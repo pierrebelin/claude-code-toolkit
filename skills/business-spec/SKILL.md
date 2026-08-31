@@ -17,6 +17,7 @@ $ARGUMENTS
    - **One decision at a time.** Walk the tree branch by branch, resolve dependencies one by one — no grouping (the answer to Q1 changes Q2).
    - **The answer is in the code → explore, do not ask.** Ask only about what cannot be deduced.
    - Through **AskUserQuestion**: 1 question = 1 decision, **recommended answer as the first option** (`(recommended)`).
+   - **A business constraint is a decision too**: regulation, standard, SLA, contractual commitment, existing behaviour that must survive. Elicit it here. It lands as a business rule carrying its origin — never as a section of its own. A constraint that is technical, temporal or about resources is out of scope here: it belongs to `/plan-implementation`.
    - Continue until no decision remains that would change a use case, a business rule, the data, the states or the scope. Settled choices → into the spec; unsettled → section 11.
 3. **Challenge the product owner** only when a decision can reduce scope, complexity or risk — at most 3 questions through **AskUserQuestion**:
    - Minimal scope: can we ship less and still validate the need?
@@ -38,6 +39,7 @@ The spec is a produced artefact, proofread by a business expert.
 - Every rule names its origin (regulation, standard, practice, product choice), briefly.
 - **Authority of a rule**: when the rule is owned by an external system (product/key service, delegation between organisations, organisation catalogue), the spec says **who the authority is** and what the product merely consumes. Do not replay or restate a rule owned elsewhere — cite it and name its owner.
 - **Target of a share, transfer or delegation**: a target organisation is validated by an **existing delegation**, never by its mere existence. Phrase the business rule in those terms.
+- **What must not break**: an existing behaviour the feature must preserve is stated as a business rule with `Origine` = existing product behaviour, not as a passing remark. Left unnamed, it will not be tested.
 - Unsettled → `TBD`, listed in section 11.
 
 ## Verbosity budget (produced document)
