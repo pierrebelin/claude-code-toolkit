@@ -48,7 +48,7 @@ The number of Infrastructure calls for a behaviour is **bounded and independent 
 
 Before adding a repository method, check no existing one already answers in one query. A dedicated method is justified when it **changes the shape** of the read (SQL filter, projection, join), not when it renames the existing one.
 
-Symptom/fix table and the COST step of the TDD cycle → skill `/implement-tdd`, `references/conventions.md` § "Accès aux données".
+Symptom/fix table and the COST step of the TDD cycle → skill `/implement-tdd`, `.claude/skills/implement-tdd/references/conventions.md` § "Data access".
 
 ## Naming
 

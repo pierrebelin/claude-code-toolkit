@@ -1,30 +1,30 @@
 ---
 name: tests-contract-tests
-description: "Créer ou modifier des tests de contrat HTTP xUnit avec Verify et WebApplicationFactory. Utiliser quand une route ou un contrat HTTP public change ; pas pour les règles métier ni un lifecycle E2E."
-argument-hint: "[route, action et scénario nominal]"
+description: "Create or modify xUnit HTTP contract tests with Verify and WebApplicationFactory. Use when a route or a public HTTP contract changes; not for business rules nor an E2E lifecycle."
+argument-hint: "[route, action and nominal scenario]"
 model: sonnet
 ---
 
-# Tests contrat API — Verify
+# API contract tests — Verify
 
-Figer le contrat HTTP nominal : méthode, route, status, headers et body. Si le lot est fourni, lire seulement son test contrat sélectionné ; ne pas relire ni compléter le plan DDD.
+Freeze the nominal HTTP contract: method, route, status, headers and body. If the batch is supplied, read only its selected contract test; do not re-read or complete the DDD plan.
 
-## Règles
+## Rules
 
-- Une route `{HTTP} {route}` = un test contrat happy path. Ajouter un test d'erreur seulement si la représentation HTTP publique d'une erreur change (status, headers ou body).
-- GET : 200/204 ; POST : 201 ; PUT : 200 ; DELETE : 204.
-- Validation et RM restent dans les TU handler. Lorsque `GlobalExceptionHandler` ou le contrat public d'erreur change, figer une fois le mapping HTTP concerné ; ne pas dupliquer tous les cas métier par endpoint.
-- Réutiliser fixture et `WebApplicationFactory` locales. Mocker repositories seulement ; handlers et Domain réels.
-- IDs déterministes. Scrubber ULIDs, GUIDs, dates et chemins avant snapshot.
-- Lister explicitement les headers publics attendus par la route (par exemple `Location`, `ETag`, `Cache-Control`, `Content-Type`) ; ne pas snapshotter les headers internes ou volatils.
-- Ne jamais ajouter de commentaire. Supprimer ceux que tu as écrits, et ceux qui ne servent pas **dans les lignes que tu touches** — ailleurs dans le fichier, signaler sans supprimer. Ne conserver que ceux qui expliquent une décision, une contrainte ou une exception non déductible du nommage. Pas de status code dans le nom : `ShouldCreateEntity()`.
-- Route inchangée ou lifecycle ≥2 opérations : ne pas créer ce test ; rester dans le plan ou utiliser `/tests-e2e-tests`.
+- One `{HTTP} {route}` route = one happy-path contract test. Add an error test only when the public HTTP representation of an error changes (status, headers or body).
+- GET: 200/204; POST: 201; PUT: 200; DELETE: 204.
+- Validation and business rules stay in the handler unit tests. When `GlobalExceptionHandler` or the public error contract changes, freeze the affected HTTP mapping once; do not duplicate every business case per endpoint.
+- Reuse the local fixture and `WebApplicationFactory`. Mock repositories only; handlers and Domain stay real.
+- Deterministic IDs. Scrub ULIDs, GUIDs, dates and paths before snapshotting.
+- List explicitly the public headers the route is expected to return (for example `Location`, `ETag`, `Cache-Control`, `Content-Type`); do not snapshot internal or volatile headers.
+- Never add a comment. Delete the ones you wrote, and the ones that serve nothing **within the lines you touch** — elsewhere in the file, report without deleting. Keep only those explaining a decision, a constraint or an exception not deducible from naming. No status code in the name: `ShouldCreateEntity()`.
+- Route unchanged, or a lifecycle of ≥2 operations: do not create this test; stay in the plan or use `/tests-e2e-tests`.
 
 ## Workflow
 
-1. Localiser test existant de la route. L'enrichir, ne jamais ajouter un second test pour la même route.
-2. Préparer le seul scénario nominal avec fixtures déterministes.
-3. Exécuter, relire le snapshot `received`, promouvoir en `verified` seulement si le contrat est voulu. Vérifier que le snapshot contient aussi les headers de réponse significatifs.
+1. Locate the existing test for the route. Extend it, never add a second test for the same route.
+2. Prepare the single nominal scenario with deterministic fixtures.
+3. Run it, re-read the `received` snapshot, promote it to `verified` only if the contract is the intended one. Check the snapshot also contains the significant response headers.
 
 ## Template
 
@@ -43,11 +43,11 @@ public sealed class Create[Entity]Tests : BaseEndpointTests
 }
 ```
 
-Lire `references/examples.md` seulement pour configurer un nouveau scrubber ou une nouvelle fixture stable.
+Read `references/examples.md` only to configure a new scrubber or a new stable fixture.
 
-## Vérification
+## Verification
 
-- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.ContractTests/{{PRODUCT}}.ContractTests.csproj --no-build --no-restore --filter-class "*[Endpoint]Tests"` vert
-- [ ] Une seule route et son happy path, plus une erreur seulement si son contrat HTTP change ; snapshot relu et headers publics explicitement selectionnes
-- [ ] Aucune règle métier dupliquée ; mapping d'erreur contractuel centralisé
-- [ ] Mocks Infrastructure uniquement, IDs stables ; aucun commentaire ajouté
+- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.ContractTests/{{PRODUCT}}.ContractTests.csproj --no-build --no-restore --filter-class "*[Endpoint]Tests"` green
+- [ ] A single route and its happy path, plus an error only when its HTTP contract changes; snapshot re-read and public headers explicitly selected
+- [ ] No duplicated business rule; contractual error mapping centralised
+- [ ] Infrastructure mocks only, stable IDs; no comment added

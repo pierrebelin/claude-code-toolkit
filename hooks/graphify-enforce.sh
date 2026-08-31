@@ -13,7 +13,7 @@ if [[ "$tool_name" == "Agent" ]]; then
 
   prompt=$(echo "$input" | jq -r '.tool_input.prompt // ""' | tr '[:upper:]' '[:lower:]')
   if ! echo "$prompt" | grep -q 'graphify'; then
-    jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "Explore bloqué: utilise graphify query/explain/path avant de spawn Explore. Mentionne graphify dans le prompt si déjà fait."}}'
+    jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "Explore blocked: use graphify query/explain/path before spawning Explore. Mention graphify in the prompt if you already did."}}'
   fi
   exit 0
 fi
@@ -23,35 +23,34 @@ fi
 
 cmd=$(echo "$input" | jq -r '.tool_input.command // ""')
 
-# Ne compter que la DECOUVERTE de code source, pas le filtrage.
+# Only count source-code DISCOVERY, not filtering.
 #
-# Filtrage = grep en aval d'un pipe (`dotnet build | grep error`), sur un
-# here-string (`grep -q X <<<"$OUT"`), ou sur un chemin hors sources (logs,
-# /tmp, .claude/, graphify-out/). Aucun de ces usages ne se remplace par
-# graphify : le compter epuisait le quota pendant du travail d'outillage.
+# Filtering = grep downstream of a pipe (`dotnet build | grep error`), on a
+# here-string (`grep -q X <<<"$OUT"`), or on a path outside the sources (logs,
+# /tmp, .claude/, graphify-out/). None of those can be replaced by graphify:
+# counting them drained the quota during tooling work.
 #
-# Seul le premier etage du pipeline peut etre de la decouverte.
+# Only the first stage of the pipeline can be discovery.
 first_stage="${cmd%%|*}"
 
 if ! echo "$first_stage" | grep -qE '(^|[[:space:]|;&])(rtk[[:space:]]+|command[[:space:]]+|/(usr/(local/)?bin|bin)/)?(grep|rg|find|egrep|fgrep)([[:space:]]|$)'; then
   exit 0
 fi
 
-# Cible non-code : graphify n'indexe que l'AST des sources C#. Chercher un
-# CLAUDE.md, un .md, un .json ou un fichier projet ne se remplace par aucune
-# commande graphify — le compter epuisait le quota pendant de la metrologie
-# de configuration.
+# Non-code target: graphify only indexes the AST of the C# sources. Searching a
+# CLAUDE.md, a .md, a .json or a project file has no graphify equivalent —
+# counting it drained the quota during configuration measurement work.
 non_code_ext='md|markdown|json|props|targets|csproj|sln|ya?ml|sh|ps1|editorconfig|txt'
 if echo "$first_stage" | grep -qE "[-]{1,2}(name|iname|path|ipath|include|glob)[[:space:]]*=?[[:space:]]*[\"']?[^[:space:]]*\.($non_code_ext)[\"']?"; then
   exit 0
 fi
 
-# Here-string / heredoc : lecture d'une variable, jamais de l'arborescence.
+# Here-string / heredoc: reads a variable, never the file tree.
 if echo "$first_stage" | grep -qE '<<'; then
   exit 0
 fi
 
-# Cible hors sources, sauf si src/ ou tests/ apparait aussi.
+# Target outside the sources, unless src/ or tests/ shows up too.
 non_source='(/private)?/tmp|\.claude|graphify-out|node_modules|/\.git|[^[:space:]]*\.log'
 if echo "$first_stage" | grep -qE "(^|[[:space:]])[^[:space:]]*($non_source)(/[^[:space:]]*)?([[:space:]]|$)" \
    && ! echo "$first_stage" | grep -qE '(^|[[:space:]])(\./)?(src|tests|externals|dsl)(/|[[:space:]]|$)'; then
@@ -65,13 +64,13 @@ count=$((count + 1))
 echo "$count" > "$counter_file"
 
 if [ "$count" -gt 3 ]; then
-  jq -n --arg c "$count" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: ("Limite 3 grep/find dépassée (count=" + $c + "). Utilise: graphify query \"<question>\", graphify explain \"<symbol>\", graphify path \"<A>\" \"<B>\". Reset: rm " + "/tmp/claude-grep-count-'$session_id'")}}'
+  jq -n --arg c "$count" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: ("3 grep/find limit exceeded (count=" + $c + "). Use: graphify query \"<question>\", graphify explain \"<symbol>\", graphify path \"<A>\" \"<B>\". Reset: rm " + "/tmp/claude-grep-count-'$session_id'")}}'
   exit 0
 fi
 
 # Soft reminder on first grep uses
-# Repo root derivé du script (cwd du hook non garanti = racine repo)
+# Repo root derived from the script (the hook cwd is not guaranteed to be the repo root)
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 if [ -f "$repo_root/graphify-out/graph.json" ]; then
-  jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: "Rappel: graphify-out/ disponible. Préfère graphify query/explain/path avant grep."}}'
+  jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: "Reminder: graphify-out/ available. Prefer graphify query/explain/path over grep."}}'
 fi

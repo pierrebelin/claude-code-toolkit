@@ -1,13 +1,13 @@
-# Exemples de code — Domain
+# Code examples — Domain
 
-Consulter quand le pattern est inconnu ou qu'il s'agit de la première implémentation d'un type d'élément dans cette couche.
-Règles et pièges → `.claude/rules/` (chargées automatiquement).
+Consult when the pattern is unknown, or when this is the first implementation of an element type in this layer.
+Rules and pitfalls → `.claude/rules/` (loaded automatically).
 
 ---
 
 ## Domain - Aggregate Root
 
-Constructeur prive. Factory methods `Create()` (nouvelle instance + event) et `Restore()` (rehydratation, pas de validation metier). Methodes de mutation metier qui emettent des events.
+Private constructor. Factory methods `Create()` (new instance + event) and `Restore()` (rehydration, no business validation). Business mutation methods that emit events.
 
 ```csharp
 public class Product : AggregateRoot<ProductId>
@@ -55,32 +55,32 @@ public class Product : AggregateRoot<ProductId>
 }
 ```
 
-**Regles** :
-- Proprietes modifiables : `{ get; private set; }`
-- Proprietes immuables : `{ get; }` (init dans constructeur)
-- Jamais de setter public
-- Collections : `private readonly List<T> _items` + `public IReadOnlyList<T> Items => _items.AsReadOnly()`
-- Concept metier porteur d'une regle de format : type VO (`Name`, `TechnicalName`, `DiagramName`), jamais `string` (DDD-04). La regle vit dans le VO ; `Create()` et `Update()` appellent `Name.Create(name)`, ils ne reecrivent pas la validation. Un nom vide leve `EmptyNameException`, pas un `ArgumentException` local.
-- `Restore()` reconstruit le VO sans validation (`Name.Restore(name)`) : la donnee vient de la base, elle a deja ete validee a l'ecriture.
-- L'event de persistence transporte la forme primitive (`validatedName.Value`) : il alimente le mapper EF, pas le Domain.
+**Rules**:
+- Mutable properties: `{ get; private set; }`
+- Immutable properties: `{ get; }` (set in the constructor)
+- Never a public setter
+- Collections: `private readonly List<T> _items` + `public IReadOnlyList<T> Items => _items.AsReadOnly()`
+- A business concept carrying a format rule: a VO type (`Name`, `TechnicalName`, `DiagramName`), never `string` (DDD-04). The rule lives in the VO; `Create()` and `Update()` call `Name.Create(name)`, they do not rewrite the validation. An empty name throws `EmptyNameException`, not a local `ArgumentException`.
+- `Restore()` rebuilds the VO without validation (`Name.Restore(name)`): the data comes from the database, it was already validated on write.
+- The persistence event carries the primitive form (`validatedName.Value`): it feeds the EF mapper, not the Domain.
 
 ---
 
 ## Domain - EntityId
 
-Utilise ULID, herite de `EntityId<T>` :
+Uses ULID, inherits from `EntityId<T>`:
 
 ```csharp
 public class ProductId : EntityId<ProductId> { }
 ```
 
-Creation : `ProductId.Create()` (nouveau) ou `ProductId.From(ulid)` (existant).
+Creation: `ProductId.Create()` (new) or `ProductId.From(ulid)` (existing).
 
 ---
 
 ## Domain - Value Objects
 
-Implementer `GetEqualityComponents()` :
+Implement `GetEqualityComponents()`:
 
 ```csharp
 public class DisplaySettings : ValueObject
@@ -96,7 +96,7 @@ public class DisplaySettings : ValueObject
 }
 ```
 
-Un VO porteur d'une regle de format expose `Create()` (validation, appelee par le Domain) et `Restore()` (rehydratation depuis la base, sans validation). C'est ce couple qui retire la validation des aggregates :
+A VO carrying a format rule exposes `Create()` (validation, called by the Domain) and `Restore()` (rehydration from the database, no validation). That pair is what takes validation out of the aggregates:
 
 ```csharp
 public sealed class Name : ValueObject
@@ -125,13 +125,13 @@ public sealed class Name : ValueObject
 }
 ```
 
-`Name`, `TechnicalName` et `DiagramName` existent deja dans `Domain/Core/ValueObjects/` : les reutiliser avant d'en creer un.
+`Name`, `TechnicalName` and `DiagramName` already exist under `Domain/Core/ValueObjects/`: reuse them before creating one.
 
 ---
 
 ## Domain - Domain Events
 
-Records qui heritent de `DomainEvent<TEntityId>`. Emis via `AddEvent()` dans l'aggregate :
+Records inheriting from `DomainEvent<TEntityId>`. Emitted through `AddEvent()` inside the aggregate:
 
 ```csharp
 public sealed record ProductCreated(
@@ -147,9 +147,9 @@ public sealed record ProductCreated(
 
 ## Domain - Exceptions
 
-Heriter d'une base de `Domain/Core/Exceptions/Base/` : `NotFoundException` (404), `ConflictException` (409), `ForbiddenException` (403), `ValidationException` (400, porte un dictionnaire d'erreurs), ou `DomainException` (400) par defaut. Nommer `{Entity}{Raison}Exception`.
+Inherit from a base under `Domain/Core/Exceptions/Base/`: `NotFoundException` (404), `ConflictException` (409), `ForbiddenException` (403), `ValidationException` (400, carries an error dictionary), or `DomainException` (400) by default. Name it `{Entity}{Reason}Exception`.
 
-`NotFoundException` et `ConflictException` derivent de `DomainException` ; `ValidationException` et `ForbiddenException` derivent d'`Exception` + `IInternalException`. Le statut vient de la base choisie — le mapping complet est en fin de fichier (§ WebAPI - Endpoint).
+`NotFoundException` and `ConflictException` derive from `DomainException`; `ValidationException` and `ForbiddenException` derive from `Exception` + `IInternalException`. The status comes from the chosen base — the full mapping is at the end of the WebAPI file (§ WebAPI - Endpoint).
 
 ```csharp
 public class ProductNotFoundException(ProductId id)
@@ -163,7 +163,7 @@ public class ProductNameAlreadyExistsException(string name)
 
 ## Domain - Repository Interface
 
-Centree sur l'aggregate. Inclut la methode `Save` pour les domain events :
+Aggregate-centred. Includes the `Save` method for domain events:
 
 ```csharp
 public interface IProductRepository

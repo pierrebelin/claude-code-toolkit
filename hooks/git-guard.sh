@@ -1,14 +1,14 @@
 #!/bin/bash
-# PreToolUse hook — interdiction dure des commandes Git mutantes.
+# PreToolUse hook — hard ban on mutating Git commands.
 #
-# CLAUDE.md enonce « Jamais de commit Git », mais une instruction est
-# advisory : rien ne l'execute. Ce hook la rend deterministe.
+# CLAUDE.md states "Never commit to Git", but an instruction is advisory:
+# nothing enforces it. This hook makes it deterministic.
 #
-# Couvre les formes que `permissions.deny` rate, parce qu'il matche par
-# prefixe litteral :
-#   rtk git commit ...            (le hook rtk-normalize route tout via rtk)
-#   git -C /autre/repo commit ... (option globale avant le verbe)
-#   cd /ailleurs && git push      (prefixe cd)
+# Covers the forms `permissions.deny` misses, because it matches on a
+# literal prefix:
+#   rtk git commit ...            (the rtk-normalize hook routes everything through rtk)
+#   git -C /other/repo commit ... (global option before the verb)
+#   cd /elsewhere && git push     (cd prefix)
 #   env FOO=1 git add .
 set -u
 input=$(cat)
@@ -16,27 +16,27 @@ input=$(cat)
 [[ "$(echo "$input" | jq -r '.tool_name // ""')" != "Bash" ]] && exit 0
 cmd=$(echo "$input" | jq -r '.tool_input.command // ""')
 
-# Normalisation : on retire ce qui s'intercale entre le debut de commande
-# et le verbe git, pour ramener toutes les formes a « git <verbe> ».
+# Normalisation: strip whatever sits between the start of the command and the
+# git verb, so every form collapses to "git <verb>".
 norm=$(printf '%s' "$cmd" \
   | sed -E 's/(^|[;&|][[:space:]]*)cd[[:space:]]+[^&;|]+&&[[:space:]]*/\1/g' \
   | sed -E 's/(^|[;&|][[:space:]]*)(rtk|command|sudo)[[:space:]]+/\1/g' \
   | sed -E 's/(^|[;&|][[:space:]]*)(env[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*/\1/g' \
   | sed -E 's/(^|[[:space:]])git[[:space:]]+((-C|-c|--git-dir|--work-tree|--namespace|--exec-path)[[:space:]]*=?[[:space:]]*[^[:space:]]+[[:space:]]+)*/\1git /g')
 
-# --- Exception : rapatriement d'un worktree vers la branche locale ---
+# --- Exception: bringing a worktree back onto the local branch ---
 #
-# ExitWorktree ne transfere rien (keep ou remove, jamais de merge). Le flux
-# sans commit est : capturer le diff du worktree, l'appliquer ici.
+# ExitWorktree transfers nothing (keep or remove, never a merge). The
+# commit-free flow is: capture the worktree diff, apply it here.
 #
-#   git -C <worktree> add -N .          # rend les nouveaux fichiers visibles au diff
-#   git -C <worktree> diff HEAD > p     # lecture, deja autorisee
-#   git apply p                         # applique dans le working tree, sans commit
+#   git -C <worktree> add -N .          # makes new files visible to the diff
+#   git -C <worktree> diff HEAD > p     # read, already allowed
+#   git apply p                         # applies into the working tree, no commit
 #
-# Ces deux verbes passent en "ask" : l'utilisateur voit la commande et tranche.
-# `add -N` (--intent-to-add) enregistre le chemin sans le contenu — il ne stage
-# rien de commitable, et `commit` reste refuse de toute facon.
-ASK_REASON="Rapatriement de worktree : cette commande modifie le working tree local sans creer de commit. Verifie la cible avant d approuver."
+# Those two verbs fall through to "ask": the user sees the command and decides.
+# `add -N` (--intent-to-add) records the path without the content — it stages
+# nothing committable, and `commit` stays denied regardless.
+ASK_REASON="Worktree hand-back: this command modifies the local working tree without creating a commit. Check the target before approving."
 
 if printf '%s' "$norm" | grep -qE "(^|[;&|][[:space:]]*)git[[:space:]]+add[[:space:]]+([^|;&]*[[:space:]])?(-N|--intent-to-add)([[:space:]]|$)"; then
   jq -n --arg r "$ASK_REASON" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: $r}}'
@@ -48,12 +48,11 @@ if printf '%s' "$norm" | grep -qE "(^|[;&|][[:space:]]*)git[[:space:]]+apply([[:
   exit 0
 fi
 
-# --- Sous-commandes de lecture d'un verbe par ailleurs mutant ---
+# --- Read-only subcommands of an otherwise mutating verb ---
 #
-# `worktree`, `branch`, `remote`, `stash`, `tag`, `reflog` portent a la fois de
-# la lecture et de la mutation. Seule la forme de lecture passe, et la regex
-# doit couvrir la commande jusqu'au bout : `git branch -a` passe, `git branch
-# feat/x` (creation) ne passe pas.
+# `worktree`, `branch`, `remote`, `stash`, `tag`, `reflog` carry both reads and
+# mutations. Only the read form passes, and the regex must cover the command to
+# its end: `git branch -a` passes, `git branch feat/x` (creation) does not.
 END='[[:space:]]*($|[|;&])'
 READONLY="\
 (worktree[[:space:]]+list([[:space:]]+(--porcelain|-v|--verbose))*)|\
@@ -67,12 +66,12 @@ if printf '%s' "$norm" | grep -qE "(^|[;&|][[:space:]]*)git[[:space:]]+($READONL
   exit 0
 fi
 
-# `am` reste refuse : il applique ET commite.
+# `am` stays denied: it applies AND commits.
 MUTATING='add|am|branch|checkout|cherry-pick|clean|commit|filter-branch|merge|mv|pull|push|rebase|reflog|remote|reset|restore|revert|rm|stash|switch|tag|update-ref|worktree'
 
 if printf '%s' "$norm" | grep -qE "(^|[;&|][[:space:]]*)git[[:space:]]+($MUTATING)([[:space:]]|$)"; then
   verb=$(printf '%s' "$norm" | grep -oE "git[[:space:]]+($MUTATING)([[:space:]]|$)" | head -1 | awk '{print $2}')
-  jq -n --arg v "$verb" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: ("git " + $v + " bloque : ce repo interdit toute mutation Git par un agent. L utilisateur decide quand commiter, creer une branche ou pousser. Lecture autorisee (status, log, diff, show). Si la commande est vraiment necessaire, demande-la a l utilisateur pour qu il la lance lui-meme avec le prefixe ! .")}}'
+  jq -n --arg v "$verb" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: ("git " + $v + " blocked: this repo forbids any Git mutation by an agent. The user decides when to commit, branch or push. Reading is allowed (status, log, diff, show). If the command is genuinely needed, ask the user to run it themselves with the ! prefix.")}}'
   exit 0
 fi
 exit 0

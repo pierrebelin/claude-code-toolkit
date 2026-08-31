@@ -1,35 +1,35 @@
 ---
 name: tests-e2e-tests
-description: "Créer ou modifier des tests E2E xUnit via Aspire et SDK client pour un lifecycle métier complet. Utiliser seulement quand le plan sélectionne un scénario d'au moins deux opérations ; jamais pour un endpoint isolé."
-argument-hint: "[lifecycle métier sélectionné dans le plan]"
+description: "Create or modify xUnit E2E tests through Aspire and the client SDK for a complete business lifecycle. Use only when the plan selects a scenario of at least two operations; never for a single endpoint."
+argument-hint: "[business lifecycle selected in the plan]"
 model: sonnet
 ---
 
-# Tests E2E — Lifecycle via Aspire
+# E2E tests — lifecycle through Aspire
 
-Tester une histoire métier complète sur la stack réelle : Aspire, DB, auth, API et SDK. Ce niveau complète TU, intégration et contrat ; il ne remplace pas leurs scénarios.
+Test a complete business story on the real stack: Aspire, database, auth, API and SDK. This level complements unit, integration and contract tests; it does not replace their scenarios.
 
-## Préconditions
+## Preconditions
 
-- La fiche lot sélectionne explicitement un lifecycle d'au moins deux opérations.
-- Réutiliser `ApiApplicationFixture` existante et le client SDK déjà exposé. Ne pas recréer la fixture depuis un template.
-- Les credentials viennent de la configuration locale sécurisée, jamais du code, du skill ou des snapshots.
+- The batch sheet explicitly selects a lifecycle of at least two operations.
+- Reuse the existing `ApiApplicationFixture` and the SDK client already exposed. Do not recreate the fixture from a template.
+- Credentials come from the secure local configuration, never from the code, the skill or the snapshots.
 
-## Règles non négociables
+## Non-negotiable rules
 
-- Un test = parcours complet : `create → update → delete`, `create → activate → deactivate`, `initialize → create → get → delete`.
-- Interdit : `Create`, `Get`, `Compile` ou `Delete` seul. Ce sont des tests contrat/integration.
-- Zéro mock, zéro seed DB direct, zéro `HttpClient` brut : SDK client uniquement.
-- Créer les données mutables du test via API ; lire seulement des données de référence stables sans les modifier.
-- `[Collection("test")]`, fixture partagée, fichier `*LifecycleTests`, moins de 20 tests/fichier. Ne jamais ajouter de commentaire ; supprimer ceux que tu as écrits et ceux qui ne servent pas **dans les lignes que tu touches** — ailleurs dans le fichier, signaler sans supprimer — et ne conserver que ceux qui expliquent une décision, une contrainte ou une exception.
-- Endpoint ou SDK absent : écrire un `[Fact(Skip = "raison technique précise")]` avec signature complète et `throw new NotImplementedException()`.
+- One test = a complete journey: `create → update → delete`, `create → activate → deactivate`, `initialize → create → get → delete`.
+- Forbidden: `Create`, `Get`, `Compile` or `Delete` alone. Those are contract/integration tests.
+- Zero mocks, zero direct database seeding, zero raw `HttpClient`: the client SDK only.
+- Create the test's mutable data through the API; read only stable reference data, without modifying it.
+- `[Collection("test")]`, shared fixture, `*LifecycleTests` file, fewer than 20 tests per file. Never add a comment; delete the ones you wrote and the ones that serve nothing **within the lines you touch** — elsewhere in the file, report without deleting — and keep only those explaining a decision, a constraint or an exception.
+- Endpoint or SDK missing: write a `[Fact(Skip = "precise technical reason")]` with the full signature and `throw new NotImplementedException()`.
 
 ## Workflow
 
-1. Vérifier que le lifecycle est retenu dans la fiche ; sinon ne pas créer d'E2E.
-2. Rechercher le fichier lifecycle existant et l'enrichir.
-3. Créer les dépendances via SDK, exécuter toutes les opérations, vérifier les réponses API, puis cleanup par API.
-4. Lancer uniquement le test ou projet E2E visé.
+1. Check that the lifecycle is retained in the sheet; otherwise do not create an E2E test.
+2. Look for the existing lifecycle file and extend it.
+3. Create the dependencies through the SDK, run every operation, verify the API responses, then clean up through the API.
+4. Run only the targeted E2E test or project.
 
 ## Template
 
@@ -54,11 +54,11 @@ public sealed class [Feature]LifecycleTests(ApiApplicationFixture fixture)
 }
 ```
 
-Lire `references/lifecycle-patterns.md` seulement pour dépendances, données de référence, skip ou un lifecycle non standard.
+Read `references/lifecycle-patterns.md` only for dependencies, reference data, skips or a non-standard lifecycle.
 
-## Vérification
+## Verification
 
-- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.E2ETests/{{PRODUCT}}.E2ETests.csproj --no-build --no-restore --filter-class "*[Feature]LifecycleTests"` vert, ou Skip justifié
-- [ ] Lifecycle sélectionné, au moins deux opérations et cleanup API
-- [ ] SDK + Aspire réels ; aucun mock, seed DB, secret ni endpoint isolé
-- [ ] Fichier existant enrichi, fixture existante réutilisée ; aucun commentaire ajouté
+- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.E2ETests/{{PRODUCT}}.E2ETests.csproj --no-build --no-restore --filter-class "*[Feature]LifecycleTests"` green, or a justified Skip
+- [ ] Lifecycle selected, at least two operations and API cleanup
+- [ ] Real SDK + Aspire; no mock, no database seeding, no secret, no isolated endpoint
+- [ ] Existing file extended, existing fixture reused; no comment added

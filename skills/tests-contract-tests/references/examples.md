@@ -1,8 +1,8 @@
-# Exemples contract
+# Contract examples
 
-Utiliser seulement si les templates du skill ne suffisent pas. Un test couvre le chemin nominal d'une route ; les erreurs et RM restent dans les TU handler.
+Use only when the skill's templates are not enough. A test covers a route's nominal path; errors and business rules stay in the handler unit tests.
 
-## Endpoint nominal
+## Nominal endpoint
 
 ```csharp
 namespace {{PRODUCT}}.ContractTests.[Feature];
@@ -56,4 +56,4 @@ protected async Task VerifyResponse(HttpResponseMessage response, params string[
 }
 ```
 
-Conserver IDs de fixture deterministes. Passer explicitement les headers publics attendus a `VerifyResponse` ; ne pas snapshotter les headers internes ou volatils. Scrubber ULIDs, GUIDs, timestamps et chemins. Revoir chaque fichier `received` avant de le promouvoir en `verified`.
+Keep the fixture IDs deterministic. Pass the expected public headers explicitly to `VerifyResponse`; do not snapshot internal or volatile headers. Scrub ULIDs, GUIDs, timestamps and paths. Review every `received` file before promoting it to `verified`.

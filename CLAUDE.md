@@ -1,28 +1,47 @@
 # CLAUDE.md
 
-## Nature du dépôt
+## What this repo is
 
-**Kit `.claude` portable** pour un repo .NET/DDD en clean architecture. Pas de code applicatif : **rien à builder, rien à tester**. Le travail ici consiste à éditer des `.md`, des `.sh` et du JSON.
+A **portable `.claude` kit** for a .NET/DDD clean-architecture repo. No application code: **nothing to build, nothing to test**. The work here is editing `.md`, `.sh` and JSON files.
 
-Ce que fait chaque brique, comment l'installer, ce que le kit impose au repo cible : **[README.md](README.md)**. Ne pas redupliquer ces explications ici.
+What each brick does, how to install it, what the kit imposes on the target repo: **[README.md](README.md)**. Do not duplicate those explanations here.
 
-## Anonymisation — à ne pas casser
+## Anonymisation — do not break it
 
-Le nom du produit est partout le placeholder `{{PRODUCT}}`. Les exemples s'appuient sur un domaine fictif : agrégats `Product` / `ModuleDiagram`, sous-entités `ProductItem` / `DiagramNode`, contextes bornés `Catalog` / `Studio`. N'introduire aucun nom de projet, namespace ou agrégat réel.
+The product name is the `{{PRODUCT}}` placeholder everywhere. Examples rest on a fictional domain: aggregates `Product` / `ModuleDiagram`, sub-entities `ProductItem` / `DiagramNode`, bounded contexts `Catalog` / `Studio`. Never introduce a real project, namespace or aggregate name.
 
-## Où va un changement
+## Language
 
-| Changement | Fichier |
-|------------|---------|
-| convention de couche (nommage, pattern, interdit) | `rules/<couche>.md` — source unique, jamais recopiée dans un skill |
-| procédure (cycle TDD, étapes d'audit) | le `SKILL.md` concerné |
-| câblage (événement, matcher, ordre des hooks) | `settings.json` |
-| description du comportement du kit | `README.md` |
+**English everywhere** — instruction files (`skills/`, `agents/`, `rules/`), documentation (`README.md`, `CLAUDE.md`, `RESOURCES.md`), hook comments and messages, and every artefact the skills write into the target repo: `todo/` specs and plans, handler and feature `CLAUDE.md` files, reports, verdicts, summaries returned to the user.
 
-Deux sources qui divergent font choisir au hasard : un fait vit à un seul endroit.
+## Frozen literals
 
-## Éditer un hook
+Some emitted strings are parsed by exact match. Reword one and you must reword its parser in the same change.
 
-- Doit sortir en 0 sur entrée JSON vide et quand sa dépendance manque. Seules exceptions voulues : `git-guard.sh` et `graphify-enforce.sh`, blocants par conception.
-- Tester après édition : `echo '{}' | bash hooks/<nom>.sh`.
-- Ne pas lancer `graphify-autosync.sh` à blanc : il reconstruit le graphe et bloque plusieurs minutes.
+| Frozen literal | Parsed by |
+|---|---|
+| `## Business rules`, `## Flow`, `## Emitted events` and the columns `ID` / `Rule` / `Exception / Result` / `Tests` | `hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py` in the target repo |
+| `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Scope`/`Comments` | `/verify-ddd-tdd` verdict format |
+| `## RED`, `## GREEN`, `## BLOCKED` and their fields | `/implement-tdd` orchestrator |
+| `TDD: RED ✅ · GREEN ✅ · COST ✅`, `✅ DONE`, `## Assumptions`, `Correction Cn` | batch sheets |
+
+Identifier prefixes are language-neutral and stay as they are: `RM-xx` (business rule), `RL-xx` (rule local to a handler), `CU-xx` (use case), `DDD-nn`, `APP-nn`, `PERF-nn`.
+
+A skill's template blocks (spec structure, plan structure, handler sheet) are produced text: they are copied verbatim.
+
+## Where a change goes
+
+| Change | File |
+|--------|------|
+| layer convention (naming, pattern, ban) | `rules/<layer>.md` — single source, never copied into a skill |
+| procedure (TDD cycle, audit steps) | the relevant `SKILL.md` |
+| wiring (event, matcher, hook order) | `settings.json` |
+| description of the kit's behaviour | `README.md` |
+
+Two sources that drift make the choice random: a fact lives in exactly one place.
+
+## Editing a hook
+
+- Must exit 0 on empty JSON input and when its dependency is missing. The only intended exceptions: `git-guard.sh` and `graphify-enforce.sh`, blocking by design.
+- Test after editing: `echo '{}' | bash hooks/<name>.sh`.
+- Do not run `graphify-autosync.sh` idly: it rebuilds the graph and blocks for several minutes.

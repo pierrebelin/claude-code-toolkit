@@ -1,32 +1,32 @@
 ---
 name: tests-unit-tests
-description: "Créer ou modifier des tests unitaires xUnit de handlers/services applicatifs .NET avec fixture et doubles manuels. Utiliser pour règles métier, résultats de query et événements de command ; jamais pour tester directement un aggregate."
-argument-hint: "[handler/service, scénario et RM]"
+description: "Create or modify xUnit unit tests for .NET application handlers/services with a fixture and hand-written doubles. Use for business rules, query results and command events; never to test an aggregate directly."
+argument-hint: "[handler/service, scenario and business rule]"
 model: sonnet
 ---
 
-# Tests unitaires — Handler, Fixture, doubles manuels
+# Unit tests — handler, fixture, hand-written doubles
 
-Tester un comportement métier à travers son handler/service réel. Mocker uniquement l'Infrastructure. Si un lot est fourni, lire seulement sa section **Tests** et sa politique handler ; ne pas reconstruire le design DDD.
+Test a business behaviour through its real handler/service. Mock Infrastructure only. If a batch is supplied, read only its **Tests** section and its handler policy; do not rebuild the DDD design.
 
 ## Workflow
 
-1. Trouver d'abord le fichier de test et la fixture du même use case. Les enrichir avant de créer un fichier.
-2. Choisir l'observation : query = mock alimenté puis résultat ; command = `SavedEvents` par type et payload.
-3. Ecrire un test rouge à la fois, puis le code minimal via `/implement-tdd`.
-4. Lancer le test ciblé. Ne déclarer vert qu'avec code retour `0`.
+1. First find the test file and the fixture of the same use case. Extend them before creating a file.
+2. Choose the observation: query = mock fed with data, then the result; command = `SavedEvents` by type and payload.
+3. Write one red test at a time, then the minimal code through `/implement-tdd`.
+4. Run the targeted test. Declare green only on exit code `0`.
 
-## Règles non négociables
+## Non-negotiable rules
 
-- Nommage des tests et des classes → `.claude/rules/tests.md` (chargée dès que tu ouvres un fichier de `tests/`).
-- Tester une factory ou méthode d'aggregate uniquement à travers le handler/service qui l'appelle. Aucun test d'aggregate orphelin.
-- Query : données dans le double, assertion sur la sortie. Command : assertion sur `SavedEvents` par type et contenu.
-- Ne jamais observer une interaction : ni spy, compteur, `CallCount`, `Called`, `Received`, `Verify` ni nombre d'appels, même pour le coût.
-- Mocker uniquement repositories, logger et accès externes. Domain/Application restent réels.
-- Mettre builders, seeds, DSL, JSON, payloads et données métier dans la fixture. La classe de test ne porte que faits et appels de fixture.
-- Pour données répétitives, préférer `[Theory]` + `MemberData` provenant de la fixture. Aucun littéral métier dans la classe de test.
-- Ne jamais ajouter de commentaire. Supprimer ceux que tu as écrits, et ceux qui ne servent pas (répètent le code, périmés) **dans les lignes que tu touches** — un commentaire inutile situé ailleurs dans le fichier se signale, il ne se supprime pas. Ne conserver que ceux qui expliquent une décision, une contrainte ou une exception non déductible du nommage.
-- Garder un fichier sous 30 tests et sans état partagé, DB, FS ni réseau.
+- Test and class naming → `.claude/rules/tests.md` (loaded as soon as you open a file under `tests/`).
+- Test an aggregate factory or method only through the handler/service that calls it. No orphan aggregate test.
+- Query: data in the double, assertion on the output. Command: assertion on `SavedEvents` by type and content.
+- Never observe an interaction: no spy, counter, `CallCount`, `Called`, `Received`, `Verify` nor call count — not even for cost.
+- Mock only repositories, logger and external accesses. Domain/Application stay real.
+- Put builders, seeds, DSL, JSON, payloads and business data in the fixture. The test class carries only facts and fixture calls.
+- For repetitive data, prefer `[Theory]` + `MemberData` coming from the fixture. No business literal in the test class.
+- Never add a comment. Delete the ones you wrote, and the ones that serve nothing (restating the code, stale) **within the lines you touch** — a useless comment elsewhere in the file is reported, not deleted. Keep only those explaining a decision, a constraint or an exception not deducible from naming.
+- Keep a file under 30 tests, with no shared state, no database, no file system, no network.
 
 ## Structure
 
@@ -41,11 +41,11 @@ tests/{{PRODUCT}}.UnitTests/
     └── [Handler]Fixture.cs
 ```
 
-`CoreTests` n'est pas une suite : c'est l'infrastructure de test partagee (doubles, builders, assets), referencee par `UnitTests`. Un double existe deja pour la quasi-totalite des repositories — l'enrichir, jamais creer un `Doubles/` local dans `UnitTests`.
+`CoreTests` is not a suite: it is the shared test infrastructure (doubles, builders, assets), referenced by `UnitTests`. A double already exists for nearly every repository — extend it, never create a local `Doubles/` inside `UnitTests`.
 
-Suivre les noms locaux quand ils existent : le template ne justifie jamais un fichier ou une fixture parallèle.
+Follow the local names where they exist: the template never justifies a parallel file or fixture.
 
-## Templates minimaux
+## Minimal templates
 
 ```csharp
 public sealed class Create[Entity]Tests
@@ -118,19 +118,19 @@ public sealed class Mock[Entity]Repository : I[Entity]Repository
 }
 ```
 
-Lire `references/fixture-data.md` seulement pour fixtures DSL/JSON, données multiples ou `MemberData`.
+Read `references/fixture-data.md` only for DSL/JSON fixtures, multiple data sets or `MemberData`.
 
-## Couverture attendue
+## Expected coverage
 
-| Handler | Couvrir |
+| Handler | Cover |
 |---------|---------|
-| Command | succès, validation, RM, événement type + payload |
-| Query | succès, vide, filtre/pagination, charge utile retournée (`Paging<T>` / `IReadOnlyList<T>` / agrégat) |
+| Command | success, validation, business rule, event type + payload |
+| Query | success, empty, filter/pagination, returned payload (`Paging<T>` / `IReadOnlyList<T>` / aggregate) |
 
-## Vérification
+## Verification
 
-- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore --filter-class "*[Handler]Tests"` vert
-- [ ] Test handler réel ; mocks Infrastructure uniquement
-- [ ] Query par résultat, command par `SavedEvents`
-- [ ] Aucun test direct aggregate, spy, compteur ni assertion d'interaction ; aucun commentaire ajouté
-- [ ] Données métier et `MemberData` dans fixture ; double `CoreTests/Doubles` et fichier local enrichis avant création
+- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore --filter-class "*[Handler]Tests"` green
+- [ ] Real handler under test; Infrastructure mocks only
+- [ ] Query by result, command by `SavedEvents`
+- [ ] No direct aggregate test, no spy, no counter, no interaction assertion; no comment added
+- [ ] Business data and `MemberData` in the fixture; `CoreTests/Doubles` double and local file extended before creating anything

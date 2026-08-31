@@ -1,17 +1,17 @@
 #!/bin/bash
-# Fraicheur du graphe graphify, mesuree par empreinte du working tree.
+# Freshness of the graphify graph, measured from the working tree fingerprint.
 #
-# Compare les mtime des sources au mtime de graph.json. Contrairement a un flag
-# pose par les hooks Edit/Write, cette mesure capte aussi les editions IDE, les
-# merges, pulls et changements de branche.
+# Compares source mtimes against the mtime of graph.json. Unlike a flag dropped
+# by the Edit/Write hooks, this measure also catches IDE edits, merges, pulls
+# and branch switches.
 #
 # Usage:
-#   graphify-freshness.sh --count     nombre de sources plus recentes que le graphe
-#   graphify-freshness.sh --check     exit 0 si a jour, 1 si perime
-#   graphify-freshness.sh --refresh   force le recalcul (ignore le cache)
+#   graphify-freshness.sh --count     number of sources newer than the graph
+#   graphify-freshness.sh --check     exit 0 if up to date, 1 if stale
+#   graphify-freshness.sh --refresh   force recomputation (bypass the cache)
 
-# Repo derive de l'emplacement du script (.claude/hooks/ -> racine). Sans cela, un
-# defaut en dur ferait mettre a jour le graphe d'un AUTRE repo depuis ce hook.
+# Repo derived from the script location (.claude/hooks/ -> root). Without that, a
+# hardcoded default would update the graph of ANOTHER repo from this hook.
 REPO="${GRAPHIFY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 GRAPH="$REPO/graphify-out/graph.json"
 CACHE="/tmp/graphify-fresh-$(echo "$REPO" | md5 -q 2>/dev/null || echo default)"

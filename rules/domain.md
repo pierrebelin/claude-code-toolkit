@@ -70,4 +70,4 @@ C# can't default a parameter to `[]`, so make it required and place it before th
 - One repository per entity → one repository per **aggregate root**. A sub-entity never gets its own repository (`IDiagramNodeSnapshotRepository` alongside `IModuleDiagramRepository`); extend the root's.
 - `Create()` to rebuild from the DB → always `Restore()`
 - Nullable field for an optional concept → Null Object
-- Parallel collection for a new diagram node type (`NodeSnapshots` alongside `Nodes`) → subtype implementing `INode`, added to the existing `Nodes`. Heterogeneity through polymorphism, not parallel lists.
+- Parallel collection for a new graph node type (`NodeSnapshots` alongside `Nodes`) → subtype implementing `INode`, added to the existing `Nodes`. Heterogeneity through polymorphism, not parallel lists.
