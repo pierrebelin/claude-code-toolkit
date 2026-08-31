@@ -1,8 +1,8 @@
-# Fixture : données et répétitions
+# Fixture: data and repetition
 
-Lire seulement si le test nécessite du DSL, JSON, payloads, objets construits ou plusieurs cas de données.
+Read only if the test needs DSL, JSON, payloads, constructed objects or several data cases.
 
-## Données métier dans la fixture
+## Business data in the fixture
 
 ```csharp
 public sealed class GenerationServiceFixture
@@ -21,9 +21,9 @@ public sealed class GenerationServiceFixture
 }
 ```
 
-La classe de test appelle seulement `WithSampleDiagramNode()` puis le handler/service. Ne pas y déclarer source, builder privé ou payload métier.
+The test class calls only `WithSampleDiagramNode()` then the handler/service. Do not declare a source, a private builder or a business payload there.
 
-## Scénarios répétitifs
+## Repetitive scenarios
 
 ```csharp
 public static IEnumerable<object?[]> InvalidNames()
@@ -33,4 +33,4 @@ public static IEnumerable<object?[]> InvalidNames()
 }
 ```
 
-Exposer `InvalidNames` depuis la fixture (ou un fournisseur dédié de test), puis utiliser `MemberData`. Garder `InlineData` uniquement pour une valeur technique triviale, jamais pour une donnée métier ou un payload.
+Expose `InvalidNames` from the fixture (or a dedicated test provider), then use `MemberData`. Keep `InlineData` only for a trivial technical value, never for business data or a payload.

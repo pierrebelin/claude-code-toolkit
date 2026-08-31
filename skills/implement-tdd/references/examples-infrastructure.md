@@ -1,13 +1,13 @@
-# Exemples de code — Infrastructure
+# Code examples — Infrastructure
 
-Consulter quand le pattern est inconnu ou qu'il s'agit de la première implémentation d'un type d'élément dans cette couche.
-Règles et pièges → `.claude/rules/` (chargées automatiquement).
+Consult when the pattern is unknown, or when this is the first implementation of an element type in this layer.
+Rules and pitfalls → `.claude/rules/` (loaded automatically).
 
 ---
 
 ## Infrastructure - Repository
 
-Les repositories utilisent `IUnitOfWork<AppDbContext>` et `IAuditTrailWriter`. Ils traitent les domain events via un switch. Les entites mutees sont chargees **en une requete avant la boucle** : aucun `await` sur la base a l'interieur du `foreach`.
+Repositories use `IUnitOfWork<AppDbContext>` and `IAuditTrailWriter`. They process domain events through a switch. Mutated entities are loaded **in a single query before the loop**: no `await` on the database inside the `foreach`.
 
 ```csharp
 public class ProductRepository(
@@ -84,23 +84,23 @@ public class ProductRepository(
 }
 ```
 
-**Traduction d'une contrainte** : le repository est le seul endroit qui voit la violation. Il la rend en exception domain (`ProductNameAlreadyExistsException` → 409) ; sans lui, le `DbUpdateException` remonte non traite et sort en 500.
+**Translating a constraint**: the repository is the only place that sees the violation. It turns it into a domain exception (`ProductNameAlreadyExistsException` → 409); without it, the `DbUpdateException` bubbles up untreated and surfaces as a 500.
 
-Le filtre nomme **l'index precis**. Un repli du type `message.Contains("duplicate")` attrape toutes les violations d'unicite de la table et rend un 409 faux des qu'une autre contrainte casse.
+The filter names **the precise index**. A fallback such as `message.Contains("duplicate")` catches every uniqueness violation on the table and returns a wrong 409 as soon as another constraint breaks.
 
-**Cout** : 1 lecture + 1 ecriture, quel que soit le nombre d'events. La boucle ne fait plus que du dispatch en memoire.
+**Cost**: 1 read + 1 write, whatever the number of events. The loop then only dispatches in memory.
 
-**Regles** :
-- Aucune lecture base dans la boucle d'events. Les identifiants mutes sont connus avant d'entrer dedans : une requete `Contains` les charge tous d'un coup. Un `await FindAsync` par event, c'est N requetes pour une seule command.
-- La lecture de `Save` est **suivie** (pas d'`AsNoTracking`) : c'est ce suivi qui fait persister les mutations. Seules les lectures de consultation (`GetProduct`, `GetProducts`) sont `AsNoTracking()`.
-- Entite attendue mais absente : lever l'exception domain (`ProductNotFoundException`). Un `if (entity is not null)` sans `else` avale l'echec et rend un `Save` faussement reussi.
-- `auditTrailWriter.Track(@event)` une seule fois apres le switch : il s'applique a tous les events, il n'a pas a etre recopie dans chaque `case`.
+**Rules**:
+- No database read inside the event loop. The mutated identifiers are known before entering it: one `Contains` query loads them all at once. One `await FindAsync` per event means N queries for a single command.
+- The `Save` read is **tracked** (no `AsNoTracking`): that tracking is what persists the mutations. Only consultation reads (`GetProduct`, `GetProducts`) are `AsNoTracking()`.
+- Entity expected but missing: throw the domain exception (`ProductNotFoundException`). An `if (entity is not null)` with no `else` swallows the failure and returns a falsely successful `Save`.
+- `auditTrailWriter.Track(@event)` once, after the switch: it applies to every event, it does not get copied into each `case`.
 
 ---
 
 ## Infrastructure - EF Core Entity
 
-Les entites infrastructure heritent de `AbstractEntity<Ulid>` et utilisent `[EntityTypeConfiguration]` pour la configuration inline :
+Infrastructure entities inherit from `AbstractEntity<Ulid>` and use `[EntityTypeConfiguration]` for inline configuration:
 
 ```csharp
 [EntityTypeConfiguration(typeof(ProductEntityConfiguration))]
@@ -129,7 +129,7 @@ public class ProductEntityConfiguration : IEntityTypeConfiguration<ProductEntity
 
 ## Infrastructure - Mapper
 
-Mapper bidirectionnel entre entites EF Core et aggregates domain. Utilise `Restore()` pour la reconstitution :
+Two-way mapper between EF Core entities and domain aggregates. Uses `Restore()` for rehydration:
 
 ```csharp
 public static class ProductMapper

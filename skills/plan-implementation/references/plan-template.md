@@ -1,163 +1,165 @@
-# Template de plan d'implementation
+# Implementation plan template
 
-Structure attendue par `/implement-tdd`. Deux niveaux :
-- **Plan global** (`-PLAN.md`) : vue compacte lisible humain, ~15 lignes/lot
-- **Fiches lot** (`-PLAN-F1.md`, `-PLAN-F2.md`...) : detail technique par lot, charge par `/implement-tdd`
+Structure expected by `/implement-tdd`. Two levels:
+- **Global plan** (`-PLAN.md`): compact human-readable view, ~15 lines per batch
+- **Batch sheets** (`-PLAN-F1.md`, `-PLAN-F2.md`…): technical detail per batch, loaded by `/implement-tdd`
 
-**Principe** : plan global = QUOI + POURQUOI + ORDRE. Fiche lot = QUOI + COMMENT pour ce lot seul.
+**Principle**: global plan = WHAT + WHY + ORDER. Batch sheet = WHAT + HOW for that batch alone.
+
+**The templates below are reproduced verbatim**: they are produced artefacts, read by the team. Copy the structure as-is, filling in the placeholders.
 
 ---
 
-## Plan global (`[CODE]-PLAN.md`)
+## Global plan (`[CODE]-PLAN.md`)
 
 ```markdown
-# [CODE]-PLAN — [Nom de la fonctionnalite]
+# [CODE]-PLAN — [Feature name]
 
-> Plan derive de `[chemin de la spec]`.
-> Fiches lot : `[CODE]-PLAN-F1.md`, `[CODE]-PLAN-F2.md`...
+> Plan derived from `[path of the spec]`.
+> Batch sheets: `[CODE]-PLAN-F1.md`, `[CODE]-PLAN-F2.md`...
 
-## 0. Resume
+## 0. Summary
 
-**Avancement** : `X / N` (`Y %`)
+**Progress**: `X / N` (`Y %`)
 
-### Execution des lots
+### Batch execution
 
-| Lot | Depend de | Execution | Raison |
-|-----|-----------|-----------|--------|
-| F1 | — | sequentiel | socle / premier contrat |
-| F2 | F1 | parallelisable avec F3 (2 worktrees) / sequentiel | [absence de code, configuration et fixtures partages] |
-| F3 | F1 | parallelisable avec F2 (2 worktrees) / sequentiel | [raison concrete] |
+| Batch | Depends on | Execution | Reason |
+|-------|------------|-----------|--------|
+| F1 | — | sequential | foundation / first contract |
+| F2 | F1 | parallelisable with F3 (2 worktrees) / sequential | [no shared code, configuration or fixtures] |
+| F3 | F1 | parallelisable with F2 (2 worktrees) / sequential | [concrete reason] |
 
-`sequentiel` est la valeur par defaut. Marquer `parallelisable` uniquement si les prerequis sont termines et si les lots ne touchent ni le meme aggregate, handler, endpoint, projet, DI, migration, route ni fixture de test.
+`sequential` is the default. Mark `parallelisable` only if the prerequisites are finished and the batches touch neither the same aggregate, handler, endpoint, project, DI, migration, route nor test fixture.
 
-### Lot F1 — [Nom] — ⬜
-- [ ] 1. [Titre etape]
-- [ ] N. Verification build + tests — portee : [suites entieres] · [filtre TI]
+### Batch F1 — [Name] — ⬜
+- [ ] 1. [Step title]
+- [ ] N. Build + test verification — scope: [whole suites] · [IT filter]
 
-### Lot F2 — [Nom] — ⬜
-- [ ] 1. [Titre etape]
+### Batch F2 — [Name] — ⬜
+- [ ] 1. [Step title]
 
-## 1. Perimetre
+## 1. Scope
 
-- **Spec** : `[chemin]`
-- **Bounded context** : [nom]
-- **Couches** : [Domain / Application / Infrastructure / WebAPI / Abstractions.Models]
-- **Reutilisation** : [elements existants identifies lors analyse codebase]
-- **Hypotheses** : [points tranches avec utilisateur]
+- **Spec**: `[path]`
+- **Bounded context**: [name]
+- **Layers**: [Domain / Application / Infrastructure / WebAPI / Abstractions.Models]
+- **Reuse**: [existing elements identified during codebase analysis]
+- **Assumptions**: [points settled with the user]
 
-## 2. Traçabilite
+## 2. Traceability
 
-| RM/CU | Porteur(s) code | Lot |
-|-------|-----------------|-----|
-| RM-01 — [enonce] | `[Aggregate].[Methode]()` + `[Exception]` | F1 |
-| CU-01 — [enonce] | `[Command]` → `[Handler]` → `[Endpoint]` | F1 |
+| RM/CU | Code owner(s) | Batch |
+|-------|---------------|-------|
+| RM-01 — [statement] | `[Aggregate].[Method]()` + `[Exception]` | F1 |
+| CU-01 — [statement] | `[Command]` → `[Handler]` → `[Endpoint]` | F1 |
 
-## 3. Couverture des regles
+## 3. Rule coverage
 
-Chaque ID de `ddd-rules.md` et `architecture-rules.md` doit apparaitre une fois : applique ou `N/A — raison`.
+Every id of `ddd-rules.md` and `architecture-rules.md` must appear once: applied or `N/A — reason`.
 
-| Famille | IDs appliques | IDs N/A — raison |
-|----------|---------------|------------------|
-| DDD | DDD-01, DDD-02, DDD-03, DDD-06, DDD-08, DDD-11 | DDD-04 — aucun concept avec invariant propre ; DDD-05 — un seul aggregate ; DDD-07 — aucune mutation eventee ; DDD-09 — operation possedee par aggregate ; DDD-10 — Domain non touche |
-| APP/PERF | APP-01, APP-02, APP-03, PERF-01 | APP-04 — aucune couche WebAPI/Infrastructure touchee ; APP-05 — aucune route ni lecture non bornee touchee |
+| Family | Applied ids | N/A ids — reason |
+|--------|-------------|------------------|
+| DDD | DDD-01, DDD-02, DDD-03, DDD-06, DDD-08, DDD-11 | DDD-04 — no concept with its own invariant; DDD-05 — a single aggregate; DDD-07 — no evented mutation; DDD-09 — operation owned by the aggregate; DDD-10 — Domain untouched |
+| APP/PERF | APP-01, APP-02, APP-03, PERF-01 | APP-04 — no WebAPI/Infrastructure layer touched; APP-05 — no route and no unbounded read touched |
 
-## 4. Design DDD et Architecture
+## 4. DDD and Architecture design
 
-| RM/CU | Regles appliquees | Aggregate responsable | Invariant / consequence code | Coherence | Lot |
-|-------|-------------------|-----------------------|------------------------------|-----------|-----|
-| RM-01 / CU-01 | DDD-02, DDD-03, DDD-08, APP-01 | `[Aggregate]` | [invariant] → [branche/lecture supprimee] | synchrone, 1 aggregate | F1 |
+| RM/CU | Applied rules | Owning aggregate | Invariant / code consequence | Consistency | Batch |
+|-------|---------------|------------------|------------------------------|-------------|-------|
+| RM-01 / CU-01 | DDD-02, DDD-03, DDD-08, APP-01 | `[Aggregate]` | [invariant] → [branch/read removed] | synchronous, 1 aggregate | F1 |
 
-## 5. Lots fonctionnels
+## 5. Functional batches
 
-### Lot F1 — [Nom]
+### Batch F1 — [Name]
 
-**Intention** : [1 phrase — ref CU]
-**RM** : RM-01, RM-03 | **CU** : CU-01
-**Fiche** : `[CODE]-PLAN-F1.md`
+**Intent**: [1 sentence — CU ref]
+**RM**: RM-01, RM-03 | **CU**: CU-01
+**Sheet**: `[CODE]-PLAN-F1.md`
 
-| Couche | Element | Action | Detail |
-|--------|---------|--------|--------|
-| Domain | `[Aggregate]` | modifie | +`[Methode]()` (RM-XX), +`[Event]` |
-| Domain | `[ValueObject]` | nouveau | invariants: RM-XX |
-| App | `[Command]` → `[Handler]` | nouveau | — |
-| Infra | `[Repository]` | modifie | +Save case |
-| WebAPI | `[VERBE] /[route]` → [status] | nouveau | — |
+| Layer | Element | Action | Detail |
+|-------|---------|--------|--------|
+| Domain | `[Aggregate]` | modified | +`[Method]()` (RM-XX), +`[Event]` |
+| Domain | `[ValueObject]` | new | invariants: RM-XX |
+| App | `[Command]` → `[Handler]` | new | — |
+| Infra | `[Repository]` | modified | +Save case |
+| WebAPI | `[VERB] /[route]` → [status] | new | — |
 
-**Decisions** : [choix non-evidents]. Absent si rien de notable.
+**Decisions**: [non-obvious choices]. Omitted if nothing notable.
 
-**Tests** : `ShouldX_WhenY` (RM-XX, TU handler) · `ShouldA_WhenB` (TI repository) · `ShouldC()` (contrat endpoint)
+**Tests**: `ShouldX_WhenY` (RM-XX, handler UT) · `ShouldA_WhenB` (repository IT) · `ShouldC()` (endpoint contract)
 
-**E2E** : [scenario lifecycle ≥2 operations] / absent — [raison].
+**E2E**: [lifecycle scenario ≥2 operations] / omitted — [reason].
 
-**Etapes** :
-- [ ] 1. [Comportement metier bout en bout] — TDD : RED ⬜ · GREEN ⬜ · COUT ⬜
-- [ ] 2. [Comportement suivant]
-- [ ] N. Verification `dotnet build` + `dotnet test` — portee : [suites entieres] · [filtre TI] · [suites non lancees + raison]
+**Steps**:
+- [ ] 1. [End-to-end business behaviour] — TDD: RED ⬜ · GREEN ⬜ · COST ⬜
+- [ ] 2. [Next behaviour]
+- [ ] N. `dotnet build` + `dotnet test` verification — scope: [whole suites] · [IT filter] · [suites not run + reason]
 
-### Lot F2 — [Nom suivant]
+### Batch F2 — [Next name]
 
-[Meme structure]
+[Same structure]
 
-## 6. Elements transverses (si applicable)
+## 6. Cross-cutting elements (if applicable)
 
-- **DI** : enregistrements | **Routes** : constantes `Endpoints.cs` | **Bornes** (APP-05) : `RequestLimits` (transport) / `PaginationBounds` (pagination) / `QueryLimits` (lecture)
-- **Migrations EF** : hors perimetre — autre projet, jamais modifiees ici. Un changement de schema requis se signale, il ne se planifie pas comme une etape.
+- **DI**: registrations | **Routes**: `Endpoints.cs` constants | **Bounds** (APP-05): `RequestLimits` (transport) / `PaginationBounds` (pagination) / `QueryLimits` (read)
+- **EF migrations**: out of scope — another project, never modified here. A required schema change is reported, it is not planned as a step.
 ```
 
 ---
 
-## Fiche lot (`[CODE]-PLAN-F1.md`)
+## Batch sheet (`[CODE]-PLAN-F1.md`)
 
 ```markdown
-# [CODE]-PLAN-F1 — [Nom du lot]
+# [CODE]-PLAN-F1 — [Batch name]
 
-> Lot F1 du plan `[CODE]-PLAN.md`. Spec : `[chemin]`.
+> Batch F1 of plan `[CODE]-PLAN.md`. Spec: `[path]`.
 
-## Intention
+## Intent
 
-[1 phrase — ref CU]. **RM** : RM-01, RM-03 | **CU** : CU-01
+[1 sentence — CU ref]. **RM**: RM-01, RM-03 | **CU**: CU-01
 
 ## Design
 
 | Point | Decision |
 |-------|----------|
-| Regles appliquees | DDD-01, DDD-02, DDD-03, DDD-08, APP-01, APP-02, PERF-01 |
-| Aggregate responsable | `[Aggregate]` ; le handler orchestre uniquement |
-| Invariants | [RM-XX] ; consequence : [code defensif/lecture/collection evite] |
-| Coherence | une command modifie/sauve `[Aggregate]` ; lecture externe ciblee non mutante si necessaire |
-| Events | internes a la persistence : `[Event]` au passe, payload [champs] / N/A — raison |
-| Cout d'acces | [n lectures + n ecritures, borne independante de l'entree] |
+| Applied rules | DDD-01, DDD-02, DDD-03, DDD-08, APP-01, APP-02, PERF-01 |
+| Owning aggregate | `[Aggregate]`; the handler only orchestrates |
+| Invariants | [RM-XX]; consequence: [defensive code/read/collection avoided] |
+| Consistency | one command modifies/saves `[Aggregate]`; targeted non-mutating external read if needed |
+| Events | internal to persistence: `[Event]` in the past tense, payload [fields] / N/A — reason |
+| Access cost | [n reads + n writes, bounded independently of the input] |
 
-## Elements de code
+## Code elements
 
 ### Domain
 
-**`[Aggregate]`** — _modifie_ / _nouveau_
-- `Create(...)` : [params] → valide (RM-XX) → event `[Event]`
-- `[MethodeMetier](...)` : [params] → [logique courte] → event `[Event]`
-- **Invariants** : [conditions — RM-XX]
-- **Reutilise** : `[VO existant]`
+**`[Aggregate]`** — _modified_ / _new_
+- `Create(...)`: [params] → validates (RM-XX) → event `[Event]`
+- `[BusinessMethod](...)`: [params] → [short logic] → event `[Event]`
+- **Invariants**: [conditions — RM-XX]
+- **Reuses**: `[existing VO]`
 
-**`[ValueObject]`** — _nouveau_
-- `Create(...)` : [params], invariants (RM-XX)
+**`[ValueObject]`** — _new_
+- `Create(...)`: [params], invariants (RM-XX)
 
-**`[DomainEvent]`** — payload: [champs], emis par `[Aggregate].[Methode]`
+**`[DomainEvent]`** — payload: [fields], emitted by `[Aggregate].[Method]`
 
-**`[Exception]`** — declenchee par RM-XX
+**`[Exception]`** — raised by RM-XX
 
 ### Application
 
-**`[Command]`** — props: [types], retour: `[EntityId]`
+**`[Command]`** — props: [types], returns: `[EntityId]`
 
 **`[Handler]`** — deps: `I[Repo]`, `IUserContextWrapper`
-- OrgId → charger aggregate → methode metier → Save events → retourner ID
+- OrgId → load aggregate → business method → Save events → return ID
 
 ### Infrastructure
 
-**`[Repository]`** — _nouveau_ / _modifie_
-- Methodes : `Save(...)`, `GetById(...)`
-- Save : switch events `[Event1]`, `[Event2]`
-- EF : `[Entity]Entity` + config
+**`[Repository]`** — _new_ / _modified_
+- Methods: `Save(...)`, `GetById(...)`
+- Save: switch on events `[Event1]`, `[Event2]`
+- EF: `[Entity]Entity` + config
 
 ### Abstractions.Models
 
@@ -165,37 +167,33 @@ Chaque ID de `ddd-rules.md` et `architecture-rules.md` doit apparaitre une fois 
 
 ### WebAPI
 
-**`[Action][Entity]`** — `[VERBE] /[route]` → `[Request]` → command → dispatch → [status]
+**`[Action][Entity]`** — `[VERB] /[route]` → `[Request]` → command → dispatch → [status]
 
 ## Tests
 
-**TU** :
-- `ShouldCreate[Entity]_WhenCommandIsValid` — succes
+**UT**:
+- `ShouldCreate[Entity]_WhenCommandIsValid` — success
 - `ShouldEmit[Entity]CreatedEvent_WhenSuccessful` — event
-- `ShouldThrowEmptyNameException_When[Prop]IsEmpty` (RM-XX — exception du VO, pas d'`ArgumentException` local)
+- `ShouldThrowEmptyNameException_When[Prop]IsEmpty` (RM-XX — the VO's exception, not a local `ArgumentException`)
 - `ShouldThrow[Exception]_When[Condition]` (RM-XX)
 
-**Politique handler** : query = mock alimente puis resultat verifie ; command = `SavedEvents` verifie par type et payload. Jamais spy, compteur, ni assertion d'appel.
+**Handler policy**: query = mock fed with data then result asserted; command = `SavedEvents` asserted by type and payload. Never a spy, a counter, nor a call assertion.
 
-**TI** :
-- `ShouldPersist[Entity]_WhenSaved`
-- `ShouldReturn[Entity]_WhenIdExists`
+**IT regression scope**: `--filter-class "*.[Context].[Feature].*"` [+ other impacted namespaces]. The whole `IntegrationTests` suite is never run: naming the namespaces to replay here avoids having to derive them from the diff on every validation. Available roots: `Licensing`, `Catalog`, `Database`, `Dsl`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
 
-**Portee TI de non-regression** : `--filter-class "*.[Contexte].[Feature].*"` [+ autres namespaces impactes]. La suite `IntegrationTests` entiere ne se lance jamais : nommer ici les namespaces a rejouer evite d'avoir a le deduire du diff a chaque validation. Racines disponibles : `Licensing`, `Catalog`, `Database`, `Dsl`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
+**Contract**: [happy-path route test name] / omitted — [route unchanged].
 
-**Contrat** : [nom test route happy path] / absent — [route inchangee].
+**E2E**: [lifecycle scenario name ≥2 operations] / omitted — [no cross-cutting lifecycle].
 
-**E2E** : [nom scenario lifecycle ≥2 operations] / absent — [pas de lifecycle transverse].
+## Assumptions
 
-## Hypotheses
+_Empty when the plan is written. Filled by `/implement-tdd` on every non-obvious decision settled mid-batch._
 
-_Vide a la redaction du plan. Rempli par `/implement-tdd` a chaque decision non evidente tranchee en cours de lot._
-
-| # | Hypothese | A valider par |
-|---|-----------|---------------|
-| H1 | [ce qui a ete suppose faute de reponse] | [qui / quoi] |
+| # | Assumption | To be validated by |
+|---|------------|--------------------|
+| H1 | [what was assumed for lack of an answer] | [who / what] |
 
 ## Decisions
 
-[Choix non-evidents, arbitrages, reutilisations. Absent si rien de notable.]
+[Non-obvious choices, trade-offs, reuses. Omitted if nothing notable.]
 ```

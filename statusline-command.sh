@@ -40,7 +40,7 @@ if [ ! -L "$FLAG" ] && [ -f "$FLAG" ]; then
 fi
 
 # --- Graphify freshness badge ---
-# Lecture cachee (TTL 20s cote helper), ~10ms a chaud.
+# Cached read (20s TTL on the helper side), ~10ms warm.
 graphify_badge=""
 FRESH_SCRIPT="$cwd/.claude/hooks/graphify-freshness.sh"
 if [ -x "$FRESH_SCRIPT" ]; then

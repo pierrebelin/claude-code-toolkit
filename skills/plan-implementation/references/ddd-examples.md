@@ -1,39 +1,39 @@
-# Exemples DDD
+# DDD examples
 
-Lire seulement les sections des IDs appliques dans la fiche lot.
+Read only the sections of the ids applied in the batch sheet.
 
-## DDD-02 / DDD-03 — Aggregate et comportement
+## DDD-02 / DDD-03 — Aggregate and behaviour
 
-**Conforme** : `ChangeOwnerHandler` charge `Document`, appelle `document.ChangeOwner(ownerId)`, puis sauvegarde `DocumentOwnerChanged`. `Document` refuse un owner invalide.
+**Conforming**: `ChangeOwnerHandler` loads `Document`, calls `copy.ChangeOwner(ownerId)`, then saves `DocumentOwnerChanged`. `Document` rejects an invalid owner.
 
-**Non conforme** : le handler teste la RM puis assigne `document.OwnerId = ownerId`.
+**Not conforming**: the handler checks the business rule then assigns `copy.OwnerId = ownerId`.
 
-## DDD-04 / DDD-05 — Concept et reference
+## DDD-04 / DDD-05 — Concept and reference
 
-**Conforme** : `Product.Name` est un VO `Name` qui valide son format une seule fois (`Name.Create`), reutilise par tous les aggregates qui portent un nom ; `ProductItem` stocke `ProductId`, pas un `Product` navigable.
+**Conforming**: `Product.Name` is a `Name` VO validating its format once (`Name.Create`), reused by every aggregate carrying a name; `Key` stores a `ProductId`, not a navigable `Product`.
 
-**Non conforme** : `public string Name` avec la regle de format recopiee dans `Create()` puis dans `Update()` ; un VO `ProductName` cree alors que `Name` couvre deja le besoin ; un aggregate contient les objets d'un autre aggregate.
+**Not conforming**: `public string Name` with the format rule copied into `Create()` and again into `Update()`; a `ProductName` VO created while `Name` already covers the need; an aggregate holding another aggregate's objects.
 
-## DDD-06 / DDD-07 — Lifecycle et event interne
+## DDD-06 / DDD-07 — Lifecycle and internal event
 
-**Conforme** : `Product.Create(...)` produit `ProductCreated`; le repository appelle `Product.Restore(...)` pour relire la base et traduit `ProductCreated` dans `Save`.
+**Conforming**: `Product.Create(...)` produces `ProductCreated`; the repository calls `Product.Restore(...)` to read the database back and translates `ProductCreated` inside `Save`.
 
-**Non conforme** : le repository appelle `Create()` a la rehydratation ou publie l'event hors du processus de persistence.
+**Not conforming**: the repository calls `Create()` on rehydration, or publishes the event outside the persistence process.
 
-## DDD-08 — Une command, un aggregate modifie
+## DDD-08 — One command, one modified aggregate
 
-**Conforme** : `RenameProductHandler` charge et sauvegarde `Product`; une lecture ciblee fournit seulement un identifiant de contexte.
+**Conforming**: `RenameProductHandler` loads and saves `Product`; a targeted read supplies only a context identifier.
 
-**Non conforme** : le handler charge, modifie et sauvegarde `Product` et `Order` dans la meme command sans exception explicite.
+**Not conforming**: the handler loads, modifies and saves `Product` and `Order` in the same command with no explicit exception.
 
-## DDD-09 / DDD-10 — Porteur de la logique et frontiere technique
+## DDD-09 / DDD-10 — Owner of the logic and technical boundary
 
-**Conforme** : l'objet qui possede les donnees porte l'operation — `exportDiagramsContext.Serialize()`, `ParsedImportFile.Create(json)`. Un Domain Service stateless n'apparait que pour une regle qu'aucun objet metier ne possede. EF et HTTP restent en Infrastructure/WebAPI.
+**Conforming**: the object owning the data owns the operation — `exportDiagramsContext.Serialize()`, `ParsedImportFile.Create(json)`. A stateless Domain Service appears only for a rule no business object owns. EF and HTTP stay in Infrastructure/WebAPI.
 
-**Non conforme** : `DiagramExportSerializer.Serialize(context)`, `IParser.Parse(json)` ou tout helper statique qui prend en parametre l'etat d'un objet metier pour raisonner a sa place. `OrderDomainService` wrapper de repository. Une entity Domain qui porte un `DbContext`.
+**Not conforming**: `DiagramExportSerializer.Serialize(context)`, `IParser.Parse(json)` or any static helper taking a business object's state as a parameter to reason in its place. `OrderDomainService` as a repository wrapper. A Domain entity carrying a `DbContext`.
 
-## DDD-11 — Absence modelisee
+## DDD-11 — Modelled absence
 
-**Conforme** : `IReadOnlyList<GroupId> groupIds` non nullable, vide = « aucun filtre » documente sur la methode ; l'endpoint convertit `request.GroupIds ?? []` a la frontiere. Contrainte optionnelle → `NoConstraint` qui implemente le comportement neutre.
+**Conforming**: `IReadOnlyList<GroupId> groupIds` non-nullable, empty = "no filter" documented on the method; the endpoint converts `request.GroupIds ?? []` at the boundary. Optional constraint → `NoConstraint`, implementing the neutral behaviour.
 
-**Non conforme** : `IReadOnlyList<GroupId>? groupIds` propage jusqu'au repository, `PortConstraint?` teste par `is null` a chaque usage, ou un handler qui interprete `null` comme « inchange » sans que la methode le dise.
+**Not conforming**: `IReadOnlyList<GroupId>? groupIds` propagated down to the repository, `PortConstraint?` tested with `is null` at every use, or a handler interpreting `null` as "unchanged" without the method saying so.

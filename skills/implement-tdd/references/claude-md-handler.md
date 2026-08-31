@@ -1,122 +1,106 @@
-# Format des `CLAUDE.md` de l'Application
+# Format of the Application `CLAUDE.md` files
 
-Deux niveaux, jamais melanges :
+Two levels, never mixed:
 
-- **Dossier handler** (`Application/{Contexte}/{Feature}/{Action}{Entity}/CLAUDE.md`) : regles metier detaillees du use case.
-- **Dossier feature** (`Application/{Contexte}/{Feature}/CLAUDE.md`) : index. Intention en une ligne par use case, concepts transverses, cycle de vie. **Aucune regle metier detaillee.**
+- **Handler folder** (`Application/{Context}/{Feature}/{Action}{Entity}/CLAUDE.md`): the use case's detailed business rules.
+- **Feature folder** (`Application/{Context}/{Feature}/CLAUDE.md`): an index. One-line intent per use case, cross-cutting concepts, lifecycle. **No detailed business rule.**
 
-Langue : francais, ton documentaire. Nommer les types exacts (`AuditTrailEntity`, `QueryLimits.MAX_UNPAGINATED_RESULTS`) — c'est une doc pour developpeur, pas une spec metier.
+**Documentary tone** — these files are a produced artefact, read by the team. Name the exact types (`AuditTrailEntity`, `QueryLimits.MAX_UNPAGINATED_RESULTS`): this is developer documentation, not a business spec.
+
+The three `##` headings are parsed verbatim by `.claude/hooks/handler-claude-md-check.sh` and by `scripts/rules-coverage.py`. Never reword them.
 
 ---
 
-## Fiche handler
+## Handler sheet
 
 ````markdown
 # [Action][Entity]
 
-[Intention en une phrase : ce que le use case fait, pour qui, sur quelle portee.]
+[Intent in one sentence: what the use case does, for whom, over what scope.]
 
-## Règles métier
+## Business rules
 
-| ID | Règle | Exception / Résultat | Tests |
-|----|-------|----------------------|-------|
-| RM-01 | [enonce testable] | `[Exception]` → [status HTTP] | `[Classe]Tests.[Methode]` |
+| ID | Rule | Exception / Result | Tests |
+|----|------|--------------------|-------|
+| RM-01 | [testable statement] | `[Exception]` → [HTTP status] | `[Class]Tests.[Method]` |
 
-`RM-xx` = regle globale definie dans `docs/metier/REGLES-METIER-{AGREGAT}.md`, reutiliser le numero
-existant. La numerotation y est **propre a chaque document** : `RM-02` ne veut rien dire hors de
-l'agregat auquel il appartient. `RL-xx` = regle locale au handler, numerotation propre au fichier.
-
-Colonne *Tests* : `ClasseDeTest.NomDeMethode`, plusieurs separes par `, `. Cellule vide = regle non
-couverte, assumee. **Le test rouge ecrit en phase TDD renseigne sa cellule dans le meme lot.**
-
-_Query pure sans regle_ : ecrire « Aucune (query pure) » et preciser le cloisonnement applique
-(ex. scope restreint a l'organisation courante via `IUserContextWrapper`).
-
-## Flux
+## Flow
 
 ```
-[Etape 1] → [Etape 2] → [Etape 3]
+[Step 1] → [Step 2] → [Step 3]
 ```
 
-[1 lecture + 1 ecriture, quel que soit le nombre de X.]
+[1 read + 1 write, whatever the number of X.]
 
-## Evenements emis
+## Emitted events
 
-`[Event]` — payload : [champs]. / Aucun (query).
+`[Event]` — payload: [fields]. / None (query).
 ````
 
-**Liste fermee : ces trois sections `##`, dans cet ordre, et aucune autre.** Pas de `## Decisions`,
-pas de `## Raison d'etre`, pas de section ad hoc titree sur un point precis (`## La valeur ne sort
-jamais`, `## Les neuf controles du resolveur`). Ce qui n'est ni une regle, ni le flux, ni un
-evenement va dans `docs/` ou dans le plan, pas dans la fiche.
+`RM-xx` = a rule shared by several handlers of the same aggregate. Numbering is **per aggregate**: `RM-02` means nothing outside the aggregate it belongs to. Before assigning a number, read the `CLAUDE.md` of the neighbouring handlers in the same feature and reuse the one the rule already carries there; never renumber an existing rule. `RL-xx` = a rule local to the handler, numbered per file.
 
-**La ligne de cout sous le flux est obligatoire.** Elle est la seule trace durable d'une decision qu'aucun test ne
-verrouille. Lecture non bornee volontaire (`Include` d'une collection qui grossit) → le dire et dire pourquoi.
+`Tests` column: `TestClass.MethodName`, several separated by `, `. An empty cell means the rule is uncovered, knowingly. **The red test written during the TDD phase fills its cell in the same batch.**
 
-**Etat courant seulement — jamais d'historique.** Une fiche decrit ce que le handler fait aujourd'hui,
-comme si elle etait ecrite d'un coup. Un changement structurant **reecrit** la section concernee ; il
-n'en ajoute pas une nouvelle a la suite.
+_Pure query with no rule_: write "None (pure query)" and state the partitioning applied (e.g. scope restricted to the current organisation through `IUserContextWrapper`).
 
-Ne jamais ecrire :
+**Closed list: those three `##` sections, in that order, and no other.** No `## Decisions`, no `## Rationale`, no ad-hoc section titled after some specific point (`## The value never leaves`, `## The resolver's nine checks`). Whatever is neither a rule, nor the flow, nor an event goes into `docs/` or into the plan, not into the sheet.
 
-- une date ou un numero de lot — `(2026-08-11)`, `(lot F4)`. Un libelle de regle nomme la regle, rien
-  d'autre. Une reference de spec (`RM-17`, `RG_TRANSFERT_5`) se garde : elle est stable, une
-  date ne l'est pas.
-- une section de journal : « Corrections d'audit », « Ecarts assumes », « Resolutions d'ecarts »,
-  « Evolutions », « Historique », « Ce qui a change ».
-- un recit de changement : « faisait lever… desormais », « l'ancienne signature », « au lieu de »,
-  « a ete supprime », « depuis le 2026-08-24 ». Enoncer l'etat final au present suffit.
+**The cost line under the flow is mandatory.** It is the only durable trace of a decision no test locks down. A deliberately unbounded read (`Include` of a growing collection) → say so and say why.
 
-Le pourquoi d'une decision se garde quand il reste vrai (« un `404` inatteignable tromperait la
-generation de client ») ; le recit de comment on y est arrive, non. Ce recit a deja deux porteurs :
-les plans (`PLAN-*.md`, `todo/`) et l'historique Git.
+**Current state only — never history.** A sheet describes what the handler does today, as if written in one go. A structural change **rewrites** the affected section; it does not append a new one.
 
-**Pourquoi cette contrainte.** Une fiche handler est rechargee integralement a chaque lecture d'un
-fichier du dossier. Empiler les sections datees fait croitre sans fin un contenu paye a chaque
-session, pour du texte qui ne decrit plus le code.
+Never write:
+
+- a date or a batch number — `(2026-08-11)`, `(batch F4)`. A rule's wording names the rule, nothing else. A spec reference (`RM-17`, `RG_TRANSFER_5`) is kept: it is stable, a date is not.
+- a journal section: "Audit fixes", "Accepted gaps", "Gap resolutions", "Changes", "History", "What changed".
+- a change narrative: "used to throw… now", "the old signature", "instead of", "was removed", "since 2026-08-24". Stating the final state in the present tense is enough.
+
+The *why* of a decision is kept while it stays true ("an unreachable `404` would mislead client generation"); the story of how it was reached is not. That story already has two owners: the plans (`PLAN-*.md`, `todo/`) and the Git history.
+
+**Why this constraint.** A handler sheet is reloaded in full every time a file of the folder is read. Stacking dated sections grows, without limit, content paid for on every session, for text that no longer describes the code.
 
 ---
 
-## Index de feature
+## Feature index
 
 ```markdown
 # [Feature]
 
-[2-3 phrases : perimetre du bounded context, entites concernees.]
+[2-3 sentences: scope of the bounded context, entities involved.]
 
-## [Concept transverse]
+## [Cross-cutting concept]
 
-[Enum, cycle de vie, invariant partage par plusieurs use cases.]
+[Enum, lifecycle, invariant shared by several use cases.]
 
 ## Commands
 
-| Use case | Intention | Regles metier |
-|----------|-----------|---------------|
-| [Create[Entity]]([Create[Entity]]/CLAUDE.md) | [une ligne] | [N regles, M testees] |
+| Use case | Intent | Business rules |
+|----------|--------|----------------|
+| [Create[Entity]]([Create[Entity]]/CLAUDE.md) | [one line] | [N rules, M tested] |
 
 ## Queries
 
-| Use case | Intention | Regles metier |
-|----------|-----------|---------------|
-| [Get[Entity]s]([Get[Entity]s]/CLAUDE.md) | [une ligne] | 0 regle |
+| Use case | Intent | Business rules |
+|----------|--------|----------------|
+| [Get[Entity]s]([Get[Entity]s]/CLAUDE.md) | [one line] | 0 rule |
 ```
 
-Lien relatif vers la fiche handler obligatoire. Un handler absent de l'index est un handler introuvable.
+The relative link to the handler sheet is mandatory. A handler missing from the index is a handler nobody can find.
 
-La colonne *Regles metier* se recalcule : `python3 scripts/rules-coverage.py --fix-index`.
+The `Business rules` column is recomputed by: `python3 scripts/rules-coverage.py --fix-index`.
 
 ---
 
-## Mise a jour
+## Updating
 
-| Evenement | Action |
+| Event | Action |
 |---|---|
-| Regle metier ajoutee/modifiee/supprimee | Fiche handler : tableau des regles. Une regle supprimee **disparait**, elle ne devient pas une note d'historique |
-| Flux ou cout d'acces change | Fiche handler : flux + ligne de cout |
-| Nouvel evenement, payload change | Fiche handler : evenements emis |
-| Nouveau handler | Creer la fiche **et** ajouter la ligne dans l'index de feature |
-| Intention du handler changee | Fiche handler + ligne d'index |
-| Decision structurante (securite, persistence, contrat) | **Reecrire** la section concernee au present, sans date ni numero de lot |
+| Business rule added/modified/removed | Handler sheet: rules table. A removed rule **disappears**, it does not become a history note |
+| Flow or access cost changed | Handler sheet: flow + cost line |
+| New event, changed payload | Handler sheet: emitted events |
+| New handler | Create the sheet **and** add the row to the feature index |
+| Handler intent changed | Handler sheet + index row |
+| Structural decision (security, persistence, contract) | **Rewrite** the affected section in the present tense, with no date and no batch number |
 
-Exemples reels : `src/{{PRODUCT}}.Application/Catalog/Products/CLAUDE.md` (index) et
-`Catalog/Products/GetProduct/CLAUDE.md` (fiche).
+Real examples: `src/{{PRODUCT}}.Application/Catalog/Products/CLAUDE.md` (index) and
+`Catalog/Products/GetProduct/CLAUDE.md` (sheet).

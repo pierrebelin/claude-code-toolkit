@@ -7,6 +7,8 @@ paths:
 
 Full code examples for this layer: `.claude/skills/implement-tdd/references/examples-application.md`.
 
+This file owns the layer's technical conventions. The folder `CLAUDE.md` files under `src/` carry the business rules and the handler/feature intent — never a technical convention: a convention added there would only be seen by the sessions that open that folder.
+
 
 A handler orchestrates: load, call the Domain, save events, return the result (APP-01). No business rule and no direct mutation inside a handler. A pure query only reads and returns.
 
@@ -79,27 +81,27 @@ Touching this layer, the done checklist is not satisfied until:
 
 ### Fixed shape of a handler `CLAUDE.md`
 
-**Closed list — exactly these three `##` sections, in this order, nothing else.** No `## Décisions`, no `## Raison d'être`, no ad-hoc section: what is neither a rule, nor the flow, nor an event belongs in `docs/` or in the plan file, not here.
+**Closed list — exactly these three `##` sections, in this order, nothing else.** No `## Decisions`, no `## Rationale`, no ad-hoc section: what is neither a rule, nor the flow, nor an event belongs in `docs/` or in the plan file, not here.
 
 ```markdown
 # {Handler}
 
 {Intent, one sentence.}
 
-## Règles métier
+## Business rules
 
-| ID | Règle | Exception / Résultat | Tests |
-|----|-------|----------------------|-------|
-| RM-02 | Cloisonnement à l'organisation courante | `ProductNotFoundException` | `GetProductTests.ShouldThrowNotFound_WhenProductBelongsToAnotherOrganization` |
-| RL-01 | Le macro-bloc à mettre à jour existe | `DiagramNodeNotFoundException` | `UpdateDiagramNodeTests.ShouldThrowNotFound_WhenDiagramNodeDoesNotExist` |
+| ID | Rule | Exception / Result | Tests |
+|----|------|--------------------|-------|
+| RM-02 | Partitioned to the current organisation | `ProductNotFoundException` | `GetProductTests.ShouldThrowNotFound_WhenProductBelongsToAnotherOrganization` |
+| RL-01 | The macro block to update exists | `DiagramNodeNotFoundException` | `UpdateDiagramNodeTests.ShouldThrowNotFound_WhenDiagramNodeDoesNotExist` |
 
-## Flux
+## Flow
 
-Charger DiagramNodeDefinition → Valider/préparer graphe → UpdateFromStudio → Save
+Load DiagramNodeDefinition → Validate/prepare graph → UpdateFromStudio → Save
 
-1 lecture + 1 écriture, quel que soit le nombre de blocs.
+1 read + 1 write, whatever the number of blocks.
 
-## Événements émis
+## Emitted events
 
 - `DiagramNodeUpdated`
 ```
@@ -108,16 +110,16 @@ Authoring rules:
 
 | Element | Rule |
 |---------|------|
-| `RM-xx` | Cross-handler business rule, defined in the aggregate's `docs/metier/REGLES-METIER-{AGGREGATE}.md`. Reuse the existing number. Numbering is **per document** — `RM-02` means nothing without the aggregate it belongs to, so the handler folder must sit under that aggregate's feature |
+| `RM-xx` | Business rule shared by several handlers of the same aggregate. Numbering is **per aggregate** — `RM-02` means nothing without the aggregate it belongs to. Before assigning a number, read the sibling handler `CLAUDE.md` under the same feature and reuse the number the rule already carries there; never renumber an existing one |
 | `RL-xx` | Rule local to this handler. Numbering restarts per file |
-| *Règle* cell | A label, not a paragraph. The table is an index |
+| *Rule* cell | A label, not a paragraph. The table is an index |
 | *Tests* cell | `TestClass.MethodName`, comma-separated. Empty = knowingly untested |
 | Cost line | Mandatory under the flow. The only durable trace of a decision no test locks |
 | Sections | Those three and no other. The hook reports a forbidden, missing or out-of-order section |
 
 `handler-claude-md-check.sh` (PostToolUse) reports untested rules, dead test references and unbound tests. Warning only.
 
-Repo-wide report: `python3 scripts/rules-coverage.py [--untested]`; `--fix-index` recomputes the `N règles, M testées` column of the feature index `CLAUDE.md`.
+Repo-wide report: `python3 scripts/rules-coverage.py [--untested]`; `--fix-index` recomputes the `N rules, M tested` column of the feature index `CLAUDE.md`.
 
 Detailed authoring guide, including the feature index format: `.claude/skills/implement-tdd/references/claude-md-handler.md`.
 

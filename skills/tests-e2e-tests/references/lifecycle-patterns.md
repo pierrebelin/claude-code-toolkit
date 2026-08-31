@@ -1,8 +1,8 @@
-# Patterns E2E lifecycle
+# E2E lifecycle patterns
 
-Lire seulement si le lifecycle sélectionné demande plus que le template minimal.
+Read only if the selected lifecycle needs more than the minimal template.
 
-## Donnée de référence stable
+## Stable reference data
 
 ```csharp
 var blueprints = await fixture.Client.GetBlueprints(CancellationToken.None);
@@ -11,9 +11,9 @@ Assert.NotEmpty(blueprints.Value!.Blueprints);
 var blueprintId = blueprints.Value.Blueprints[0].Id;
 ```
 
-Lire la référence, ne pas la modifier. Toute donnée mutable créée par le test est supprimée à la fin du parcours.
+Read the reference data, do not modify it. Any mutable data the test creates is deleted at the end of the journey.
 
-## Dépendances API
+## API dependencies
 
 ```csharp
 var parent = await fixture.Client.CreateParentAsync(
@@ -25,9 +25,9 @@ var child = await fixture.Client.CreateChildAsync(
 Assert.True(child.IsSuccess);
 ```
 
-Créer les dépendances dans l'ordre métier requis, jamais par accès DB.
+Create the dependencies in the required business order, never through database access.
 
-## Test temporairement bloqué
+## Temporarily blocked test
 
 ```csharp
 [Fact(Skip = "Blocked: CreateChild endpoint is absent from SDK")]
@@ -37,4 +37,4 @@ public async Task ShouldCompleteLifecycle_WhenCreateThenActivateThenDelete()
 }
 ```
 
-Retirer `Skip` dès que la route et le SDK sont disponibles.
+Remove `Skip` as soon as the route and the SDK are available.

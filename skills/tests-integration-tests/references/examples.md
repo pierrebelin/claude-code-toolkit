@@ -1,8 +1,8 @@
-# Exemples integration
+# Integration examples
 
-Utiliser seulement si le template du skill ne suffit pas. Ces exemples emploient le pool SQL Server du projet ; ils ne testent jamais une methode d'aggregate directement.
+Use only when the skill's template is not enough. These examples use the project's SQL Server pool; they never test an aggregate method directly.
 
-## Relecture apres persistence
+## Re-read after persistence
 
 ```csharp
 public class Get[Entity]Fixture : BaseTestFixture
@@ -48,15 +48,15 @@ public class Get[Entity]Tests : IAsyncLifetime
 }
 ```
 
-## Contraintes SQL
+## SQL constraints
 
-Utiliser une contrainte unique ou FK seulement si elle est effectivement garantie par le schema SQL. Seeder la premiere ligne avec `DbContext`, executer l'action repository visee, puis verifier l'erreur ou l'etat persiste. Ne pas transformer ce test en test de RM : la RM reste dans le handler.
+Use a unique or FK constraint only when the SQL schema actually guarantees it. Seed the first row with `DbContext`, run the targeted repository action, then check the error or the persisted state. Do not turn this test into a business-rule test: the rule stays in the handler.
 
-## Choix de niveau de test
+## Choosing the test level
 
-| Sujet | Suite |
+| Subject | Suite |
 |-------|-------|
-| Decision metier, evenement, validation | TU handler |
-| Mapping EF, requete, migration, contrainte SQL | Integration SQL Server |
-| Contrat HTTP nominal | Contrat |
-| Parcours multi-operations | E2E |
+| Business decision, event, validation | Handler unit test |
+| EF mapping, query, migration, SQL constraint | SQL Server integration |
+| Nominal HTTP contract | Contract |
+| Multi-operation journey | E2E |

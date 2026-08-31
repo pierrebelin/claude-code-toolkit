@@ -1,37 +1,40 @@
 ---
 name: implement-tdd
-description: "Utiliser quand on implémente une fonctionnalité ou un lot .NET/DDD toutes couches en TDD strict : orchestre la chaîne test rouge, implémentation et audit final avec des sous-agents."
-argument-hint: "[lot FX | lot FX — correction: constat manuel]"
+description: "Use when implementing a .NET/DDD feature or batch across every layer under strict TDD: orchestrates the red-test, implementation and final-audit chain with subagents."
+argument-hint: "[batch FX | batch FX — correction: manual finding]"
 ---
 
-# Orchestrateur d'implémentation — TDD strict (Red-Green-Refactor)
+# Implementation orchestrator — strict TDD (Red-Green-Refactor)
 
-Pilote toute la chaîne **test-first** : sous-agent tests → implémentation → sous-agent vérification. Boucle RED-GREEN-REFACTOR explicite par comportement. Stop quand tout est vérifié ou bloque sur ambiguïté métier.
+Drives the whole **test-first** chain: test subagent → implementation → verification subagent. Explicit RED-GREEN-REFACTOR loop per behaviour. Stops once everything is verified, or blocks on a business ambiguity.
 
 $ARGUMENTS
 
-## Regles communes
+## Common rules
 
-Code, TDD test-first (Iron Law, cycle, Red Flags, rationalisations) → **lire `references/regles-communes.md`**. **Jamais de commit.** Regles de tests → skills `/tests-*`. Utiliser `rtk dotnet` pour build/test ; RTK compacte les logs mais ne remplace jamais un code retour.
+Code and test-first TDD (Iron Law, cycle, Red Flags, rationalisations) → **read `references/common-rules.md`**. **Never commit.** Test rules → the `/tests-*` skills. Use `rtk dotnet` for build/test; RTK compacts logs but never replaces an exit code.
 
-## Orchestration obligatoire
+## Mandatory orchestration
 
-Ce skill reste dans l'agent principal : **ne pas** lui ajouter `context: fork`. Un sous-agent ne peut pas déléguer à son tour.
+This skill stays in the main agent: do **not** give it `context: fork`. A subagent cannot delegate in turn.
 
-Utilise les agents projet suivants :
+Use these project agents:
 
-| Phase | Agent | Autorisation |
+| Phase | Agent | Authorisation |
 |---|---|---|
-| RED | `tdd-test-author` | Écrire uniquement le test demandé |
-| Vérification finale | `/verify-ddd-tdd` forké | Lire et exécuter les validations, sans modifier |
+| RED | `tdd-test-author` | Write only the requested test |
+| GREEN + REFACTOR | `tdd-implementer` | Write production code; test files read-only |
+| Final verification | forked `/verify-ddd-tdd` | Read and run validations, without modifying |
 
-Les phases sont **séquentielles**, jamais parallèles sur le même lot. Attends le résultat du sous-agent tests avant toute modification de production. Attends GREEN global avant de lancer le vérificateur.
+Phases are **sequential**, never parallel on the same batch. Wait for the test subagent's result before touching any production file. Wait for global GREEN before launching the verifier.
 
-Si `tdd-test-author` est introuvable, arrête avant de coder et indique le fichier manquant dans `.claude/agents/` ; ne remplace pas silencieusement sa responsabilité.
+If `tdd-test-author` or `tdd-implementer` is missing, stop before coding and name the missing file under `.claude/agents/`; do not silently take over its responsibility.
 
-## Projets du workspace
+You stay responsible for **design**: splitting into behaviours, arbitrating an unbounded cost, settling an ambiguity, updating the plan and the documentation. Subagents produce and declare; you judge.
 
-| Couche | Projet | Chemin |
+## Workspace projects
+
+| Layer | Project | Path |
 |--------|--------|--------|
 | Abstractions.Models | `{{PRODUCT}}.Abstractions.Models` | `src/{{PRODUCT}}.Abstractions.Models/` |
 | Domain | `{{PRODUCT}}.Domain` | `src/{{PRODUCT}}.Domain/` |
@@ -44,170 +47,142 @@ Si `tdd-test-author` est introuvable, arrête avant de coder et indique le fichi
 | E2E Tests | `{{PRODUCT}}.E2ETests` | `tests/{{PRODUCT}}.E2ETests/` |
 | Architecture Tests | `{{PRODUCT}}.ArchitectureTests` | `tests/{{PRODUCT}}.ArchitectureTests/` |
 | DSL Tests | `{{PRODUCT}}.DslTests` | `tests/{{PRODUCT}}.DslTests/` |
-| Infra de test partagee (doubles, builders, assets) — pas une suite | `{{PRODUCT}}.CoreTests` | `tests/{{PRODUCT}}.CoreTests/` |
+| Shared test infrastructure (doubles, builders, assets) — not a suite | `{{PRODUCT}}.CoreTests` | `tests/{{PRODUCT}}.CoreTests/` |
 
-Les migrations EF vivent dans un autre projet : **ne jamais les modifier depuis ce workspace**.
+EF migrations live in another project: **never modify them from this workspace**.
 
-## Compilation et Tests
+## Build and tests
 
-Runner Microsoft.Testing.Platform (xUnit v3) : `--project` obligatoire, filtres `--filter-class` / `--filter-method` (jokers `*` acceptes). La syntaxe VSTest `--filter "FullyQualifiedName~..."` n'existe pas ici.
-
-```bash
-rtk dotnet build --no-restore
-rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore
-rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore --filter-class "*CreateProductTests"
-```
-
-Analyse erreurs, corrige, relance jusqu'au vert.
+Runner, commands, which test level to write, suite scope and integration-test filtering → **`references/test-scope.md`**. Single source, shared with `/verify-ddd-tdd`: do not restate those rules here.
 
 ## Workflow
 
-### 1. Analyse
+### 1. Analysis
 
-- **Argument = `lot FX`** (ex: `implement-tdd lot F1`) :
-  1. Lis plan global (`*-PLAN.md`) — contexte + perimetre
-  2. Lis fiche lot (`*-PLAN-FX.md`) — detail technique
-  3. **Etapes cochees ✅** dans plan global → skip, reprends a 1re etape ⬜
-  4. Suis elements + etapes restantes de la fiche
-  5. Verifie la couverture DDD/APP/PERF du plan global, puis releve les IDs appliques de la fiche. Lis dans `/plan-implementation` `references/ddd-rules.md` et `architecture-rules.md` **uniquement** les lignes de ces IDs ; ouvre `ddd-examples.md` seulement si le pattern reste inconnu.
-- **Argument = `lot FX — correction: [constat manuel]`** :
-  1. Lis le plan global, la fiche lot et le constat. Retrouve le comportement, la RM/CU et le scenario concernes.
-  2. Si le constat modifie le perimetre, une RM/CU ou une decision de conception absente du plan, arrete et dirige vers `/specification-metier` ou `/plan-implementation` avant de coder.
-  3. Sinon, ajoute sous le comportement concerne une sous-etape `Correction Cn — [constat]` avec `TDD : RED ⬜ · GREEN ⬜ · COUT ⬜`. Conserve les preuves ✅ precedentes : ne les efface pas et ne saute pas cette correction.
-  4. Reprends la boucle RED → GREEN → REFACTOR → COUT pour cette correction, puis l'audit final du lot.
-- **Sinon** : ne code pas. La conception DDD doit etre explicite dans un plan ; dirige vers `/plan-implementation`.
+- **Argument = `batch FX`** (e.g. `implement-tdd batch F1`):
+  1. Read the global plan (`*-PLAN.md`) — context + scope
+  2. Read the batch sheet (`*-PLAN-FX.md`) — technical detail
+  3. **Steps already ticked ✅** in the global plan → skip, resume at the first ⬜ step
+  4. Follow the sheet's remaining elements and steps
+  5. Check the global plan's DDD/APP/PERF coverage, then collect the applied ids from the sheet. In `/plan-implementation`, read `references/ddd-rules.md` and `architecture-rules.md` **only** on the lines of those ids; open `ddd-examples.md` only if the pattern is still unknown.
+- **Argument = `batch FX — correction: [manual finding]`**:
+  1. Read the global plan, the batch sheet and the finding. Locate the behaviour, the RM/CU and the scenario it concerns.
+  2. If the finding changes the scope, an RM/CU or a design decision absent from the plan, stop and route to `/business-spec` or `/plan-implementation` before coding.
+  3. Otherwise, add under the affected behaviour a sub-step `Correction Cn — [finding]` with `TDD: RED ⬜ · GREEN ⬜ · COST ⬜`. Keep the previous ✅ evidence: do not erase it and do not skip this correction.
+  4. Resume the RED → GREEN → REFACTOR → COST loop for that correction, then the batch's final audit.
+- **Otherwise**: do not code. DDD design must be explicit in a plan; route to `/plan-implementation`.
 
-**Invariants → ce qu'ils SUPPRIMENT.** Une fiche enonce des invariants (« une copie n'a qu'un seul owner », « toutes les cles viennent du meme trousseau »). Ne te contente pas de les recopier dans la doc : ecris **ce qu'ils retirent du code** — une boucle, un `GroupBy`, un dictionnaire, une branche defensive, une seconde lecture. Un invariant documente mais non exploite produit du code qui defend un cas impossible.
+**Invariants → what they REMOVE.** A sheet states invariants ("a copy has a single owner", "every key comes from the same product"). Do not merely copy them into the docs: write **what they take out of the code** — a loop, a `GroupBy`, a dictionary, a defensive branch, a second read. A documented but unexploited invariant produces code that defends an impossible case.
 
-**Ambiguite en cours de lot → hypothese tracee, jamais decision silencieuse.** Une question qui change le perimetre, une RM/CU ou une decision de conception arrete le lot (retour `/specification-metier` ou `/plan-implementation`). Une question qui ne change rien de tout cela se tranche, mais s'ecrit : ajoute dans la fiche lot, sous `## Hypotheses`, une ligne `Hn — [ce que tu supposes] — a valider par [qui]`, et reporte-la dans le resume final. Une hypothese non ecrite est une decision que personne ne peut relire.
+**Ambiguity mid-batch → traced assumption, never a silent decision.** A question that changes the scope, an RM/CU or a design decision stops the batch (back to `/business-spec` or `/plan-implementation`). A question that changes none of those gets settled, but written down: add to the batch sheet, under `## Assumptions`, a line `Hn — [what you assume] — to be validated by [who]`, and carry it into the final summary. An unwritten assumption is a decision nobody can review.
 
-**Au debut (une fois)** : lis `references/conventions.md` (« Acces aux donnees »). Les conventions par couche — nommage, classes de base, structure de dossiers, pieges — arrivent seules via `.claude/rules/*.md` des que tu lis un fichier de la couche : ne les recherche pas, ne les redemande pas. Les exemples de code complets sont decoupes par couche (`references/examples-domain.md`, `-application`, `-infrastructure`, `-webapi`) : la regle de la couche te donne le chemin exact. N'en lis un que si le pattern t'est inconnu.
+**At the start (once)**: read `references/test-scope.md` (test level, suite scope) and `references/conventions.md` ("Data access"). Layer conventions — naming, base classes, folder structure, pitfalls — arrive on their own through `.claude/rules/*.md` as soon as you read a file of that layer: do not go looking for them, do not ask for them again. Full code examples are split by layer (`references/examples-domain.md`, `-application`, `-infrastructure`, `-webapi`): the layer rule gives you the exact path. Open one only if the pattern is unknown to you.
 
-### 2. Boucle Red-Green-Refactor par comportement
+### 2. Red-Green-Refactor loop per behaviour
 
-Decoupe le lot en **comportements metier bout-en-bout** portes par un Command/Query+Handler, endpoint ou repository — chacun rattache a une RM/CU. Une methode d'aggregate reste une etape interne de ce comportement, jamais une cible de test isolee. Applique le cycle **RED → GREEN → REFACTOR → COUT** (`regles-communes.md` §2) a chaque, ordre dependance **Domain → Application → Infrastructure → WebAPI**.
+Split the batch into **end-to-end business behaviours** carried by a Command/Query+Handler, an endpoint or a repository — each tied to an RM/CU. An aggregate method stays an internal step of that behaviour, never a standalone test target. Apply the **RED → GREEN → REFACTOR → COST** cycle (`common-rules.md` §2) to each one, in dependency order **Domain → Application → Infrastructure → WebAPI**.
 
-**COUT = obligatoire avant de passer au comportement suivant.** Enonce en une ligne le nombre d'appels Infrastructure du comportement (« 1 lecture + 1 ecriture »), et verifie qu'il ne depend pas de la taille de l'entree. Aucun test n'observe ce nombre : vert ne prouve rien ici. Un `await` sur un repository dans une boucle = defaut de **conception**, on repart en conception. Table des symptomes et corrections → `references/conventions.md` § « Acces aux donnees ».
+**COST is mandatory before moving to the next behaviour.** `tdd-implementer` states it in one line ("1 read + 1 write"); you **validate** it against the delivered code, you do not take it at face value. No test observes that number: green proves nothing here. An `await` on a repository inside a loop is a **design** defect, and design is where you go back to. Symptom/fix table → `references/conventions.md` § "Data access".
 
-**RED = délègue TOUJOURS l'écriture du test** au sous-agent `tdd-test-author`, en lui demandant d'appliquer le skill adapté (+ nom de scénario + RM) :
+**RED = ALWAYS delegate writing the test** to the `tdd-test-author` subagent, telling it which skill to apply (+ scenario name + RM). Level choice → `references/test-scope.md` §1.
 
-| Comportement porte sur... | Skill | Projet |
-|---|---|---|
-| Command/Query + Handler | `/tests-unit-tests` | `tests/{{PRODUCT}}.UnitTests/` |
-| Méthode sur Repository | `/tests-integration-tests` | `tests/{{PRODUCT}}.IntegrationTests/` |
-| Endpoint API | `/tests-contract-tests` | `tests/{{PRODUCT}}.ContractTests/` |
-| Lifecycle metier ≥2 operations prevu par la fiche | `/tests-e2e-tests` | `tests/{{PRODUCT}}.E2ETests/` |
+**A hunk in `src/{{PRODUCT}}.Infrastructure/` mandates an integration test**, on top of the handler test: the unit test's double proves neither the SQL, nor the join, nor the filter pushed to the database, nor the index violation translated into a domain exception. Only waiver: an Infrastructure hunk with no effect on persistence (DI registration, adapter of an already-doubled external service) — to be written out explicitly in the sheet and the summary, with its reason.
 
-**Regle absolue : jamais de test direct sur methode d'agregat.** Un comportement Domain (factory `Create()`, methode `SetDefault()`, etc.) se teste toujours **a travers le handler/service qui l'appelle**. Les domain events sont des effets de bord verifies au niveau handler, pas sur l'agregat en isolation. Si aucun handler n'existe encore pour ce comportement, **ne pas ecrire le test** — il sera ecrit quand le handler existera. Pas de test orphelin sur un agregat.
+**Absolute rule: never test an aggregate method directly.** A Domain behaviour (factory `Create()`, method `SetDefault()`, …) is always tested **through the handler/service that calls it**. Domain events are side effects verified at handler level, not on the aggregate in isolation. If no handler exists yet for that behaviour, **do not write the test** — it will be written when the handler exists. No orphan test on an aggregate.
 
-**Politique handler absolue** : pour une query, le mock fournit les donnees et le test verifie le resultat retourne. Pour une command, le test verifie le type et le payload de `SavedEvents`. **Jamais** spy, compteur, `Called`, `Received`, `Verify` ou assertion du nombre d'appels, meme pour le cout.
+**Absolute handler policy**: for a query, the mock supplies the data and the test asserts on the returned result. For a command, the test asserts the type and payload of `SavedEvents`. **Never** a spy, a counter, `Called`, `Received`, `Verify` or an assertion on call count — not even for cost.
 
-Lire les plans une seule fois dans l'agent principal. Pour chaque comportement, délègue ce contrat compact, sans joindre ni demander de relire le plan :
+Read the plans once, in the main agent. For each behaviour, delegate this compact contract, without attaching the plan or asking for it to be re-read:
 
 ```text
-RM/CU : …
-Comportement : …
-Niveau / skill : …
-Projet et fixture existante : …
-Scénarios : …
-Observation attendue : …
+RM/CU: …
+Behaviour: …
+Level / skill: …
+Project and existing fixture: …
+Scenarios: …
+Expected observation: …
 ```
 
-L'agent ne modifie que les fichiers de test, lance le test filtré et retourne son format `## RED` compact. Ne pas lui demander de réexpliquer le plan ni recopier ses logs.
+The agent modifies test files only, runs the filtered test and returns its compact `## RED` format. Do not ask it to re-explain the plan nor to copy its logs.
 
-Après son retour : lis son diff, confirme qu'il ne contient aucun code de production, puis contrôle l'échec attendu du test filtré. Seulement alors, écris le minimum de code de production pour GREEN. Respecte les conventions du skill test invoqué — **pas de règles de test ici**. Jamais de code prod en avance d'un test rouge.
+Once it returns: read its diff, confirm it contains no production code, then check the filtered test's expected failure. Never production code ahead of a red test.
 
-### 3. Boucle verte globale
+**GREEN + REFACTOR = delegate to the `tdd-implementer` subagent.** It writes the production code, deletes what its code orphaned, runs the filtered test and states the cost. Test files are read-only to it: a test that cannot go green without being modified comes back as `## BLOCKED`, it does not get weakened. Delegate this compact contract, without attaching the plan or having it re-read:
 
-Corrige jusqu'au vert total (tous comportements du lot). **La portee de chaque suite se decide, elle ne se subit pas** — voir « Portee des suites » ci-dessous. Dans la fiche lot, coche RED seulement apres echec attendu du test filtre, GREEN apres succes, COUT apres revue du cout. Ne coche jamais une preuve non observee.
-
-#### Portee des suites
-
-Toujours `--project <csproj> --no-build --no-restore`.
-
-| Suite | Portee | Condition |
-|---|---|---|
-| `UnitTests` | **entiere** | toujours — rapide, et c'est la seule qui couvre les handlers de tout le repo |
-| `ArchitectureTests` | **entiere** | des qu'un handler, endpoint, repository, frontiere de couche ou enregistrement DI change. Verrouille nommage, CQRS, dependances et enregistrement mieux qu'une relecture |
-| `ContractTests` | **entiere** | des qu'un endpoint, un contrat HTTP ou un type d'`Abstractions.Models` change |
-| `DslTests` | **entiere** | seulement si le diff touche `dsl/**`, le parseur ou les templates/presets. Sinon ne pas lancer |
-| `IntegrationTests` | **filtree** | seulement si le diff touche un repository, un mapper EF ou une entite EF. **Jamais la suite entiere** |
-| `E2ETests` | — | seulement si la fiche selectionne un lifecycle ≥2 operations. Sinon ne pas demarrer Aspire |
-
-#### Filtrer les tests d'integration
-
-Une suite TI entiere reconstruit chaque fixture et re-seede la base : le cout est proportionnel au nombre de tests, pas seulement au demarrage du conteneur. Sur ce repo, la suite complete depasse les 4 minutes la ou le contexte impacte tient en une minute.
-
-`--filter-class` accepte les jokers `*` **et se repete** ; les valeurs s'unissent. Construis le filtre depuis les **dossiers de production touches**, pas depuis le lot :
-
-```bash
-APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj \
-  --no-build --no-restore \
-  --filter-class "*.Studio.Diagrams.*" \
-  --filter-class "*.Studio.ModuleDiagrams.Save.*" \
-  --filter-class "*.Studio.Templates.Save.*"
+```text
+RM/CU: …
+Behaviour: …
+Red test: path + method name
+Elements to create or modify: exact names + public signatures from the sheet
+Applied DDD/APP ids: …
+Exploitable invariants — what they remove: …
+Expected cost: n reads + n writes
 ```
 
-Racines de namespace disponibles sous `{{PRODUCT}}.IntegrationTests` : `Licensing`, `Catalog`, `Database`, `Dsl`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
+Once it returns `## GREEN`: read its diff, check the announced cost against the code, and each hunk's attachment. A `## BLOCKED` on an unbounded cost or a design ambiguity is settled here — or escalated to `/plan-implementation` if it moves a decision of the plan. Never by re-running the agent with the same instruction.
 
-**Regle de selection** : un repository modifie → le namespace de son agregat **et** celui de tout agregat dont un test de persistence le construit. Descends d'un cran (`*.Studio.ModuleDiagrams.Save.*` plutot que `*.Studio.*`) des que la methode touchee est identifiee ; remonte d'un cran seulement si une signature partagee change. Un doute sur la portee se tranche en elargissant d'un niveau, jamais en lancant tout.
+### 3. Global green loop
 
-**Enonce la portee retenue et ce qu'elle laisse de cote.** Une suite filtree presentee comme « tests verts » sans dire ce qui n'a pas tourne se lit comme une couverture complete qu'elle n'est pas.
+Fix until fully green (every behaviour of the batch). **Each suite's scope is decided, not endured** — see `references/test-scope.md` §2. In the batch sheet, tick RED only after the filtered test's expected failure, GREEN after success, COST after reviewing the cost. Never tick evidence you have not observed.
 
-### 4. Audit final délégué
+#### Scope
 
-Après la boucle verte globale, invoque `/verify-ddd-tdd lot FX`. Son `context: fork` l'exécute dans un sous-agent isolé, en mode rapide, sans écrire de fichier. Attends son verdict avant de conclure.
+Which suites to run, whole or filtered, how to build the integration-test filter and how to report → `references/test-scope.md` §2-4.
 
-- Verdict `VALIDE` : conserve son tableau de preuves et ses commandes avec codes retour dans le résumé final. S'il liste des écarts **Mineurs**, reporte-les tels quels dans le résumé sans les corriger ni les taire : l'utilisateur tranche.
-- Verdict `ECARTS` : corrige dans l'agent principal, relance les validations concernées, puis délègue à nouveau le même audit.
-- Après deux itérations de correction/audit encore en écart, arrête et retourne les écarts bloquants ; ne contourne ni le plan ni l'audit.
+### 4. Delegated final audit
 
-Un verdict `VALIDE` clôt **uniquement le lot courant**. Arrête-toi : ne démarre, ne délègue et ne suggère aucun lot suivant. Termine par `→ Lot FX terminé — validation manuelle requise avant tout autre lot.`
+After the global green loop, invoke `/verify-ddd-tdd batch FX`. Its `context: fork` runs it in an isolated subagent, in fast mode, writing no file. Wait for its verdict before concluding.
 
-### 5. Mise a jour du plan
+- Verdict `VALID`: keep its evidence table and its commands with exit codes in the final summary. If it lists **Minor** deviations, carry them over as they are, without fixing or hiding them: the user decides.
+- Verdict `GAPS`: fix in the main agent, re-run the affected validations, then delegate the same audit again.
+- After two correction/audit rounds still in deviation, stop and return the blocking deviations; work around neither the plan nor the audit.
 
-Implementation reference un plan (`PLAN-*.md`, `SPEC-*-PLAN.md` dans `todo/` ou `docs/`) → **toujours** maj apres complétion :
-- Lot/etape → **✅ DONE** + date
-- Resume court fichiers crees/modifies
-- Ecarts (fichiers en plus, decisions differentes) → documente
-- Hypotheses posees en cours de lot → section `## Hypotheses` de la fiche : `Hn — [supposition] — a valider par [qui]`. Une hypothese confirmee plus tard devient une decision : la deplacer en `## Decisions`.
-- **Correction change une RM/CU** → maj spec source aussi. Traçabilite bidirectionnelle : spec = source de verite metier.
-- Correction issue d'une validation manuelle → ajoute `Correction Cn` sous le comportement concerne ; conserve l'historique TDD initial et les preuves de correction.
-- Pour chaque comportement termine : `TDD : RED ✅ · GREEN ✅ · COUT ✅` seulement si les trois preuves ont ete observees.
+A `VALID` verdict closes **the current batch only**. Stop there: do not start, delegate or suggest any following batch. End with `→ Batch FX complete — manual validation required before any other batch.`
 
-### 6. Mise a jour documentation handler
+### 5. Plan update
 
-Handler modifie ou cree → **mettre a jour le `CLAUDE.md` du dossier handler** (dans `Application/`). Tableau des regles metier **colonne Tests comprise** (chaque test rouge ecrit dans le lot y est rattache a sa regle), flux, evenements emis. Si nouveau handler : creer le `CLAUDE.md`. **Format et exemple → `references/claude-md-handler.md`** (lire avant d'ecrire).
+Whenever the implementation references a plan (`PLAN-*.md`, `SPEC-*-PLAN.md` under `todo/` or `docs/`) → **always** update it on completion:
+- Batch/step → **✅ DONE** + date
+- Short summary of files created/modified
+- Deviations (extra files, different decisions) → document them
+- Assumptions made mid-batch → the sheet's `## Assumptions` section: `Hn — [assumption] — to be validated by [who]`. An assumption later confirmed becomes a decision: move it to `## Decisions`.
+- **A correction that changes an RM/CU** → update the source spec too. Traceability runs both ways: the spec is the business source of truth.
+- A correction coming from manual validation → add `Correction Cn` under the affected behaviour; keep the original TDD history and the correction evidence.
+- For each finished behaviour: `TDD: RED ✅ · GREEN ✅ · COST ✅` only if all three pieces of evidence were observed.
 
-**Nouveau handler ou intention modifiee → mettre a jour aussi le `CLAUDE.md` index du dossier feature parent** : ligne du use case dans le tableau Commands/Queries (lien relatif `[Nom](Nom/CLAUDE.md)`, intention en une ligne, `N regles, M testees` — `python3 scripts/rules-coverage.py --fix-index` recalcule la colonne). Un handler absent de l'index est un handler introuvable.
+### 6. Handler documentation update
 
-**Section « Flux » : consigner le cout.** Une ligne apres le flux — « 1 lecture + 1 ecriture, quel que soit le nombre de candidats ». C'est la seule trace durable d'une decision qu'aucun test ne verrouille. Si une lecture non bornee est chargee volontairement (`Include` d'une collection qui grossit sans limite), le dire et dire pourquoi.
+Handler modified or created → **update the `CLAUDE.md` of the handler folder** (under `Application/`). Business-rules table **including the `Tests` column** (every red test written in the batch is tied there to its rule), flow, emitted events. If the handler is new: create the `CLAUDE.md`. **Format and example → `references/claude-md-handler.md`** (read it before writing).
 
-### 7. Cloture
+**New handler or changed intent → also update the parent feature folder's index `CLAUDE.md`**: the use-case line in the Commands/Queries table (relative link `[Name](Name/CLAUDE.md)`, one-line intent, `N rules, M tested` — `python3 scripts/rules-coverage.py --fix-index` recomputes that column). A handler missing from the index is a handler nobody can find.
 
-Avant de resumer : relis ton propre diff (`git diff`), **hunk par hunk**.
+**"Flow" section: record the cost.** One line after the flow — "1 read + 1 write, whatever the number of candidates". It is the only durable trace of a decision no test locks down. If an unbounded read is loaded deliberately (`Include` of a collection that grows without limit), say so and say why.
 
-- **Chaque hunk se rattache a une RM/CU ou a une etape de la fiche.** Ce qui ne se rattache a rien se revert : refacto d'un code qui marchait deja, renommage hors lot, reformatage, reorganisation d'imports, correction d'un bug adjacent. Un bug adjacent reel se **signale dans le resume**, il ne se corrige pas dans ce lot.
-- **Style local d'abord** : aligne-toi sur le fichier que tu modifies, meme si tu ecrirais autrement ailleurs.
-- **Aucun commentaire ajouté** — supprime ceux que tu as écrits. Supprime aussi ceux qui ne servent pas (répètent le code, périmés) **dans les lignes que le lot touche**, pas ailleurs dans le fichier. Ne subsistent que les commentaires préexistants qui expliquent une décision, une contrainte ou une exception non déductible du nommage.
-- **Orphelins** : supprime les `using`, variables, methodes et types que **ton** changement a rendus inutilises. Le code mort préexistant se signale dans le resume, il ne se supprime pas.
+### 7. Closing
 
-Resume : fichiers créés/modifiés, couches touchées, **coût d'accès par comportement livré**, **hypothèses `Hn` posées en cours de lot**, **code mort ou bug adjacent signalé mais volontairement non touché**, IDs DDD/APP/PERF et verdict de `/verify-ddd-tdd`. Pour les validations, indiquer commande + exit + **portée** (filtre appliqué ou « suite entière ») et nombre de tests ; nommer les suites volontairement non lancées et pourquoi. En échec, joindre au plus six lignes RTK utiles. **Pas de commit** — l'utilisateur décide quand commiter.
+Before summarising: re-read your own diff (`git diff`), **hunk by hunk**.
 
-**Tableau recapitulatif des tests** — toujours terminer par un tableau Markdown listant chaque test implemente :
+Local style, absence of comments, orphans and surgical change: rules in `references/common-rules.md` §1, applied by `tdd-implementer` on every behaviour. Here you check them **once, on the batch's complete diff** — the only vantage point that sees the whole batch:
 
-| Test | UC valide |
-|------|-----------|
-| `NomDuTest` | Description courte du cas d'usage / regle metier valide |
+- **Every hunk ties back to an RM/CU or to a step of the sheet.** Whatever ties to nothing gets reverted: refactor of code that already worked, renaming outside the batch, reformatting, import reorganisation, fixing an adjacent bug. A real adjacent bug is **reported in the summary**, not fixed in this batch.
+- **Cross-behaviour orphans**: a `using`, an intermediate type or an overload one behaviour left behind and another made useless only shows up at this level. Delete them. Pre-existing dead code is reported in the summary, not deleted.
 
-Un test par ligne, nom exact de la methode, description concise du comportement verifie.
+Summary: files created/modified, layers touched, **access cost per delivered behaviour**, **`Hn` assumptions made mid-batch**, **dead code or adjacent bug reported but deliberately untouched**, DDD/APP/PERF ids and `/verify-ddd-tdd`'s verdict. For validations, give command + exit + **scope** (filter applied, or "whole suite") and the number of tests; name the suites deliberately not run and why. On failure, attach at most six useful RTK lines. **No commit** — the user decides when to commit.
+
+**Test recap table** — always end with a Markdown table listing every implemented test:
+
+| Test | Validated UC |
+|------|--------------|
+| `TestName` | Short description of the use case / business rule validated |
+
+One test per row, exact method name, concise description of the verified behaviour.
 
 ---
 
 ## Reference
 
-Conventions DDD par couche (nommage, classes de base, structure, pieges) → `.claude/rules/*.md`, chargees automatiquement. Exemples de code complets → `references/examples-{domain,application,infrastructure,webapi}.md`, un par couche. Cout d'acces aux donnees → `references/conventions.md`.
+Per-layer DDD conventions (naming, base classes, structure, pitfalls) → `.claude/rules/*.md`, loaded automatically. Full code examples → `references/examples-{domain,application,infrastructure,webapi}.md`, one per layer. Data-access cost → `references/conventions.md`.
 
-## Fin du lot
+## End of batch
 
-Après verdict `VALIDE`, attendre la validation manuelle de l'utilisateur avant toute nouvelle commande `/implement-tdd`.
+After a `VALID` verdict, wait for the user's manual validation before any new `/implement-tdd` command.

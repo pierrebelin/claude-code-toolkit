@@ -1,12 +1,12 @@
-# Conventions — Accès aux données
+# Conventions — data access
 
-**Toujours lu par `/implement-tdd`.**
+**Always read by `/implement-tdd`.**
 
-## Conventions par couche — ne sont plus ici
+## Per-layer conventions — no longer here
 
-Nommage, classes de base, structure de dossiers, règles et pièges par couche vivent dans `.claude/rules/`, chargées automatiquement dès qu'un fichier de la couche est lu — y compris dans un subagent :
+Naming, base classes, folder structure, per-layer rules and pitfalls live in `.claude/rules/`, loaded automatically as soon as a file of that layer is read — inside a subagent too:
 
-| Fichier | Couche |
+| File | Layer |
 |---------|--------|
 | `.claude/rules/domain.md` | `Domain/` |
 | `.claude/rules/application-cqrs.md` | `Application/` |
@@ -14,34 +14,34 @@ Nommage, classes de base, structure de dossiers, règles et pièges par couche v
 | `.claude/rules/webapi-endpoints.md` | `WebAPI/`, `Abstractions.Models/`, `SDK/` |
 | `.claude/rules/tests.md` | `tests/` |
 
-Ne pas dupliquer ces règles ici : deux sources qui divergent font choisir arbitrairement. Une convention de couche nouvelle va dans le fichier de règle de sa couche.
+Do not duplicate those rules here: two sources that drift make the choice arbitrary. A new layer convention goes into that layer's rule file.
 
-Exemples code complets → `examples-{domain,application,infrastructure,webapi}.md`, un fichier par couche. La regle de la couche donne le chemin exact.
+Full code examples → `examples-{domain,application,infrastructure,webapi}.md`, one file per layer. The layer rule gives the exact path.
 
-Le tableau ci-dessous reste ici : il est indissociable de l'étape **COUT** du cycle (`regles-communes.md` §2).
+The table below stays here: it is inseparable from the **COST** step of the cycle (`common-rules.md` §2).
 
 ---
 
-## Accès aux données — coût des appels Infrastructure
+## Data access — cost of Infrastructure calls
 
-**Aucun test ne verrouille le nombre d'appels** : un handler à 1 requête et un handler à 2N+2 requêtes sont aussi verts. La pression doit venir d'ici, pas de la suite de tests.
+**No test locks down the call count**: a handler making 1 query and a handler making 2N+2 queries are equally green. The pressure has to come from here, not from the test suite.
 
-**Règle** : le nombre d'appels Infrastructure d'un comportement est **borné et indépendant de la taille de l'entrée**. Énoncer ce coût fait partie du cycle (`regles-communes.md` §2, étape COUT).
+**Rule**: a behaviour's number of Infrastructure calls is **bounded and independent of input size**. Stating that cost is part of the cycle (`common-rules.md` §2, COST step).
 
-| Symptôme | Correction |
+| Symptom | Fix |
 |---|---|
-| `await repo.GetX(id)` dans un `foreach` | Méthode qui prend **la liste** : `GetX(IReadOnlyList<TId> ids, …)` |
-| Une requête par identifiant reçu (N+1) | Une requête, `ids.Contains(...)` poussé en SQL |
-| `Save` dans la boucle | Accumuler les événements, **un seul** `Save` |
-| Lecture base dans la boucle d'events d'un `Save` de repository | Collecter les identifiants mutés, **une** requête `Contains` avant la boucle ; le `foreach` ne fait plus que du dispatch en mémoire |
-| `.Where(...)` en mémoire sur un résultat de repository | Passer le prédicat au repository, filtrer en SQL |
-| Deux lectures pour résoudre `A → B → agrégat` | Une lecture qui part de l'agrégat et filtre sur `A` (jointure) |
-| `Include` d'une collection **non bornée** pour toucher un seul élément | Décision **explicite** : charger entier (agrégat cohérent, coût assumé) ou lecture dédiée. Jamais par défaut, jamais sans le dire |
+| `await repo.GetX(id)` inside a `foreach` | A method taking **the list**: `GetX(IReadOnlyList<TId> ids, …)` |
+| One query per received identifier (N+1) | One query, `ids.Contains(...)` pushed to SQL |
+| `Save` inside the loop | Accumulate the events, **one single** `Save` |
+| Database read inside the event loop of a repository `Save` | Collect the mutated identifiers, **one** `Contains` query before the loop; the `foreach` then only dispatches in memory |
+| `.Where(...)` in memory over a repository result | Pass the predicate to the repository, filter in SQL |
+| Two reads to resolve `A → B → aggregate` | One read starting from the aggregate and filtering on `A` (join) |
+| `Include` of an **unbounded** collection to touch a single element | An **explicit** decision: load it whole (coherent aggregate, cost accepted) or a dedicated read. Never by default, never unsaid |
 
-**Avant d'ajouter une méthode de repository** : vérifier qu'aucune existante ne répond déjà en une requête. Une méthode dédiée est justifiée quand elle **change la forme** de la lecture (filtre SQL, projection, jointure), pas quand elle renomme l'existant.
+**Before adding a repository method**: check that no existing one already answers in a single query. A dedicated method is justified when it **changes the shape** of the read (SQL filter, projection, join), not when it renames an existing one.
 
-**Exploiter les invariants avant d'écrire la boucle.** Une invariante énoncée par la fiche ou la spec (« une copie n'a qu'un référent », « toutes les clés d'une Configuration transférée viennent du même trousseau ») **supprime du code** : elle transforme un `GroupBy` + parcours en une lecture unique. Lire la fiche pour la documenter ne suffit pas — il faut en déduire ce qui disparaît.
+**Exploit invariants before writing the loop.** An invariant stated by the sheet or the spec ("a copy has a single owner", "every key of a transferred Configuration comes from the same product") **removes code**: it turns a `GroupBy` + traversal into a single read. Reading the sheet to document it is not enough — you must deduce what disappears.
 
-**Ne pas confondre avec l'optimisation prématurée** : il ne s'agit pas de gagner des millisecondes mais de retirer une dépendance à la taille de l'entrée. `N` requêtes là où `1` suffit est un défaut de conception, pas un réglage de performance.
+**Do not confuse this with premature optimisation**: this is not about shaving milliseconds but about removing a dependency on input size. `N` queries where `1` suffices is a design defect, not a performance setting.
 
 ---

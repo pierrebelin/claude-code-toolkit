@@ -1,12 +1,12 @@
-# Regles Architecture
+# Architecture rules
 
-Le plan classe **chaque ID** : applique ou `N/A — raison`. Detail d'implementation dans `/implement-tdd` et les skills de tests ; ne duplique pas leurs exemples ici.
+The plan classifies **every id**: `applied` or `N/A — reason`. Implementation detail lives in `/implement-tdd` and the test skills; do not duplicate their examples here.
 
-| ID | Regle | Quand | Decision de plan et preuve | Exception |
+| ID | Rule | When | Plan decision and evidence | Exception |
 |----|-------|-------|----------------------------|-----------|
-| APP-01 | Handler orchestre : charge, appelle le Domain, sauvegarde events, retourne resultat. | Handler cree/modifie. | Decrire ce flux ; aucune RM ni mutation directe dans handler. | Query pure : lecture + resultat seulement. |
-| APP-02 | Command exprime intention et retourne ID ; Query lit et retourne sa charge utile (`Paging<T>` paginee, `IReadOnlyList<T>` bornee, agregat ou reponse unitaire) — jamais `Result<T>`. | Contrat Application cree/modifie. | Nommer contrat, entree et sortie observable. | Aucune. |
-| APP-03 | Repository centre aggregate et traduit events en persistence, ainsi que les violations de contrainte en exception domain. | Persistence aggregate touchee. | Nommer aggregate, events et cas Save/Restore ; nommer l'index unique et l'exception rendue. | N/A si persistence non touchee. |
-| APP-04 | WebAPI traduit HTTP ; Infrastructure traduit IO ; aucune ne porte de RM. | WebAPI ou Infrastructure touchee. | Localiser mapping/IO ; RM dans Domain/Application. | N/A si couche non touchee. |
-| APP-05 | Borne de ressource portee par son porteur dedie, jamais recodee ad hoc. | Route publique ou lecture non paginee ajoutee/modifiee. | Nommer la borne et son porteur : transport (taille de corps, debit) en WebAPI (`RequestLimits`, rate limiting) ; pagination normalisee a la creation de la query (`Application/Core/PaginationBounds`) ; plafond de lecture cote persistence (`Infrastructure/Database/QueryLimits`). Aucune borne dans le Domain, aucune borne reecrite a la main dans un handler. | N/A si aucune route ni lecture non bornee touchee. |
-| PERF-01 | Cout d'acces Infrastructure borne, independant de la taille d'entree. | Handler ou IO touche. | Enoncer lectures/ecritures ; aucune lecture IO dans boucle pilotee par entree. | Cout non borne uniquement si plan le justifie explicitement. |
+| APP-01 | The handler orchestrates: loads, calls the Domain, saves events, returns the result. | Handler created/modified. | Describe that flow; no business rule and no direct mutation inside the handler. | Pure query: read + result only. |
+| APP-02 | A command expresses an intent and returns an ID; a query reads and returns its payload (`Paging<T>` when paginated, `IReadOnlyList<T>` when bounded, aggregate or response for a single read) — never `Result<T>`. | Application contract created/modified. | Name the contract, its input and its observable output. | None. |
+| APP-03 | The repository is aggregate-centred and translates events into persistence, as well as constraint violations into domain exceptions. | Aggregate persistence touched. | Name the aggregate, the events and the Save/Restore cases; name the unique index and the exception returned. | N/A if persistence is untouched. |
+| APP-04 | WebAPI translates HTTP; Infrastructure translates IO; neither owns a business rule. | WebAPI or Infrastructure touched. | Locate the mapping/IO; business rules in Domain/Application. | N/A if the layer is untouched. |
+| APP-05 | A resource limit is carried by its dedicated owner, never re-coded ad hoc. | A public route or an unpaginated read added/modified. | Name the bound and its owner: transport (body size, rate) in WebAPI (`RequestLimits`, rate limiting); pagination normalised when the query is created (`Application/Core/PaginationBounds`); read cap on the persistence side (`Infrastructure/Database/QueryLimits`). No bound in the Domain, no bound hand-rewritten in a handler. | N/A if no route and no unbounded read is touched. |
+| PERF-01 | Infrastructure access cost bounded, independent of input size. | Handler or IO touched. | State the reads/writes; no IO read inside an input-driven loop. | An unbounded cost only where the plan explicitly justifies it. |

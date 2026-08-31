@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Hook PostToolUse (Edit|Write) : vérifie la traçabilité règles métier <-> tests unitaires.
+# PostToolUse hook (Edit|Write): checks business-rule <-> unit-test traceability.
 #
-# Chaque CLAUDE.md de handler (src/{{PRODUCT}}.Application/**/<Handler>/CLAUDE.md)
-# porte un tableau "## Règles métier" dont la colonne Tests cite des `ClasseDeTest.Méthode`.
-# Le hook construit deux index globaux (références citées / tests réellement présents dans
-# tests/{{PRODUCT}}.UnitTests et tests/{{PRODUCT}}.ContractTests) et signale
-# les écarts. Les ContractTests comptent : une règle de forme de réponse (payload, code
-# HTTP) ne se vérifie que par snapshot de contrat.
+# Every handler CLAUDE.md (src/{{PRODUCT}}.Application/**/<Handler>/CLAUDE.md)
+# carries a "## Business rules" table whose Tests column cites `TestClass.Method`.
+# The hook builds two global indexes (cited references / tests actually present in
+# tests/{{PRODUCT}}.UnitTests and tests/{{PRODUCT}}.ContractTests) and reports the
+# gaps. ContractTests count: a response-shape rule (payload, HTTP status) can only
+# be checked through a contract snapshot.
 #
-# Avertissement seul : sortie 0 dans tous les cas, jamais de blocage.
+# Warning only: exit 0 in every case, never blocking.
 
 INPUT=$(cat)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -39,8 +39,8 @@ if not (target.endswith(".cs") or os.path.basename(target) == "CLAUDE.md"):
 
 
 def fold(s):
-    """Compare les titres de section sans dependre des accents : le repo melange
-    « Regles metier » et « Règles métier »."""
+    """Compare section titles without depending on case or accents: a repo migrated
+    from the French headings may still carry stray diacritics."""
     return "".join(c for c in unicodedata.normalize("NFD", s.strip().lower())
                    if unicodedata.category(c) != "Mn")
 
@@ -62,9 +62,9 @@ HANDLER_CLASS = re.compile(r"^\s*(?:public|internal)\s+(?:sealed\s+|abstract\s+|
 
 
 def is_handler_file(path):
-    """Une classe, pas une interface. Tester `not f.startswith("I")` ferait passer
-    `IFooCommandHandler.cs` pour une interface, mais exclurait aussi
-    `ImportGraphsCommandHandler.cs` — tout handler dont le nom commence par I."""
+    """A class, not an interface. Testing `not f.startswith("I")` would take
+    `IFooCommandHandler.cs` for an interface, but would also exclude
+    `ImportGraphsCommandHandler.cs` — any handler whose name starts with I."""
     try:
         return bool(HANDLER_CLASS.search(read(path)))
     except OSError:
@@ -72,8 +72,8 @@ def is_handler_file(path):
 
 
 def is_handler_dir(d):
-    """Un dossier de handler porte son handler. L'arborescence Application melange
-    des profondeurs (Studio/X/Y/, Catalog/X/Y/Z/) : la profondeur ne discrimine pas."""
+    """A handler folder carries its handler. The Application tree mixes depths
+    (Studio/X/Y/, Catalog/X/Y/Z/): depth is not a discriminator."""
     try:
         names = os.listdir(d)
     except OSError:
@@ -81,10 +81,10 @@ def is_handler_dir(d):
     return any(f.endswith("Handler.cs") and is_handler_file(os.path.join(d, f)) for f in names)
 
 
-# --- Index 1 : règles déclarées dans les CLAUDE.md de handler -----------------
-# rules[claude_md] = [(rule_id, label, [Classe.Méthode, ...]), ...]
+# --- Index 1: rules declared in the handler CLAUDE.md files ------------------
+# rules[claude_md] = [(rule_id, label, [Class.Method, ...]), ...]
 RULE_ROW = re.compile(r"^\|\s*(R[ML]-\d+)\s*\|(.*)$")
-SECTION = re.compile(r"^##\s+R[eè]gles?\s+m[eé]tier", re.I)
+SECTION = re.compile(r"^##\s+Business\s+rules?\b", re.I)
 
 rules = {}
 all_md = set()
@@ -100,7 +100,7 @@ for base, dirs, files in os.walk(APP):
             continue
         if not in_section:
             continue
-        if line.strip().lower().startswith("aucun"):
+        if line.strip().lower().startswith("none"):
             empty_ok = True
         m = RULE_ROW.match(line.strip())
         if not m:
@@ -114,14 +114,14 @@ for base, dirs, files in os.walk(APP):
         rules[md] = rows
     elif empty_ok:
         rules[md] = []
-    # Un CLAUDE.md de feature ou de racine est un index : pas de structure figée à contrôler.
-    # On garde le dossier qui porte un handler, et tout fichier qui déclare des règles
-    # (Core/GroupAccess documente les siennes sans être un handler).
+    # A feature or root CLAUDE.md is an index: no fixed shape to check.
+    # Keep the folder that carries a handler, plus any file declaring rules
+    # (Core/GroupAccess documents its own without being a handler).
     if md in rules or is_handler_dir(base):
         all_md.add(md)
 
-# --- Index 2 : tests réellement présents -------------------------------------
-# present[Classe.Méthode] = chemin
+# --- Index 2: tests actually present ----------------------------------------
+# present[Class.Method] = path
 CLASS = re.compile(r"^\s*(?:public|internal)\s+(?:sealed\s+|abstract\s+|partial\s+)*class\s+(\w+)")
 ATTR = re.compile(r"^\s*\[(?:Fact|Theory)[\](]")
 METHOD = re.compile(r"^\s*(?:public|internal)\s+(?:async\s+)?(?:Task|void|ValueTask)\s+(\w+)\s*\(")
@@ -146,7 +146,7 @@ for suite in SUITES:
                     present[f"{cls}.{mm.group(1)}"] = path
                     armed = False
 
-# --- Périmètre du rapport ----------------------------------------------------
+# --- Scope of the report -----------------------------------------------------
 all_referenced = {r for rows in rules.values() for _, _, refs in rows for r in refs}
 cited_classes = {r.split(".")[0] for r in all_referenced}
 
@@ -162,12 +162,12 @@ elif in_app:
         focus.add(md)
     elif is_handler_dir(d):
         rel = os.path.relpath(d, APP)
-        print(f"Rappel : pas de CLAUDE.md dans {rel} — en créer un (tableau Règles métier, Flux, Événements émis).")
+        print(f"Reminder: no CLAUDE.md in {rel} — create one (Business rules table, Flow, Emitted events).")
         sys.exit(0)
     else:
         sys.exit(0)
 else:
-    # fichier de tests : on remonte aux CLAUDE.md qui citent une de ses classes
+    # test file: walk back up to the CLAUDE.md files citing one of its classes
     classes = {k.split(".")[0] for k, p in present.items() if p == target}
     for md, rows in rules.items():
         if any(r.split(".")[0] in classes for _, _, refs in rows for r in refs):
@@ -175,14 +175,14 @@ else:
     if not focus:
         orphans = sorted(k for k, p in present.items() if p == target and k.split(".")[0] in cited_classes)
         if orphans:
-            print("Tests non rattachés à une règle : " + ", ".join(orphans[:5]))
+            print("Tests bound to no rule: " + ", ".join(orphans[:5]))
         sys.exit(0)
 
 if not focus:
     sys.exit(0)
 
-# --- Forme figée -------------------------------------------------------------
-ALLOWED = ["Règles métier", "Flux", "Événements émis"]
+# --- Fixed shape -------------------------------------------------------------
+ALLOWED = ["Business rules", "Flow", "Emitted events"]
 ALLOWED_FOLDED = {fold(s): s for s in ALLOWED}
 
 
@@ -191,25 +191,25 @@ def shape_issues(md):
     issues = []
     extra = [s for s in secs if fold(s) not in ALLOWED_FOLDED]
     if extra:
-        issues.append("sections interdites : " + ", ".join(f"'{s}'" for s in extra))
+        issues.append("forbidden sections: " + ", ".join(f"'{s}'" for s in extra))
     seen = {fold(s) for s in secs}
     missing = [s for s in ALLOWED if fold(s) not in seen]
     if missing:
-        issues.append("sections manquantes : " + ", ".join(missing))
+        issues.append("missing sections: " + ", ".join(missing))
     kept = [ALLOWED_FOLDED[fold(s)] for s in secs if fold(s) in ALLOWED_FOLDED]
     if kept != [s for s in ALLOWED if s in kept]:
-        issues.append("ordre attendu : Règles métier, Flux, Événements émis")
+        issues.append("expected order: Business rules, Flow, Emitted events")
     return issues
 
 
-# --- Rapport -----------------------------------------------------------------
+# --- Report ------------------------------------------------------------------
 out = []
 for md in sorted(focus):
     rel_md = os.path.relpath(md, ROOT)
     if md not in rules:
         issues = shape_issues(md)
         detail = (" — " + " ; ".join(issues)) if issues else ""
-        out.append(f"{rel_md} : pas de tableau '## Règles métier' — structure figée : titre + description, Règles métier, Flux, Événements émis{detail}.")
+        out.append(f"{rel_md}: no '## Business rules' table — fixed shape: title + description, Business rules, Flow, Emitted events{detail}.")
         continue
     untested = [rid for rid, _, refs in rules[md] if not refs]
     stale = sorted({r for _, _, refs in rules[md] for r in refs if r not in present})
@@ -221,33 +221,33 @@ for md in sorted(focus):
     shared = sorted(f"{r} ({', '.join(ids)})" for r, ids in dup.items() if len(ids) > 1)
 
     md_classes = {r.split(".")[0] for _, _, refs in rules[md] for r in refs}
-    # Une classe transverse (StoredFileModificationServiceTests) repartit ses tests sur plusieurs
-    # handlers : un test rattache dans un autre CLAUDE.md n'est pas orphelin ici.
+    # A cross-cutting class (StoredFileModificationServiceTests) spreads its tests over
+    # several handlers: a test bound in another CLAUDE.md is not an orphan here.
     orphans = sorted(k for k in present if k.split(".")[0] in md_classes and k not in all_referenced)
 
-    # La structure figée ne vaut que pour un dossier de handler. Core/GroupAccess declare
-    # des règles partagées sans en être un : on garde sa traçabilité, pas sa forme.
+    # The fixed shape only applies to a handler folder. Core/GroupAccess declares
+    # shared rules without being one: keep its traceability, not its shape.
     lines = shape_issues(md) if is_handler_dir(os.path.dirname(md)) else []
     lines = [f"  {i}" for i in lines]
     if untested:
-        lines.append(f"  règles sans test : {', '.join(untested)}")
+        lines.append(f"  rules with no test: {', '.join(untested)}")
     if stale:
-        lines.append(f"  tests référencés introuvables : {', '.join(stale[:5])}")
+        lines.append(f"  referenced tests not found: {', '.join(stale[:5])}")
     if orphans:
-        lines.append(f"  tests non rattachés à une règle : {', '.join(orphans[:5])}" + (f" (+{len(orphans)-5})" if len(orphans) > 5 else ""))
+        lines.append(f"  tests bound to no rule: {', '.join(orphans[:5])}" + (f" (+{len(orphans)-5})" if len(orphans) > 5 else ""))
     if shared:
-        lines.append(f"  test partagé par plusieurs règles : {'; '.join(shared[:3])}")
+        lines.append(f"  test shared by several rules: {'; '.join(shared[:3])}")
     if lines:
         out.append(f"{rel_md}\n" + "\n".join(lines))
     elif os.path.basename(target) != "CLAUDE.md":
-        out.append(f"{rel_md} : traçabilité règles/tests à jour.")
+        out.append(f"{rel_md}: rule/test traceability up to date.")
 
 if out:
-    print("Traçabilité règles métier ↔ tests")
+    print("Business rule <-> test traceability")
     print("\n".join(out))
     total_untested = sum(1 for rows in rules.values() for _, _, refs in rows if not refs)
     if total_untested:
-        print(f"({total_untested} règles sans test sur l'ensemble de Application/)")
+        print(f"({total_untested} rules with no test across all of Application/)")
 PYEOF
 
 exit 0

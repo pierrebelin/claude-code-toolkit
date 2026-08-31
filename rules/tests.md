@@ -27,7 +27,7 @@ A domain class is never tested directly (`PortConstraintTests`) — always throu
 
 ## Traceability
 
-A handler test is bound to a rule: its `Class.Method` appears in the *Tests* column of the `## Règles métier` table in the handler's `CLAUDE.md` (`src/{{PRODUCT}}.Application/**/<Handler>/`). Write the test, then fill the cell — same commit.
+A handler test is bound to a rule: its `Class.Method` appears in the *Tests* column of the `## Business rules` table in the handler's `CLAUDE.md` (`src/{{PRODUCT}}.Application/**/<Handler>/`). Write the test, then fill the cell — same commit.
 
 The `handler-claude-md-check.sh` hook reports, on every edit of a handler or of a handler test: rules with an empty *Tests* cell, referenced tests that no longer exist, tests in a cited class bound to no rule. Warning only, never blocking.
 

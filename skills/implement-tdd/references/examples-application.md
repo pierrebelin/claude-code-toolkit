@@ -1,15 +1,15 @@
-# Exemples de code — Application
+# Code examples — Application
 
-Consulter quand le pattern est inconnu ou qu'il s'agit de la première implémentation d'un type d'élément dans cette couche.
-Règles et pièges → `.claude/rules/` (chargées automatiquement).
+Consult when the pattern is unknown, or when this is the first implementation of an element type in this layer.
+Rules and pitfalls → `.claude/rules/` (loaded automatically).
 
 ---
 
 ## Application - Command Handler
 
-Les commands heritent de `ICommand`. Le handler herite de `CommandHandler<TCommand, TResult>` qui wrappe automatiquement dans une transaction via `ITransactionManager`. Le handler implemente `HandleCommand()` (pas `Handle()`).
+Commands inherit from `ICommand`. The handler inherits from `CommandHandler<TCommand, TResult>`, which automatically wraps in a transaction through `ITransactionManager`. The handler implements `HandleCommand()` (not `Handle()`).
 
-Les commands retournent directement l'ID de l'aggregate (pas de `Result<T>`). Les erreurs sont des exceptions domain.
+Commands return the aggregate's ID directly (no `Result<T>`). Errors are domain exceptions.
 
 ```csharp
 // CreateProductCommand.cs
@@ -45,20 +45,20 @@ public sealed class CreateProductCommandHandler(
 }
 ```
 
-**Unicite : qui porte la regle.** L'autorite est la **contrainte de persistence** (`UK_Product_OrganizationId_Name`), traduite par le repository. Elle seule verifie et ecrit de maniere atomique.
+**Uniqueness: who owns the rule.** The authority is the **persistence constraint** (`UK_Product_OrganizationId_Name`), translated by the repository. It alone checks and writes atomically.
 
-Le `GetProductByName` du handler n'est pas la regle : c'est un **echec anticipe**, qui evite d'engager le reste de la transaction — un clonage, un appel amont — avant de savoir qu'elle echouera. Il ne protege pas de la concurrence : deux commands simultanees passent toutes les deux, que le test soit dans le handler ou dans l'agregat. Le deuxieme `SaveChanges` attend le verrou d'index, puis echoue quand le premier commite.
+The handler's `GetProductByName` is not the rule: it is an **early failure**, avoiding the rest of the transaction — a clone, an upstream call — before knowing it will fail. It does not protect against concurrency: two simultaneous commands both pass, whether the check sits in the handler or in the aggregate. The second `SaveChanges` waits on the index lock, then fails when the first commits.
 
-Consequences a respecter :
-- Sans traduction de la violation par le repository, cette course sort en **500** au lieu de 409. C'est le defaut, pas le pre-controle.
-- Un pre-controle qui double une autorite nommee ne viole pas APP-01. Un handler qui serait le **seul** porteur de la regle, si.
-- Le pre-controle est facultatif : sur une command sans travail couteux en amont du `Save`, la traduction suffit et economise une lecture.
+Consequences to respect:
+- Without the repository translating the violation, that race surfaces as **500** instead of 409. That is the defect, not the pre-check.
+- A pre-check duplicating a named authority does not violate APP-01. A handler that would be the **only** owner of the rule does.
+- The pre-check is optional: on a command with no expensive work ahead of the `Save`, the translation alone is enough and saves a read.
 
 ---
 
 ## Application - Query Handler
 
-Les queries implementent `IHandler` directement (pas de base class, pas de transaction). Elles retournent **directement leur charge utile** : `Paging<T>` pour une liste paginee, `IReadOnlyList<T>` pour une liste bornee par nature, l'agregat ou la reponse pour une lecture unitaire. Jamais de `Result<T>` : aucun query handler du codebase n'en utilise.
+Queries implement `IHandler` directly (no base class, no transaction). They return **their payload directly**: `Paging<T>` for a paginated list, `IReadOnlyList<T>` for a list bounded by nature, the aggregate or the response for a single read. Never `Result<T>`: no query handler in the codebase uses one.
 
 ```csharp
 // GetProductsQuery.cs
@@ -83,19 +83,19 @@ public sealed class GetProductsQueryHandler(
 }
 ```
 
-**Bornes d'une lecture de liste** (APP-05) — trois porteurs distincts, jamais recodes a la main :
-- `PaginationBounds.Normalize(query)` dans le `Create` de la query : page et taille de page ramenees dans leurs bornes avant que la query n'existe.
-- Filtre et tri : Gridify dans le repository (`GridifyAsync` + `IGridifyMapper`), pousses en SQL.
-- Branche non paginee : plafonnee par `QueryLimits.MAX_UNPAGINATED_RESULTS` cote repository. Une lecture de liste sans pagination **et** sans plafond est un ecart.
+**Bounds of a list read** (APP-05) — three distinct owners, never hand-rewritten:
+- `PaginationBounds.Normalize(query)` inside the query's `Create`: page and page size brought back within their bounds before the query even exists.
+- Filtering and sorting: Gridify in the repository (`GridifyAsync` + `IGridifyMapper`), pushed to SQL.
+- Unpaginated branch: capped by `QueryLimits.MAX_UNPAGINATED_RESULTS` on the repository side. A list read with neither pagination **nor** a cap is a deviation.
 
-Modele complet : `AuditTrailRepository.GetAuditTrails` + `GetAuditTrailsQuery.Create`.
+Full model: `AuditTrailRepository.GetAuditTrails` + `GetAuditTrailsQuery.Create`.
 
-**Quel retour choisir** :
+**Which return type to pick**:
 
-| Lecture | Retour du repository et du handler |
+| Read | Repository and handler return type |
 |---------|------------------------------------|
-| Liste exposee par un endpoint, paginable ou filtrable | `Paging<T>` |
-| Liste bornee par nature (enfants d'un agregat, referentiel court) | `IReadOnlyList<T>` |
-| Lecture unitaire | l'agregat ou la reponse ; `null` cote repository, exception `NotFound` levee par le handler |
+| List exposed by an endpoint, paginable or filterable | `Paging<T>` |
+| List bounded by nature (children of an aggregate, short reference data) | `IReadOnlyList<T>` |
+| Single read | the aggregate or the response; `null` on the repository side, `NotFound` exception thrown by the handler |
 
 ---

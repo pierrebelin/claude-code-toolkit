@@ -1,13 +1,13 @@
-# Exemples de code — WebAPI
+# Code examples — WebAPI
 
-Consulter quand le pattern est inconnu ou qu'il s'agit de la première implémentation d'un type d'élément dans cette couche.
-Règles et pièges → `.claude/rules/` (chargées automatiquement).
+Consult when the pattern is unknown, or when this is the first implementation of an element type in this layer.
+Rules and pitfalls → `.claude/rules/` (loaded automatically).
 
 ---
 
 ## Abstractions.Models - Request DTO
 
-Les Request DTOs definissent le contrat des endpoints API. Ils vivent dans `Abstractions.Models`, jamais dans le projet WebAPI. L'endpoint importe le DTO.
+Request DTOs define the API endpoints' contract. They live in `Abstractions.Models`, never in the WebAPI project. The endpoint imports the DTO.
 
 ```
 src/{{PRODUCT}}.Abstractions.Models/
@@ -20,7 +20,7 @@ src/{{PRODUCT}}.Abstractions.Models/
                 └── ExportDiagramsRequest.cs
 ```
 
-Exemples :
+Examples:
 
 ```csharp
 // Requests/Studio/Diagram/DeleteTemplate/DeleteTemplateRequest.cs
@@ -39,19 +39,19 @@ public sealed record ExportDiagramsRequest(
     bool IncludeAssociatedElements = false);
 ```
 
-**Regles** :
-- `sealed record` obligatoire
-- Namespace = chemin du fichier : `{{PRODUCT}}.Abstractions.Models.Requests.{Feature}.{Operation}`
-- 1 fichier = 1 request DTO, dans un dossier nomme comme l'operation (`ExportDiagrams/`, `CreateProduct/`)
-- Ne jamais definir un request DTO en nested record dans l'endpoint WebAPI
+**Rules**:
+- `sealed record` mandatory
+- Namespace = file path: `{{PRODUCT}}.Abstractions.Models.Requests.{Feature}.{Operation}`
+- 1 file = 1 request DTO, in a folder named after the operation (`ExportDiagrams/`, `CreateProduct/`)
+- Never declare a request DTO as a nested record inside the WebAPI endpoint
 
 ---
 
 ## WebAPI - Endpoint
 
-Chaque endpoint est une classe statique avec un handler static et une nested class `Endpoint : IEndpoint`. Decouverts automatiquement par reflexion.
+Every endpoint is a static class with a static handler and a nested `Endpoint : IEndpoint` class. Discovered automatically by reflection.
 
-Le Request DTO est importe depuis `Abstractions.Models` (jamais defini en local) :
+The Request DTO is imported from `Abstractions.Models` (never declared locally):
 
 ```csharp
 using {{PRODUCT}}.Abstractions.Models.Requests.Catalog.Products.CreateProduct;
@@ -87,33 +87,33 @@ public static class CreateProduct
 }
 ```
 
-**Responses** :
-- **POST** : `Results.Created($"/api/v1/{route}/{id.Value}", id.Value)` → 201
-- **GET** : `Results.Ok(Mapper.ToResponse(data))` → 200
-- **PUT** : `Results.Ok(id.Value)` → 200
-- **DELETE** : `Results.NoContent()` → 204
+**Responses**:
+- **POST**: `Results.Created($"/api/v1/{route}/{id.Value}", id.Value)` → 201
+- **GET**: `Results.Ok(Mapper.ToResponse(data))` → 200
+- **PUT**: `Results.Ok(id.Value)` → 200
+- **DELETE**: `Results.NoContent()` → 204
 
-Les erreurs sont gerees globalement par `GlobalExceptionHandler`. Aucun `try/catch` dans l'endpoint : il laisse remonter.
+Errors are handled globally by `GlobalExceptionHandler`. No `try/catch` in the endpoint: it lets them bubble up.
 
-Le mapping est un `switch` **ordonne** — la premiere branche qui matche gagne. Une exception plus specialisee doit donc etre declaree avant sa base (`PartnerApiException` avant `UpstreamServiceException`), sinon elle est absorbee.
+The mapping is an **ordered** `switch` — the first matching branch wins. A more specialised exception must therefore be declared before its base (`PartnerApiException` before `UpstreamServiceException`), otherwise it gets absorbed.
 
-| Exception | Statut | Charge utile |
+| Exception | Status | Payload |
 |-----------|--------|--------------|
-| `PartnerApiException` | statut amont si 4xx, sinon **502** | detail masque hors Development |
+| `PartnerApiException` | upstream status if 4xx, otherwise **502** | detail hidden outside Development |
 | `SecurityContextUnavailableException` | **503** | — |
 | `NotFoundException` | **404** | — |
 | `FluentValidation.ValidationException` | **400** | `errors` |
 | `ForbiddenException` | **403** | — |
 | `ConflictException` | **409** | — |
 | `ValidationFailedException` | **422** | `workflow` + `violations` |
-| `DomainException` (defaut de la famille) | **400** | `AggregateValidationException` ajoute `errors` |
-| `GridifyMapperException`, `GridifyFilteringException`, `GridifyOrderingException` | **400** | filtre ou tri invalide envoye par le client |
-| `BadHttpRequestException { InnerException: InvalidDataException }` | **413** | corps de requete au-dela de la limite |
+| `DomainException` (family default) | **400** | `AggregateValidationException` adds `errors` |
+| `GridifyMapperException`, `GridifyFilteringException`, `GridifyOrderingException` | **400** | invalid filter or sort sent by the client |
+| `BadHttpRequestException { InnerException: InvalidDataException }` | **413** | request body beyond the limit |
 | `ArgumentException` | **400** | — |
-| `IInternalException` | **400** | attrape `Core.Exceptions.Base.ValidationException` et toute exception marquee |
-| `UpstreamServiceException` (autres que PartnerApi) | **503** | — |
-| tout le reste | **500** | detail masque hors Development |
+| `IInternalException` | **400** | catches `Core.Exceptions.Base.ValidationException` and any marked exception |
+| `UpstreamServiceException` (other than PartnerApi) | **503** | — |
+| everything else | **500** | detail hidden outside Development |
 
-Hierarchie reelle des exceptions de base, a connaitre avant d'en creer une : `NotFoundException` et `ConflictException` heritent de `DomainException`. `ValidationException` et `ForbiddenException` n'en heritent **pas** — elles derivent d'`Exception` et portent `IInternalException`. `UpstreamServiceException` ne porte deliberement pas `IInternalException` : une panne amont n'est pas une faute du client, elle doit sortir en 503 et non en 400.
+Real hierarchy of the base exceptions, to know before creating one: `NotFoundException` and `ConflictException` inherit from `DomainException`. `ValidationException` and `ForbiddenException` do **not** — they derive from `Exception` and carry `IInternalException`. `UpstreamServiceException` deliberately does not carry `IInternalException`: an upstream outage is not the client's fault, it must surface as 503 and not as 400.
 
-`.ProducesProblem(...)` ne declare que les statuts que **cette** route peut produire — ils viennent des exceptions levees par son handler, pas de la table entiere. `500` est toujours declare ; `413` seulement sur une route qui recoit un corps volumineux ; `422` seulement sur une route qui declenche une validation de workflow.
+`.ProducesProblem(...)` declares only the statuses **this** route can produce — they come from the exceptions its handler throws, not from the whole table. `500` is always declared; `413` only on a route receiving a large body; `422` only on a route triggering a workflow validation.
