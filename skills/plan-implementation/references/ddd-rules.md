@@ -1,0 +1,17 @@
+# Regles DDD
+
+Le plan classe **chaque ID** : applique ou `N/A — raison`. Une fiche lot ne cite que les IDs appliques. Le verifier refuse un ID absent de cette couverture.
+
+| ID | Regle | Quand | Decision de plan et preuve | Exception |
+|----|-------|-------|----------------------------|-----------|
+| DDD-01 | Noms = langage metier, jamais terme technique ou service generique. | Toujours si Domain/Application change. | Nommer le concept et son porteur ; code et tests emploient ce vocabulaire. | Aucune. |
+| DDD-02 | Aggregate = frontiere de coherence ; il porte ses invariants. | Command modifie l'etat metier. | Nommer aggregate + RM ; methode Domain empeche l'etat invalide. | Plusieurs aggregates seulement sous DDD-08. |
+| DDD-03 | Changement par methode metier, jamais setter ou mutation depuis handler. | Etat d'aggregate modifie. | Nommer methode semantique ; handler orchestre sans modifier proprietes. | Aucune. |
+| DDD-04 | Value Object = concept valide, immuable, egal par valeur. | Donnee avec regle/identite metier propre. | Nommer concept et invariant ; validation dans le VO. | Type primitif si aucune regle ni semantique propre. |
+| DDD-05 | Reference inter-aggregate par ID, jamais navigation objet. | Un aggregate designe un autre aggregate. | Nommer ID et besoin de lecture ; aucune collection d'aggregates etrangers. | Aucune. |
+| DDD-06 | `Create()` cree/valide/emet ; `Restore()` rehydrate seulement. | Creation ou lecture persistence. | Nommer le chemin Create/Restore ; repository n'appelle que Restore pour lire. | Aucune. |
+| DDD-07 | Domain event = fait passe interne a la persistence, type et payload explicites. | Une mutation est persistee par event. | Nommer event au passe et son payload ; aucun outbox ou evenement d'integration. | N/A si aucune mutation eventee. |
+| DDD-08 | Une command modifie et sauvegarde un seul aggregate. | Toute command ecriture. | Nommer l'unique aggregate modifie/sauve ; une lecture externe reste ciblee et non mutante. | Exception explicite, raison metier et coherence dans plan. |
+| DDD-09 | La logique appartient a l'objet qui possede les donnees ; Domain Service seulement si aucun objet metier ne la possede naturellement. | Operation metier sans porteur evident, ou tentation d'un service/helper statique : serializer, parser, factory, mapper, transformation, calcul. | Nommer le porteur et la forme d'appel : `context.Serialize()`, `ParsedImportFile.Create(json)` — jamais `Serializer.Serialize(context)` ni `IParser.Parse(json)`. Pour un Domain Service : expliquer pourquoi chaque aggregate est exclu ; stateless, metier, sans dependance Infrastructure, jamais wrapper de repository. | N/A si aggregate proprietaire. |
+| DDD-10 | Domain ne depend ni HTTP, EF, SQL, DTO ni Infrastructure. | Domain touche. | Localiser dependances techniques aux frontieres ; Domain compile sans elles. | Aucune. |
+| DDD-11 | Absence modelisee, jamais un `null` de commodite. | Domain ou Application expose un parametre, une propriete, une command, une query ou un retour. | Collection absente → `[]`, `IReadOnlyList<T>` non nullable, semantique documentee sur la methode (« vide = aucun filtre »). Concept optionnel → Null Object (`NoConstraint`), pas de champ nullable. Le nullable des couches transport (DTO, parametre de requete) est converti a la frontiere WebAPI (`request.GroupIds ?? []`), jamais propage plus bas. | `null` admis uniquement pour une valeur metier scalaire reellement optionnelle (`string? Description`). |
