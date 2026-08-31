@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify DDD TDD"
+  short_description: "Vérifier un lot DDD implémenté en TDD"
+  default_prompt: "Vérifie le lot implémenté contre son plan DDD et TDD."
