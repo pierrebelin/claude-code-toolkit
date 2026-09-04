@@ -76,7 +76,7 @@ Same rule as the Domain: commands, queries and repository signatures don't take 
 
 Touching this layer, the done checklist is not satisfied until:
 
-1. **Handler or its tests modified** → update the handler folder `CLAUDE.md`, *Tests* column included
+1. **Handler or its tests modified** → update the handler folder `CLAUDE.md`, and carry a `[Trait("RM", "…")]` on every test written
 2. **New handler or changed intent** → update the index `CLAUDE.md` of the parent feature folder (links, intent)
 
 ### Fixed shape of a handler `CLAUDE.md`
@@ -88,20 +88,20 @@ Touching this layer, the done checklist is not satisfied until:
 
 {Intent, one sentence.}
 
-## Business rules
+## Règles métier
 
-| ID | Rule | Exception / Result | Tests |
-|----|------|--------------------|-------|
-| RM-02 | Partitioned to the current organisation | `ProductNotFoundException` | `GetProductTests.ShouldThrowNotFound_WhenProductBelongsToAnotherOrganization` |
-| RL-01 | The macro block to update exists | `DiagramNodeNotFoundException` | `UpdateDiagramNodeTests.ShouldThrowNotFound_WhenDiagramNodeDoesNotExist` |
+| ID | Règle | Exception / Résultat |
+|----|-------|----------------------|
+| RM-02 | Partitioned to the current organisation | `ProductNotFoundException` |
+| RL-01 | The macro block to update exists | `DiagramNodeNotFoundException` |
 
-## Flow
+## Flux
 
 Load DiagramNodeDefinition → Validate/prepare graph → UpdateFromStudio → Save
 
 1 read + 1 write, whatever the number of blocks.
 
-## Emitted events
+## Événements émis
 
 - `DiagramNodeUpdated`
 ```
@@ -112,12 +112,12 @@ Authoring rules:
 |---------|------|
 | `RM-xx` | Business rule shared by several handlers of the same aggregate. Numbering is **per aggregate** — `RM-02` means nothing without the aggregate it belongs to. Before assigning a number, read the sibling handler `CLAUDE.md` under the same feature and reuse the number the rule already carries there; never renumber an existing one |
 | `RL-xx` | Rule local to this handler. Numbering restarts per file |
-| *Rule* cell | A label, not a paragraph. The table is an index |
-| *Tests* cell | `TestClass.MethodName`, comma-separated. Empty = knowingly untested |
+| *Règle* cell | A label, not a paragraph. The table is an index |
+| Rule ↔ test link | Declared **on the test**, `[Trait("RM", "{HandlerFolder}/{RM\|RL-xx}")]`. No cell to fill: a rule carried by no trait is a knowingly untested rule |
 | Cost line | Mandatory under the flow. The only durable trace of a decision no test locks |
 | Sections | Those three and no other. The hook reports a forbidden, missing or out-of-order section |
 
-`handler-claude-md-check.sh` (PostToolUse) reports untested rules, dead test references and unbound tests. Warning only.
+`handler-claude-md-check.sh` (PostToolUse) reports untested rules, traits citing a rule absent from the table, and tests with no trait. Warning only.
 
 Repo-wide report: `python3 scripts/rules-coverage.py [--untested]`; `--fix-index` recomputes the `N rules, M tested` column of the feature index `CLAUDE.md`.
 

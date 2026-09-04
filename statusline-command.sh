@@ -47,13 +47,13 @@ if [ -x "$FRESH_SCRIPT" ]; then
   stale=$("$FRESH_SCRIPT" --count 2>/dev/null)
   case "$stale" in
     ''|*[!0-9-]*) ;;
-    -1) graphify_badge=$(printf '\033[31m[graphe absent]\033[0m') ;;
+    -1) graphify_badge=$(printf '\033[31m[graph missing]\033[0m') ;;
     0)  ;;
     *)
       if [ "$stale" -ge 25 ]; then
-        graphify_badge=$(printf '\033[31m[graphe +%s]\033[0m' "$stale")
+        graphify_badge=$(printf '\033[31m[graph +%s]\033[0m' "$stale")
       else
-        graphify_badge=$(printf '\033[33m[graphe +%s]\033[0m' "$stale")
+        graphify_badge=$(printf '\033[33m[graph +%s]\033[0m' "$stale")
       fi
       ;;
   esac

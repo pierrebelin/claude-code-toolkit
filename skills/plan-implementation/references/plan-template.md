@@ -179,6 +179,10 @@ Every id of `ddd-rules.md` and `architecture-rules.md` must appear once: applied
 
 **Handler policy**: query = mock fed with data then result asserted; command = `SavedEvents` asserted by type and payload. Never a spy, a counter, nor a call assertion.
 
+**IT**:
+- `ShouldPersist[Entity]_WhenSaved`
+- `ShouldReturn[Entity]_WhenIdExists`
+
 **IT regression scope**: `--filter-class "*.[Context].[Feature].*"` [+ other impacted namespaces]. The whole `IntegrationTests` suite is never run: naming the namespaces to replay here avoids having to derive them from the diff on every validation. Available roots: `Licensing`, `Catalog`, `Database`, `Dsl`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
 
 **Contract**: [happy-path route test name] / omitted — [route unchanged].

@@ -8,6 +8,7 @@ tools:
   - Edit
   - Write
   - Bash
+model: sonnet
 maxTurns: 30
 ---
 

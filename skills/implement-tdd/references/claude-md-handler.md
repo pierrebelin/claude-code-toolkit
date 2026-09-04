@@ -18,13 +18,13 @@ The three `##` headings are parsed verbatim by `.claude/hooks/handler-claude-md-
 
 [Intent in one sentence: what the use case does, for whom, over what scope.]
 
-## Business rules
+## Règles métier
 
-| ID | Rule | Exception / Result | Tests |
-|----|------|--------------------|-------|
-| RM-01 | [testable statement] | `[Exception]` → [HTTP status] | `[Class]Tests.[Method]` |
+| ID | Règle | Exception / Résultat |
+|----|-------|----------------------|
+| RM-01 | [testable statement] | `[Exception]` → [HTTP status] |
 
-## Flow
+## Flux
 
 ```
 [Step 1] → [Step 2] → [Step 3]
@@ -32,14 +32,14 @@ The three `##` headings are parsed verbatim by `.claude/hooks/handler-claude-md-
 
 [1 read + 1 write, whatever the number of X.]
 
-## Emitted events
+## Événements émis
 
 `[Event]` — payload: [fields]. / None (query).
 ````
 
 `RM-xx` = a rule shared by several handlers of the same aggregate. Numbering is **per aggregate**: `RM-02` means nothing outside the aggregate it belongs to. Before assigning a number, read the `CLAUDE.md` of the neighbouring handlers in the same feature and reuse the one the rule already carries there; never renumber an existing rule. `RL-xx` = a rule local to the handler, numbered per file.
 
-`Tests` column: `TestClass.MethodName`, several separated by `, `. An empty cell means the rule is uncovered, knowingly. **The red test written during the TDD phase fills its cell in the same batch.**
+The rule ↔ test link lives **on the test**, as `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` — no column to fill. A rule carried by no trait is uncovered, knowingly. **The red test written during the TDD phase carries its trait from the start.**
 
 _Pure query with no rule_: write "None (pure query)" and state the partitioning applied (e.g. scope restricted to the current organisation through `IUserContextWrapper`).
 

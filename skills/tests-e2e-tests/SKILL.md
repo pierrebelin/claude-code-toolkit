@@ -17,6 +17,7 @@ Test a complete business story on the real stack: Aspire, database, auth, API an
 
 ## Non-negotiable rules
 
+- A test covering a rule of a handler's `## Règles métier` table carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under its `[Fact]`/`[Theory]`. A trait is read in every suite — this is how a rule proven only here stops counting as untested. A test covering no documented rule carries none.
 - One test = a complete journey: `create → update → delete`, `create → activate → deactivate`, `initialize → create → get → delete`.
 - Forbidden: `Create`, `Get`, `Compile` or `Delete` alone. Those are contract/integration tests.
 - Zero mocks, zero direct database seeding, zero raw `HttpClient`: the client SDK only.

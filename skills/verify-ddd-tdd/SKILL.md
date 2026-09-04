@@ -10,12 +10,9 @@ background: false
 
 Audit without modifying code. The verdict covers a batch implemented by `/implement-tdd`, never a feature without a plan. Use `rtk dotnet` for validations and never return a raw log.
 
-**Two axes, in this order.**
+**One audit table** (§2): the code axes first — correctness, reuse, simplification, cost, placement, comments — which apply to the delivered code as it is, whatever the plan announces; then the axes tying that code back to the sheet — test policy, plan traceability, scope.
 
-1. **Coding rules** (§2) — correctness, reuse, simplification, cost, placement of logic. The primary axis. It applies to the delivered code as it is, independently of what the plan announces.
-2. **Conformance to plan and tests** (§3) — RM/CU traceability, DDD/APP/PERF ids, test policy, TDD evidence.
-
-The plan is not the ultimate reference: it gets modified mid-batch when the implementation heads the wrong way. A gap between code and plan is **classified** (§3), it never mechanically translates into "the code is wrong".
+The plan is not the ultimate reference: it gets modified mid-batch when the implementation heads the wrong way. A gap between code and plan is **classified** (§2), it never mechanically translates into "the code is wrong".
 
 The verdict is read by the user; its headings, severities and axis labels are a fixed format. Never reword them.
 
@@ -24,7 +21,7 @@ $ARGUMENTS
 ## Modes
 
 - **Fast** by default: global plan + batch sheet, DDD/APP/PERF coverage, applied ids, diff, modified files and targeted tests.
-- **Full** only with `full` in the argument: widens inspection to the touched boundaries and adds the whole fast suites (§4.6). **`full` does not authorise a whole `IntegrationTests` suite** — it stays filtered on the impacted context.
+- **Full** only with `full` in the argument: widens inspection to the touched boundaries and adds the whole fast suites (§3.4). **`full` does not authorise a whole `IntegrationTests` suite** — it stays filtered on the impacted context.
 
 Read the compact indexes `ddd-rules.md` and `architecture-rules.md` to check full coverage. Then read only the lines of the ids applied in the sheet. Open `ddd-examples.md` only if an id stays ambiguous.
 
@@ -37,34 +34,27 @@ Read the compact indexes `ddd-rules.md` and `architecture-rules.md` to check ful
 3. Without full coverage or without a **Design** section: still conduct the §2 audit on the delivered code, and report the plan's gap as a **Major** deviation whose fix is updating the sheet. Every id must be `applied` or `N/A — reason`. Do not reconstruct the design from the code and do not infer it from the implementation.
 4. Read `git status --short`, `git diff --check`, then the diff of the files concerned. If the expected diff is already committed, require an explicit base in the argument; do not guess the history. Walk the diff **hunk by hunk** and tie each one to an RM/CU or to a step of the sheet: whatever ties to nothing is a **Scope** deviation (§2).
 
-### 2. Check the coding rules
+### 2. Audit the delivered code
 
-The primary axis, always executed, including when the plan is incomplete or was modified mid-batch. It covers the batch's diff. A green test is no evidence here.
+One table, one pass, over the batch's diff. **Axis labels below are written verbatim into the verdict.** A green test is evidence for nothing here.
 
-Axis labels below are the ones written into the verdict — keep them verbatim.
+`Correctness` → `Comments` judge the code as delivered, even when the plan is incomplete or was modified mid-batch. `Test`, `Plan` and `Scope` tie that code back to the sheet. DDD/APP/PERF ids cited below are the ones of `ddd-rules.md` and `architecture-rules.md`: read the line of an id before invoking it.
 
-| Axis | What counts as a deviation |
-|------|---------------------|
-| Correctness | Untreated error path, absence or `null` unhandled, wrong comparison boundary, operation order leaving an invalid intermediate state, swallowed exception, silent default value masking a failure, concurrent write on the same aggregate with no concurrency handling. |
-| Reuse | A type, service, VO or method created while an existing element covers the need, or 80 % of it. A second type sharing the shape of an existing one: rename or extend the existing one, do not duplicate. |
-| Simplification | A defensive branch on a case made impossible by an invariant of the batch. Indirection, wrapper or intermediate mapping with a single caller. Dead code introduced or orphaned by the batch, a parameter never read, an optional parameter or default value no caller ever supplies, an abstraction with no second implementer. **Pre-existing** dead code is reported as Minor: demanding its removal is outside the batch's scope. |
-| Cost | Repository call inside an input-driven loop, unbounded read, `Include` of a collection growing without limit, materialisation before filtering, one query per element. A bounded cost that differs from the one announced in the sheet is a plan deviation (§3), not a code one. |
-| Placement | Business rule or validation carried by a handler, a repository, Infrastructure or WebAPI instead of the aggregate concerned. Exception: a pre-check duplicating an authority named elsewhere (persistence constraint, external system) is not a placement deviation — it is one only if it is the **sole** owner of the rule. Conversely, a resource limit hand-rewritten in a handler or carried by the Domain, instead of its dedicated owner: WebAPI `RequestLimits`/rate limiting for transport, `PaginationBounds` for pagination, `QueryLimits` for the read cap. |
-| Scope | A diff hunk with no RM/CU nor sheet step carrying it. Refactor, renaming, reformatting or reorganisation of code that worked and that the batch had no reason to modify. Fixing an adjacent bug outside the batch's RM/CU. Unrequested removal of pre-existing dead code or a pre-existing comment outside the touched lines. Flexibility, configurability or abstraction added with no expressed need. |
-| Comments | A comment or XML `///` doc present in production code. Intent is carried by naming. |
+| Axis | What counts as a deviation | Evidence required to report it |
+|------|----------------------------|--------------------------------|
+| Correctness | Untreated error path, absence or `null` unhandled, wrong comparison boundary, operation order leaving an invalid intermediate state, swallowed exception, silent default value masking a failure, concurrent write on the same aggregate with no concurrency handling. A command modifying or saving more than one aggregate outside a DDD-08 exception stated with its consistency. A persistence-constraint violation not translated into a domain exception (APP-03), or translated through a generic filter such as `Contains("duplicate")` instead of a filter naming the index — an upstream uniqueness check is an early failure, not a deviation; the missing translation is. | A concrete breaking scenario, `inputs X → wrong behaviour Y`. Without a scenario, do not report the finding. |
+| Reuse | A type, service, VO or method created while an existing element covers the need, or 80 % of it. A second type sharing the shape of an existing one: rename or extend the existing one, do not duplicate. | The existing element as `path:line`. Without a named element, do not report the finding. |
+| Simplification | A defensive branch on a case made impossible by an invariant of the batch — symmetrically, an invariant announced in the sheet that removes no branch, loop, grouping or read is itself the deviation. Indirection, wrapper or intermediate mapping with a single caller. Dead code introduced or orphaned by the batch, a parameter never read, an optional parameter or default value no caller ever supplies, an abstraction with no second implementer. Nullable collection in Domain/Application, or an optional concept tested with `is null` at every use instead of being modelled (DDD-11). **Pre-existing** dead code is reported as Minor: demanding its removal is outside the batch's scope. | The line and the concrete effect. No stylistic preference, no alternative-architecture suggestion, no proposed rewrite. |
+| Cost | Repository call inside an input-driven loop, unbounded read, `Include` of a collection growing without limit, materialisation before filtering, one query per element (PERF-01). A bounded cost that differs from the one announced in the sheet is a `Plan` deviation, not a code one. | idem |
+| Placement | Business rule or validation carried by a handler, a repository, Infrastructure or WebAPI instead of the aggregate concerned (DDD-02, APP-04) — the handler orchestrates load, business call and save, it does not decide. Business operation carried by a helper or a static service receiving a business object's state; Domain Service neither stateless nor justified (DDD-09). A rule owned by an external system (products/keys, delegation, organisation catalogue) replayed here, or the target of a transfer validated by mere existence instead of delegation. `Create()` and `Restore()` conflated, or a repository that is not aggregate-centred (DDD-06, APP-03). A resource limit hand-rewritten in a handler or carried by the Domain instead of its owner (APP-05): WebAPI `RequestLimits`/rate limiting for transport, `PaginationBounds` when the query is created, `QueryLimits` for the read cap; an unpaginated read with no cap. Exception: a pre-check duplicating an authority named elsewhere (persistence constraint, external system) is a deviation only if it is the **sole** owner of the rule. | idem |
+| Comments | A comment or XML `///` doc present in production code. Intent is carried by naming. | The line. |
+| Test | Aggregate tested directly, query handler asserted on anything but its returned result, command handler asserted on anything but the type and content of `SavedEvents`, any interaction assertion (spy, counter, `CallCount`, `Called`, `Received`, `Verify`) — the four rules of `test-scope.md` §5. Wrong or missing level (§1 of the same file): a diff hunk touching `src/{{PRODUCT}}.Infrastructure/` with no integration test and no waiver written in the sheet, a contract test with no route changed, an E2E for a single operation. | The test as `path:line`, or the Infrastructure hunk left uncovered. |
+| Plan | An RM/CU with no code owner. A test written without its `[Trait("RM", "{HandlerFolder}/{RM\|RL-xx}")]`, or a trait citing a rule absent from the handler's table. A DDD/APP/PERF id missing from the coverage, an `N/A` without a reason, or an id applied with no owner. TDD evidence (RED, GREEN, COST) ticked where nothing was observed. A non-obvious decision settled mid-batch and absent from the sheet's `## Assumptions` — what is assumed, and who validates it. | The RM/CU or the id, and the place where the evidence is missing. |
+| Scope | A diff hunk with no RM/CU nor sheet step carrying it. Refactor, renaming, reformatting or reorganisation of code that worked and that the batch had no reason to modify. Fixing an adjacent bug outside the batch's RM/CU. Unrequested removal of pre-existing dead code or of a pre-existing comment outside the touched lines. Flexibility, configurability or abstraction added with no expressed need. | The hunk as `path:line` + the missing RM/CU or sheet step. A line required by the delivered behaviour — a propagated signature, a DI registration, a `using` that became necessary — is traced: that is not a deviation. |
 
-**Mandatory filter — a finding without evidence is not reported.**
-
-- Correctness: name a concrete breaking scenario, `inputs X → wrong behaviour Y`. Without a scenario, do not report the finding.
-- Reuse: name the existing element as `path:line`. Without a named element, do not report the finding.
-- Simplification, Cost, Placement: cite the line and the concrete effect. No stylistic preference, no alternative-architecture suggestion, no proposed rewrite.
-- Scope: cite the hunk as `path:line` and name the missing RM/CU or sheet step. A line required by the delivered behaviour — a propagated signature, a DI registration, a `using` that became necessary — is traced: that is not a deviation.
+**A finding without its evidence is not reported.** Symmetrically, missing evidence is never a favourable assumption: cite the file and the line where the deviation is observed, or say the point could not be verified.
 
 Never propose adding a comment, an XML doc, an anticipatory abstraction or an aggregate test in isolation: those are deviations, not fixes.
-
-### 3. Check conformance to plan and tests
-
-For every RM/CU and every applied DDD/APP/PERF id, find evidence in the code and a planned scenario. Reject an id missing from the coverage, or an `N/A` without a reason.
 
 **Classify every code/plan divergence before reporting it**, in one explicit line:
 
@@ -72,33 +62,9 @@ For every RM/CU and every applied DDD/APP/PERF id, find evidence in the code and
 - **Stale plan** — the implementation is better, or a decision was settled mid-batch. Expected fix: the sheet, plus the source spec if an RM/CU moves. Severity **Major**, never blocking.
 - **Unsettleable divergence** — both readings hold. Report both and leave the arbitration to the user. Do not decide in the plan's place.
 
-An RM/CU with no code owner stays blocking in all three cases: that is a hole, not a divergence.
+An RM/CU with no code owner stays blocking in all three cases: that is a hole, not a divergence. Traceability reads both ways: RM → code, and code → RM.
 
-| Point | Expected |
-|-------|----------|
-| Aggregate | It carries the announced invariants; the handler orchestrates load, business call and save. |
-| A command | It modifies and saves a single aggregate; any exception is documented. |
-| Invariant | It genuinely removes a branch, loop, grouping or read identified in the plan. |
-| Boundaries | Several aggregates: DDD-08 exception and consistency made explicit; no implicit integration event. Infrastructure/WebAPI does not decide an RM. |
-| Bounds (APP-05) | Transport (size, rate) in WebAPI; pagination normalised through `PaginationBounds` when the query is created; read cap through `QueryLimits`. Deviation = a bound hand-rewritten in a handler, a technical bound in the Domain, or an unpaginated read with no cap. |
-| External authority | No rule owned by an external system (products/keys, delegation, organisation catalogue) replayed in the code; the target of a transfer validated by delegation, not by mere existence. |
-| Creation/persistence | `Create()` and `Restore()` stay distinct; aggregate-centred repository, saves events. |
-| Uniqueness (APP-03) | The persistence constraint is the authority and the repository translates its violation into a domain exception, with a filter naming the precise index. An upstream uniqueness check is an early failure, not a deviation; the deviation is the missing translation (race surfacing as 500) or a generic filter such as `Contains("duplicate")`. |
-| Owner of the logic (DDD-09) | No business operation carried by a helper or static service receiving a business object's state; Domain Service stateless and justified. |
-| Absence (DDD-11) | No nullable collection in Domain/Application; transport nullable converted at the boundary; an optional concept modelled, not tested with `is null` at every use. |
-| Cost | Reads/writes bounded, independent of input size; no repository read inside an input-driven loop. |
-| Aggregate test | No test calls an aggregate factory or method directly to verify behaviour. |
-| Query handler test | Mock fed with data; assertion on the returned result. |
-| Command handler test | `SavedEvents` verified by type and content. |
-| Interactions | No spy, counter, `CallCount`, `Called`, `Received` or assertion on call count. |
-| Test level | **Integration test mandatory as soon as a hunk touches `src/{{PRODUCT}}.Infrastructure/`** — repository, EF mapper, entity configuration, query, persistence-exception translation. A waiver is admissible only for a hunk with no effect on persistence (DI registration, adapter of an already-doubled external service), written in the sheet with its reason. Contract tests only when a nominal route changed; E2E only for a lifecycle of at least two operations. |
-| Scope | Every diff hunk ties back to an RM/CU or to a step of the sheet. Traceability reads both ways: RM → code, and code → RM. A hunk with no owner is a deviation, even if it improves the code. |
-| Assumptions (Hn) | Every non-obvious decision settled mid-batch for lack of an answer appears as `Assumption Hn` in the sheet: what is assumed, and who validates it. Deviation = a silent decision. |
-| TDD | Every delivered behaviour carries RED, GREEN and COST ticked only where actually observed. |
-
-Missing evidence is not a favourable assumption. Cite the file and line where the deviation is observed.
-
-### 4. Run the minimal validations
+### 3. Run the minimal validations
 
 Runner, filters, suite scope and integration-test filter construction → `.claude/skills/implement-tdd/references/test-scope.md`. Single source, shared with `/implement-tdd`: do not restate it, apply it.
 
@@ -106,10 +72,8 @@ Runner, filters, suite scope and integration-test filter construction → `.clau
 
 1. `rtk dotnet build --no-restore` if the diff contains source code.
 2. The tests and projects named in the sheet: targeted filter first; target project without a filter if the filter is not usable.
-3. **`ArchitectureTests` in full** as soon as the diff touches a handler, an endpoint, a repository, a layer boundary or a DI registration. It mechanically locks naming, CQRS, dependencies, encapsulation and registration: what it proves does not have to be re-argued in the verdict, what it breaks is blocking.
-4. **`IntegrationTests` as soon as the diff touches `src/{{PRODUCT}}.Infrastructure/`**, always **filtered** — `full` mode included. No integration test on an Infrastructure diff with no written waiver in the sheet: a **Blocking** deviation, even if the filtered suite passes green on the existing tests.
-5. Contract and E2E only if the batch selects them. E2E not selected = do not start Aspire.
-6. `full` mode: adds `UnitTests` and `ContractTests` in full, plus `DslTests` **only** if the diff touches `dsl/**`, the parser or the templates/presets.
+3. The suites the diff makes mandatory, whole or filtered per §2 of that file. Two points the audit owns: **`ArchitectureTests` in full** on any handler, endpoint, repository, boundary or DI change — what it locks (naming, CQRS, dependencies, encapsulation, registration) does not have to be re-argued in the verdict, what it breaks is blocking; **`IntegrationTests` stays filtered**, `full` mode included.
+4. `full` mode: adds `UnitTests` and `ContractTests` in full, plus `DslTests` **only** if the diff touches `dsl/**`, the parser or the templates/presets.
 
 Never declare a test green without exit code `0`. Distinguish a test not run, skipped and failed. In the verdict, the `Validations` line carries each command's **scope**, not just its exit code: a filter presented without its scope reads as a full suite.
 

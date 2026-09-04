@@ -1,0 +1,12 @@
+# Runtime files the hooks write inside .claude/.
+# context-log.raw.json holds a raw hook payload (session id, absolute paths):
+# never commit it.
+context-log.tsv
+context-log.raw.json
+
+# Session-local grants, machine paths: never shared.
+settings.local.json
+
+# Python byte-code: a build artefact, regenerated on every run.
+__pycache__/
+*.pyc

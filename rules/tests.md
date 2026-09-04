@@ -27,9 +27,17 @@ A domain class is never tested directly (`PortConstraintTests`) — always throu
 
 ## Traceability
 
-A handler test is bound to a rule: its `Class.Method` appears in the *Tests* column of the `## Business rules` table in the handler's `CLAUDE.md` (`src/{{PRODUCT}}.Application/**/<Handler>/`). Write the test, then fill the cell — same commit.
+A handler test declares its rule **on itself**, with a `Trait`:
 
-The `handler-claude-md-check.sh` hook reports, on every edit of a handler or of a handler test: rules with an empty *Tests* cell, referenced tests that no longer exist, tests in a cited class bound to no rule. Warning only, never blocking.
+```csharp
+[Fact]
+[Trait("RM", "GetProduct/RL-02")]
+public async Task ShouldThrowNotFound_WhenProductBelongsToAnotherOrganization()
+```
+
+Value: `{HandlerFolder}/{RM|RL-xx}` — the folder name of the handler under `src/{{PRODUCT}}.Application/**/`, then the id of the row in its `## Règles métier` table. The prefix is the **handler folder**, not the aggregate: `RM` numbering is not unique across the handlers of one feature. A test covering two rules carries two attributes. A trait is read in any suite, so an integration or E2E test covers a rule just as well as a unit test.
+
+The `handler-claude-md-check.sh` hook reports, on every edit of a handler or of a handler test: rules carried by no trait, traits citing a rule absent from the table, and tests with no trait in a class that carries some. Warning only, never blocking. Only `UnitTests` and `ContractTests` are expected to bind every test — the other suites bind the ones that cover a documented rule.
 
 Tests outside handler folders (`Aggregates/`, `ValueObjects/`, `Core/`, `DslTests`) are out of scope — no rule to bind them to.
 

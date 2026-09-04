@@ -34,20 +34,9 @@ You stay responsible for **design**: splitting into behaviours, arbitrating an u
 
 ## Workspace projects
 
-| Layer | Project | Path |
-|--------|--------|--------|
-| Abstractions.Models | `{{PRODUCT}}.Abstractions.Models` | `src/{{PRODUCT}}.Abstractions.Models/` |
-| Domain | `{{PRODUCT}}.Domain` | `src/{{PRODUCT}}.Domain/` |
-| Application | `{{PRODUCT}}.Application` | `src/{{PRODUCT}}.Application/` |
-| Infrastructure | `{{PRODUCT}}.Infrastructure` | `src/{{PRODUCT}}.Infrastructure/` |
-| WebAPI | `{{PRODUCT}}.WebAPI` | `src/{{PRODUCT}}.WebAPI/` |
-| Unit Tests | `{{PRODUCT}}.UnitTests` | `tests/{{PRODUCT}}.UnitTests/` |
-| Integration Tests | `{{PRODUCT}}.IntegrationTests` | `tests/{{PRODUCT}}.IntegrationTests/` |
-| Contract Tests | `{{PRODUCT}}.ContractTests` | `tests/{{PRODUCT}}.ContractTests/` |
-| E2E Tests | `{{PRODUCT}}.E2ETests` | `tests/{{PRODUCT}}.E2ETests/` |
-| Architecture Tests | `{{PRODUCT}}.ArchitectureTests` | `tests/{{PRODUCT}}.ArchitectureTests/` |
-| DSL Tests | `{{PRODUCT}}.DslTests` | `tests/{{PRODUCT}}.DslTests/` |
-| Shared test infrastructure (doubles, builders, assets) — not a suite | `{{PRODUCT}}.CoreTests` | `tests/{{PRODUCT}}.CoreTests/` |
+Production — `src/{{PRODUCT}}.{Abstractions.Models, Domain, Application, Infrastructure, WebAPI}/`.
+Suites — `tests/{{PRODUCT}}.{UnitTests, IntegrationTests, ContractTests, E2ETests, ArchitectureTests, DslTests}/`.
+`tests/{{PRODUCT}}.CoreTests/` is not a suite: shared test infrastructure (doubles, builders, assets), referenced by the others.
 
 EF migrations live in another project: **never modify them from this workspace**.
 
@@ -84,13 +73,7 @@ Split the batch into **end-to-end business behaviours** carried by a Command/Que
 
 **COST is mandatory before moving to the next behaviour.** `tdd-implementer` states it in one line ("1 read + 1 write"); you **validate** it against the delivered code, you do not take it at face value. No test observes that number: green proves nothing here. An `await` on a repository inside a loop is a **design** defect, and design is where you go back to. Symptom/fix table → `references/conventions.md` § "Data access".
 
-**RED = ALWAYS delegate writing the test** to the `tdd-test-author` subagent, telling it which skill to apply (+ scenario name + RM). Level choice → `references/test-scope.md` §1.
-
-**A hunk in `src/{{PRODUCT}}.Infrastructure/` mandates an integration test**, on top of the handler test: the unit test's double proves neither the SQL, nor the join, nor the filter pushed to the database, nor the index violation translated into a domain exception. Only waiver: an Infrastructure hunk with no effect on persistence (DI registration, adapter of an already-doubled external service) — to be written out explicitly in the sheet and the summary, with its reason.
-
-**Absolute rule: never test an aggregate method directly.** A Domain behaviour (factory `Create()`, method `SetDefault()`, …) is always tested **through the handler/service that calls it**. Domain events are side effects verified at handler level, not on the aggregate in isolation. If no handler exists yet for that behaviour, **do not write the test** — it will be written when the handler exists. No orphan test on an aggregate.
-
-**Absolute handler policy**: for a query, the mock supplies the data and the test asserts on the returned result. For a command, the test asserts the type and payload of `SavedEvents`. **Never** a spy, a counter, `Called`, `Received`, `Verify` or an assertion on call count — not even for cost.
+**RED = ALWAYS delegate writing the test** to the `tdd-test-author` subagent, telling it which skill to apply (+ scenario name + RM). Level choice, Infrastructure integration-test obligation and its only waiver → `references/test-scope.md` §1. Aggregate, query, command and interaction policy → the same file, §5. Both are absolute: a deviation is Blocking at audit.
 
 Read the plans once, in the main agent. For each behaviour, delegate this compact contract, without attaching the plan or asking for it to be re-read:
 
@@ -106,6 +89,18 @@ Expected observation: …
 The agent modifies test files only, runs the filtered test and returns its compact `## RED` format. Do not ask it to re-explain the plan nor to copy its logs.
 
 Once it returns: read its diff, confirm it contains no production code, then check the filtered test's expected failure. Never production code ahead of a red test.
+
+**Relay its `## RED` table to the user immediately, before GREEN.** A subagent's report is never shown to the user: an unrelayed table is a table nobody reads. The subagent returns method names and cases; **you** add the `RM/CU` column from the contract you handed it — it is your id, not its output. Print, under the behaviour's name, with the observed exit code:
+
+```markdown
+### RED — [behaviour] (exit 1)
+
+| Test | RM/CU | Case covered |
+|---|---|---|
+| `[Class]Tests.[Method]` | RM-XX | what the test observes |
+```
+
+Check the table against the diff before relaying: a test method present in the diff but absent from the table comes back to the subagent. Keep these rows for the batch — they are the material of the final recap (step 7); do not rebuild them from the diff at the end.
 
 **GREEN + REFACTOR = delegate to the `tdd-implementer` subagent.** It writes the production code, deletes what its code orphaned, runs the filtered test and states the cost. Test files are read-only to it: a test that cannot go green without being modified comes back as `## BLOCKED`, it does not get weakened. Delegate this compact contract, without attaching the plan or having it re-read:
 
@@ -123,11 +118,9 @@ Once it returns `## GREEN`: read its diff, check the announced cost against the 
 
 ### 3. Global green loop
 
-Fix until fully green (every behaviour of the batch). **Each suite's scope is decided, not endured** — see `references/test-scope.md` §2. In the batch sheet, tick RED only after the filtered test's expected failure, GREEN after success, COST after reviewing the cost. Never tick evidence you have not observed.
+Fix until fully green (every behaviour of the batch). **Each suite's scope is decided, not endured** — which suites to run whole or filtered, how to build the integration-test filter, how to report the scope → `references/test-scope.md` §2-4.
 
-#### Scope
-
-Which suites to run, whole or filtered, how to build the integration-test filter and how to report → `references/test-scope.md` §2-4.
+In the batch sheet, tick RED only after the filtered test's expected failure, GREEN after success, COST after reviewing the cost. Never tick evidence you have not observed.
 
 ### 4. Delegated final audit
 
@@ -148,11 +141,11 @@ Whenever the implementation references a plan (`PLAN-*.md`, `SPEC-*-PLAN.md` und
 - Assumptions made mid-batch → the sheet's `## Assumptions` section: `Hn — [assumption] — to be validated by [who]`. An assumption later confirmed becomes a decision: move it to `## Decisions`.
 - **A correction that changes an RM/CU** → update the source spec too. Traceability runs both ways: the spec is the business source of truth.
 - A correction coming from manual validation → add `Correction Cn` under the affected behaviour; keep the original TDD history and the correction evidence.
-- For each finished behaviour: `TDD: RED ✅ · GREEN ✅ · COST ✅` only if all three pieces of evidence were observed.
+- For each finished behaviour: `TDD: RED ✅ · GREEN ✅ · COST ✅`.
 
 ### 6. Handler documentation update
 
-Handler modified or created → **update the `CLAUDE.md` of the handler folder** (under `Application/`). Business-rules table **including the `Tests` column** (every red test written in the batch is tied there to its rule), flow, emitted events. If the handler is new: create the `CLAUDE.md`. **Format and example → `references/claude-md-handler.md`** (read it before writing).
+Handler modified or created → **update the `CLAUDE.md` of the handler folder** (under `Application/`): three-column business-rules table, flow, emitted events. No test column to fill — the rule ↔ test link lives on the test, as `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, posed by `tdd-test-author` in step 2. If the handler is new: create the `CLAUDE.md`. **Format and example → `references/claude-md-handler.md`** (read it before writing).
 
 **New handler or changed intent → also update the parent feature folder's index `CLAUDE.md`**: the use-case line in the Commands/Queries table (relative link `[Name](Name/CLAUDE.md)`, one-line intent, `N rules, M tested` — `python3 scripts/rules-coverage.py --fix-index` recomputes that column). A handler missing from the index is a handler nobody can find.
 
@@ -169,13 +162,15 @@ Local style, absence of comments, orphans and surgical change: rules in `referen
 
 Summary: files created/modified, layers touched, **access cost per delivered behaviour**, **`Hn` assumptions made mid-batch**, **dead code or adjacent bug reported but deliberately untouched**, DDD/APP/PERF ids and `/verify-ddd-tdd`'s verdict. For validations, give command + exit + **scope** (filter applied, or "whole suite") and the number of tests; name the suites deliberately not run and why. On failure, attach at most six useful RTK lines. **No commit** — the user decides when to commit.
 
-**Test recap table** — always end with a Markdown table listing every implemented test:
+**Test recap table** — always end with a Markdown table listing every implemented test, assembled from the `## RED` tables relayed during the batch:
 
-| Test | Validated UC |
-|------|--------------|
-| `TestName` | Short description of the use case / business rule validated |
+| Test | RM/CU | Validated UC |
+|------|-------|--------------|
+| `[Class]Tests.[Method]` | RM-XX | Short description of the use case / business rule validated |
 
-One test per row, exact method name, concise description of the verified behaviour.
+One test per row, exact method name, the rule id it is tied to, concise description of the verified behaviour. Every row of every relayed `## RED` table appears here; a test deleted mid-batch does not. Assemble it from those rows — do not rebuild it from the diff.
+
+**Cross-check the handler half** with `python3 scripts/rules-coverage.py --untested`. It reads the `## Règles métier` tables, confronts them with the `[Trait("RM", …)]` posed across **all** of `tests/`, and reports two things the recap cannot: a trait citing a rule absent from the tables (`DEAD REFERENCE` — a renamed or deleted rule), and a test with no trait in a class that carries some (`UNBOUND TEST`). That second signal is raised on `UnitTests` and `ContractTests` only: the other suites bind the tests that cover a documented rule, not all of theirs.
 
 ---
 
