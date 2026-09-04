@@ -12,8 +12,7 @@
       "Bash(git check-ignore *)",
       "Bash(graphify query *)",
       "Bash(graphify explain *)",
-      "Bash(graphify path *)",
-      "Bash(rm -f /tmp/claude-grep-count-*)"
+      "Bash(graphify path *)"
     ],
     "deny": [
       "Read(./node_modules/**)",
@@ -76,7 +75,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "rm -f /tmp/claude-grep-count-$(cat /dev/stdin | jq -r '.session_id // \"unknown\"')"
+            "command": "rm -f /tmp/claude-graphify-seen-$(cat /dev/stdin | jq -r '.session_id // \"unknown\"')"
           }
         ]
       }
@@ -87,6 +86,16 @@
           {
             "type": "command",
             "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/graphify-autosync.sh"
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/context-log.sh"
           }
         ]
       }

@@ -11,6 +11,7 @@ Freeze the nominal HTTP contract: method, route, status, headers and body. If th
 
 ## Rules
 
+- A test covering a rule of a handler's `## Règles métier` table carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under its `[Fact]`/`[Theory]`. A trait is read in every suite — this is how a rule proven only here stops counting as untested. A test covering no documented rule carries none.
 - One `{HTTP} {route}` route = one happy-path contract test. Add an error test only when the public HTTP representation of an error changes (status, headers or body).
 - GET: 200/204; POST: 201; PUT: 200; DELETE: 204.
 - Validation and business rules stay in the handler unit tests. When `GlobalExceptionHandler` or the public error contract changes, freeze the affected HTTP mapping once; do not duplicate every business case per endpoint.

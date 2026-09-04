@@ -80,3 +80,14 @@ Format expected everywhere — batch sheet, `/implement-tdd` summary, `Validatio
 [command] — exit N, scope [filter applied or "whole suite"], [n] tests
 Not run: [suite] — [reason]
 ```
+
+## 5. Handler test policy
+
+Absolute, shared by writing (`/implement-tdd`) and audit (`/verify-ddd-tdd`).
+
+- **Never test an aggregate directly.** A Domain behaviour (factory `Create()`, method `SetDefault()`, …) is tested through the handler/service that calls it; domain events are side effects observed at handler level. No handler exists yet for that behaviour → the test is not written. No orphan test on an aggregate.
+- **Query handler**: the double supplies the data, the test asserts on the returned result.
+- **Command handler**: the test asserts the type and the payload of `SavedEvents`.
+- **Never an interaction**: no spy, counter, `CallCount`, `Called`, `Received`, `Verify`, no assertion on a call count — not even to observe cost.
+
+A deviation on any of these four is **Blocking**, axis `Test`.

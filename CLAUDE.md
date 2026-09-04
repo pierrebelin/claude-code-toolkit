@@ -20,10 +20,13 @@ Some emitted strings are parsed by exact match. Reword one and you must reword i
 
 | Frozen literal | Parsed by |
 |---|---|
-| `## Business rules`, `## Flow`, `## Emitted events` and the columns `ID` / `Rule` / `Exception / Result` / `Tests` | `hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py` in the target repo |
-| `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Scope`/`Comments` | `/verify-ddd-tdd` verdict format |
+| `## Règles métier`, `## Flux`, `## Événements émis` and the columns `ID` / `Règle` / `Exception / Résultat` | `hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`, `scripts/migrate-rm-traits.py` |
+| `[Trait("RM", "{HandlerFolder}/{RM\|RL-xx}")]` — the attribute name `RM` and the `folder/id` shape of its value | idem, plus `scripts/untagged-tests.py` and `scripts/migrate-rm-traits.py` |
+| `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Comments`/`Test`/`Plan`/`Scope` | `/verify-ddd-tdd` verdict format |
 | `## RED`, `## GREEN`, `## BLOCKED` and their fields | `/implement-tdd` orchestrator |
 | `TDD: RED ✅ · GREEN ✅ · COST ✅`, `✅ DONE`, `## Assumptions`, `Correction Cn` | batch sheets |
+| `N rules, M tested` — the coverage column of a feature index `CLAUDE.md` | written by `scripts/rules-coverage.py --fix-index`, templated in `skills/implement-tdd/references/claude-md-handler.md` |
+| `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/migrate-rm-traits.py` and `skills/implement-tdd/SKILL.md` |
 
 Identifier prefixes are language-neutral and stay as they are: `RM-xx` (business rule), `RL-xx` (rule local to a handler), `CU-xx` (use case), `DDD-nn`, `APP-nn`, `PERF-nn`.
 
@@ -37,11 +40,12 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 | procedure (TDD cycle, audit steps) | the relevant `SKILL.md` |
 | wiring (event, matcher, hook order) | `settings.json` |
 | description of the kit's behaviour | `README.md` |
+| repo-wide scanner or one-shot migration | `scripts/` — never a hook: a hook fires per edit, a scan reads the whole repo |
 
 Two sources that drift make the choice random: a fact lives in exactly one place.
 
 ## Editing a hook
 
-- Must exit 0 on empty JSON input and when its dependency is missing. The only intended exceptions: `git-guard.sh` and `graphify-enforce.sh`, blocking by design.
+- Must exit 0 on empty JSON input and when its dependency is missing. Intended exceptions: `git-guard.sh`, blocking by design, and `graphify-enforce.sh`, which denies an `Explore` subagent with no graphify in its prompt and rewrites a symbol-discovery `grep` into `graphify explain` (a rewrite, not a denial).
 - Test after editing: `echo '{}' | bash hooks/<name>.sh`.
 - Do not run `graphify-autosync.sh` idly: it rebuilds the graph and blocks for several minutes.

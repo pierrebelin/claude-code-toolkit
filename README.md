@@ -55,7 +55,7 @@ This kit encodes **my** way of working, not a universal best practice. Among oth
 - surgical change — no opportunistic refactor of adjacent code that worked;
 - a material ban on committing (`git-guard.sh` blocks `add` / `commit` / `push`);
 - one `CLAUDE.md` per handler folder, with a business-rules ↔ tests table checked by a hook;
-- a quota of 3 `grep` per session to force going through an AST graph.
+- symbol-discovery `grep`s substituted by `graphify explain` when the AST graph actually answers.
 
 On another project, with other conventions or another tolerance for ceremony, half of these constraints are noise. Taking the kit wholesale mostly leads to fighting it.
 
@@ -67,18 +67,22 @@ The use I recommend: **cherry-pick**. A hook, a path-scoped rule, the structure 
 |--------|----------|----------------|
 | `agents/` | `tdd-test-author` (writes the RED tests), `tdd-implementer` (writes the production code in GREEN), `ddd-tdd-auditor` (audits a batch, read-only) | `<repo>/.claude/agents/` |
 | `rules/` | 5 path-scoped rules: `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests` | `<repo>/.claude/rules/` |
-| `hooks/` | 7 hooks: Git guard, grep quota, rules ↔ tests traceability, AST graph resync | `<repo>/.claude/hooks/` |
+| `hooks/` | 9 hooks: Git guard, grep → AST-graph substitution, rules ↔ tests traceability, AST graph resync, context load log | `<repo>/.claude/hooks/` |
 | `skills/` | 8 skills: the spec → plan → implementation → audit chain, plus 4 test skills | `<repo>/.claude/skills/` |
 | `settings.json` | hook wiring + statusline + base permissions | `<repo>/.claude/` (merge if the file exists) |
 | `statusline-command.sh` | git branch, model, context %, effort, 5 h rate limit, caveman badge, graph lag | `<repo>/.claude/` |
+| `.gitignore` | the runtime files the hooks write inside `.claude/` | `<repo>/.claude/` (merge if the file exists) |
+| `scripts/` | `rules-coverage.py` (rules ↔ traits, repo-wide), `untagged-tests.py` (tests carrying no trait), `migrate-rm-traits.py` (one-shot: `Tests` column → traits), `turn-batching-check.py` (tool-call batching) | `<repo>/scripts/` |
 
 ## Installation
 
-1. **Copy** the folders you want into `<repo>/.claude/`. The skills read `.claude/rules/*.md`: copying `skills/` without `rules/` breaks their references.
+1. **Copy** the folders you want into `<repo>/.claude/`. The skills read `.claude/rules/*.md`: copying `skills/` without `rules/` breaks their references. `scripts/` is the exception: it goes to `<repo>/scripts/`, which is where the hooks and the skills reference it.
+
+   The kit ships the `.gitignore` covering what the hooks write inside `.claude/`: `context-log.tsv`, `context-log.raw.json`, `settings.local.json`. One entry belongs to the repo's own `.gitignore`, one level up: `graphify-out/`, the AST graph rebuilt by `graphify-autosync.sh`.
 
 2. **Wire it up** — copy `settings.json` to `<repo>/.claude/settings.json`, or merge its `hooks` and `statusLine` keys into the existing file. The commands there are written with `$CLAUDE_PROJECT_DIR`, never an absolute path: that is what makes the setup portable.
 
-   The shipped `settings.json` is a shareable template, not a `settings.local.json`: no one-off session grant, no machine path, no `skillOverrides` bound to skills absent from the kit. Its `allow` list covers the strict minimum (`dotnet`, `rtk`, `gh pr`, `python3`, `graphify query|explain|path`, purging the grep counter, `git check-ignore`). Broad grants — `Bash(rm *)`, `Bash(cd *)` — are deliberately excluded: adding them means letting an agent delete outside its scope.
+   The shipped `settings.json` is a shareable template, not a `settings.local.json`: no one-off session grant, no machine path, no `skillOverrides` bound to skills absent from the kit. Its `allow` list covers the strict minimum (`dotnet`, `rtk`, `gh pr`, `python3`, `graphify query|explain|path`, `git check-ignore`). Broad grants — `Bash(rm *)`, `Bash(cd *)` — are deliberately excluded: adding them means letting an agent delete outside its scope.
 
 3. **Substitute `{{PRODUCT}}`** and adapt the points below, otherwise the rules never load and the traceability hook finds nothing.
 
@@ -94,7 +98,7 @@ tests/{{PRODUCT}}.UnitTests/     dotnet test --project tests/{{PRODUCT}}.UnitTes
 One substitution is enough to make the kit operational:
 
 ```bash
-grep -rl '{{PRODUCT}}' .claude/ | xargs sed -i '' 's/{{PRODUCT}}/MyProduct/g'
+grep -rl '{{PRODUCT}}' .claude/ scripts/ | xargs sed -i '' 's/{{PRODUCT}}/MyProduct/g'
 ```
 
 The code examples rest on a neutral fictional domain — aggregates `Product` and `ModuleDiagram`, sub-entities `ProductItem` and `DiagramNode`, bounded contexts `Catalog` and `Studio`. Nothing there matches an existing project. Rewriting them with the target domain's vocabulary makes the examples more telling, but is not needed to make things work.
@@ -110,7 +114,10 @@ The kit assumes a repo shaped as `src/{{PRODUCT}}.<Layer>/` + `tests/{{PRODUCT}}
 | `rules/infrastructure-ef.md` | `paths:` frontmatter | Infrastructure + migrations globs |
 | `rules/webapi-endpoints.md` | `paths:` frontmatter | WebAPI + public/SDK contract globs |
 | `rules/tests.md` | `paths:` frontmatter | tests glob |
-| `hooks/handler-claude-md-check.sh` | `APP`, `UT`, `CT` (l. 23-25) | paths of the Application, UnitTests and ContractTests projects |
+| `hooks/handler-claude-md-check.sh` | `APP`, `BOUND_SUITES` | paths of the Application, UnitTests and ContractTests projects |
+| `scripts/rules-coverage.py` | `APP`, `BOUND_SUITES` | same paths |
+| `scripts/migrate-rm-traits.py` | `APP`, `TESTS` | Application and tests roots; no suite binding, it reads every suite |
+| `scripts/untagged-tests.py` | `PRODUCT` | project prefix stripped from the suite name |
 | `hooks/graphify-enforce.sh` | `non_source`, source folder list | the repo's source folders |
 | `hooks/graphify-freshness.sh` | scanned dirs, extensions | indexed languages and folders |
 | `hooks/caveman-skill-ultra.sh` | `case "$skill"` | skills that must force `caveman=ultra` |
@@ -126,12 +133,14 @@ The `graphify-*` hooks derive the repo root from `dirname "${BASH_SOURCE[0]}"`: 
 | Hook | Event | Role | Blocking |
 |------|-------|------|----------|
 | `git-guard.sh` | `PreToolUse:Bash` | forbids mutating Git commands (`add`, `commit`, `push`), including through `rtk git`, `git -C`, `cd && git`. Reading stays free | yes |
-| `graphify-enforce.sh` | `PreToolUse:Bash`/`Agent` | caps at 3 `grep`/`find`/`rg` per session, pushes towards the AST graph. Ignores non-code targets and heredocs | yes past the quota |
+| `graphify-enforce.sh` | `PreToolUse:Bash`/`Agent` | rewrites a symbol-discovery `grep`/`find`/`rg` into `graphify explain`, but only when the node exists in the graph, the search is not scoped to a subpath, and the symbol was not already substituted in the session. Ignores non-code targets, heredocs and downstream-of-a-pipe filtering. Still denies an `Explore` subagent whose prompt never mentions graphify | no for Bash (rewrite), yes for `Explore` |
 | `rtk-normalize.sh` | `PreToolUse:Bash` | normalises `/usr/bin/grep` to `grep` so the RTK rewrite matches | no |
 | `caveman-skill-ultra.sh` | `PreToolUse:Skill` | forces `caveman=ultra` when entering certain skills | no |
-| `handler-claude-md-check.sh` | `PostToolUse:Edit\|Write` | cross-checks the `## Business rules` table of the handler `CLAUDE.md` files against the tests actually present; reports untested rules and orphan tests | no, warning only |
+| `handler-claude-md-check.sh` | `PostToolUse:Edit\|Write` | cross-checks the `## Règles métier` table of the handler `CLAUDE.md` files against the tests actually present; reports untested rules and orphan tests | no, warning only |
 | `graphify-autosync.sh` | `Stop` | rebuilds the graph if the working tree moved. `mkdir` lock, anti-shrink guard (auto `--force` if the drop is ≤ 2 %) | no |
 | `graphify-freshness.sh` | called by autosync + statusline | counts the sources newer than `graph.json`, 20 s TTL cache | no |
+| `context-log.sh` | `InstructionsLoaded` | logs every instruction file entering the context (path, bytes, ~tokens, load reason) into `.claude/context-log.tsv` | no, observes only |
+| `context-report.sh` | run by hand | reads that log back: heaviest files, tokens per load reason. `--session` narrows it to the last session | not a hook |
 
 ## Skills
 
@@ -160,11 +169,32 @@ Main chain: `business-spec` → `plan-implementation` → `implement-tdd` → `v
 
 **Zero comments in production**, XML `///` doc included — intent is carried by naming. Pre-existing comments explaining a decision, a constraint or an exception are kept; only touch them within the lines you touch.
 
-**Rules ↔ tests traceability** — every handler folder carries a `CLAUDE.md` with a `## Business rules` table whose Tests column cites `TestClass.Method`. `handler-claude-md-check.sh` checks both directions.
+**Rules ↔ tests traceability** — every handler folder carries a `CLAUDE.md` with a `## Règles métier` table, and every test declares the rule it covers on itself: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`. `handler-claude-md-check.sh` checks both directions; `scripts/rules-coverage.py` gives the repo-wide count.
 
 **Never commit to Git.** The user decides when to commit. `git-guard.sh` makes the instruction deterministic.
 
-**Done checklist** — never announce completion without: the relevant tests green, no regression, plan files marked ✅ with a date, the handler's `## Business rules` table up to date (Tests column included), the parent feature's index `CLAUDE.md` up to date if a handler is added or its intent changes.
+**Done checklist** — never announce completion without: the relevant tests green, no regression, plan files marked ✅ with a date, the handler's `## Règles métier` table up to date (Tests column included), the parent feature's index `CLAUDE.md` up to date if a handler is added or its intent changes.
+
+**Context discipline** — these are behaviour rules, independent of the domain. They are not shipped by a hook: copy them into the `CLAUDE.md` of the repo installing the kit.
+
+> **Context** — every turn resends everything accumulated: the cost follows the number of turns and the size of what you leave in them.
+> - **Independent calls → a single message.** Two `Read`/`Bash`/`Grep` that do not wait on each other, in two turns, pay the accumulation twice. A turn = one billed round trip, not one call.
+> - `offset`/`limit` from 200 lines on. An aggregate read whole is ~24k characters carried to the end of the session: locate (`graphify`, grep) then read the range.
+> - 3 files or more to go through → haiku subagent: its reads stay in its own context, only the conclusion comes back.
+>
+> **Subagents**
+> - Read-only exploration (`Explore`, `general-purpose` when searching) → **always `model: haiku`** in the `Agent` call. Without that parameter the agent inherits the parent model: measured at 11× the cost per turn for the same locating work.
+> - Writing code, tests, multi-step → default model.
+> - **Bound the report in the delegation prompt**: format and max size. An agent's final report is re-injected whole into the main conversation — measured at 27k characters per unbounded `Explore` launch, against 3k for an agent with an imposed format.
+>
+> **Symbol or relation → graphify; text → grep.** `explain` (what a node is, what it uses, who uses it), `affected` (what breaks if you change it), `path` (how A reaches B), `query` (natural-language question). The graph only holds AST nodes: a literal, an error message, a configuration value, a `.md`/`.json`/`.csproj` are not in it — that is grep. Never chain `grep | grep | head`.
+>
+> **Session hygiene** — context cost is quadratic in the number of turns: every answer is re-billed as input on every later turn.
+> - `/clear` on a phase change — the only mechanism that throws away the accumulated tail. Within the hour, the head (system prompt, tools, `CLAUDE.md`) is read back from cache instead of being rewritten.
+> - `/branch` before an uncertain exploration: a 30-turn dead end abandoned in a branch is never carried by the trunk.
+> - `/fork` reduces nothing — it copies the conversation into a background session. A throughput tool, not a cost tool.
+> - Never let `/compact` fire: it injects ~60k tokens carried to the end ($3.60 on average over 18 sessions, $12.15 at worst). `/clear` with a ten-line brief costs less.
+> - The cache expires after an hour of inactivity. Resuming a large session after a long pause for a small question pays the full rewrite of the prefix — measured at $90 over 30 days.
 
 ## Dependencies
 
@@ -172,9 +202,9 @@ Only `jq` and `python3` really count. The rest degrades cleanly — and three of
 
 | Tool | Required by | If missing |
 |------|-------------|------------|
-| `jq` | statusline, `graphify-enforce.sh`, `graphify-autosync.sh` | silent statusline, grep quota not enforced |
-| `python3` | `handler-claude-md-check.sh`, `caveman-skill-ultra.sh` | inert hooks, exit 0 |
-| `graphify` (`~/.local/bin/graphify`) | autosync, freshness | autosync logs "graphify not found, skip" and exits 0 |
+| `jq` | statusline, `graphify-enforce.sh`, `graphify-autosync.sh` | silent statusline, no grep substitution |
+| `python3` | `graphify-enforce.sh`, `handler-claude-md-check.sh`, `caveman-skill-ultra.sh`, `context-log.sh`, every script under `scripts/` | inert hooks, exit 0 |
+| `graphify` (`~/.local/bin/graphify`) | `graphify-enforce.sh`, autosync, freshness | no substitution (the hook exits 0 in silence); autosync logs "graphify not found, skip" and exits 0 |
 | `rtk` | `rtk-normalize.sh`, prefixed commands in the skills | drop the `rtk ` prefix from the skills, nothing else breaks |
 | `caveman` plugin | `caveman-skill-ultra.sh`, statusline badge | flag written with no effect |
 

@@ -19,6 +19,7 @@ Test a business behaviour through its real handler/service. Mock Infrastructure 
 ## Non-negotiable rules
 
 - Test and class naming → `.claude/rules/tests.md` (loaded as soon as you open a file under `tests/`).
+- **Every test covering a documented business rule carries it**, right under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, where `{HandlerFolder}` is the handler's folder name under `src/{{PRODUCT}}.Application/**/` and the id is a row of its `## Règles métier` table. Two rules covered → two attributes. This attribute **is** the traceability: the table has no test column, and a rule carried by no trait counts as untested (`scripts/rules-coverage.py`).
 - Test an aggregate factory or method only through the handler/service that calls it. No orphan aggregate test.
 - Query: data in the double, assertion on the output. Command: assertion on `SavedEvents` by type and content.
 - Never observe an interaction: no spy, counter, `CallCount`, `Called`, `Received`, `Verify` nor call count — not even for cost.
@@ -53,6 +54,7 @@ public sealed class Create[Entity]Tests
     private readonly Create[Entity]Fixture _fixture = new();
 
     [Fact]
+    [Trait("RM", "Create[Entity]/RM-01")]
     public async Task ShouldCreate[Entity]_WhenCommandIsValid()
     {
         var result = await _fixture.WithValidName().Execute();
