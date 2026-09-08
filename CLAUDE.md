@@ -26,6 +26,7 @@ Some emitted strings are parsed by exact match. Reword one and you must reword i
 | `## RED`, `## GREEN`, `## BLOCKED` and their fields | `/implement-tdd` orchestrator |
 | `TDD: RED ✅ · GREEN ✅ · COST ✅`, `✅ DONE`, `## Assumptions`, `Correction Cn` | batch sheets |
 | `N rules, M tested` — the coverage column of a feature index `CLAUDE.md` | written by `scripts/rules-coverage.py --fix-index`, templated in `skills/implement-tdd/references/claude-md-handler.md` |
+| `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names and the JSON's first-level keys | `scripts/quality-report-check.py`, the whole report history and any viewer built on it |
 | `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/migrate-rm-traits.py` and `skills/implement-tdd/SKILL.md` |
 
 Identifier prefixes are language-neutral and stay as they are: `RM-xx` (business rule), `RL-xx` (rule local to a handler), `CU-xx` (use case), `DDD-nn`, `APP-nn`, `PERF-nn`.
