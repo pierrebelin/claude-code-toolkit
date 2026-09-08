@@ -68,11 +68,11 @@ The use I recommend: **cherry-pick**. A hook, a path-scoped rule, the structure 
 | `agents/` | `tdd-test-author` (writes the RED tests), `tdd-implementer` (writes the production code in GREEN), `ddd-tdd-auditor` (audits a batch, read-only) | `<repo>/.claude/agents/` |
 | `rules/` | 5 path-scoped rules: `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests` | `<repo>/.claude/rules/` |
 | `hooks/` | 9 hooks: Git guard, grep → AST-graph substitution, rules ↔ tests traceability, AST graph resync, context load log | `<repo>/.claude/hooks/` |
-| `skills/` | 8 skills: the spec → plan → implementation → audit chain, plus 4 test skills | `<repo>/.claude/skills/` |
+| `skills/` | 9 skills: the spec → plan → implementation → audit chain, 4 test skills, and the monthly quality report | `<repo>/.claude/skills/` |
 | `settings.json` | hook wiring + statusline + base permissions | `<repo>/.claude/` (merge if the file exists) |
 | `statusline-command.sh` | git branch, model, context %, effort, 5 h rate limit, caveman badge, graph lag | `<repo>/.claude/` |
 | `.gitignore` | the runtime files the hooks write inside `.claude/` | `<repo>/.claude/` (merge if the file exists) |
-| `scripts/` | `rules-coverage.py` (rules ↔ traits, repo-wide), `untagged-tests.py` (tests carrying no trait), `migrate-rm-traits.py` (one-shot: `Tests` column → traits), `turn-batching-check.py` (tool-call batching) | `<repo>/scripts/` |
+| `scripts/` | `rules-coverage.py` (rules ↔ traits, repo-wide), `untagged-tests.py` (tests carrying no trait), `migrate-rm-traits.py` (one-shot: `Tests` column → traits), `turn-batching-check.py` (tool-call batching), `quality-report-check.py` (arithmetic of a quality report) | `<repo>/scripts/` |
 
 ## Installation
 
@@ -123,6 +123,8 @@ The kit assumes a repo shaped as `src/{{PRODUCT}}.<Layer>/` + `tests/{{PRODUCT}}
 | `hooks/caveman-skill-ultra.sh` | `case "$skill"` | skills that must force `caveman=ultra` |
 | `agents/tdd-test-author.md`, `agents/tdd-implementer.md` | `dotnet test` command | test project path pattern |
 | `skills/implement-tdd/references/test-scope.md` | `{{PRODUCT}}`, test environment variable, namespace roots, filter examples | projects, suites actually present, integration test splitting |
+| `skills/quality-report/commands-dotnet.md` | `{{PRODUCT}}`, suite list, SonarQube project key, Stryker config names | the suites actually present, the Sonar key, the mutation configs |
+| `skills/quality-report/commands-js.md` | Jest config paths, build script, `src/pages` | the front-end layout of the target repo |
 | `settings.json` | `permissions.allow` | tools specific to the target repo |
 | `skills/*/SKILL.md`, `skills/*/references/*.md` | code examples | namespaces and aggregate names |
 
@@ -156,6 +158,7 @@ Main chain: `business-spec` → `plan-implementation` → `implement-tdd` → `v
 | `tests-integration-tests` | repositories / persistence, Testcontainers |
 | `tests-contract-tests` | public HTTP contract, Verify snapshots |
 | `tests-e2e-tests` | lifecycle of at least two operations, never an isolated endpoint |
+| `quality-report` | monthly quality snapshot: tests, coverage, SonarQube, Stryker, git activity — .NET or JS/TS |
 
 ## What the kit imposes on the repo installing it
 
