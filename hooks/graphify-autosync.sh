@@ -1,7 +1,7 @@
 #!/bin/bash
 # Auto-sync of the graphify graph at the end of a session.
 #
-# Trigger: working tree fingerprint (see graphify-freshness.sh), not a flag
+# Trigger: working tree fingerprint (see ../lib/graphify-freshness.sh), not a flag
 # dropped by the Edit/Write hooks. So it also catches IDE edits, merges, pulls
 # and branch switches.
 #
@@ -20,7 +20,7 @@
 REPO="${GRAPHIFY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 GRAPHIFY="$HOME/.local/bin/graphify"
 GRAPH="$REPO/graphify-out/graph.json"
-FRESHNESS="$REPO/.claude/hooks/graphify-freshness.sh"
+FRESHNESS="$REPO/.claude/lib/graphify-freshness.sh"
 export GRAPHIFY_REPO="$REPO"   # freshness must target the same repo
 LOG=/tmp/graphify-hook.log
 LOCK=/tmp/graphify-autosync.lock

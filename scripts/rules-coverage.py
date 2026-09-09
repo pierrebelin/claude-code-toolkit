@@ -10,6 +10,7 @@ contract snapshot, a persistence rule by an integration test.
     python3 scripts/rules-coverage.py               # report
     python3 scripts/rules-coverage.py --untested    # only the rules with no test
     python3 scripts/rules-coverage.py --fix-index   # recompute the feature index counters
+    python3 scripts/rules-coverage.py --ids <fiche>  # DDD/APP/PERF ids the sheet never cites
 """
 import os
 import re
@@ -34,6 +35,22 @@ TRAIT = re.compile(r'^\s*\[Trait\("RM",\s*"([^"]+)"\)\]')
 METHOD = re.compile(r"^\s*(?:public|internal)\s+(?:async\s+)?(?:Task|void|ValueTask)\s+(\w+)\s*\(")
 ROW = re.compile(r"^\|\s*(R[ML]-\d+)\s*\|(.*)$")
 SECTION = re.compile(r"^##\s+R[eè]gles?\s+m[eé]tier", re.I)
+
+# The DDD/APP/PERF referential: one markdown table per file, the id in the first
+# cell. `/plan-implementation` owns those two files; the sheets cite them.
+REFS = [os.path.join(ROOT, ".claude", "skills", "plan-implementation", "references", f)
+        for f in ("ddd-rules.md", "architecture-rules.md")]
+REF_ROW = re.compile(r"^\|\s*((?:DDD|APP|PERF)-\d+)\s*\|")
+# A sheet declares its ids on `| Règles appliquées | … |`, and on the
+# `avec dérogation` variant when it carries one.
+APPLIED_ROW = re.compile(r"^\|([^|]+)\|(.*)$")
+ID = re.compile(r"(DDD|APP|PERF)-(\d+)")
+# `DDD-05 → DDD-08` stands for the four ids: the sheets write ranges.
+RANGE = re.compile(r"(DDD|APP|PERF)-(\d+)\s*(?:→|->)\s*(DDD|APP|PERF)-(\d+)")
+
+L_IDS, L_CITED, L_UNCITED = "ids", "cited", "not cited"
+L_UNKNOWN, L_NONE_M, L_NONE_F = "unknown references", "(none)", "(none)"
+L_USAGE = "--ids expects the path of a sheet"
 
 
 def fold(s):
@@ -163,7 +180,57 @@ def fix_index(traits):
             print(f"index recomputed: {feature}")
 
 
+def referential_ids():
+    """Every id the referential defines, in file order."""
+    ids = []
+    for path in REFS:
+        if not os.path.isfile(path):
+            continue
+        for line in open(path, encoding="utf-8").read().splitlines():
+            m = REF_ROW.match(line)
+            if m and m.group(1) not in ids:
+                ids.append(m.group(1))
+    return ids
+
+
+def cited_ids(fiche):
+    """Ids cited by the sheet's `Règles appliquées` rows, ranges expanded.
+
+    Only the absence of a citation is decided here. Whether an id is applied or
+    `N/A` is left to the audit: those cells are free prose — `**N/A**`,
+    `: N/A —`, dated arbitrations — and a parser claiming to classify them
+    would report deviations that are not there."""
+    cited = set()
+    for line in open(fiche, encoding="utf-8").read().splitlines():
+        m = APPLIED_ROW.match(line)
+        if not m or not fold(m.group(1)).startswith("regles appliquees"):
+            continue
+        cell = m.group(2)
+        for prefix, low, _, high in RANGE.findall(cell):
+            cited.update(f"{prefix}-{n:02d}" for n in range(int(low), int(high) + 1))
+        cited.update(f"{prefix}-{num}" for prefix, num in ID.findall(cell))
+    return cited
+
+
+def ids_coverage(fiche):
+    """Report line for the audit bundle: what the sheet forgot to classify."""
+    known = referential_ids()
+    cited = cited_ids(fiche)
+    missing = [i for i in known if i not in cited]
+    unknown = sorted(cited - set(known))
+    print(f"{L_IDS} : {len(known)} | {L_CITED} : {len(known) - len(missing)} | "
+          f"{L_UNCITED} : {', '.join(missing) if missing else L_NONE_M}")
+    print(f"{L_UNKNOWN} : {', '.join(unknown) if unknown else L_NONE_F}")
+
+
 def main():
+    if "--ids" in sys.argv:
+        i = sys.argv.index("--ids")
+        if i + 1 >= len(sys.argv):
+            sys.exit(L_USAGE)
+        ids_coverage(sys.argv[i + 1])
+        return
+
     only_untested = "--untested" in sys.argv
     traits, methods = scan_traits()
 
