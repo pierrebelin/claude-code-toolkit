@@ -28,15 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/rtk-normalize.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/graphify-enforce.sh"
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/bash-dispatch.sh"
           }
         ]
       },
@@ -45,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/graphify-enforce.sh"
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/explore-guard.sh"
           }
         ]
       },
@@ -55,6 +47,15 @@
           {
             "type": "command",
             "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/caveman-skill-ultra.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/read-bounds.sh"
           }
         ]
       }
@@ -75,7 +76,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "rm -f /tmp/claude-graphify-seen-$(cat /dev/stdin | jq -r '.session_id // \"unknown\"')"
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-cleanup.sh"
           }
         ]
       }

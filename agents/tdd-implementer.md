@@ -28,6 +28,10 @@ Do not touch the plan, the batch sheet, any `CLAUDE.md`, documentation, project 
 
 The delegation *is* the context contract: do not re-read the global plan or the batch sheet. Take only what the orchestrator hands you — RM/CU, behaviour, red test, elements to create with their signatures, applied DDD/APP ids, invariants, expected cost.
 
+**The paths come with the delegation.** `Glob` and `Grep` are for one thing only: finding the existing element to reuse or extend, when the contract does not name it. Never to locate the red test, the handler, the aggregate or the repository the contract already gives you — `Read` those directly, all in a **single message**. Measured on 2026-09-08: 18 runs for 310 turns, 17 turns per behaviour.
+
+**The steps are numbered, the calls are not.** That single message is not only the opening read: for the rest of the run too, everything that does not depend on the previous result goes out in one message — a turn is one billed round trip, not one call. Measured on 2026-09-09: 12 of the 18 requests of a `tdd-test-author` run carried a single call.
+
 ## Coding rules
 
 Read `.claude/skills/implement-tdd/references/common-rules.md` §1 and §2 before writing. Summary, which does not replace reading it:

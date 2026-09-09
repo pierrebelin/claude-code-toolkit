@@ -6,7 +6,7 @@
 # hook has no blocking power, it observes.
 #
 # Log:    .claude/context-log.tsv   (timestamp, reason, bytes, ~tokens, path)
-# Report: bash .claude/hooks/context-report.sh
+# Report: bash .claude/lib/context-report.sh
 set -u
 LOG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG="$LOG_DIR/context-log.tsv"

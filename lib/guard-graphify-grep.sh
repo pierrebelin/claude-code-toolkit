@@ -1,14 +1,18 @@
 #!/bin/bash
-# PreToolUse hook — route C# symbol discovery towards graphify.
+# bash-dispatch module — route C# symbol discovery towards graphify.
 #
 # History. Version 1: a counter, denying from the 4th grep of the session on.
 # Measured over 135 transcripts — 471 denials, 203 workarounds through `rm` of the
 # counter (a command the denial message printed itself), 5 actual switches to
 # graphify. A wall you can climb with one command is a toll booth. Removed.
 #
-# Version 2: the hook checks, then substitutes. It runs `graphify explain` itself
+# Version 2: the module checks, then substitutes. It runs `graphify explain` itself
 # (~0.5 s, local, no API cost) and only replaces the command when the answer exists
 # and answers the question asked. Otherwise it stays silent and the grep goes out.
+#
+# Version 3 (2026-09-09): moved under bash-dispatch.sh. The substitution is now
+# terminal — the rtk rewrite no longer races it with a competing `updatedInput`,
+# and the per-session escape hatch is only consumed when the substitution wins.
 #
 # Three guardrails, computed over the 62 symbol-discovery commands found in the
 # history:
@@ -21,28 +25,16 @@
 #     to be announced — so there is nothing to game.
 # 27 substitutions out of 62 remain, correct by construction.
 #
-# Still blocking: spawning an Explore subagent without graphify in the prompt.
-# Different saving — an action costing ~55k startup tokens, not a 300-token grep.
+# The Explore-subagent guard lives in .claude/hooks/explore-guard.sh: different
+# tool, different matcher, different saving (~55k startup tokens, not a 300-token
+# grep).
+#
+# Contract: reads $HOOK_CMD and $HOOK_SESSION_ID, prints the hook JSON when it
+# substitutes, nothing otherwise.
 set -u
-input=$(cat)
 
-tool_name=$(echo "$input" | jq -r '.tool_name // ""')
-
-# --- Explore: require that graphify was considered ---
-if [[ "$tool_name" == "Agent" ]]; then
-  subagent_type=$(echo "$input" | jq -r '.tool_input.subagent_type // ""')
-  [[ "$subagent_type" != "Explore" ]] && exit 0
-
-  prompt=$(echo "$input" | jq -r '.tool_input.prompt // ""' | tr '[:upper:]' '[:lower:]')
-  if ! echo "$prompt" | grep -q 'graphify'; then
-    jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "Explore blocked: use graphify query/explain/path before spawning Explore. Mention graphify in the prompt if you already did."}}'
-  fi
-  exit 0
-fi
-
-[[ "$tool_name" != "Bash" ]] && exit 0
-
-cmd=$(echo "$input" | jq -r '.tool_input.command // ""')
+cmd="${HOOK_CMD:-}"
+[ -n "$cmd" ] || exit 0
 
 # Only target source-code DISCOVERY, not filtering.
 #
@@ -80,9 +72,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 [ -f "$repo_root/graphify-out/graph.json" ] || exit 0
 command -v graphify >/dev/null 2>&1 || exit 0
 
-session_id=$(echo "$input" | jq -r '.session_id // "unknown"')
-
-FIRST_STAGE="$first_stage" SEEN_FILE="/tmp/claude-graphify-seen-${session_id}" python3 <<'PYEOF'
+FIRST_STAGE="$first_stage" SEEN_FILE="/tmp/claude-graphify-seen-${HOOK_SESSION_ID:-unknown}" python3 <<'PYEOF'
 import json
 import os
 import re
@@ -119,7 +109,7 @@ if not pattern:
 
 # A C# symbol: an identifier, no metacharacter, no space, carrying an uppercase
 # letter. A literal, an error message, a regex fragment are not AST nodes: grep is
-# the right tool and the hook stays quiet.
+# the right tool and the module stays quiet.
 if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{2,}$", pattern):
     sys.exit(0)
 if not pattern[0].isupper() and not re.search(r"[A-Z]", pattern[1:]):
@@ -150,6 +140,8 @@ except (OSError, subprocess.SubprocessError):
 if not explained or explained.startswith("No node matching"):
     sys.exit(0)
 
+# Consumed only here: the substitution below is terminal, so the escape hatch is
+# never burned by a decision the dispatcher discards.
 try:
     with open(seen_file, "a", encoding="utf-8") as handle:
         handle.write(pattern + "\n")

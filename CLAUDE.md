@@ -31,6 +31,8 @@ Some emitted strings are parsed by exact match. Reword one and you must reword i
 
 Identifier prefixes are language-neutral and stay as they are: `RM-xx` (business rule), `RL-xx` (rule local to a handler), `CU-xx` (use case), `DDD-nn`, `APP-nn`, `PERF-nn`.
 
+The same table ships to the target repo in `rules/markdown-output.md` — this one governs the kit, that one governs the repo that installs it. Change a literal and you change both, plus its parser, in the same edit.
+
 A skill's template blocks (spec structure, plan structure, handler sheet) are produced text: they are copied verbatim.
 
 ## Where a change goes
@@ -41,12 +43,13 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 | procedure (TDD cycle, audit steps) | the relevant `SKILL.md` |
 | wiring (event, matcher, hook order) | `settings.json` |
 | description of the kit's behaviour | `README.md` |
+| measurement, protocol or procedure too long for `CLAUDE.md` | `docs/CONTEXT-COST.md`, `docs/TOOLING.md` — opened on demand, so the standing rule stays in `CLAUDE.md` and only points here |
 | repo-wide scanner or one-shot migration | `scripts/` — never a hook: a hook fires per edit, a scan reads the whole repo |
 
 Two sources that drift make the choice random: a fact lives in exactly one place.
 
 ## Editing a hook
 
-- Must exit 0 on empty JSON input and when its dependency is missing. Intended exceptions: `git-guard.sh`, blocking by design, and `graphify-enforce.sh`, which denies an `Explore` subagent with no graphify in its prompt and rewrites a symbol-discovery `grep` into `graphify explain` (a rewrite, not a denial).
-- Test after editing: `echo '{}' | bash hooks/<name>.sh`.
+- Must exit 0 on empty JSON input and when its dependency is missing. Intended exceptions: `lib/guard-git.sh`, blocking by design; `explore-guard.sh`, which denies an `Explore` subagent with no graphify in its prompt; `lib/guard-graphify-grep.sh`, which rewrites a symbol-discovery `grep` into `graphify explain` (a rewrite, not a denial); and `read-bounds.sh`, which denies an unbounded `Read` on a large file once per agent and file.
+- Test after editing: `echo '{}' | bash hooks/<name>.sh`. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`.
 - Do not run `graphify-autosync.sh` idly: it rebuilds the graph and blocks for several minutes.

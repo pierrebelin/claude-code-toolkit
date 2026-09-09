@@ -1,6 +1,10 @@
 #!/bin/bash
 # Freshness of the graphify graph, measured from the working tree fingerprint.
 #
+# Not a hook: a helper called by .claude/hooks/graphify-autosync.sh and by
+# .claude/statusline-command.sh. Lived in hooks/ until 2026-09-09, where it read
+# like a dead hook.
+#
 # Compares source mtimes against the mtime of graph.json. Unlike a flag dropped
 # by the Edit/Write hooks, this measure also catches IDE edits, merges, pulls
 # and branch switches.
@@ -10,7 +14,7 @@
 #   graphify-freshness.sh --check     exit 0 if up to date, 1 if stale
 #   graphify-freshness.sh --refresh   force recomputation (bypass the cache)
 
-# Repo derived from the script location (.claude/hooks/ -> root). Without that, a
+# Repo derived from the script location (.claude/lib/ -> root). Without that, a
 # hardcoded default would update the graph of ANOTHER repo from this hook.
 REPO="${GRAPHIFY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 GRAPH="$REPO/graphify-out/graph.json"

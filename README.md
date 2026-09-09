@@ -24,7 +24,7 @@ flowchart LR
     N -.->|"next sheet"| I
 ```
 
-`/implement-tdd` is not a step but a loop: one full turn per business behaviour, in the order Domain → Application → Infrastructure → WebAPI.
+`/implement-tdd` is not a step but a loop: one full turn per business behaviour, in the order Domain → Application → Infrastructure → WebAPI. Behaviours whose target test files are disjoint are grouped into a **wave**: their REDs go out as several `Agent` calls in a single message. GREEN never parallelises — two implementers on the same layer collide.
 
 ```mermaid
 flowchart LR
@@ -39,12 +39,13 @@ flowchart LR
     C ==>|"whole batch green"| V["/verify-ddd-tdd"]
 ```
 
-Four points carry all the rest:
+Five points carry all the rest:
 
 - **`/implement-tdd` writes neither its tests nor its code.** RED goes to the `tdd-test-author` subagent, allowed to touch test files and nothing else. GREEN and REFACTOR go to `tdd-implementer`, for which test files are read-only: a test that cannot go green without being modified comes back as `BLOCKED` instead of being weakened. The orchestrator produces nothing — it splits, reads the diffs, validates the cost and settles the design.
 - **Subagents produce and declare, the orchestrator judges.** That is also what keeps the main context usable over a long batch: build and test logs stay with whoever caused them.
+- **The delegation contract names the paths.** Target test file, fixture, handler under test, shared builders: the orchestrator has just read the sheet and holds them, the subagent does not and would pay a full exploration to rebuild them. Any file search is forbidden to it; a missing path comes back as `BLOCKED` and is a plan gap. Same rule on the GREEN side, plus one: a GREEN contract carries the current behaviour only — a guard written ahead turns the next RED green, and the only way out is to strip the code and re-observe the red.
 - **`COST` is a phase, not a review.** No test measures the number of Infrastructure calls: green proves nothing on that axis. An `await` on a repository inside a loop goes back to design.
-- **`/verify-ddd-tdd` runs before the next batch**, in a fork and with no write access. It audits the delivered code as it is first, and only then its conformance to the plan — the plan is not the ultimate reference, it gets corrected mid-batch.
+- **`/verify-ddd-tdd` runs before the next batch**, in a fork and with no write access. It audits the delivered code as it is first, and only then its conformance to the plan — the plan is not the ultimate reference, it gets corrected mid-batch. The orchestrator hands it a capture produced by `scripts/audit-capture.sh` (status, diff, coverage, `build` and `ArchitectureTests` exit codes) and the sheet's FX section: the audit opens that once instead of rebuilding it over thirty turns. On a re-audit after correction, `resume` narrows the scope to the previous verdict's deviation table plus the diff produced since — what already carries a verdict is not re-established.
 
 ## Not a template to install as-is
 
@@ -53,7 +54,7 @@ This kit encodes **my** way of working, not a universal best practice. Among oth
 - strict TDD, red test before the code, no exception;
 - zero comments in production, XML `///` doc included;
 - surgical change — no opportunistic refactor of adjacent code that worked;
-- a material ban on committing (`git-guard.sh` blocks `add` / `commit` / `push`);
+- a material ban on committing (the `guard-git.sh` module blocks `add` / `commit` / `push`);
 - one `CLAUDE.md` per handler folder, with a business-rules ↔ tests table checked by a hook;
 - symbol-discovery `grep`s substituted by `graphify explain` when the AST graph actually answers.
 
@@ -66,13 +67,15 @@ The use I recommend: **cherry-pick**. A hook, a path-scoped rule, the structure 
 | Folder | Contents | Install target |
 |--------|----------|----------------|
 | `agents/` | `tdd-test-author` (writes the RED tests), `tdd-implementer` (writes the production code in GREEN), `ddd-tdd-auditor` (audits a batch, read-only) | `<repo>/.claude/agents/` |
-| `rules/` | 5 path-scoped rules: `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests` | `<repo>/.claude/rules/` |
-| `hooks/` | 9 hooks: Git guard, grep → AST-graph substitution, rules ↔ tests traceability, AST graph resync, context load log | `<repo>/.claude/hooks/` |
+| `rules/` | 6 path-scoped rules: `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests`, `markdown-output` (produced vs. instruction files, frozen literals) | `<repo>/.claude/rules/` |
+| `docs/` | `CONTEXT-COST.md` (why the cost is quadratic, reading and batching rules, weekly protocol, session hygiene), `TOOLING.md` (RTK, graphify, worktrees, bootstrap). Opened on demand — `CLAUDE.md` keeps the standing rules and points here | `<repo>/.claude/docs/` |
+| `hooks/` | 8 hooks: the Bash dispatcher (Git guard, grep → AST-graph substitution, RTK rewrite), `Explore` guard, rules ↔ tests traceability, AST graph resync, context load log, session cleanup | `<repo>/.claude/hooks/` |
+| `lib/` | what the hooks call but the harness never invokes: the 3 dispatcher modules, the graph freshness helper, the context log reader | `<repo>/.claude/lib/` |
 | `skills/` | 9 skills: the spec → plan → implementation → audit chain, 4 test skills, and the monthly quality report | `<repo>/.claude/skills/` |
 | `settings.json` | hook wiring + statusline + base permissions | `<repo>/.claude/` (merge if the file exists) |
 | `statusline-command.sh` | git branch, model, context %, effort, 5 h rate limit, caveman badge, graph lag | `<repo>/.claude/` |
 | `.gitignore` | the runtime files the hooks write inside `.claude/` | `<repo>/.claude/` (merge if the file exists) |
-| `scripts/` | `rules-coverage.py` (rules ↔ traits, repo-wide), `untagged-tests.py` (tests carrying no trait), `migrate-rm-traits.py` (one-shot: `Tests` column → traits), `turn-batching-check.py` (tool-call batching), `quality-report-check.py` (arithmetic of a quality report) | `<repo>/scripts/` |
+| `scripts/` | `rules-coverage.py` (rules ↔ traits, repo-wide; `--fix-index` recomputes a feature index's `N rules, M tested` column, `--ids <sheet>` lists the DDD/APP/PERF ids the sheet never cites), `untagged-tests.py` (tests carrying no trait), `migrate-rm-traits.py` (one-shot: `Tests` column → traits), `turn-batching-check.py` (tool-call batching, context fill per tool, `read-bounds` denials and forcings; `--save-baseline` / `--compare` to track a week against a frozen snapshot, `--until` to freeze one before a change goes live), `quality-report-check.py` (arithmetic of a quality report), `audit-capture.sh` (gathers the deterministic audit material — status, diff, RM/CU and DDD/APP/PERF coverage, build, `ArchitectureTests` — into one file, so `/verify-ddd-tdd` opens it once instead of rebuilding it over thirty turns) | `<repo>/scripts/` |
 
 ## Installation
 
@@ -118,8 +121,8 @@ The kit assumes a repo shaped as `src/{{PRODUCT}}.<Layer>/` + `tests/{{PRODUCT}}
 | `scripts/rules-coverage.py` | `APP`, `BOUND_SUITES` | same paths |
 | `scripts/migrate-rm-traits.py` | `APP`, `TESTS` | Application and tests roots; no suite binding, it reads every suite |
 | `scripts/untagged-tests.py` | `PRODUCT` | project prefix stripped from the suite name |
-| `hooks/graphify-enforce.sh` | `non_source`, source folder list | the repo's source folders |
-| `hooks/graphify-freshness.sh` | scanned dirs, extensions | indexed languages and folders |
+| `lib/guard-graphify-grep.sh` | `non_source`, source folder list | the repo's source folders |
+| `lib/graphify-freshness.sh` | scanned dirs, extensions | indexed languages and folders |
 | `hooks/caveman-skill-ultra.sh` | `case "$skill"` | skills that must force `caveman=ultra` |
 | `agents/tdd-test-author.md`, `agents/tdd-implementer.md` | `dotnet test` command | test project path pattern |
 | `skills/implement-tdd/references/test-scope.md` | `{{PRODUCT}}`, test environment variable, namespace roots, filter examples | projects, suites actually present, integration test splitting |
@@ -127,22 +130,44 @@ The kit assumes a repo shaped as `src/{{PRODUCT}}.<Layer>/` + `tests/{{PRODUCT}}
 | `skills/quality-report/commands-js.md` | Jest config paths, build script, `src/pages` | the front-end layout of the target repo |
 | `settings.json` | `permissions.allow` | tools specific to the target repo |
 | `skills/*/SKILL.md`, `skills/*/references/*.md` | code examples | namespaces and aggregate names |
+| `scripts/audit-capture.sh` | `{{PRODUCT}}.sln`, `ArchitectureTests` project path | solution name and architecture suite of the target repo |
+| `docs/TOOLING.md` | `## Bootstrap` section | restore command, `--no-restore` policy, purge, per-OS SDK paths |
+| `docs/CONTEXT-COST.md` | the measured figures | re-measure with `turn-batching-check.py`, then create `.claude/context-baseline.json` (`--until <date> --save-baseline`) |
+| `rules/markdown-output.md` | language of the produced family | the language the team proofreads; the frozen literals never move |
 
-The `graphify-*` hooks derive the repo root from `dirname "${BASH_SOURCE[0]}"`: no absolute path to fix, but they assume the `.claude/hooks/` depth. Override with `GRAPHIFY_REPO`.
+The `graphify-*` scripts derive the repo root from `dirname "${BASH_SOURCE[0]}"`: no absolute path to fix, but they assume the `.claude/hooks/` and `.claude/lib/` depth — both one level under `.claude/`. Override with `GRAPHIFY_REPO`.
 
 ## Hooks
 
 | Hook | Event | Role | Blocking |
 |------|-------|------|----------|
-| `git-guard.sh` | `PreToolUse:Bash` | forbids mutating Git commands (`add`, `commit`, `push`), including through `rtk git`, `git -C`, `cd && git`. Reading stays free | yes |
-| `graphify-enforce.sh` | `PreToolUse:Bash`/`Agent` | rewrites a symbol-discovery `grep`/`find`/`rg` into `graphify explain`, but only when the node exists in the graph, the search is not scoped to a subpath, and the symbol was not already substituted in the session. Ignores non-code targets, heredocs and downstream-of-a-pipe filtering. Still denies an `Explore` subagent whose prompt never mentions graphify | no for Bash (rewrite), yes for `Explore` |
-| `rtk-normalize.sh` | `PreToolUse:Bash` | normalises `/usr/bin/grep` to `grep` so the RTK rewrite matches | no |
+| `bash-dispatch.sh` | `PreToolUse:Bash` | single entry point: parses the payload once, then runs `lib/guard-git.sh`, `lib/guard-graphify-grep.sh` and `lib/rewrite-rtk.sh` in that order. First module that answers wins, so a substitution is never rewrapped by the RTK rewrite | depends on the module |
+| `explore-guard.sh` | `PreToolUse:Agent` | denies an `Explore` subagent whose prompt never mentions graphify. Own hook: a spawn costs ~55k startup tokens, a grep ~300 | yes |
+| `read-bounds.sh` | `PreToolUse:Read` | denies a `Read` with no `offset`/`limit` on a file past 120 lines (`CLAUDE_READ_BOUNDS_THRESHOLD` to change it), and records the denial per agent. Re-issuing the identical `Read` passes through — that is how a full read is forced; the pass applies to the agent that asked for it, not to its siblings or its parent. Skips images, PDFs and notebooks | yes, once per file and agent |
 | `caveman-skill-ultra.sh` | `PreToolUse:Skill` | forces `caveman=ultra` when entering certain skills | no |
 | `handler-claude-md-check.sh` | `PostToolUse:Edit\|Write` | cross-checks the `## Règles métier` table of the handler `CLAUDE.md` files against the tests actually present; reports untested rules and orphan tests | no, warning only |
 | `graphify-autosync.sh` | `Stop` | rebuilds the graph if the working tree moved. `mkdir` lock, anti-shrink guard (auto `--force` if the drop is ≤ 2 %) | no |
-| `graphify-freshness.sh` | called by autosync + statusline | counts the sources newer than `graph.json`, 20 s TTL cache | no |
+| `session-cleanup.sh` | `SessionStart` | drops this session's substitution and read-denial memories (glob, subagents included), purges what is older than two days | no |
 | `context-log.sh` | `InstructionsLoaded` | logs every instruction file entering the context (path, bytes, ~tokens, load reason) into `.claude/context-log.tsv` | no, observes only |
-| `context-report.sh` | run by hand | reads that log back: heaviest files, tokens per load reason. `--session` narrows it to the last session | not a hook |
+
+The `lib/` side, which the harness never calls directly:
+
+| File | Called by | Role |
+|------|-----------|------|
+| `lib/guard-git.sh` | `bash-dispatch.sh` | forbids mutating Git commands (`add`, `commit`, `push`), including through `rtk git`, `git -C`, `cd && git`. Reading stays free; `add -N` and `apply` fall through to `ask` for the worktree hand-back |
+| `lib/guard-graphify-grep.sh` | `bash-dispatch.sh` | rewrites a symbol-discovery `grep`/`find`/`rg` into `graphify explain`, but only when the node exists in the graph, the search is not scoped to a subpath, and the symbol was not already substituted in the session. Ignores non-code targets, heredocs and downstream-of-a-pipe filtering |
+| `lib/rewrite-rtk.sh` | `bash-dispatch.sh` | strips the `/usr/bin/`, `/bin/`, `/usr/local/bin/` prefix off `grep`/`rg`/`find`/`egrep`/`fgrep`, then pipes the payload to `rtk hook claude` itself. The kit *is* the RTK rewrite plus the normalisation — a repo installing it needs no global `rtk init -g` |
+| `lib/graphify-freshness.sh` | autosync + statusline | counts the sources newer than `graph.json`, 20 s TTL cache |
+| `lib/context-report.sh` | run by hand | reads the context log back: heaviest files, tokens per load reason. `--session` narrows it to the last session |
+
+### RTK gotchas (verified on rtk 0.42.4)
+
+- **`rtk gain` prints `[warn] No hook installed` even when this hook is active**, and `rtk init --show` prints `[--] Hook: not found`. Both detectors only inspect `~/.claude/settings.json`; a hook declared in a project `.claude/settings.local.json` is invisible to them. Trust the rewrite, not the warning — `echo '{"tool_name":"Bash","tool_input":{"command":"grep -rn foo src"}}' | rtk hook claude` must answer with an `updatedInput` carrying `rtk grep`.
+- **The absolute-path bypass is real**, which is what the normalisation buys: fed `/usr/bin/grep -rn foo src`, `rtk hook claude` returns nothing at all, where the bare `grep` gets rewritten.
+- **`rtk hook claude` is idempotent** — `rtk git status` comes back unrewritten, so a global RTK hook (`rtk init -g --auto-patch`) and this one never produce `rtk rtk git status`. **Register only one of them anyway.** Both fire on the same `tool_input`, and on a symbol-discovery `grep` the global one answers `rtk grep …` while the dispatcher answers `graphify explain "X"` — two competing `updatedInput` with no defined winner. The dispatcher already performs the RTK rewrite: drop the global hook.
+- **Still bypassing**: the `command` builtin. `command grep …` is not stripped by the normalisation.
+- `rtk grep` answers with a match count, not the matching lines. Repo-wide it pays; on a single short file it costs a turn to re-read with `awk`.
+
 
 ## Skills
 
@@ -153,7 +178,7 @@ Main chain: `business-spec` → `plan-implementation` → `implement-tdd` → `v
 | `business-spec` | short, testable business spec, no technical design |
 | `plan-implementation` | validated spec → DDD plan split into batches, tracing RM/CU and decisions |
 | `implement-tdd` | implements an all-layer batch under strict TDD; delegates RED to `tdd-test-author`, GREEN and REFACTOR to `tdd-implementer` |
-| `verify-ddd-tdd` | audits the batch before moving to the next one; runs in a fork on `ddd-tdd-auditor` |
+| `verify-ddd-tdd` | audits the batch before moving to the next one; runs in a fork on `ddd-tdd-auditor`. `full` widens to the touched boundaries, `resume` re-audits only the deviations of a previous verdict |
 | `tests-unit-tests` | handlers/services: business rules, query results, command events |
 | `tests-integration-tests` | repositories / persistence, Testcontainers |
 | `tests-contract-tests` | public HTTP contract, Verify snapshots |
@@ -174,21 +199,27 @@ Main chain: `business-spec` → `plan-implementation` → `implement-tdd` → `v
 
 **Rules ↔ tests traceability** — every handler folder carries a `CLAUDE.md` with a `## Règles métier` table, and every test declares the rule it covers on itself: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`. `handler-claude-md-check.sh` checks both directions; `scripts/rules-coverage.py` gives the repo-wide count.
 
-**Never commit to Git.** The user decides when to commit. `git-guard.sh` makes the instruction deterministic.
+**Never commit to Git.** The user decides when to commit. `lib/guard-git.sh` makes the instruction deterministic.
 
 **Done checklist** — never announce completion without: the relevant tests green, no regression, plan files marked ✅ with a date, the handler's `## Règles métier` table up to date (Tests column included), the parent feature's index `CLAUDE.md` up to date if a handler is added or its intent changes.
+
+**Progressive disclosure inside a skill** — what only one branch or one phase needs lives in its own reference file, read at that point and not before: `correction-mode.md` opens only on a `— correction:` argument, `closing.md` only after the audit verdict. A reference loaded at the top of a skill is carried by every turn of the batch.
 
 **Context discipline** — these are behaviour rules, independent of the domain. They are not shipped by a hook: copy them into the `CLAUDE.md` of the repo installing the kit.
 
 > **Context** — every turn resends everything accumulated: the cost follows the number of turns and the size of what you leave in them.
 > - **Independent calls → a single message.** Two `Read`/`Bash`/`Grep` that do not wait on each other, in two turns, pay the accumulation twice. A turn = one billed round trip, not one call.
-> - `offset`/`limit` from 200 lines on. An aggregate read whole is ~24k characters carried to the end of the session: locate (`graphify`, grep) then read the range.
+> - `offset`/`limit` **mandatory past 120 lines** — `read-bounds.sh` (`PreToolUse:Read`) denies an unbounded `Read` and records it. Re-issue the **same** `Read` verbatim to force the full read.
+> - An aggregate read whole is ~24k characters carried to the end of the session: locate (`graphify`, `grep -n`) then read the range. Measured on a .NET repo of this shape: `Read` is 30 % of context fill, and only a third of the calls are bounded.
 > - 3 files or more to go through → haiku subagent: its reads stay in its own context, only the conclusion comes back.
 >
 > **Subagents**
 > - Read-only exploration (`Explore`, `general-purpose` when searching) → **always `model: haiku`** in the `Agent` call. Without that parameter the agent inherits the parent model: measured at 11× the cost per turn for the same locating work.
 > - Writing code, tests, multi-step → default model.
 > - **Bound the report in the delegation prompt**: format and max size. An agent's final report is re-injected whole into the main conversation — measured at 27k characters per unbounded `Explore` launch, against 3k for an agent with an imposed format.
+> - **Correcting a returned agent: `SendMessage` under 3 turns, a fresh `Agent` beyond.** `SendMessage` resumes the agent with its whole transcript, re-sent on every further turn; an agent stopped at 49 turns carries ~80k of context and every correction turn pays it. A fresh agent restarts at ~17k of preamble plus ~11k of reloaded rules. Measured: a 10-turn correction costs ~850k in continuation against ~350k restarted.
+> - **Never delegate a mechanical file operation** (restore from HEAD, add an import to N files, rename, reformat): a Bash loop does it in one turn. Measured on two sessions: a `restore 19 files from HEAD` agent cost 11 turns, an `add an import to 11 files` agent 4 more.
+> - **Every `Agent` call carries a `description`.** Anonymous launches were 42 % of the subagent bill over those two sessions — no name is the symptom of a delegation that was never scoped.
 >
 > **Symbol or relation → graphify; text → grep.** `explain` (what a node is, what it uses, who uses it), `affected` (what breaks if you change it), `path` (how A reaches B), `query` (natural-language question). The graph only holds AST nodes: a literal, an error message, a configuration value, a `.md`/`.json`/`.csproj` are not in it — that is grep. Never chain `grep | grep | head`.
 >
@@ -205,13 +236,13 @@ Only `jq` and `python3` really count. The rest degrades cleanly — and three of
 
 | Tool | Required by | If missing |
 |------|-------------|------------|
-| `jq` | statusline, `graphify-enforce.sh`, `graphify-autosync.sh` | silent statusline, no grep substitution |
-| `python3` | `graphify-enforce.sh`, `handler-claude-md-check.sh`, `caveman-skill-ultra.sh`, `context-log.sh`, every script under `scripts/` | inert hooks, exit 0 |
-| `graphify` (`~/.local/bin/graphify`) | `graphify-enforce.sh`, autosync, freshness | no substitution (the hook exits 0 in silence); autosync logs "graphify not found, skip" and exits 0 |
-| `rtk` | `rtk-normalize.sh`, prefixed commands in the skills | drop the `rtk ` prefix from the skills, nothing else breaks |
+| `jq` | statusline, `bash-dispatch.sh`, `graphify-autosync.sh`, `session-cleanup.sh` | silent statusline, no grep substitution |
+| `python3` | `lib/guard-graphify-grep.sh`, `handler-claude-md-check.sh`, `caveman-skill-ultra.sh`, `context-log.sh`, every script under `scripts/` | inert hooks, exit 0 |
+| `graphify` (`~/.local/bin/graphify`) | `lib/guard-graphify-grep.sh`, autosync, freshness | no substitution (the module exits 0 in silence); autosync logs "graphify not found, skip" and exits 0 |
+| `rtk` | `lib/rewrite-rtk.sh`, prefixed commands in the skills | drop the `rtk ` prefix from the skills, nothing else breaks |
 | `caveman` plugin | `caveman-skill-ultra.sh`, statusline badge | flag written with no effect |
 
-Every hook exits 0 when its dependency is missing, except `git-guard.sh` and `graphify-enforce.sh` which block by design. Removing the `graphify-*`, `rtk-normalize.sh` and `caveman-skill-ultra.sh` hooks from `settings.json` leaves a coherent kit.
+Every hook exits 0 when its dependency is missing, except `lib/guard-git.sh`, `explore-guard.sh` and `read-bounds.sh` which block by design. Removing the `graphify-*` scripts, `read-bounds.sh` and `caveman-skill-ultra.sh` from `settings.json` leaves a coherent kit; `bash-dispatch.sh` keeps working with any subset of its three modules present.
 
 ## Elsewhere
 

@@ -90,7 +90,7 @@ Never keep a green-from-the-start test hoping it "protects anyway": it locks dow
 
 ## 4. When a rule gives way
 
-The rules above are written for the common case. Four situations make them give way — no others. An exception not listed here is treated as an ambiguity: it is written as `Hn` in the sheet, it is not decided in silence.
+The rules above are written for the common case. Five situations make them give way — no others. An exception not listed here is treated as an ambiguity: it is written as `Hn` in the sheet, it is not decided in silence.
 
 1. **Signature stub to make RED observable.** A handler test will not compile as long as the Command, the return type or the interface do not exist, and a compilation failure is not a RED (§2, cycle step 1). Write then the strict minimum to compile: signature, empty type, `throw new NotImplementedException()`. No logic, no branch, no validation. The test must fail **on its assertion** — if it fails on `NotImplementedException`, the stub is still too thin or the assertion comes too late. This stub does not breach the Iron Law: it contains no behaviour to prove.
 
@@ -99,5 +99,7 @@ The rules above are written for the common case. Four situations make them give 
 3. **The rule would destroy the answer.** A user instruction reaffirmed after you stated the rule wins: state the rule once, in one sentence, do what was asked, record it as `Hn`. Same when a harness or system instruction contradicts this file — the constraint wins, the form stays.
 
 4. **Data loss or a security hole on the path the batch touches.** "Adjacent bug → report, do not fix" (§2, scope Red Flags) applies to a functional defect. Data corruption or an authorisation leak on the modified path **stops the batch**: escalate it immediately, before going on. No silent fix, no line buried in the final summary.
+
+5. **Declarative artifact written by the orchestrator.** EF entity and its `IEntityTypeConfiguration`, `DbSet` registration, migration, `Abstractions.Models` request/response DTO: pure declaration and mapping, no branch, no validation, no business decision. The orchestrator writes them directly, without delegating and without a red before them — their correctness is observed by the integration or contract test of the behaviour they serve, which does go through RED. The moment such an artifact carries a branch, a validation or a mapping decision, it stops being declarative and goes back through RED. Assumed for cost by an explicit project decision, which the sheet records: it is not reported as a deviation.
 
 **What is never an exception**: the lines of the Rationalisations table (§2). "Too simple", "I'll test afterwards", "while I'm here" do not become admissible because an exceptions section exists. An exception is recognised by naming the rule it bends **and** the structural reason bending it — never by making the work shorter.

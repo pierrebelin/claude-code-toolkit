@@ -1,20 +1,22 @@
 #!/bin/bash
-# PreToolUse hook — hard ban on mutating Git commands.
+# bash-dispatch module — hard ban on mutating Git commands.
 #
 # CLAUDE.md states "Never commit to Git", but an instruction is advisory:
-# nothing enforces it. This hook makes it deterministic.
+# nothing enforces it. This module makes it deterministic.
 #
 # Covers the forms `permissions.deny` misses, because it matches on a
 # literal prefix:
-#   rtk git commit ...            (the rtk-normalize hook routes everything through rtk)
+#   rtk git commit ...            (the rtk rewrite routes everything through rtk)
 #   git -C /other/repo commit ... (global option before the verb)
 #   cd /elsewhere && git push     (cd prefix)
 #   env FOO=1 git add .
+#
+# Contract: reads $HOOK_CMD, prints the hook JSON when it decides, nothing when
+# it passes. Runs first in the chain — a deny is terminal.
 set -u
-input=$(cat)
 
-[[ "$(echo "$input" | jq -r '.tool_name // ""')" != "Bash" ]] && exit 0
-cmd=$(echo "$input" | jq -r '.tool_input.command // ""')
+cmd="${HOOK_CMD:-}"
+[ -n "$cmd" ] || exit 0
 
 # Normalisation: strip whatever sits between the start of the command and the
 # git verb, so every form collapses to "git <verb>".

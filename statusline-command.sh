@@ -42,7 +42,7 @@ fi
 # --- Graphify freshness badge ---
 # Cached read (20s TTL on the helper side), ~10ms warm.
 graphify_badge=""
-FRESH_SCRIPT="$cwd/.claude/hooks/graphify-freshness.sh"
+FRESH_SCRIPT="$cwd/.claude/lib/graphify-freshness.sh"
 if [ -x "$FRESH_SCRIPT" ]; then
   stale=$("$FRESH_SCRIPT" --count 2>/dev/null)
   case "$stale" in
