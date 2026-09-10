@@ -70,7 +70,7 @@ The use I recommend: **cherry-pick**. A hook, a path-scoped rule, the structure 
 | `rules/` | 6 path-scoped rules: `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests`, `markdown-output` (produced vs. instruction files, frozen literals) | `<repo>/.claude/rules/` |
 | `docs/` | `CONTEXT-COST.md` (why the cost is quadratic, reading and batching rules, weekly protocol, session hygiene), `TOOLING.md` (RTK, graphify, worktrees, bootstrap). Opened on demand — `CLAUDE.md` keeps the standing rules and points here | `<repo>/.claude/docs/` |
 | `hooks/` | 8 hooks: the Bash dispatcher (Git guard, grep → AST-graph substitution, RTK rewrite), `Explore` guard, rules ↔ tests traceability, AST graph resync, context load log, session cleanup | `<repo>/.claude/hooks/` |
-| `lib/` | what the hooks call but the harness never invokes: the 3 dispatcher modules, the graph freshness helper, the context log reader | `<repo>/.claude/lib/` |
+| `lib/` | what the hooks call but the harness never invokes: the 4 dispatcher modules, the graph freshness helper, the context log reader | `<repo>/.claude/lib/` |
 | `skills/` | 9 skills: the spec → plan → implementation → audit chain, 4 test skills, and the monthly quality report | `<repo>/.claude/skills/` |
 | `settings.json` | hook wiring + statusline + base permissions | `<repo>/.claude/` (merge if the file exists) |
 | `statusline-command.sh` | git branch, model, context %, effort, 5 h rate limit, caveman badge, graph lag | `<repo>/.claude/` |
@@ -141,12 +141,14 @@ The `graphify-*` scripts derive the repo root from `dirname "${BASH_SOURCE[0]}"`
 
 | Hook | Event | Role | Blocking |
 |------|-------|------|----------|
-| `bash-dispatch.sh` | `PreToolUse:Bash` | single entry point: parses the payload once, then runs `lib/guard-git.sh`, `lib/guard-graphify-grep.sh` and `lib/rewrite-rtk.sh` in that order. First module that answers wins, so a substitution is never rewrapped by the RTK rewrite | depends on the module |
+| `bash-dispatch.sh` | `PreToolUse:Bash` | single entry point: parses the payload once, then runs `lib/guard-git.sh`, `lib/guard-graphify-grep.sh`, `lib/guard-cat-bounds.sh` and `lib/rewrite-rtk.sh` in that order. First module that answers wins, so a substitution is never rewrapped by the RTK rewrite. `lib/batching-nudge.sh` runs outside that chain: it decides nothing, and its advice is grafted onto whatever the chain answers | depends on the module |
 | `explore-guard.sh` | `PreToolUse:Agent` | denies an `Explore` subagent whose prompt never mentions graphify. Own hook: a spawn costs ~55k startup tokens, a grep ~300 | yes |
+| `implement-tdd-guard.sh` | `UserPromptSubmit` + `PreToolUse:Skill` | denies a second `/implement-tdd` launch in a session that already closed a batch — it reads the transcript for the closing literal of the skill (French and English wordings both matched). Correction mode passes. Re-issuing the identical launch passes through; the chained batch would otherwise pay the whole accumulated context of the previous one, measured at 1.9x the input at equal request count | yes, once per closed batch |
 | `read-bounds.sh` | `PreToolUse:Read` | denies a `Read` with no `offset`/`limit` on a file past 120 lines (`CLAUDE_READ_BOUNDS_THRESHOLD` to change it), and records the denial per agent. Re-issuing the identical `Read` passes through — that is how a full read is forced; the pass applies to the agent that asked for it, not to its siblings or its parent. Skips images, PDFs and notebooks | yes, once per file and agent |
 | `caveman-skill-ultra.sh` | `PreToolUse:Skill` | forces `caveman=ultra` when entering certain skills | no |
 | `handler-claude-md-check.sh` | `PostToolUse:Edit\|Write` | cross-checks the `## Règles métier` table of the handler `CLAUDE.md` files against the tests actually present; reports untested rules and orphan tests | no, warning only |
 | `graphify-autosync.sh` | `Stop` | rebuilds the graph if the working tree moved. `mkdir` lock, anti-shrink guard (auto `--force` if the drop is ≤ 2 %) | no |
+| `worktree-graphify-link.sh` | `SessionStart` | symlinks the main working tree's `graphify-out/` into a linked worktree. graphify resolves its graph only at `<cwd>/graphify-out/graph.json` — no parent lookup, no env var — so `query`, `explain`, `path` and `affected` all fail in a worktree without it. No-op outside a linked worktree | no |
 | `session-cleanup.sh` | `SessionStart` | drops this session's substitution and read-denial memories (glob, subagents included), purges what is older than two days | no |
 | `context-log.sh` | `InstructionsLoaded` | logs every instruction file entering the context (path, bytes, ~tokens, load reason) into `.claude/context-log.tsv` | no, observes only |
 
@@ -156,7 +158,9 @@ The `lib/` side, which the harness never calls directly:
 |------|-----------|------|
 | `lib/guard-git.sh` | `bash-dispatch.sh` | forbids mutating Git commands (`add`, `commit`, `push`), including through `rtk git`, `git -C`, `cd && git`. Reading stays free; `add -N` and `apply` fall through to `ask` for the worktree hand-back |
 | `lib/guard-graphify-grep.sh` | `bash-dispatch.sh` | rewrites a symbol-discovery `grep`/`find`/`rg` into `graphify explain`, but only when the node exists in the graph, the search is not scoped to a subpath, and the symbol was not already substituted in the session. Ignores non-code targets, heredocs and downstream-of-a-pipe filtering |
+| `lib/guard-cat-bounds.sh` | `bash-dispatch.sh` | denies a bare `cat` on a file past 120 lines (`CLAUDE_READ_BOUNDS_THRESHOLD`) or 8 kB (`CLAUDE_CAT_BOUNDS_BYTES`) — the byte trigger catches Markdown that wraps at the paragraph, where a line count alone waves an 18 kB report through. `read-bounds.sh` is a `PreToolUse:Read` hook and has no reach over Bash; measured on one .NET batch, `Read` fell to 1 % of the context fill while Bash rose to 85 %. Never fires on a pipe, a redirect, a binary format, or a second identical command from the same agent |
 | `lib/rewrite-rtk.sh` | `bash-dispatch.sh` | strips the `/usr/bin/`, `/bin/`, `/usr/local/bin/` prefix off `grep`/`rg`/`find`/`egrep`/`fgrep`, then pipes the payload to `rtk hook claude` itself. The kit *is* the RTK rewrite plus the normalisation — a repo installing it needs no global `rtk init -g` |
+| `lib/batching-nudge.sh` | `bash-dispatch.sh` | appends one line of `additionalContext` when the last 6 tool-carrying turns each held a single call (`CLAUDE_BATCHING_WINDOW`, `CLAUDE_BATCHING_COOLDOWN`). Never denies, never rewrites. Wired on Bash but reads the transcript, so it counts every tool. Main chain only: a subagent drops its context after ~30 turns, where the same run costs 32x less |
 | `lib/graphify-freshness.sh` | autosync + statusline | counts the sources newer than `graph.json`, 20 s TTL cache |
 | `lib/context-report.sh` | run by hand | reads the context log back: heaviest files, tokens per load reason. `--session` narrows it to the last session |
 
@@ -208,8 +212,8 @@ Main chain: `business-spec` → `plan-implementation` → `implement-tdd` → `v
 **Context discipline** — these are behaviour rules, independent of the domain. They are not shipped by a hook: copy them into the `CLAUDE.md` of the repo installing the kit.
 
 > **Context** — every turn resends everything accumulated: the cost follows the number of turns and the size of what you leave in them.
-> - **Independent calls → a single message.** Two `Read`/`Bash`/`Grep` that do not wait on each other, in two turns, pay the accumulation twice. A turn = one billed round trip, not one call.
-> - `offset`/`limit` **mandatory past 120 lines** — `read-bounds.sh` (`PreToolUse:Read`) denies an unbounded `Read` and records it. Re-issue the **same** `Read` verbatim to force the full read.
+> - **Independent calls → a single message.** Two `Read`/`Bash`/`Grep` that do not wait on each other, in two turns, pay the accumulation twice. A turn = one billed round trip, not one call. `lib/batching-nudge.sh` says so out loud after 6 mono-call turns in a row — measured on one .NET batch: 110 of 124 tool-carrying turns held a single call, and the three heaviest cost lines of that session all scale with the turn count.
+> - **Bounds mandatory past 120 lines or 8 kB** — `read-bounds.sh` (`PreToolUse:Read`) denies an unbounded `Read`, `lib/guard-cat-bounds.sh` an unbounded `cat`. Re-issue the **same** command verbatim to force the full read.
 > - An aggregate read whole is ~24k characters carried to the end of the session: locate (`graphify`, `grep -n`) then read the range. Measured on a .NET repo of this shape: `Read` is 30 % of context fill, and only a third of the calls are bounded.
 > - 3 files or more to go through → haiku subagent: its reads stay in its own context, only the conclusion comes back.
 >
@@ -237,12 +241,12 @@ Only `jq` and `python3` really count. The rest degrades cleanly — and three of
 | Tool | Required by | If missing |
 |------|-------------|------------|
 | `jq` | statusline, `bash-dispatch.sh`, `graphify-autosync.sh`, `session-cleanup.sh` | silent statusline, no grep substitution |
-| `python3` | `lib/guard-graphify-grep.sh`, `handler-claude-md-check.sh`, `caveman-skill-ultra.sh`, `context-log.sh`, every script under `scripts/` | inert hooks, exit 0 |
+| `python3` | `lib/guard-graphify-grep.sh`, `lib/batching-nudge.sh`, `handler-claude-md-check.sh`, `caveman-skill-ultra.sh`, `context-log.sh`, every script under `scripts/` | inert hooks, exit 0 |
 | `graphify` (`~/.local/bin/graphify`) | `lib/guard-graphify-grep.sh`, autosync, freshness | no substitution (the module exits 0 in silence); autosync logs "graphify not found, skip" and exits 0 |
 | `rtk` | `lib/rewrite-rtk.sh`, prefixed commands in the skills | drop the `rtk ` prefix from the skills, nothing else breaks |
 | `caveman` plugin | `caveman-skill-ultra.sh`, statusline badge | flag written with no effect |
 
-Every hook exits 0 when its dependency is missing, except `lib/guard-git.sh`, `explore-guard.sh` and `read-bounds.sh` which block by design. Removing the `graphify-*` scripts, `read-bounds.sh` and `caveman-skill-ultra.sh` from `settings.json` leaves a coherent kit; `bash-dispatch.sh` keeps working with any subset of its three modules present.
+Every hook exits 0 when its dependency is missing, except `lib/guard-git.sh`, `explore-guard.sh`, `read-bounds.sh` and `implement-tdd-guard.sh` which block by design. Removing the `graphify-*` scripts, `read-bounds.sh` and `caveman-skill-ultra.sh` from `settings.json` leaves a coherent kit; `bash-dispatch.sh` keeps working with any subset of its three modules present.
 
 ## Elsewhere
 

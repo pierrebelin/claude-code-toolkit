@@ -51,5 +51,5 @@ Two sources that drift make the choice random: a fact lives in exactly one place
 ## Editing a hook
 
 - Must exit 0 on empty JSON input and when its dependency is missing. Intended exceptions: `lib/guard-git.sh`, blocking by design; `explore-guard.sh`, which denies an `Explore` subagent with no graphify in its prompt; `lib/guard-graphify-grep.sh`, which rewrites a symbol-discovery `grep` into `graphify explain` (a rewrite, not a denial); and `read-bounds.sh`, which denies an unbounded `Read` on a large file once per agent and file.
-- Test after editing: `echo '{}' | bash hooks/<name>.sh`. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`.
+- Test after editing: `echo '{}' | bash hooks/<name>.sh`. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` / `HOOK_AGENT_ID` / `HOOK_TRANSCRIPT_PATH` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`. A module that decides prints hook JSON; `lib/batching-nudge.sh` prints plain text, which the dispatcher grafts onto the decision.
 - Do not run `graphify-autosync.sh` idly: it rebuilds the graph and blocks for several minutes.

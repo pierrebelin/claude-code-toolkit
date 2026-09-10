@@ -91,8 +91,8 @@ Every id of `ddd-rules.md` and `architecture-rules.md` must appear once: applied
 
 **E2E**: [lifecycle scenario ≥2 operations] / omitted — [reason].
 
-**Steps**:
-- [ ] 1. [End-to-end business behaviour] — TDD: RED ⬜ · GREEN ⬜ · COST ⬜
+**Steps**: one step = one production artifact (Command/Query+Handler, endpoint, repository), guards and refusals included. 2-5 behaviour steps.
+- [ ] 1. [End-to-end business behaviour, guards included] — TDD: RED ⬜ · GREEN ⬜ · COST ⬜
 - [ ] 2. [Next behaviour]
 - [ ] N. `dotnet build` + `dotnet test` verification — scope: [whole suites] · [IT filter] · [suites not run + reason]
 

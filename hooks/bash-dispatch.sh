@@ -15,7 +15,8 @@
 # Order:
 #   1. guard-git       deny / ask   -> terminal, nothing else runs
 #   2. guard-graphify  substitute   -> terminal, rtk must not rewrap it
-#   3. rewrite-rtk     rewrite      -> the default path
+#   3. guard-cat-bounds deny        -> terminal, an unbounded dump never reaches rtk
+#   4. rewrite-rtk     rewrite      -> the default path
 #
 # Module contract: reads HOOK_* from the environment, prints the hook JSON on
 # stdout when it decides, prints nothing when it passes.
@@ -26,22 +27,54 @@ LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 HOOK_INPUT=$(cat)
 
 # Single parse for the whole chain.
-read -r HOOK_TOOL_NAME HOOK_SESSION_ID HOOK_AGENT_ID <<<"$(
-  printf '%s' "$HOOK_INPUT" | jq -r '[(.tool_name // ""), (.session_id // "unknown"), (.agent_id // "")] | @tsv'
+# The separator is US (\x1f), not a tab: a tab is IFS-whitespace, and bash
+# collapses runs of IFS-whitespace into one delimiter even when IFS holds
+# nothing else. An empty agent_id — the main chain always has one — therefore
+# shifted transcript_path into HOOK_AGENT_ID and made every caller look like a
+# subagent. A non-whitespace separator keeps empty fields.
+IFS=$'\x1f' read -r HOOK_TOOL_NAME HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH <<<"$(
+  printf '%s' "$HOOK_INPUT" | jq -r '[(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.transcript_path // "")] | join("")'
 )"
 HOOK_CMD=$(printf '%s' "$HOOK_INPUT" | jq -r '.tool_input.command // ""')
 
 [ "$HOOK_TOOL_NAME" = "Bash" ] || exit 0
 [ -n "$HOOK_CMD" ] || exit 0
 
-export HOOK_INPUT HOOK_CMD HOOK_SESSION_ID HOOK_AGENT_ID
+export HOOK_INPUT HOOK_CMD HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH
 
-for module in guard-git.sh guard-graphify-grep.sh rewrite-rtk.sh; do
+# Advisory, not a decision: it never denies and never rewrites, so it runs
+# outside the terminal chain and is merged into whatever that chain answers.
+NUDGE=$(bash "$LIB/batching-nudge.sh" 2>/dev/null || true)
+
+emit() {
+  # $1 = the module's JSON, or empty when no module decided.
+  if [ -z "$NUDGE" ]; then
+    [ -n "${1:-}" ] && printf '%s\n' "$1"
+    return
+  fi
+  if [ -z "${1:-}" ]; then
+    jq -n --arg c "$NUDGE" \
+      '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $c}}'
+    return
+  fi
+  # Graft the nudge onto the decision. A module answer that is not an object
+  # carrying hookSpecificOutput is passed through untouched: the decision always
+  # outranks the advice.
+  merged=$(printf '%s' "$1" | jq --arg c "$NUDGE" \
+    'if type == "object" and has("hookSpecificOutput")
+     then .hookSpecificOutput.additionalContext =
+       (((.hookSpecificOutput.additionalContext // "") | if . == "" then "" else . + "\n" end) + $c)
+     else . end' 2>/dev/null) || merged=""
+  printf '%s\n' "${merged:-$1}"
+}
+
+for module in guard-git.sh guard-graphify-grep.sh guard-cat-bounds.sh rewrite-rtk.sh; do
   out=$(bash "$LIB/$module")
   if [ -n "$out" ]; then
-    printf '%s\n' "$out"
+    emit "$out"
     exit 0
   fi
 done
 
+emit ""
 exit 0
