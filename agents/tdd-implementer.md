@@ -10,6 +10,7 @@ tools:
   - Bash
 model: sonnet
 maxTurns: 30
+effort: medium
 ---
 
 # GREEN implementer

@@ -6,6 +6,8 @@ tools:
   - Glob
   - Grep
   - Bash
+model: opus
+effort: high
 ---
 
 # DDD + TDD auditor

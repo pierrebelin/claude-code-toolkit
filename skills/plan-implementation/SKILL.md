@@ -60,8 +60,9 @@ For each batch, also establish its **execution status**: `sequential` by default
 ## Execution-plan rules (3.FX.3)
 
 - A step is an **end-to-end business behaviour**, not a layer, not a file
+- **One step = one production artifact**: a Command/Query+Handler, an endpoint, a repository. Two steps whose target production code is the same handler and the same aggregate method are **one step**. A guard, a refusal, a uniqueness check or a visibility check on a method already carried by a step is **not a step** — it is one more scenario of that step, listed on its `Tests` line. Splitting them buys a separate TDD cycle (a subagent launch, a report, a re-read of the same two files) for code that ships as one method.
 - Every step → **≥1 test named after the target skill's convention** + its RM + the target test project: unit/integration/E2E `Should{result}_When{condition}`, contract `Should{Action}()`. A step with no nameable business behaviour is an internal mechanism ("scan", "detect", "map", "convert") → **recast it as a behaviour**. No file paths and no assertions (→ the `/tests-*` skills).
-- ~4-8 steps per batch, never more than 10
+- **2-5 behaviour steps per batch**, plus the documentation step and the verification step. Past 6, the split went down to the rule instead of the artifact: regroup by target method before writing the sheet. A batch legitimately needing more than 8 is a batch to split in two.
 - The last step is `dotnet build` + `dotnet test` with its **named scope**: suites run whole, filtered project and filter root, suites deliberately not run and why. A bare "`dotnet test`" is a weak success criterion
 - No meta-step, no pure-layer step, no file-only step
 

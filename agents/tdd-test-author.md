@@ -10,6 +10,7 @@ tools:
   - Bash
 model: sonnet
 maxTurns: 12
+effort: medium
 ---
 
 # RED test author
