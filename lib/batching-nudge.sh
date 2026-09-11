@@ -34,6 +34,20 @@ transcript="${HOOK_TRANSCRIPT_PATH:-}"
 [ -f "$transcript" ] || exit 0
 
 session="${HOOK_SESSION_ID:-unknown}"
+# Sampling gate, in pure bash, before the python spawn. Measured 2026-09-11:
+# `python3 -c pass` alone costs 16 ms of the module's 29, and it was paid on every
+# single Bash call. What the module looks for is a RUN of WINDOW consecutive
+# mono-call turns — a state that persists across several calls — so evaluating one
+# call in SAMPLE catches it, at worst one turn later than before.
+SAMPLE=${CLAUDE_BATCHING_SAMPLE:-3}
+tick_file="/tmp/claude-batching-tick-${session}"
+tick=0
+[ -f "$tick_file" ] && read -r tick < "$tick_file" 2>/dev/null
+case "$tick" in ''|*[!0-9]*) tick=0 ;; esac
+tick=$(( (tick + 1) % SAMPLE ))
+printf '%s' "$tick" > "$tick_file"
+[ "$tick" -eq 0 ] || exit 0
+
 state="/tmp/claude-batching-nudge-${session}"
 last_alert=0
 [ -f "$state" ] && last_alert=$(cat "$state" 2>/dev/null || echo 0)
@@ -51,6 +65,12 @@ window, cooldown, last_alert = int(window), int(cooldown), int(last_alert)
 seen_msg, seen_tu, turns = {}, set(), []
 with open(transcript, encoding="utf-8", errors="replace") as fh:
     for line in fh:
+        # Substring pre-filter before the parse. Behaviour-preserving: a line
+        # carrying no tool_use yields an empty `new` below and is dropped by the
+        # `if not new` guard anyway — but json.loads ran on it first, on every
+        # line of a transcript that reaches 10 MB, on every Bash call.
+        if '"tool_use"' not in line:
+            continue
         try:
             d = json.loads(line)
         except ValueError:

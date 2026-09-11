@@ -41,8 +41,8 @@ SECTION = re.compile(r"^##\s+R[eè]gles?\s+m[eé]tier", re.I)
 REFS = [os.path.join(ROOT, ".claude", "skills", "plan-implementation", "references", f)
         for f in ("ddd-rules.md", "architecture-rules.md")]
 REF_ROW = re.compile(r"^\|\s*((?:DDD|APP|PERF)-\d+)\s*\|")
-# A sheet declares its ids on `| Règles appliquées | … |`, and on the
-# `avec dérogation` variant when it carries one.
+# A sheet declares its ids on `| Applied rules | … |`, and on the
+# deviation variant when it carries one.
 APPLIED_ROW = re.compile(r"^\|([^|]+)\|(.*)$")
 ID = re.compile(r"(DDD|APP|PERF)-(\d+)")
 # `DDD-05 → DDD-08` stands for the four ids: the sheets write ranges.
@@ -194,7 +194,7 @@ def referential_ids():
 
 
 def cited_ids(fiche):
-    """Ids cited by the sheet's `Règles appliquées` rows, ranges expanded.
+    """Ids cited by the sheet's `Applied rules` rows, ranges expanded.
 
     Only the absence of a citation is decided here. Whether an id is applied or
     `N/A` is left to the audit: those cells are free prose — `**N/A**`,

@@ -3,23 +3,29 @@
 #
 # Read is 30% of context fill (5.6 MB measured over 30 days) and only 34% of
 # calls are bounded. A full aggregate read is ~24k characters carried to the end
-# of the session. This hook denies an unbounded Read past THRESHOLD lines and
+# of the session. This hook denies an unbounded Read past the threshold and
 # tells the model to locate first (graphify, grep) then read the range.
 #
-# THRESHOLD is 120, not 300. At 300 the hook only ever caught the giant
+# The threshold is 120, not 300. At 300 the hook only ever caught the giant
 # aggregates: measured on two sessions of 2026-09-08, 42 of 59 Reads were
 # unbounded and every one of those files sat under the threshold (23 to 303
-# lines). The cost was never one huge read, it was the count -- 59 Reads plus 71
+# lines). The cost was never one huge read, it was the count — 59 Reads plus 71
 # Bash cat/grep in two sessions, each carried to the end. 120 catches the test
 # fixtures and infrastructure files (160 to 500 lines) that made up that volume.
 #
 # Escape hatch, same shape as the graphify substitution (lib/guard-graphify-grep.sh):
-# the denial is recorded per
-# (session, file). Re-issuing the identical unbounded Read passes through — that
-# is how you force a full read when you genuinely want one.
+# the denial is recorded per (agent, file). Re-issuing the identical unbounded
+# Read passes through — that is how you force a full read when you genuinely want
+# one.
+#
+# Thresholds, skip lists, outline and refusal layout are shared with
+# lib/guard-cat-bounds.sh through lib/bounds-common.sh. Anything a fix would have
+# to be applied to twice belongs there, not here.
 set -u
 
-THRESHOLD=${CLAUDE_READ_BOUNDS_THRESHOLD:-120}
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
+# shellcheck source=../lib/bounds-common.sh
+. "$LIB/bounds-common.sh"
 
 input=$(cat)
 tool_name=$(echo "$input" | jq -r '.tool_name // ""')
@@ -35,15 +41,15 @@ has_limit=$(echo "$input" | jq -r '.tool_input.limit // empty')
 [ -n "$has_offset" ] && exit 0
 [ -n "$has_limit" ] && exit 0
 
-# Binary / rendered formats: Read handles them natively, bounding is meaningless.
-lower_path=$(printf '%s' "$file_path" | tr '[:upper:]' '[:lower:]')
-case "$lower_path" in
-  *.png|*.jpg|*.jpeg|*.gif|*.webp|*.bmp|*.svg|*.pdf|*.ipynb) exit 0 ;;
-esac
+bounds_skip "$file_path" && exit 0
 
 lines=$(wc -l < "$file_path" 2>/dev/null | tr -d ' ')
 [ -n "$lines" ] || exit 0
-[ "$lines" -le "$THRESHOLD" ] 2>/dev/null && exit 0
+[ "$lines" -le "$BOUNDS_THRESHOLD" ] 2>/dev/null && exit 0
+
+# Past the threshold but flat: denying it costs more than it saves. See
+# bounds_is_flat in lib/bounds-common.sh.
+bounds_is_flat "$file_path" && exit 0
 
 # Scope the escape hatch to the agent, not the session. Subagents run under the
 # parent's session_id *and* its transcript_path, so a per-session key let one
@@ -58,11 +64,18 @@ seen_file="/tmp/claude-readbounds-seen-${session_id}${agent_id:+-$agent_id}"
 
 # Second identical attempt, same agent → let it through.
 if [ -f "$seen_file" ] && grep -Fxq "$file_path" "$seen_file" 2>/dev/null; then
+  echo "$file_path" >> "${seen_file}.forced"
   exit 0
 fi
 echo "$file_path" >> "$seen_file"
 
-jq -n --arg f "$file_path" --arg l "$lines" --arg t "$THRESHOLD" \
-  '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny",
-    permissionDecisionReason: ("Unbounded Read on \($f) (\($l) lines > \($t)). Locate the range first (graphify explain/query, grep -n), then Read with offset/limit. The whole file stays in context until the session ends. Re-issue this exact Read to force the full read.")}}'
+reason=$(bounds_reason \
+  "Unbounded Read on $file_path ($lines lines > $BOUNDS_THRESHOLD). The whole file stays in context until the session ends." \
+  "$file_path" \
+  "Read the range you need around one of them" \
+  "Locate the range first (graphify explain/query, grep -n), then Read with offset/limit." \
+  "Re-issue this exact Read to force the full read.")
+
+jq -n --arg r "$reason" \
+  '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
 exit 0

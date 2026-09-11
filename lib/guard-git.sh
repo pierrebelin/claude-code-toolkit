@@ -18,6 +18,12 @@ set -u
 cmd="${HOOK_CMD:-}"
 [ -n "$cmd" ] || exit 0
 
+# Fast bail-out, before any subprocess. The normalisation below costs 4 sed
+# spawns (~11 ms measured 2026-09-11) and it ran on every Bash call, git or not.
+# No normalisation can turn a string without the substring `git` into `git <verb>`:
+# every rule it strips (cd, rtk, env assignments, -C) sits *before* the verb.
+case "$cmd" in *git*) ;; *) exit 0 ;; esac
+
 # Normalisation: strip whatever sits between the start of the command and the
 # git verb, so every form collapses to "git <verb>".
 norm=$(printf '%s' "$cmd" \

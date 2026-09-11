@@ -36,6 +36,14 @@ set -u
 cmd="${HOOK_CMD:-}"
 [ -n "$cmd" ] || exit 0
 
+# Fast bail-out before the first grep spawn (~4.4 ms). Deliberately a superset of
+# the regex below — `rg` matches inside "target" too — since only false negatives
+# would be a bug here. egrep/fgrep carry `grep`.
+case "$cmd" in
+  *grep*|*rg*|*find*) ;;
+  *) exit 0 ;;
+esac
+
 # Only target source-code DISCOVERY, not filtering.
 #
 # Filtering = grep downstream of a pipe (`dotnet build | grep error`), on a
