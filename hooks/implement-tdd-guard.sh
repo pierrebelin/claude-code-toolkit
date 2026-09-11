@@ -9,9 +9,10 @@
 #
 # Detection reads the transcript, not a state file: the closing literal emitted by
 # /implement-tdd is emitted once per closed batch and by nothing else. Both wordings
-# are matched, French repos and English toolkit alike, and the reply keeps the
-# language of the literal it matched. F<n> requires a digit, so the skill sources and
-# this file, which quote "Lot FX" / "Batch FX", never match.
+# are matched — the skill emits the English one, the French alternative only catches
+# a transcript started before the kit was translated — and the reply is English in
+# either case. F<n> requires a digit, so the skill sources and this file, which quote
+# "Lot FX" / "Batch FX", never match.
 #
 # Escape hatch, same convention as read-bounds.sh and guard-graphify-grep.sh:
 # re-issuing the identical launch lets it through. The first attempt drops a marker,
@@ -55,9 +56,6 @@ closed=$(jq -rs '
 
 [[ -n "$closed" ]] || exit 0
 
-lang=fr
-grep -qE "Batch $closed complete — manual validation required" "$transcript" 2>/dev/null && lang=en
-
 lot=$(echo "$launch" | grep -oiE '\bF[0-9]+\b' | head -1 | tr '[:lower:]' '[:upper:]')
 
 session=$(echo "$input" | jq -r '.session_id // "nosession"')
@@ -69,17 +67,10 @@ if [[ -f "$marker" ]]; then
 fi
 touch "$marker"
 
-if [[ "$lang" == "fr" ]]; then
-  reason="Lot ${closed} déjà terminé dans cette session — /clear avant le lot ${lot:-suivant}.
-Le lot qui suit paierait le contexte accumulé du précédent à chaque tour (mesuré : 1,9x l'input à nombre de requêtes égal, cf. implement-tdd SKILL.md « End of batch »).
-Ne rien lire, ne rien déléguer, ne rien écrire. Relancer /implement-tdd lot ${lot:-FX} après le /clear.
-Forcer : relancer la commande à l'identique une seconde fois."
-else
-  reason="Batch ${closed} already closed in this session — /clear before batch ${lot:-next}.
+reason="Batch ${closed} already closed in this session — /clear before batch ${lot:-next}.
 The next batch would pay the accumulated context of the previous one on every turn (measured: 1.9x the input at equal request count, see implement-tdd SKILL.md \"End of batch\").
-Read nothing, delegate nothing, write nothing. Relaunch /implement-tdd lot ${lot:-FX} after the /clear.
+Read nothing, delegate nothing, write nothing. Relaunch /implement-tdd batch ${lot:-FX} after the /clear.
 Force: re-issue the identical launch a second time."
-fi
 
 if [[ "$event" == "PreToolUse" ]]; then
   jq -n --arg r "$reason" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'

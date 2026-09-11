@@ -36,8 +36,9 @@ Spec → a plan **split by feature** (not by layer):
    - Routes in `Endpoints/Endpoints.cs` (collision risk)
    - Local patterns of the bounded context (naming, conventions)
    - Document it in section "1. Scope > Reuse".
-5. Blocking technical ambiguities → **ask the user before planning** through **AskUserQuestion** (≤4 decisions per call, recommended answer as the first option). No plan while a blocking question is open.
-6. **Technical challenge** — at most 3 questions through **AskUserQuestion**, only if an answer can **remove work**:
+5. **Measure the blast radius of every existing type the plan modifies** — one `graphify affected "<Type>"` per aggregate, value object or domain interface already in `src/`. Roll the output up per project (`grep -oE '(src|tests)/[^/]+' | sort | uniq -c | sort -rn`); never paste the file:line list into a plan. A new type has no radius: skip it. The rollup goes into section "1. Scope" as the **measured** cost of the change, and it decides the split in Phase 2 — a type whose radius spans four test projects is a batch of its own, not a line inside a larger one. Estimating this by hand is what the graph exists to stop.
+6. Blocking technical ambiguities → **ask the user before planning** through **AskUserQuestion** (≤4 decisions per call, recommended answer as the first option). No plan while a blocking question is open.
+7. **Technical challenge** — at most 3 questions through **AskUserQuestion**, only if an answer can **remove work**:
    - Can this need ship without a new type, service, endpoint or table?
    - Does extending an existing element cover 80 % of the need (see Maximum reuse)?
    - Which part of the scope can wait for a later batch without blocking the value?

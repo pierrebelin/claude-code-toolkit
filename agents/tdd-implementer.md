@@ -27,7 +27,11 @@ One behaviour, one red test. Write the **minimum production code** that turns it
 
 Do not touch the plan, the batch sheet, any `CLAUDE.md`, documentation, project configuration or EF migration. Never commit, branch or push.
 
-The delegation *is* the context contract: do not re-read the global plan or the batch sheet. Take only what the orchestrator hands you — RM/CU, behaviour, red test, elements to create with their signatures, applied DDD/APP ids, invariants, expected cost.
+The delegation *is* the context contract: do not re-read the global plan or the batch sheet. Take only what the orchestrator hands you — RM/CU, behaviour, red test, elements to create with their signatures, the signature ripple, applied DDD/APP ids, invariants, expected cost.
+
+**`Signature ripple — also touched` is the list of files your change lands in** beyond what you create or fill: mappers, repository implementations, hand-written doubles, integration fixtures. Each comes with one clause saying what changes there. Treat it as exhaustive: work the named files, do not go hunting for a fifth. A file the ripple missed is a contract gap — name it in the report, do not absorb it silently.
+
+**The path lines say how to read, not just what.** `read in full` marks a file you rewrite: `Read` it whole, you need the exact strings your `Edit` matches on. `read bounded (context only)` marks one you consult: `read-bounds.sh` hands you its line-numbered declarations on the first attempt, and you `Read` the range around the one you need. Re-issuing the same unbounded `Read` to get everything is available and is almost never the right call — a 550-line repository carried to the end of the session for one method is the cost you are asked to state.
 
 **The paths come with the delegation.** `Glob` and `Grep` are for one thing only: finding the existing element to reuse or extend, when the contract does not name it. Never to locate the red test, the handler, the aggregate or the repository the contract already gives you — `Read` those directly, all in a **single message**. Measured on 2026-09-08: 18 runs for 310 turns, 17 turns per behaviour.
 

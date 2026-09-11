@@ -32,3 +32,21 @@ for path, (n, tk) in sorted(per_file.items(), key=lambda kv: -kv[1][1])[:20]:
     rep = f" x{n}" if n > 1 else ""
     print(f"  {tk:>7} tk{rep:<4}  {path}")
 PY
+
+# Bound guards: denied vs forced. A guard whose every denial is forced saves no
+# context and costs one turn each time -- it needs a better refusal, not a lower
+# threshold. Counts are per (session, agent) files left in /tmp by the two hooks.
+echo
+echo "bound guards (denied / forced):"
+for kind in readbounds catbounds; do
+  denied=0; forced=0
+  for f in /tmp/claude-${kind}-seen-*; do
+    [ -f "$f" ] || continue
+    case "$f" in *.forced) continue ;; esac
+    denied=$((denied + $(wc -l < "$f" | tr -d ' ')))
+    [ -f "$f.forced" ] && forced=$((forced + $(wc -l < "$f.forced" | tr -d ' ')))
+  done
+  [ "$denied" -eq 0 ] && continue
+  printf '  %-11s %d denied, %d forced\n' "$kind" "$denied" "$forced"
+  [ "$forced" -ge "$denied" ] && echo "              every denial forced — this guard costs a turn and saves nothing"
+done

@@ -13,10 +13,14 @@
 # Here the order is explicit and only one stage ever answers.
 #
 # Order:
-#   1. guard-git       deny / ask   -> terminal, nothing else runs
-#   2. guard-graphify  substitute   -> terminal, rtk must not rewrap it
-#   3. guard-cat-bounds deny        -> terminal, an unbounded dump never reaches rtk
-#   4. rewrite-rtk     rewrite      -> the default path
+#   1. guard-git         deny / ask -> terminal, nothing else runs
+#   2. guard-graphify    substitute -> terminal, rtk must not rewrap it
+#   3. guard-cat-bounds  deny       -> terminal, an unbounded dump never reaches rtk
+#   4. piped-filter x2   rewrite    -> terminal, rtk knows neither of these tools
+#   5. rewrite-rtk       rewrite    -> the default path
+#
+# A module entry may carry an argument, which is why MODULES is an array and the
+# expansion below is deliberately unquoted: the strings are ours, not the user's.
 #
 # Module contract: reads HOOK_* from the environment, prints the hook JSON on
 # stdout when it decides, prints nothing when it passes.
@@ -32,10 +36,14 @@ HOOK_INPUT=$(cat)
 # nothing else. An empty agent_id — the main chain always has one — therefore
 # shifted transcript_path into HOOK_AGENT_ID and made every caller look like a
 # subagent. A non-whitespace separator keeps empty fields.
-IFS=$'\x1f' read -r HOOK_TOOL_NAME HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH <<<"$(
-  printf '%s' "$HOOK_INPUT" | jq -r '[(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.transcript_path // "")] | join("")'
-)"
-HOOK_CMD=$(printf '%s' "$HOOK_INPUT" | jq -r '.tool_input.command // ""')
+# One jq for the whole payload. Metadata and command were two spawns (~3.2 ms
+# each); the command is appended behind an RS (\x1e) instead, and split off on
+# the FIRST occurrence — the four metadata fields can hold neither separator.
+# -j, not -r: no trailing newline to strip, and none to inject into the command.
+PARSED=$(printf '%s' "$HOOK_INPUT" | jq -j '([(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.transcript_path // "")] | join("\u001f")) + "\u001e" + (.tool_input.command // "")')
+
+IFS=$'\x1f' read -r HOOK_TOOL_NAME HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH <<<"${PARSED%%$'\x1e'*}"
+HOOK_CMD="${PARSED#*$'\x1e'}"
 
 [ "$HOOK_TOOL_NAME" = "Bash" ] || exit 0
 [ -n "$HOOK_CMD" ] || exit 0
@@ -68,8 +76,18 @@ emit() {
   printf '%s\n' "${merged:-$1}"
 }
 
-for module in guard-git.sh guard-graphify-grep.sh guard-cat-bounds.sh rewrite-rtk.sh; do
-  out=$(bash "$LIB/$module")
+MODULES=(
+  "guard-git.sh"
+  "guard-graphify-grep.sh"
+  "guard-cat-bounds.sh"
+  "rewrite-piped-filter.sh graphify-query"
+  "rewrite-piped-filter.sh git-grep"
+  "rewrite-rtk.sh"
+)
+
+for module in "${MODULES[@]}"; do
+  # shellcheck disable=SC2086
+  out=$(bash "$LIB/"$module)
   if [ -n "$out" ]; then
     emit "$out"
     exit 0

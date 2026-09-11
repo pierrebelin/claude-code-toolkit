@@ -2,7 +2,6 @@
 paths:
   - "todo/**/*.md"
   - "docs/**/*.md"
-  - "src/**/CLAUDE.md"
   - ".claude/skills/**/*.md"
   - ".claude/agents/**/*.md"
   - ".claude/rules/**/*.md"

@@ -50,7 +50,7 @@ Runner, commands, which test level to write, suite scope and integration-test fi
 
 ### 1. Analysis
 
-**Entry guard — one batch, one session. Check this before any read.** If this session has already closed a batch (a `/verify-ddd-tdd` verdict was relayed, or a `→ Batch FX complete` line was printed), **stop here**: read nothing, delegate nothing, write nothing. Print `→ Batch FZ already closed in this session. Run /clear, then relaunch /implement-tdd lot FX.` and end the turn. A second batch launched without `/clear` pays the whole accumulated context of the first on every one of its turns — the measurement is in "End of batch" below, and it is the single largest avoidable cost of this skill. The user relaunching without clearing is not an authorisation to continue: say it and stop.
+**Entry guard — one batch, one session. Check this before any read.** If this session has already closed a batch (a `/verify-ddd-tdd` verdict was relayed, or a `→ Batch FX complete` line was printed), **stop here**: read nothing, delegate nothing, write nothing. Print `→ Batch FZ already closed in this session. Run /clear, then relaunch /implement-tdd batch FX.` and end the turn. A second batch launched without `/clear` pays the whole accumulated context of the first on every one of its turns — the measurement is in "End of batch" below, and it is the single largest avoidable cost of this skill. The user relaunching without clearing is not an authorisation to continue: say it and stop.
 
 This guard is also enforced outside the model, by `.claude/hooks/implement-tdd-guard.sh` (`UserPromptSubmit` + `PreToolUse:Skill`): it reads the transcript for the closing literal and denies the second launch. Re-issuing the identical launch forces it through — the escape hatch exists for a false positive, not for chaining batches.
 
@@ -71,7 +71,7 @@ This guard is also enforced outside the model, by `.claude/hooks/implement-tdd-g
 
 **At the start (once)**: read `references/test-scope.md` (test level, suite scope) and `references/conventions.md` ("Data access"). Layer conventions — naming, base classes, folder structure, pitfalls — arrive on their own through `.claude/rules/*.md` as soon as you read a file of that layer: do not go looking for them, do not ask for them again. Full code examples are split by layer (`references/examples-domain.md`, `-application`, `-infrastructure`, `-webapi`): the layer rule gives you the exact path. Open one only if the pattern is unknown to you.
 
-**Do not open a source file outside the target handler folder — delegate that look.** Reading a neighbouring feature to copy its pattern is legitimate work; doing it in the orchestrator is not. Every `Read` under `src/` or `tests/` makes the harness attach that folder's `CLAUDE.md` and its layer rules, and the orchestrator then carries them to the end of the batch without ever writing the code they govern. Ask `graphify explain|path|query` first — a relation between symbols is answered there, with no attachment. If files still have to be opened, send an `Explore` subagent (`model: haiku`, prompt naming `graphify`, `hooks/explore-guard.sh` denies it otherwise; bounded report: a `file:line` table, 20 lines max) and work from its answer. Measured on Stid.Platform.SES, session 1a39aeca: six `Read` on a neighbouring feature at turn 6 pulled in that feature's `CLAUDE.md` (14.8 kB) plus four `rules/*.md`, 60 kB carried by 127 turns — **$3.1 of the session's $25** — and the same `CLAUDE.md` was loaded again by the subagent that actually needed it. Attached documents cost $0.049/kB in the orchestrator against $0.0015/kB in a subagent: the same reading, 32x cheaper, in the run that uses it.
+**Do not open a source file outside the target handler folder — delegate that look.** Reading a neighbouring feature to copy its pattern is legitimate work; doing it in the orchestrator is not. Every `Read` under `src/` or `tests/` makes the harness attach that folder's `CLAUDE.md` and its layer rules, and the orchestrator then carries them to the end of the batch without ever writing the code they govern. Ask `graphify explain|path|query` first — a relation between symbols is answered there, with no attachment. If files still have to be opened, send an `Explore` subagent (`model: haiku`, prompt naming `graphify`, `hooks/explore-guard.sh` denies it otherwise; bounded report: a `file:line` table, 20 lines max) and work from its answer. Measured on {{PRODUCT}}.Studio, session 1a39aeca: six `Read` on a neighbouring feature at turn 6 pulled in that feature's `CLAUDE.md` (14.8 kB) plus four `rules/*.md`, 60 kB carried by 127 turns — **$3.1 of the session's $25** — and the same `CLAUDE.md` was loaded again by the subagent that actually needed it. Attached documents cost $0.049/kB in the orchestrator against $0.0015/kB in a subagent: the same reading, 32x cheaper, in the run that uses it.
 
 ### 2. Red-Green-Refactor loop per behaviour
 
@@ -93,16 +93,16 @@ Read the plans once, in the main agent. For each behaviour, delegate this compac
 RM/CU: …
 Behaviour: …
 Level / skill: …
-Target test file: exact path, existing or to create
-Fixture to reuse: exact path
-Handler / aggregate under test: exact path
-Shared doubles and builders available: exact paths under tests/{{PRODUCT}}.CoreTests/
+Rewritten by you (read in full): test file, fixture — exact paths, existing or to create
+Read bounded (context only): handler / aggregate under test, shared doubles and builders under tests/{{PRODUCT}}.CoreTests/ — exact paths
 Scenarios: …
 Expected observation: …
 Forbidden: any file search. A missing path comes back as ## BLOCKED.
 ```
 
 **The exact paths are not optional.** You have just read the sheet, you hold them; the subagent does not and pays a full exploration to rebuild them. Measured on 2026-09-08: 23 `tdd-test-author` runs for 445 turns, **19 turns to write one test**. A contract that names the four paths removes that exploration. If you cannot name one, it is missing from the sheet — that is a plan gap, settle it before delegating.
+
+**Sort the paths into the two lines, do not merge them.** A file the agent rewrites has to be read whole: it needs the exact strings an `Edit` matches on, and an outline does not carry them. A file it only consults is read around one declaration. `read in full` and `read bounded (context only)` are the two literals that say which is which — keep them verbatim, they are the vocabulary both agents key on. Getting it wrong costs a denied read and a turn; leaving a path out costs the exploration the contract exists to remove.
 
 Behaviours cleared as disjoint go out **in the same message**, one `Agent` call each.
 
@@ -129,8 +129,10 @@ RM/CU: …
 Behaviour: …
 Red test: exact path + method name
 Out of scope — next behaviour: [guard/branch not to write] — would turn the RED of [X] green
-Already stubbed at RED (body to fill): exact paths
+Already stubbed at RED (body to fill, read in full): exact paths
 To create from scratch: exact paths
+Signature ripple — also touched (read in full): exact path — what changes there, one clause each
+Read bounded (context only): exact paths
 Elements: exact names + public signatures from the sheet — declaration only, never a body
 Applied DDD/APP ids: …
 Exploitable invariants — what they remove: …
@@ -141,6 +143,8 @@ Snapshot (approval-testing suites only): approved-file path + literal seeded val
 **The contract carries only what the agent cannot know.** Never restate what `.claude/agents/tdd-implementer.md` already binds it to: zero comments, test files read-only, validation commands, REFACTOR, orphan deletion, `## GREEN` / `## BLOCKED` format. Each restatement is paid on every delegation and becomes a second source that drifts from the charter.
 
 **Signature means declaration** — name, parameters, return type. A dictated body makes your own mistake read as the spec, and no review catches it: the code matches the contract. If you need to dictate the body, you are doing the GREEN yourself — do it, do not delegate.
+
+**Name the ripple, or it gets rediscovered file by file.** When the behaviour moves a signature — a parameter dropped from an aggregate method, a member leaving a repository interface — the change lands in files that are neither stubbed nor created: mappers, repository implementations, hand-written doubles, integration fixtures. You know where, you have just read the sheet and the RED diff. The agent does not, so it reads each of them whole looking for the landing site. Measured on 2026-09-10: one `tdd-implementer` run opened four such files unbounded, two of them past 550 lines, none named by the contract. One clause per file — "loses the `hasBeenTransferred` parameter", "stops hydrating from the repository" — replaces that.
 
 **The two stub lists are not optional.** `tdd-test-author` writes signature stubs to make the RED observable (`references/common-rules.md` §1). You have just read its diff: a file it already created, announced as "to create", sends the agent looking for work that is done.
 

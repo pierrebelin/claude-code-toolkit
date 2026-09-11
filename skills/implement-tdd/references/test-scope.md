@@ -84,7 +84,7 @@ Format expected everywhere — batch sheet, `/implement-tdd` summary, `Validatio
 
 ```
 [command] — exit N, scope [filter applied or "whole suite"], [n] tests
-Non exécuté : [suite] — [raison]
+Not run: [suite] — [reason]
 ```
 
 ## 5. Handler test policy
