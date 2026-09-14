@@ -16,7 +16,7 @@
 #   bash .claude/evals/run.sh -v cases/guard-git.json
 #
 # Case file shape:
-#   { "fixtures": [ {"path": "big.cs", "lines": 300, "kind": "sparse|flat|md|transcript|stub|stub-error|stub-slow|cs-flat|cs-loop|cs-filter", "ctx": N} ],
+#   { "fixtures": [ {"path": "big.cs", "lines": 300, "kind": "sparse|flat|md|transcript|stub|stub-error|stub-slow|cs-flat|cs-loop|cs-filter|text", "ctx": N, "content": "..." } ],
 #     "cases": [ { "name": "...",
 #                  "hook": "hooks/x.sh"  |  "cmd": "bash .claude/tools/x ...",
 #                  "pre": [payload, ...],          # replayed first, output ignored
@@ -59,7 +59,7 @@ cleanup() {
 trap cleanup EXIT
 
 make_fixture() {
-  local path="$FIX/$1" lines="$2" kind="$3" ctx="$4"
+  local path="$FIX/$1" lines="$2" kind="$3" ctx="$4" content="${5:-}"
   mkdir -p "$(dirname "$path")"
   case "$kind" in
     flat)
@@ -67,6 +67,10 @@ make_fixture() {
       # weighs most of the file, which is what bounds_is_flat measures.
       { seq 1 40 | awk '{printf "public sealed record Declaration%03d(string Name, int Value, bool Enabled, string Description);\n", $1}'
         seq 41 "$lines" | awk '{print "class C"$1" {}"}'; } > "$path" ;;
+    text)
+      # Verbatim bytes. A state file a hook reads is a fixture like any other:
+      # implement-tdd-guard.sh reads the effort the statusline dropped in $TMPDIR.
+      printf '%s' "$content" > "$path" ;;
     md)
       seq 1 "$lines" | awk '{print "Paragraph "$1": markdown wraps at the paragraph rather than at eighty columns, so a line count alone waves a heavy file through and only the byte bound catches it."}' > "$path" ;;
     transcript)
@@ -219,7 +223,8 @@ for f in "${files[@]}"; do
       "$(jq -r ".fixtures[$i].path" "$f")" \
       "$(jq -r ".fixtures[$i].lines // 0" "$f")" \
       "$(jq -r ".fixtures[$i].kind // \"sparse\"" "$f")" \
-      "$(jq -r ".fixtures[$i].ctx // 0" "$f")"
+      "$(jq -r ".fixtures[$i].ctx // 0" "$f")" \
+      "$(jq -r ".fixtures[$i].content // \"\"" "$f")"
     i=$((i + 1))
   done
 

@@ -136,6 +136,228 @@
       "expect": {
         "exit": 0
       }
+    },
+    {
+      "name": "a batch launched at effort high is refused, /effort medium named",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "high",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": "/effort medium"
+      }
+    },
+    {
+      "name": "the refusal carries the measure that justifies it",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "high",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": "8.6 s"
+      }
+    },
+    {
+      "name": "re-issuing the identical launch forces it through",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "high",
+        "TMPDIR": "{{FIX}}"
+      },
+      "pre": [
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "{{SID}}",
+          "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+        }
+      ],
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "name": "effort medium lets the batch start",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "medium",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "name": "effort low lets the batch start",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "low",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "name": "unknown effort never blocks a batch",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_STATE_DIR": "{{FIX}}/no-such-dir",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "name": "the Skill call is denied too, through the documented channel",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "xhigh",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "{{SID}}",
+        "tool_name": "Skill",
+        "tool_input": {
+          "skill": "implement-tdd",
+          "args": "batch F3 todo/PLAN-F.md"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "decision": "deny",
+        "reason": "/effort medium"
+      }
+    },
+    {
+      "name": "effort max is refused like high",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "max",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": "/effort medium"
+      }
+    },
+    {
+      "name": "a prompt that is not a batch launch is left alone at effort high",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "high",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "read the UpdateConfiguration handler again"
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "name": "another skill is left alone at effort high",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "high",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "{{SID}}",
+        "tool_name": "Skill",
+        "tool_input": {
+          "skill": "verify-ddd-tdd",
+          "args": "batch F3"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "decision": "none"
+      }
+    },
+    {
+      "name": "a correction pass is held to the same effort",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "high",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/implement-tdd batch F3 — correction: the handler does not validate the target"
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": "/effort medium"
+      }
+    },
+    {
+      "name": "the effort state file drives the decision when no env override is set",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_STATE_DIR": "{{FIX}}",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": "/effort medium"
+      }
+    }
+  ],
+  "fixtures": [
+    {
+      "path": "claude-effort-last",
+      "kind": "text",
+      "content": "high"
     }
   ]
 }

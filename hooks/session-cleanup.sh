@@ -17,10 +17,18 @@ sid=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unk
 # All six families, not two. Measured 2026-09-11, /tmp held 37 orphaned
 # claude-batching-nudge-*, 6 claude-catbounds-seen-*, plus delegation and affected
 # leftovers that nothing ever removed: only graphify and readbounds were listed.
-PREFIXES="graphify-seen readbounds-seen catbounds-seen affected-seen batching-nudge batching-tick delegation clearnudge"
+PREFIXES="graphify-seen readbounds-seen catbounds-seen affected-seen batching-nudge batching-tick delegation clearnudge implement-tdd-guard implement-tdd-effort effort"
 
-for prefix in $PREFIXES; do
-  rm -f "/tmp/claude-${prefix}-$sid"* 2>/dev/null
+# Two directories, not one: implement-tdd-guard.sh and the effort state write to
+# ${TMPDIR:-/tmp}, which on macOS is /var/folders/... and never /tmp. Deduplicated
+# so a Linux session, where both resolve to /tmp, does not sweep twice.
+DIRS="/tmp"
+[ -n "${TMPDIR:-}" ] && [ "${TMPDIR%/}" != "/tmp" ] && DIRS="$DIRS ${TMPDIR%/}"
+
+for dir in $DIRS; do
+  for prefix in $PREFIXES; do
+    rm -f "$dir/claude-${prefix}-$sid"* 2>/dev/null
+  done
 done
 
 # -H, because on macOS /tmp is a symlink to private/tmp and find does not follow
@@ -31,7 +39,9 @@ for prefix in $PREFIXES; do
   find_args="$find_args -name claude-${prefix}-*"
 done
 # shellcheck disable=SC2086
-find -H /tmp -maxdepth 1 \( $find_args \) -mtime +2 -delete 2>/dev/null
+for dir in $DIRS; do
+  find -H "$dir" -maxdepth 1 \( $find_args \) -mtime +2 -delete 2>/dev/null
+done
 
 # Third job: give the caveman flag back its pre-skill mode. caveman-skill-ultra.sh
 # writes `ultra` into the global ~/.claude/.caveman-active and saves what was
