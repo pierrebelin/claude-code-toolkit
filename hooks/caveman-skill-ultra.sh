@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-# Force caveman=ultra when entering specific skills.
-# Revert manually with `/caveman full` once task is done.
+# PreToolUse Skill hook — force caveman=ultra when entering the code and test skills.
+#
+# The flag is global: the caveman plugin reads ~/.claude/.caveman-active whatever
+# the repo. Until 2026-09-12 this hook wrote `ultra` there and nothing ever wrote
+# it back, so one /implement-tdd here put every other repo in ultra until someone
+# typed /caveman full by hand. The mode in force before the skill is now saved
+# beside the flag, once, and session-cleanup.sh restores it at the next session
+# start — /clear included, which is where a batch ends — as long as the flag still
+# reads `ultra`. A mode the user switched by hand in between is left alone.
 
 set -e
 
@@ -14,7 +21,14 @@ except Exception:
 
 case "$skill" in
   plan-implementation|implement-tdd|implement-js|tests-unit-tests|tests-integration-tests|tests-contract-tests)
-    flag="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.caveman-active"
+    cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+    flag="$cfg/.caveman-active"
+    saved="$cfg/.caveman-active.before-skill"
+    if [ ! -f "$saved" ]; then
+      # Empty when no flag existed: the plugin's default mode, restored by removal.
+      printf '%s' "$(cat "$flag" 2>/dev/null || true)" > "$saved"
+      chmod 600 "$saved" 2>/dev/null || true
+    fi
     printf 'ultra' > "$flag"
     chmod 600 "$flag" 2>/dev/null || true
     ;;

@@ -1,0 +1,147 @@
+{
+  "fixtures": [
+    {"path": "d/A1.cs", "lines": 10}, {"path": "d/A2.cs", "lines": 10}, {"path": "d/A3.cs", "lines": 10},
+    {"path": "d/A4.cs", "lines": 10}, {"path": "d/A5.cs", "lines": 10}, {"path": "d/A6.cs", "lines": 10},
+    {"path": "d/A7.cs", "lines": 10}, {"path": "d/A8.cs", "lines": 10}, {"path": "d/A9.cs", "lines": 10},
+    {"path": "d/A10.cs", "lines": 10}, {"path": "d/A11.cs", "lines": 10}, {"path": "d/A12.cs", "lines": 10},
+    {"path": "d/M1.md", "lines": 5, "kind": "md"}, {"path": "d/M2.md", "lines": 5, "kind": "md"}, {"path": "d/M3.md", "lines": 5, "kind": "md"},
+    {"path": "d/M4.md", "lines": 5, "kind": "md"}, {"path": "d/M5.md", "lines": 5, "kind": "md"}, {"path": "d/M6.md", "lines": 5, "kind": "md"},
+    {"path": "d/big.cs", "lines": 300}
+  ],
+  "cases": [
+    {
+      "name": "sixth distinct .cs read on the main chain nudges, naming bulk-read",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A2.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A3.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A4.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A5.cs"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A6.cs"}},
+      "expect": {"decision": "none", "context": "Delegation: 6 distinct"}
+    },
+    {
+      "name": "the nudge names bulk-read as the light alternative",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A2.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A3.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A4.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A5.cs"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A6.cs"}},
+      "expect": {"context": "tools/bulk-read"}
+    },
+    {
+      "name": "a bounded read counts as much as an unbounded one",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs", "offset": 1, "limit": 5}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A2.cs", "offset": 1, "limit": 5}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A3.cs", "offset": 1, "limit": 5}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A4.cs", "offset": 1, "limit": 5}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A5.cs", "offset": 1, "limit": 5}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/big.cs", "offset": 1, "limit": 20}},
+      "expect": {"decision": "none", "context": "Delegation: 6 distinct"}
+    },
+    {
+      "name": "a denied read never entered the context and is not counted",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A2.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A3.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A4.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A5.cs"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/big.cs"}},
+      "expect": {"decision": "deny", "no_context": true}
+    },
+    {
+      "name": "re-reading the same file five times never nudges (distinct files, not calls)",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+      "expect": {"no_context": true}
+    },
+    {
+      "name": "seventh read stays silent (next nudge at the doubling)",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A2.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A3.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A4.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A5.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A6.cs"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A7.cs"}},
+      "expect": {"no_context": true}
+    },
+    {
+      "name": "twelfth distinct read nudges again",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A2.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A3.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A4.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A5.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A6.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A7.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A8.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A9.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A10.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A11.cs"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A12.cs"}},
+      "expect": {"context": "Delegation: 12 distinct"}
+    },
+    {
+      "name": "a subagent's reads are never counted",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "tool_input": {"file_path": "{{FIX}}/d/A1.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "tool_input": {"file_path": "{{FIX}}/d/A2.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "tool_input": {"file_path": "{{FIX}}/d/A3.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "tool_input": {"file_path": "{{FIX}}/d/A4.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "tool_input": {"file_path": "{{FIX}}/d/A5.cs"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "tool_input": {"file_path": "{{FIX}}/d/A6.cs"}},
+      "expect": {"no_context": true}
+    },
+    {
+      "name": "a delegation restarts the window: five reads, one Agent, then one read stays silent",
+      "cmd": "for i in 1 2 3 4 5; do printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A'$i'.cs\"}}' | bash .claude/hooks/read-bounds.sh >/dev/null; done; printf '{\"tool_name\":\"Agent\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"subagent_type\":\"Explore\",\"description\":\"x\",\"prompt\":\"graphify\",\"model\":\"haiku\"}}' | bash .claude/hooks/explore-guard.sh >/dev/null; printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A6.cs\"}}' | bash .claude/hooks/read-bounds.sh",
+      "expect": {"no_context": true}
+    },
+    {
+      "name": "after a delegation, six new distinct reads nudge again (was: silent for the rest of the session)",
+      "cmd": "for i in 1 2 3 4 5; do printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A'$i'.cs\"}}' | bash .claude/hooks/read-bounds.sh >/dev/null; done; printf '{\"tool_name\":\"Agent\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"subagent_type\":\"tdd-test-author\",\"description\":\"x\",\"prompt\":\"y\"}}' | bash .claude/hooks/explore-guard.sh >/dev/null; for i in 6 7 8 9 10; do printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A'$i'.cs\"}}' | bash .claude/hooks/read-bounds.sh >/dev/null; done; printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A11.cs\"}}' | bash .claude/hooks/read-bounds.sh",
+      "expect": {"context": "Delegation: 6 distinct"}
+    },
+    {
+      "name": "non-.cs reads are not exploration",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/M1.md"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/M2.md"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/M3.md"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/M4.md"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/M5.md"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/M6.md"}},
+      "expect": {"no_context": true}
+    }
+  ]
+}

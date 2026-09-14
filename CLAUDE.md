@@ -25,7 +25,6 @@ Some emitted strings are parsed by exact match. Reword one and you must reword i
 | `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Comments`/`Test`/`Plan`/`Scope` | `/verify-ddd-tdd` verdict format |
 | `## RED`, `## GREEN`, `## BLOCKED` and their fields | `/implement-tdd` orchestrator |
 | `TDD: RED ✅ · GREEN ✅ · COST ✅`, `✅ DONE`, `## Assumptions`, `Correction Cn` | batch sheets |
-| `N rules, M tested` — the coverage column of a feature index `CLAUDE.md` | written by `scripts/rules-coverage.py --fix-index`, templated in `skills/implement-tdd/references/claude-md-handler.md` |
 | `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names and the JSON's first-level keys | `scripts/quality-report-check.py`, the whole report history and any viewer built on it |
 | `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/migrate-rm-traits.py` and `skills/implement-tdd/SKILL.md` |
 
@@ -50,6 +49,6 @@ Two sources that drift make the choice random: a fact lives in exactly one place
 
 ## Editing a hook
 
-- Must exit 0 on empty JSON input and when its dependency is missing. Intended exceptions: `lib/guard-git.sh`, blocking by design; `explore-guard.sh`, which denies an `Explore` subagent with no graphify in its prompt; `lib/guard-graphify-grep.sh`, which rewrites a symbol-discovery `grep` into `graphify explain` (a rewrite, not a denial); and `read-bounds.sh`, which denies an unbounded `Read` on a large file once per agent and file.
-- Test after editing: `echo '{}' | bash hooks/<name>.sh`. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` / `HOOK_AGENT_ID` / `HOOK_TRANSCRIPT_PATH` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`. A module that decides prints hook JSON; `lib/batching-nudge.sh` prints plain text, which the dispatcher grafts onto the decision.
+- Must exit 0 on empty JSON input and when its dependency is missing. Intended exceptions: `lib/guard-git.sh`, blocking by design; `explore-guard.sh`, which denies an `Agent` call with no `description` or no explicit model; and `read-bounds.sh`, which denies an unbounded `Read` on a large file once per agent and file.
+- Test after editing: `echo '{}' | bash hooks/<name>.sh`. Recorded cases live in `evals/cases/*.json` and `evals/run.sh` replays them once the kit sits under `<repo>/.claude/`: a hook change without a case is not finished. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` / `HOOK_AGENT_ID` / `HOOK_TRANSCRIPT_PATH` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`. A module that decides prints hook JSON; `lib/batching-nudge.sh` prints plain text, which the dispatcher grafts onto the decision.
 - Do not run `graphify-autosync.sh` idly: it rebuilds the graph and blocks for several minutes.

@@ -1,0 +1,149 @@
+{
+  "fixtures": [
+    {
+      "path": "small.cs",
+      "lines": 50
+    },
+    {
+      "path": "claude-stub",
+      "kind": "stub"
+    },
+    {
+      "path": "claude-stub-error",
+      "kind": "stub-error"
+    },
+    {
+      "path": "claude-stub-slow",
+      "kind": "stub-slow"
+    }
+  ],
+  "cases": [
+    {
+      "name": "missing --question is a usage error",
+      "cmd": "bash .claude/tools/bulk-read --paths {{FIX}}/small.cs",
+      "expect": {
+        "exit": 2,
+        "stderr": "--question is required"
+      }
+    },
+    {
+      "name": "missing --paths is a usage error",
+      "cmd": "bash .claude/tools/bulk-read --question 'what?'",
+      "expect": {
+        "exit": 2,
+        "stderr": "--paths is required"
+      }
+    },
+    {
+      "name": "unknown argument is a usage error",
+      "cmd": "bash .claude/tools/bulk-read --question 'what?' --paths {{FIX}}/small.cs --verbose",
+      "expect": {
+        "exit": 2,
+        "stderr": "unknown argument"
+      }
+    },
+    {
+      "name": "a missing file fails loudly instead of asking about nothing",
+      "cmd": "bash .claude/tools/bulk-read --question 'what?' --paths {{FIX}}/small.cs {{FIX}}/nope.cs",
+      "env": {
+        "CLAUDE_BULK_READ_BIN": "{{FIX}}/claude-stub"
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": "file not found"
+      }
+    },
+    {
+      "name": "a corpus over the byte limit is refused before any call",
+      "cmd": "bash .claude/tools/bulk-read --question 'what?' --paths {{FIX}}/small.cs",
+      "env": {
+        "CLAUDE_BULK_READ_BIN": "{{FIX}}/claude-stub",
+        "CLAUDE_BULK_READ_MAX_BYTES": "100"
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": "over the 100 byte limit"
+      }
+    },
+    {
+      "name": "transport: the worker's answer goes to stdout, the accounting to stderr",
+      "cmd": "bash .claude/tools/bulk-read --question 'what?' --paths {{FIX}}/small.cs",
+      "env": {
+        "CLAUDE_BULK_READ_BIN": "{{FIX}}/claude-stub"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "- stubbed answer",
+        "stderr": "[bulk-read: 1 file(s)"
+      }
+    },
+    {
+      "name": "transport: an error envelope is a failure, not an answer",
+      "cmd": "bash .claude/tools/bulk-read --question 'what?' --paths {{FIX}}/small.cs",
+      "env": {
+        "CLAUDE_BULK_READ_BIN": "{{FIX}}/claude-stub-error"
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": "worker returned an error"
+      }
+    },
+    {
+      "name": "transport: a worker slower than CLAUDE_BULK_READ_TIMEOUT is killed and reported",
+      "cmd": "bash .claude/tools/bulk-read --question 'what?' --paths {{FIX}}/small.cs",
+      "env": {
+        "CLAUDE_BULK_READ_BIN": "{{FIX}}/claude-stub-slow",
+        "CLAUDE_BULK_READ_TIMEOUT": "1"
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": "timed out after 1s"
+      }
+    },
+    {
+      "name": "--help prints the usage and exits 0",
+      "cmd": "bash .claude/tools/bulk-read --help",
+      "expect": {
+        "exit": 0,
+        "stdout": "Usage:"
+      }
+    },
+    {
+      "name": "a lock held by a live worker makes the second call queue, then give up loudly",
+      "cmd": "mkdir -p /tmp/claude-bulk-lock-{{SID}}; bash .claude/tools/bulk-read --question 'what?' --paths {{FIX}}/small.cs",
+      "env": {
+        "CLAUDE_BULK_READ_BIN": "{{FIX}}/claude-stub",
+        "CLAUDE_BULK_READ_LOCK": "/tmp/claude-bulk-lock-{{SID}}",
+        "CLAUDE_BULK_READ_LOCK_WAIT": "2"
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": "lock held by another worker"
+      }
+    },
+    {
+      "name": "a lock left by a dead worker is reclaimed instead of blocking",
+      "cmd": "mkdir -p /tmp/claude-bulk-lock-{{SID}}; touch -t 202001010000 /tmp/claude-bulk-lock-{{SID}}; bash .claude/tools/bulk-read --question 'what?' --paths {{FIX}}/small.cs",
+      "env": {
+        "CLAUDE_BULK_READ_BIN": "{{FIX}}/claude-stub",
+        "CLAUDE_BULK_READ_LOCK": "/tmp/claude-bulk-lock-{{SID}}",
+        "CLAUDE_BULK_READ_LOCK_WAIT": "2"
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "name": "the lock is released on the way out, never left for the next call",
+      "cmd": "bash .claude/tools/bulk-read --question 'what?' --paths {{FIX}}/small.cs >/dev/null 2>&1; [ -d /tmp/claude-bulk-lock-{{SID}} ] && echo held || echo free",
+      "env": {
+        "CLAUDE_BULK_READ_BIN": "{{FIX}}/claude-stub",
+        "CLAUDE_BULK_READ_LOCK": "/tmp/claude-bulk-lock-{{SID}}"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "free"
+      }
+    }
+  ]
+}

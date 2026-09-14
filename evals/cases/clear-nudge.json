@@ -1,0 +1,54 @@
+{
+  "fixtures": [
+    {"path": "t170.jsonl", "kind": "transcript", "ctx": 170000},
+    {"path": "t50.jsonl", "kind": "transcript", "ctx": 50000},
+    {"path": "t320.jsonl", "kind": "transcript", "ctx": 320000}
+  ],
+  "cases": [
+    {
+      "name": "first step (150k) crossed: one line with the number",
+      "hook": "hooks/clear-nudge.sh",
+      "input": {"session_id": "{{SID}}", "transcript_path": "{{FIX}}/t170.jsonl", "prompt": "next"},
+      "expect": {"context": "171k tokens"}
+    },
+    {
+      "name": "the nudge names /clear and rules out /compact",
+      "hook": "hooks/clear-nudge.sh",
+      "input": {"session_id": "{{SID}}", "transcript_path": "{{FIX}}/t170.jsonl", "prompt": "next"},
+      "expect": {"context": "/compact"}
+    },
+    {
+      "name": "same step again stays silent",
+      "hook": "hooks/clear-nudge.sh",
+      "pre": [{"session_id": "{{SID}}", "transcript_path": "{{FIX}}/t170.jsonl", "prompt": "next"}],
+      "input": {"session_id": "{{SID}}", "transcript_path": "{{FIX}}/t170.jsonl", "prompt": "next"},
+      "expect": {"no_context": true}
+    },
+    {
+      "name": "below the first step nothing is said",
+      "hook": "hooks/clear-nudge.sh",
+      "input": {"session_id": "{{SID}}", "transcript_path": "{{FIX}}/t50.jsonl", "prompt": "next"},
+      "expect": {"no_context": true}
+    },
+    {
+      "name": "second step (300k) nudges again after the first",
+      "hook": "hooks/clear-nudge.sh",
+      "pre": [{"session_id": "{{SID}}", "transcript_path": "{{FIX}}/t170.jsonl", "prompt": "next"}],
+      "input": {"session_id": "{{SID}}", "transcript_path": "{{FIX}}/t320.jsonl", "prompt": "next"},
+      "expect": {"context": "321k tokens"}
+    },
+    {
+      "name": "a custom step through the environment",
+      "hook": "hooks/clear-nudge.sh",
+      "env": {"CLAUDE_CLEAR_NUDGE_STEP": "40000"},
+      "input": {"session_id": "{{SID}}", "transcript_path": "{{FIX}}/t50.jsonl", "prompt": "next"},
+      "expect": {"context": "51k tokens"}
+    },
+    {
+      "name": "missing transcript stays silent",
+      "hook": "hooks/clear-nudge.sh",
+      "input": {"session_id": "{{SID}}", "transcript_path": "{{FIX}}/nope.jsonl", "prompt": "next"},
+      "expect": {"no_context": true}
+    }
+  ]
+}

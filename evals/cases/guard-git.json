@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "name": "git commit is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git commit -m 'x'"}},
+      "expect": {"decision": "deny", "reason": "git commit blocked"}
+    },
+    {
+      "name": "rtk-prefixed git commit is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "rtk git commit -m 'x'"}},
+      "expect": {"decision": "deny", "reason": "git commit blocked"}
+    },
+    {
+      "name": "git -C <path> push is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git -C /tmp/elsewhere push origin main"}},
+      "expect": {"decision": "deny", "reason": "git push blocked"}
+    },
+    {
+      "name": "cd && git add is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cd /tmp/elsewhere && git add ."}},
+      "expect": {"decision": "deny", "reason": "git add blocked"}
+    },
+    {
+      "name": "env-prefixed git push is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "GIT_TRACE=1 git push"}},
+      "expect": {"decision": "deny", "reason": "git push blocked"}
+    },
+    {
+      "name": "git status passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git status"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "git log passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git log --oneline -5"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "git branch -a (read form) passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git branch -a"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "git branch <name> (creation) is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git branch feat/x"}},
+      "expect": {"decision": "deny", "reason": "git branch blocked"}
+    },
+    {
+      "name": "git worktree list passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git worktree list"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "git stash list passes, bare git stash is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git stash"}},
+      "expect": {"decision": "deny", "reason": "git stash blocked"}
+    },
+    {
+      "name": "git stash list passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git stash list"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "worktree hand-back: git add -N asks",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git -C /tmp/wt add -N ."}},
+      "expect": {"decision": "ask", "reason": "Worktree hand-back"}
+    },
+    {
+      "name": "worktree hand-back: git apply asks",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git apply /tmp/wt.patch"}},
+      "expect": {"decision": "ask", "reason": "Worktree hand-back"}
+    },
+    {
+      "name": "the word git inside a quoted string is not a git command",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "echo \"git commit is forbidden here\""}},
+      "expect": {"decision": "not_deny"}
+    }
+  ]
+}

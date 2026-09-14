@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "name": "entering implement-tdd writes ultra and saves the mode that was in force",
+      "cmd": "D={{FIX}}/cfg-{{SID}}; mkdir -p $D; printf lite > $D/.caveman-active; printf '{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"implement-tdd\"}}' | CLAUDE_CONFIG_DIR=$D bash .claude/hooks/caveman-skill-ultra.sh; printf '%s|%s' \"$(cat $D/.caveman-active)\" \"$(cat $D/.caveman-active.before-skill)\"",
+      "expect": {"stdout": "ultra|lite"}
+    },
+    {
+      "name": "a second code skill in the same run keeps the first saved mode",
+      "cmd": "D={{FIX}}/cfg-{{SID}}; mkdir -p $D; printf lite > $D/.caveman-active; for s in plan-implementation implement-tdd; do printf '{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"'$s'\"}}' | CLAUDE_CONFIG_DIR=$D bash .claude/hooks/caveman-skill-ultra.sh; done; printf '%s|%s' \"$(cat $D/.caveman-active)\" \"$(cat $D/.caveman-active.before-skill)\"",
+      "expect": {"stdout": "ultra|lite"}
+    },
+    {
+      "name": "another skill leaves the flag alone",
+      "cmd": "D={{FIX}}/cfg-{{SID}}; mkdir -p $D; printf lite > $D/.caveman-active; printf '{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"bulk-read\"}}' | CLAUDE_CONFIG_DIR=$D bash .claude/hooks/caveman-skill-ultra.sh; printf '%s|%s' \"$(cat $D/.caveman-active)\" \"$(cat $D/.caveman-active.before-skill 2>/dev/null)\"",
+      "expect": {"stdout": "lite|"}
+    },
+    {
+      "name": "the next session start restores the saved mode and drops the sidecar",
+      "cmd": "D={{FIX}}/cfg-{{SID}}; mkdir -p $D; printf lite > $D/.caveman-active; printf '{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"implement-tdd\"}}' | CLAUDE_CONFIG_DIR=$D bash .claude/hooks/caveman-skill-ultra.sh; printf '{\"session_id\":\"{{SID}}\"}' | CLAUDE_CONFIG_DIR=$D bash .claude/hooks/session-cleanup.sh; printf '%s|%s' \"$(cat $D/.caveman-active)\" \"$(ls $D/.caveman-active.before-skill 2>/dev/null)\"",
+      "expect": {"stdout": "lite|"}
+    },
+    {
+      "name": "a mode the user switched by hand in between is left alone",
+      "cmd": "D={{FIX}}/cfg-{{SID}}; mkdir -p $D; printf lite > $D/.caveman-active; printf '{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"implement-tdd\"}}' | CLAUDE_CONFIG_DIR=$D bash .claude/hooks/caveman-skill-ultra.sh; printf full > $D/.caveman-active; printf '{\"session_id\":\"{{SID}}\"}' | CLAUDE_CONFIG_DIR=$D bash .claude/hooks/session-cleanup.sh; printf '%s|%s' \"$(cat $D/.caveman-active)\" \"$(ls $D/.caveman-active.before-skill 2>/dev/null)\"",
+      "expect": {"stdout": "full|"}
+    },
+    {
+      "name": "no flag before the skill: the plugin default comes back by removing the file",
+      "cmd": "D={{FIX}}/cfg-{{SID}}; mkdir -p $D; printf '{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"tests-unit-tests\"}}' | CLAUDE_CONFIG_DIR=$D bash .claude/hooks/caveman-skill-ultra.sh; printf '{\"session_id\":\"{{SID}}\"}' | CLAUDE_CONFIG_DIR=$D bash .claude/hooks/session-cleanup.sh; printf 'flag=<%s>' \"$(cat $D/.caveman-active 2>/dev/null)\"",
+      "expect": {"stdout": "flag=<>"}
+    }
+  ]
+}

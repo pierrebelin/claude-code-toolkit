@@ -22,6 +22,12 @@ BOUNDS_BYTES=${CLAUDE_CAT_BOUNDS_BYTES:-8000}
 BOUNDS_OUTLINE_MAX=${CLAUDE_READ_BOUNDS_OUTLINE:-40}
 BOUNDS_FLAT_PCT=${CLAUDE_BOUNDS_FLAT_PCT:-33}
 
+# Third way out, after the bounded read and the forcing: a question about the
+# file goes to the one-shot worker and the file never enters the context at all.
+# Added 2026-09-12 with .claude/tools/bulk-read; measured ~500 fixed tokens
+# against ~1k carried to the end of the session for a direct read of a 4 kB file.
+BOUNDS_BULK_READ="A question about the file rather than an edit (what it does, which rules, which dependencies): bash ${CLAUDE_PROJECT_DIR:-.}/.claude/tools/bulk-read --question \"...\" --paths <file> — one-shot haiku worker, ~500 fixed tokens, the file never enters this context."
+
 bounds_lower() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
@@ -112,9 +118,9 @@ bounds_reason() {
   local header=$1 file=$2 with_map=$3 without_map=$4 force=$5 outline
   outline=$(bounds_outline "$file")
   if [ -n "$outline" ]; then
-    printf '%s Its declarations, line-numbered — %s:\n\n%s\n\n%s\n' \
-      "$header" "$with_map" "$outline" "$force"
+    printf '%s Its declarations, line-numbered — %s:\n\n%s\n\n%s\n%s\n' \
+      "$header" "$with_map" "$outline" "$force" "$BOUNDS_BULK_READ"
   else
-    printf '%s %s\n\n%s\n' "$header" "$without_map" "$force"
+    printf '%s %s\n\n%s\n%s\n' "$header" "$without_map" "$force" "$BOUNDS_BULK_READ"
   fi
 }

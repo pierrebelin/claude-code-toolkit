@@ -1,0 +1,12 @@
+id: memory-filter
+language: cs
+severity: info
+message: LINQ filter applied in memory on an awaited result
+rule:
+  kind: member_access_expression
+  has:
+    field: expression
+    kind: parenthesized_expression
+    has:
+      kind: await_expression
+  regex: '\.(Where|Any|All|First|FirstOrDefault|Single|SingleOrDefault|Count|Last|LastOrDefault|Contains|OrderBy|OrderByDescending|Skip|Take)$'

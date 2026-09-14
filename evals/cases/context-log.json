@@ -1,0 +1,67 @@
+{
+  "cases": [
+    {
+      "name": "a single load writes one row: reason, bytes, tokens, path, session",
+      "cmd": "R={{FIX}}/ctx-{{SID}}; mkdir -p $R/.claude/hooks; cp .claude/hooks/context-log.sh $R/.claude/hooks/; printf 'rule body\\n' > $R/rule.md; printf '%s' '{\"reason\":\"startup\",\"session_id\":\"abcdef123456\",\"file_path\":\"'$R'/rule.md\"}' | bash $R/.claude/hooks/context-log.sh; cat $R/.claude/context-log.tsv",
+      "expect": {
+        "stdout": "startup\t10\t2\t",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a load carrying a list writes one row per file",
+      "cmd": "R={{FIX}}/ctx-{{SID}}; mkdir -p $R/.claude/hooks; cp .claude/hooks/context-log.sh $R/.claude/hooks/; printf 'rule body\\n' > $R/rule.md; cp $R/rule.md $R/second.md; printf '%s' '{\"reason\":\"lazy\",\"session_id\":\"s1\",\"files\":[\"'$R'/rule.md\",\"'$R'/second.md\"]}' | bash $R/.claude/hooks/context-log.sh; printf 'rows=%s' \"$(wc -l < $R/.claude/context-log.tsv | tr -d ' ')\"",
+      "expect": {
+        "stdout": "rows=2",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a payload with no path is logged as such rather than dropped",
+      "cmd": "R={{FIX}}/ctx-{{SID}}; mkdir -p $R/.claude/hooks; cp .claude/hooks/context-log.sh $R/.claude/hooks/; printf 'rule body\\n' > $R/rule.md; printf '%s' '{\"reason\":\"import\",\"session_id\":\"s1\"}' | bash $R/.claude/hooks/context-log.sh; cat $R/.claude/context-log.tsv",
+      "expect": {
+        "stdout": "no path in the payload",
+        "exit": 0
+      }
+    },
+    {
+      "name": "the agent id fills the last column and stays empty on the main chain",
+      "cmd": "R={{FIX}}/ctx-{{SID}}; mkdir -p $R/.claude/hooks; cp .claude/hooks/context-log.sh $R/.claude/hooks/; printf 'rule body\\n' > $R/rule.md; printf '%s' '{\"reason\":\"startup\",\"session_id\":\"s1\",\"agent_id\":\"agent999\",\"file_path\":\"'$R'/rule.md\"}' | bash $R/.claude/hooks/context-log.sh; printf '%s' '{\"reason\":\"startup\",\"session_id\":\"s1\",\"file_path\":\"'$R'/rule.md\"}' | bash $R/.claude/hooks/context-log.sh; awk -F'\\t' '{printf \"[%s]\", $7}' $R/.claude/context-log.tsv",
+      "expect": {
+        "stdout": "[agent999][]",
+        "exit": 0
+      }
+    },
+    {
+      "name": "the first payload is kept raw, the schema not being documented",
+      "cmd": "R={{FIX}}/ctx-{{SID}}; mkdir -p $R/.claude/hooks; cp .claude/hooks/context-log.sh $R/.claude/hooks/; printf 'rule body\\n' > $R/rule.md; printf '%s' '{\"reason\":\"startup\",\"session_id\":\"s1\",\"file_path\":\"'$R'/rule.md\"}' | bash $R/.claude/hooks/context-log.sh; printf '%s' '{\"reason\":\"second\",\"session_id\":\"s1\",\"file_path\":\"'$R'/rule.md\"}' | bash $R/.claude/hooks/context-log.sh; cat $R/.claude/context-log.raw.json",
+      "expect": {
+        "stdout": "\"reason\":\"startup\"",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a path the load names but the disk does not have is logged at zero bytes",
+      "cmd": "R={{FIX}}/ctx-{{SID}}; mkdir -p $R/.claude/hooks; cp .claude/hooks/context-log.sh $R/.claude/hooks/; printf 'rule body\\n' > $R/rule.md; printf '%s' '{\"reason\":\"startup\",\"session_id\":\"s1\",\"file_path\":\"'$R'/gone.md\"}' | bash $R/.claude/hooks/context-log.sh; cat $R/.claude/context-log.tsv",
+      "expect": {
+        "stdout": "startup\t0\t0\t",
+        "exit": 0
+      }
+    },
+    {
+      "name": "malformed input observes nothing and never blocks",
+      "cmd": "R={{FIX}}/ctx-{{SID}}; mkdir -p $R/.claude/hooks; cp .claude/hooks/context-log.sh $R/.claude/hooks/; printf 'not json' | bash $R/.claude/hooks/context-log.sh; n=$(wc -l < $R/.claude/context-log.tsv 2>/dev/null | tr -d ' '); printf 'rows=%s' \"${n:-0}\"",
+      "expect": {
+        "stdout": "rows=0",
+        "exit": 0
+      }
+    },
+    {
+      "name": "an empty payload exits 0",
+      "cmd": "R={{FIX}}/ctx-{{SID}}; mkdir -p $R/.claude/hooks; cp .claude/hooks/context-log.sh $R/.claude/hooks/; printf 'rule body\\n' > $R/rule.md; printf '{}' | bash $R/.claude/hooks/context-log.sh",
+      "expect": {
+        "exit": 0
+      }
+    }
+  ]
+}

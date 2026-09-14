@@ -10,3 +10,4 @@ settings.local.json
 # Python byte-code: a build artefact, regenerated on every run.
 __pycache__/
 *.pyc
+evals/.fixtures/

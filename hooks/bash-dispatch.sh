@@ -14,16 +14,28 @@
 #
 # Order:
 #   1. guard-git         deny / ask -> terminal, nothing else runs
-#   2. guard-graphify    substitute -> terminal, rtk must not rewrap it
-#   3. guard-cat-bounds  deny       -> terminal, an unbounded dump never reaches rtk
+#   2. guard-cat-bounds  deny       -> terminal, an unbounded dump never reaches rtk
+#   3. guard-integration deny       -> terminal, a whole IntegrationTests suite never runs
 #   4. piped-filter x2   rewrite    -> terminal, rtk knows neither of these tools
 #   5. rewrite-rtk       rewrite    -> the default path
+#
+# guard-graphify-grep sat in second position until 2026-09-13: it ran a
+# `graphify explain` on every symbol-looking grep to decide whether to
+# substitute — 2.25 s per call measured — and substituted once in the last 60
+# sessions, never followed by a re-grep. Removed: cost with no decision behind it.
 #
 # A module entry may carry an argument, which is why MODULES is an array and the
 # expansion below is deliberately unquoted: the strings are ours, not the user's.
 #
 # Module contract: reads HOOK_* from the environment, prints the hook JSON on
 # stdout when it decides, prints nothing when it passes.
+#
+# Modules are sourced inside the command substitution, not run as `bash file`.
+# The substitution is already a fork; `bash file` added an exec and a shell
+# start-up on top, eight times per Bash call. Measured 2026-09-12 on `ls src`,
+# 20 calls: 41.9 ms per call before, 30.8 ms after. A module's
+# `exit` and `set -u` stay in that subshell, and `. file args` hands the module
+# its positional parameters, so nothing in the modules changed.
 set -u
 
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
@@ -52,7 +64,7 @@ export HOOK_INPUT HOOK_CMD HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH
 
 # Advisory, not a decision: it never denies and never rewrites, so it runs
 # outside the terminal chain and is merged into whatever that chain answers.
-NUDGE=$(bash "$LIB/batching-nudge.sh" 2>/dev/null || true)
+NUDGE=$(. "$LIB/batching-nudge.sh" 2>/dev/null || true)
 
 emit() {
   # $1 = the module's JSON, or empty when no module decided.
@@ -78,8 +90,8 @@ emit() {
 
 MODULES=(
   "guard-git.sh"
-  "guard-graphify-grep.sh"
   "guard-cat-bounds.sh"
+  "guard-integration-filter.sh"
   "rewrite-piped-filter.sh graphify-query"
   "rewrite-piped-filter.sh git-grep"
   "rewrite-rtk.sh"
@@ -87,7 +99,7 @@ MODULES=(
 
 for module in "${MODULES[@]}"; do
   # shellcheck disable=SC2086
-  out=$(bash "$LIB/"$module)
+  out=$(set -- $module; f=$1; shift; . "$LIB/$f" "$@")
   if [ -n "$out" ]; then
     emit "$out"
     exit 0

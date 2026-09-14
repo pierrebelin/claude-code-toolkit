@@ -7,27 +7,27 @@ model: sonnet
 
 # Unit tests — handler, fixture, hand-written doubles
 
-Test a business behaviour through its real handler/service. Mock Infrastructure only. If a batch is supplied, read only its **Tests** section and its handler policy; do not rebuild the DDD design.
+Behaviour through real handler/service. Mock Infrastructure only. Batch supplied → read only its **Tests** section + handler policy; never rebuild DDD design.
 
 ## Workflow
 
-1. First find the test file and the fixture of the same use case. Extend them before creating a file.
-2. Choose the observation: query = mock fed with data, then the result; command = `SavedEvents` by type and payload.
-3. Write one red test at a time, then the minimal code through `/implement-tdd`.
-4. Run the targeted test. Declare green only on exit code `0`.
+1. Find test file + fixture of same use case. Extend before creating.
+2. Observation: query = mock fed with data, then result; command = `SavedEvents` by type and payload.
+3. One red test at a time, then minimal code via `/implement-tdd`.
+4. Run targeted test. Green only on exit code `0`.
 
 ## Non-negotiable rules
 
-- Test and class naming → `.claude/rules/tests.md` (loaded as soon as you open a file under `tests/`).
-- **Every test covering a documented business rule carries it**, right under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, where `{HandlerFolder}` is the handler's folder name under `src/{{PRODUCT}}.Application/**/` and the id is a row of its `## Règles métier` table. Two rules covered → two attributes. This attribute **is** the traceability: the table has no test column, and a rule carried by no trait counts as untested (`scripts/rules-coverage.py`).
-- Test an aggregate factory or method only through the handler/service that calls it. No orphan aggregate test.
-- Query: data in the double, assertion on the output. Command: assertion on `SavedEvents` by type and content.
-- Never observe an interaction: no spy, counter, `CallCount`, `Called`, `Received`, `Verify` nor call count — not even for cost.
-- Mock only repositories, logger and external accesses. Domain/Application stay real.
-- Put builders, seeds, DSL, JSON, payloads and business data in the fixture. The test class carries only facts and fixture calls.
-- For repetitive data, prefer `[Theory]` + `MemberData` coming from the fixture. No business literal in the test class.
-- Never add a comment. Delete the ones you wrote, and the ones that serve nothing (restating the code, stale) **within the lines you touch** — a useless comment elsewhere in the file is reported, not deleted. Keep only those explaining a decision, a constraint or an exception not deducible from naming.
-- Keep a file under 30 tests, with no shared state, no database, no file system, no network.
+- Test/class naming → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
+- **Every test covering a documented rule carries it**, under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its `## Règles métier` table. Two rules → two attributes. This attribute **is** traceability: table has no test column, rule with no trait counts untested (`scripts/rules-coverage.py`).
+- Aggregate factory/method tested only through its handler/service. No orphan aggregate test.
+- Query: data in double, assert output. Command: assert `SavedEvents` type + content.
+- Never observe interaction: no spy, counter, `CallCount`, `Called`, `Received`, `Verify`, call count — not even for cost.
+- Mock repositories, logger, external accesses only. Domain/Application real.
+- Builders, seeds, DSL, JSON, payloads, business data → fixture. Test class = facts + fixture calls.
+- Repetitive data → `[Theory]` + `MemberData` from fixture. No business literal in test class.
+- Never add comment. Delete yours, and useless ones (restating code, stale) **within lines you touch** — elsewhere report, don't delete. Keep those explaining decision, constraint, exception not deducible from naming.
+- Under 30 tests per file. No shared state, database, file system, network.
 
 ## Structure
 
@@ -42,9 +42,7 @@ tests/{{PRODUCT}}.UnitTests/
     └── [Handler]Fixture.cs
 ```
 
-`CoreTests` is not a suite: it is the shared test infrastructure (doubles, builders, assets), referenced by `UnitTests`. A double already exists for nearly every repository — extend it, never create a local `Doubles/` inside `UnitTests`.
-
-Follow the local names where they exist: the template never justifies a parallel file or fixture.
+`CoreTests` = shared test infrastructure (doubles, builders, assets) referenced by `UnitTests`, not a suite. Double exists for nearly every repository — extend it, never create local `Doubles/` inside `UnitTests`. Follow local names where they exist: template never justifies a parallel file or fixture.
 
 ## Minimal templates
 
@@ -120,7 +118,7 @@ public sealed class Mock[Entity]Repository : I[Entity]Repository
 }
 ```
 
-Read `references/fixture-data.md` only for DSL/JSON fixtures, multiple data sets or `MemberData`.
+`references/fixture-data.md` only for DSL/JSON fixtures, multiple data sets, `MemberData`.
 
 ## Expected coverage
 
@@ -135,4 +133,4 @@ Read `references/fixture-data.md` only for DSL/JSON fixtures, multiple data sets
 - [ ] Real handler under test; Infrastructure mocks only
 - [ ] Query by result, command by `SavedEvents`
 - [ ] No direct aggregate test, no spy, no counter, no interaction assertion; no comment added
-- [ ] Business data and `MemberData` in the fixture; `CoreTests/Doubles` double and local file extended before creating anything
+- [ ] Business data + `MemberData` in fixture; `CoreTests/Doubles` double and local file extended before creating anything

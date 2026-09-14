@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "name": "--help prints the usage and exits 0",
+      "cmd": "bash .claude/tools/doctor --help",
+      "expect": {"exit": 0, "stdout": "Usage:"}
+    },
+    {
+      "name": "unknown argument is a usage error",
+      "cmd": "bash .claude/tools/doctor --repair",
+      "expect": {"exit": 2, "stderr": "unknown argument"}
+    },
+    {
+      "name": "the full report names the registrations, the graph and the git hook",
+      "cmd": "bash .claude/tools/doctor",
+      "expect": {"stdout": "hook registrations"}
+    },
+    {
+      "name": "a root without a settings file is a FAIL, not a crash",
+      "cmd": "bash .claude/tools/doctor --quiet",
+      "env": {"CLAUDE_DOCTOR_ROOT": "{{FIX}}"},
+      "expect": {"exit": 1, "stdout": "settings.local.json"}
+    }
+  ]
+}

@@ -6,7 +6,7 @@ Structure expected by `/implement-tdd`. Two levels:
 
 **Principle**: global plan = WHAT + WHY + ORDER. Batch sheet = WHAT + HOW for that batch alone.
 
-**The templates below are reproduced verbatim**: they are produced artefacts, read by the team. Copy the structure as-is, filling in the placeholders.
+**Templates below reproduced verbatim** — produced artefacts, read by the team. Copy the structure as-is, fill the placeholders.
 
 ---
 
@@ -168,6 +168,16 @@ Every id of `ddd-rules.md` and `architecture-rules.md` must appear once: applied
 ### WebAPI
 
 **`[Action][Entity]`** — `[VERB] /[route]` → `[Request]` → command → dispatch → [status]
+
+## Ancrages
+
+Exact paths, copied as they stand into the RED and GREEN contracts of `/implement-tdd`. An existing path comes from the plan's inventory, verified by existence; a file to create carries its future path, mirrored on the sibling it imitates. One row per step.
+
+| Step | Test class / fixture | `CoreTests` builders and doubles | Production filled or created |
+|-------|--------------------------|----------------------------------|-----------------------------|
+| 1 | `tests/{{PRODUCT}}.UnitTests/[Context]/[Feature]/[Action]/[Handler]Tests.cs` — _to create_ ; `[...]TestsFixture.cs` — _existing_ | `tests/{{PRODUCT}}.CoreTests/DataBuilder/[Feature]/[Aggregate]Builder.cs` (`With[Prop]` to add) ; `Doubles/Mock[Repo].cs` | `src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs` — _to create_ ; `src/{{PRODUCT}}.Domain/.../Aggregates/[Aggregate].cs` — `[Method]` |
+| 2 (IT) | `tests/{{PRODUCT}}.IntegrationTests/[Context]/[Feature]/[Repo]Tests.cs` | `tests/{{PRODUCT}}.IntegrationTests/Core/DataBuilder/[Entity]Builder.cs` | `src/{{PRODUCT}}.Infrastructure/.../[Repo].cs` ; `Mappers/[Entity]Mapper.cs` |
+| 3 (contract) | `tests/{{PRODUCT}}.ContractTests/[Context]/[Feature]Tests.cs` ; `Fixtures/[Feature]/[X]Fixture.cs` ; snapshot `[Feature]Tests.[Test].verified.txt` | — | `src/{{PRODUCT}}.WebAPI/Endpoints/[Feature]/[Endpoint].cs` |
 
 ## Tests
 

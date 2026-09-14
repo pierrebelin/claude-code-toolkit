@@ -1,0 +1,7 @@
+id: include
+language: cs
+severity: info
+message: EF Include
+rule:
+  kind: member_access_expression
+  regex: '\.(Include|ThenInclude)$'

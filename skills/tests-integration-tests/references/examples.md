@@ -1,6 +1,6 @@
 # Integration examples
 
-Use only when the skill's template is not enough. These examples use the project's SQL Server pool; they never test an aggregate method directly.
+Only when the skill's template is not enough. These use the project's SQL Server pool; never test an aggregate method directly.
 
 ## Re-read after persistence
 
@@ -50,7 +50,7 @@ public class Get[Entity]Tests : IAsyncLifetime
 
 ## SQL constraints
 
-Use a unique or FK constraint only when the SQL schema actually guarantees it. Seed the first row with `DbContext`, run the targeted repository action, then check the error or the persisted state. Do not turn this test into a business-rule test: the rule stays in the handler.
+Unique or FK constraint only when the SQL schema guarantees it. Seed the first row with `DbContext`, run the repository action, check the error or persisted state. Not a business-rule test: the rule stays in the handler.
 
 ## Choosing the test level
 
