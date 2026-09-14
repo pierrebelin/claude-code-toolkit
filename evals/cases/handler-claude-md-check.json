@@ -1,0 +1,91 @@
+{
+  "cases": [
+    {
+      "name": "a rule carrying its trait reports the traceability up to date",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flux\n\n1. Load the catalog, create the product, save.\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules/tests traceability up to date",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a rule no test cites is named",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flux\n\n1. Load the catalog, create the product, save.\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules with no test: RM-02",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a trait citing a rule absent from the table is named",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flux\n\n1. Load the catalog, create the product, save.\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-09\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "traits citing a rule absent from the table: CreateProduct/RM-09",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a test of the handler class carrying no trait is an orphan",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flux\n\n1. Load the catalog, create the product, save.\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n\n    [Fact]\n    public async Task Carries_no_trait()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "tests with no `RM` trait: CreateProductCommandHandlerTests.Carries_no_trait",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a missing section of the fixed shape is named",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "missing sections: Flux",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a section the shape does not allow is named",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flux\n\n1. Load the catalog, create the product, save.\n\n## Événements émis\n\n- ProductCreated\n\n## Notes\n\nfree text\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "forbidden sections: 'Notes'",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a handler folder with no CLAUDE.md is a reminder, not a report",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$A/CreateProductCommandHandler.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "stdout": "Reminder: no CLAUDE.md in Catalog/CreateProduct",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a bound test with no trait at all is named even with no handler in focus",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flux\n\n1. Load the catalog, create the product, save.\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class OrphanRuleTests\n{\n    [Fact]\n    public async Task Proves_nothing_in_particular()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "stdout": "Tests with no `RM` trait: OrphanRuleTests.Proves_nothing_in_particular",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a file outside Application and tests is left alone",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flux\n\n1. Load the catalog, create the product, save.\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$R/README.md'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "no_context": true,
+        "exit": 0
+      }
+    },
+    {
+      "name": "the report speaks through additionalContext — plain stdout never reaches the model on PostToolUse",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/{{PRODUCT}}.Application/Catalog/CreateProduct\nT=$R/tests/{{PRODUCT}}.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp .claude/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flux\n\n1. Load the catalog, create the product, save.\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "stdout": "hookSpecificOutput",
+        "exit": 0
+      }
+    },
+    {
+      "name": "an empty payload exits 0",
+      "cmd": "printf '{}' | bash .claude/hooks/handler-claude-md-check.sh",
+      "expect": {
+        "exit": 0
+      }
+    }
+  ]
+}

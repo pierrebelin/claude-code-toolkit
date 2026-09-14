@@ -7,25 +7,25 @@ model: sonnet
 
 # API contract tests — Verify
 
-Freeze the nominal HTTP contract: method, route, status, headers and body. If the batch is supplied, read only its selected contract test; do not re-read or complete the DDD plan.
+Freeze nominal HTTP contract: method, route, status, headers, body. Batch supplied → read only its selected contract test; never re-read or complete DDD plan.
 
 ## Rules
 
-- A test covering a rule of a handler's `## Règles métier` table carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under its `[Fact]`/`[Theory]`. A trait is read in every suite — this is how a rule proven only here stops counting as untested. A test covering no documented rule carries none.
-- One `{HTTP} {route}` route = one happy-path contract test. Add an error test only when the public HTTP representation of an error changes (status, headers or body).
+- Test covering rule of handler's `## Règles métier` table carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]`. Trait read in every suite — rule proven only here stops counting untested. No documented rule → no trait.
+- One `{HTTP} {route}` = one happy-path contract test. Error test only when public HTTP representation of error changes (status, headers, body).
 - GET: 200/204; POST: 201; PUT: 200; DELETE: 204.
-- Validation and business rules stay in the handler unit tests. When `GlobalExceptionHandler` or the public error contract changes, freeze the affected HTTP mapping once; do not duplicate every business case per endpoint.
-- Reuse the local fixture and `WebApplicationFactory`. Mock repositories only; handlers and Domain stay real.
-- Deterministic IDs. Scrub ULIDs, GUIDs, dates and paths before snapshotting.
-- List explicitly the public headers the route is expected to return (for example `Location`, `ETag`, `Cache-Control`, `Content-Type`); do not snapshot internal or volatile headers.
-- Never add a comment. Delete the ones you wrote, and the ones that serve nothing **within the lines you touch** — elsewhere in the file, report without deleting. Keep only those explaining a decision, a constraint or an exception not deducible from naming. No status code in the name: `ShouldCreateEntity()`.
-- Route unchanged, or a lifecycle of ≥2 operations: do not create this test; stay in the plan or use `/tests-e2e-tests`.
+- Validation, business rules → handler unit tests. `GlobalExceptionHandler` or public error contract changes → freeze affected HTTP mapping once, never duplicate every business case per endpoint.
+- Reuse local fixture, `WebApplicationFactory`. Mock repositories only; handlers, Domain real.
+- Deterministic IDs. Scrub ULIDs, GUIDs, dates, paths before snapshotting.
+- List explicitly public headers route returns (`Location`, `ETag`, `Cache-Control`, `Content-Type`); never snapshot internal or volatile headers.
+- Never add comment. Delete yours, and useless ones **within lines you touch** — elsewhere report, don't delete. Keep those explaining decision, constraint, exception not deducible from naming. No status code in name: `ShouldCreateEntity()`.
+- Route unchanged, or lifecycle ≥2 operations: no test here; stay in plan or `/tests-e2e-tests`.
 
 ## Workflow
 
-1. Locate the existing test for the route. Extend it, never add a second test for the same route.
-2. Prepare the single nominal scenario with deterministic fixtures.
-3. Run it, re-read the `received` snapshot, promote it to `verified` only if the contract is the intended one. Check the snapshot also contains the significant response headers.
+1. Locate existing test for route. Extend, never second test for same route.
+2. Prepare single nominal scenario, deterministic fixtures.
+3. Run, re-read `received` snapshot, promote to `verified` only if contract intended. Check it holds significant response headers.
 
 ## Template
 
@@ -44,11 +44,11 @@ public sealed class Create[Entity]Tests : BaseEndpointTests
 }
 ```
 
-Read `references/examples.md` only to configure a new scrubber or a new stable fixture.
+`references/examples.md` only for a new scrubber or new stable fixture.
 
 ## Verification
 
 - [ ] `rtk dotnet test --project tests/{{PRODUCT}}.ContractTests/{{PRODUCT}}.ContractTests.csproj --no-build --no-restore --filter-class "*[Endpoint]Tests"` green
-- [ ] A single route and its happy path, plus an error only when its HTTP contract changes; snapshot re-read and public headers explicitly selected
+- [ ] Single route, happy path, plus error only when its HTTP contract changes; snapshot re-read, public headers explicitly selected
 - [ ] No duplicated business rule; contractual error mapping centralised
 - [ ] Infrastructure mocks only, stable IDs; no comment added

@@ -11,23 +11,23 @@ xUnit v3 / Microsoft Testing Platform. Assertions: **xUnit built-in only** — n
 
 | Suite | Scope |
 |-------|-------|
-| `CoreTests` | Shared library, not a suite: hand-written mocks (`Doubles/`, no Moq/NSubstitute) + fluent data builders (`DataBuilder/`), fixtures and assets |
+| `CoreTests` | Shared library, not a suite: hand-written mocks (`Doubles/`, no Moq/NSubstitute) + fluent builders (`DataBuilder/`), fixtures, assets |
 | `UnitTests` | Domain logic + handlers on in-memory mocks, fixture builder pattern |
 | `IntegrationTests` | SQL Server Testcontainers — needs Docker |
 | `ContractTests` | `WebApplicationFactory` + Verify snapshots |
-| `DslTests` | DSL parser, templates and presets |
+| `DslTests` | DSL parser, templates, presets |
 | `E2ETests` | Business lifecycle over ≥2 operations, Aspire-driven |
-| `ArchitectureTests` | ArchUnitNET (layer deps, naming) — no cross-layer leaks, Domain depends on nothing, API contracts in `Abstractions` not leaked internals |
+| `ArchitectureTests` | ArchUnitNET (layer deps, naming) — no cross-layer leaks, Domain depends on nothing, API contracts in `Abstractions`, no leaked internals |
 
 ## What is tested
 
-A test targets an **observable business behaviour** through the public API, tied to a business rule. Never a private helper or an internal detail.
+Target = **observable business behaviour** via public API, tied to a business rule. Never private helper or internal detail.
 
-A domain class is never tested directly (`PortConstraintTests`) — always through its use case or service (`ValidateDiagramTests`). An aggregate method is exercised through its handler.
+Domain class never tested directly (`PortConstraintTests`) — always via use case or service (`ValidateDiagramTests`). Aggregate method exercised via its handler.
 
 ## Traceability
 
-A handler test declares its rule **on itself**, with a `Trait`:
+Handler test declares its rule **on itself**, with `Trait`:
 
 ```csharp
 [Fact]
@@ -35,15 +35,15 @@ A handler test declares its rule **on itself**, with a `Trait`:
 public async Task ShouldThrowNotFound_WhenProductBelongsToAnotherOrganization()
 ```
 
-Value: `{HandlerFolder}/{RM|RL-xx}` — the folder name of the handler under `src/{{PRODUCT}}.Application/**/`, then the id of the row in its `## Règles métier` table. The prefix is the **handler folder**, not the aggregate: `RM` numbering is not unique across the handlers of one feature. A test covering two rules carries two attributes. A trait is read in any suite, so an integration or E2E test covers a rule just as well as a unit test.
+Value: `{HandlerFolder}/{RM|RL-xx}` — handler folder name under `src/{{PRODUCT}}.Application/**/`, then row id in its `## Règles métier` table. Prefix = **handler folder**, not aggregate: `RM` numbering not unique across handlers of one feature. Test covering two rules carries two attributes. Trait read in any suite: integration or E2E test covers a rule as well as unit test.
 
-The `handler-claude-md-check.sh` hook reports, on every edit of a handler or of a handler test: rules carried by no trait, traits citing a rule absent from the table, and tests with no trait in a class that carries some. Warning only, never blocking. Only `UnitTests` and `ContractTests` are expected to bind every test — the other suites bind the ones that cover a documented rule.
+`handler-claude-md-check.sh` reports, on every edit of handler or handler test: rules with no trait, traits citing rule absent from table, tests with no trait in a class carrying some. Warning only, never blocking. Only `UnitTests`, `ContractTests` expected to bind every test — other suites bind those covering a documented rule.
 
-Tests outside handler folders (`Aggregates/`, `ValueObjects/`, `Core/`, `DslTests`) are out of scope — no rule to bind them to.
+Tests outside handler folders (`Aggregates/`, `ValueObjects/`, `Core/`, `DslTests`) out of scope — no rule to bind.
 
 ## Naming
 
-Test method: `Should{Result}_When{Condition}`, where `{Result}` describes the **actual assertion**, not the intent.
+Test method: `Should{Result}_When{Condition}`, `{Result}` = **actual assertion**, not intent.
 
 | Suite | Class pattern | Example |
 |-------|---------------|---------|
@@ -52,4 +52,4 @@ Test method: `Should{Result}_When{Condition}`, where `{Result}` describes the **
 | E2ETests | `{Feature}LifecycleTests` | `ProductLifecycleTests` |
 | Mocks (CoreTests) | `Mock{Interface}` | `MockModuleDiagramRepository` |
 
-Detailed authoring guides: skills `/tests-unit-tests`, `/tests-integration-tests`, `/tests-contract-tests`, `/tests-e2e-tests`.
+Authoring guides: skills `/tests-unit-tests`, `/tests-integration-tests`, `/tests-contract-tests`, `/tests-e2e-tests`.

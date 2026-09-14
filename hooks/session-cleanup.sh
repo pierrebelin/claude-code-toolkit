@@ -17,7 +17,7 @@ sid=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unk
 # All six families, not two. Measured 2026-09-11, /tmp held 37 orphaned
 # claude-batching-nudge-*, 6 claude-catbounds-seen-*, plus delegation and affected
 # leftovers that nothing ever removed: only graphify and readbounds were listed.
-PREFIXES="graphify-seen readbounds-seen catbounds-seen affected-seen batching-nudge batching-tick delegation"
+PREFIXES="graphify-seen readbounds-seen catbounds-seen affected-seen batching-nudge batching-tick delegation clearnudge"
 
 for prefix in $PREFIXES; do
   rm -f "/tmp/claude-${prefix}-$sid"* 2>/dev/null
@@ -32,5 +32,22 @@ for prefix in $PREFIXES; do
 done
 # shellcheck disable=SC2086
 find -H /tmp -maxdepth 1 \( $find_args \) -mtime +2 -delete 2>/dev/null
+
+# Third job: give the caveman flag back its pre-skill mode. caveman-skill-ultra.sh
+# writes `ultra` into the global ~/.claude/.caveman-active and saves what was
+# there beside it; this runs at the next session start — /clear included, which
+# is where a batch ends. Restored only while the flag still reads `ultra`: a mode
+# the user switched by hand in between is theirs. Empty saved value = no flag
+# before the skill, so the plugin's default comes back by removing the file.
+cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+flag="$cfg/.caveman-active"
+saved="$cfg/.caveman-active.before-skill"
+if [ -f "$saved" ]; then
+  if [ "$(cat "$flag" 2>/dev/null)" = "ultra" ]; then
+    prev=$(cat "$saved" 2>/dev/null || true)
+    if [ -n "$prev" ]; then printf '%s' "$prev" > "$flag"; else rm -f "$flag"; fi
+  fi
+  rm -f "$saved"
+fi
 
 exit 0

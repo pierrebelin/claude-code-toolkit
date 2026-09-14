@@ -14,33 +14,47 @@
 # normal after a refactor that deletes code: replay with --force if the extraction
 # is complete and the drop is under the threshold, otherwise warn without
 # overwriting.
+#
+# Detached since 2026-09-13. The rebuild ran in the foreground of the Stop hook:
+# 72 s measured per rebuild, 229 rebuilds over 85 sessions (2.7 per session, 19
+# in the worst one), each holding the end of the turn — the largest wall-clock
+# cost of the whole setup, and invisible to every token measure. The staleness
+# check (99 ms) stays in the foreground so nothing is spawned when the graph is
+# current; the rebuild re-executes this script detached (`--sync`, nohup, fds
+# closed) and the hook returns at once. The mkdir lock keeps two detached
+# rebuilds from racing on graph.json. GRAPHIFY_BIN, GRAPHIFY_HOOK_LOG and
+# GRAPHIFY_AUTOSYNC_LOCK exist for the evals, which point them at a stub and at
+# run-scoped paths.
 
 # Repo derived from the script location (.claude/hooks/ -> root). Without that, a
 # hardcoded default would update the graph of ANOTHER repo from this hook.
 REPO="${GRAPHIFY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-GRAPHIFY="$HOME/.local/bin/graphify"
+GRAPHIFY="${GRAPHIFY_BIN:-$HOME/.local/bin/graphify}"
 GRAPH="$REPO/graphify-out/graph.json"
-FRESHNESS="$REPO/.claude/lib/graphify-freshness.sh"
+# The helper sits beside this script, never under $REPO: with GRAPHIFY_REPO pointing
+# at another checkout the old path did not exist, STALE came back empty and every
+# Stop rebuilt the graph (found by evals/cases/graphify-autosync.json, 2026-09-13).
+FRESHNESS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/graphify-freshness.sh"
 export GRAPHIFY_REPO="$REPO"   # freshness must target the same repo
-LOG=/tmp/graphify-hook.log
-LOCK=/tmp/graphify-autosync.lock
+LOG="${GRAPHIFY_HOOK_LOG:-/tmp/graphify-hook.log}"
+LOCK="${GRAPHIFY_AUTOSYNC_LOCK:-/tmp/graphify-autosync.lock}"
 MAX_SHRINK_PCT=2
+MODE="${1:-}"
 
-SID=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unknown)
+if [ "$MODE" = "--sync" ]; then
+  SID="${GRAPHIFY_AUTOSYNC_SID:-unknown}"
+else
+  SID=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unknown)
+fi
 say() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1 (session=$SID)" >> "$LOG"; }
 mtime() { stat -f %m "$GRAPH" 2>/dev/null || echo 0; }
 
 [ -x "$GRAPHIFY" ] || { say "graphify not found, skip"; exit 0; }
 
-# Atomic lock: two sessions stopping together would launch two concurrent
-# ~64s rebuilds on the same graph.json.
-if ! mkdir "$LOCK" 2>/dev/null; then
-  say "skip, another autosync holds the lock"
-  exit 0
-fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
-
-STALE=$("$FRESHNESS" --refresh)
+STALE=$("$FRESHNESS" --refresh 2>/dev/null)
+case "$STALE" in
+  ""|*[!0-9-]*) say "ALERT freshness unreadable ('$STALE'), no rebuild"; exit 0 ;;
+esac
 if [ "$STALE" = "0" ]; then
   say "skip, graph up to date"
   exit 0
@@ -49,6 +63,27 @@ if [ "$STALE" = "-1" ]; then
   say "ALERT graph.json missing, run an initial build"
   exit 0
 fi
+
+if [ "$MODE" != "--sync" ]; then
+  if [ -d "$LOCK" ]; then
+    say "skip, another autosync holds the lock"
+    exit 0
+  fi
+  GRAPHIFY_AUTOSYNC_SID="$SID" GRAPHIFY_BIN="$GRAPHIFY" GRAPHIFY_HOOK_LOG="$LOG" \
+  GRAPHIFY_AUTOSYNC_LOCK="$LOCK" \
+    nohup bash "${BASH_SOURCE[0]}" --sync </dev/null >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+  say "rebuild detached, $STALE stale files (pid $!)"
+  exit 0
+fi
+
+# Atomic lock: two sessions stopping together would launch two concurrent
+# ~72s rebuilds on the same graph.json.
+if ! mkdir "$LOCK" 2>/dev/null; then
+  say "skip, another autosync holds the lock"
+  exit 0
+fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 BEFORE=$(mtime)
 OUT=$("$GRAPHIFY" update "$REPO" 2>&1)

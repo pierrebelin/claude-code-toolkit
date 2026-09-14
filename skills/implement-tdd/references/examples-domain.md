@@ -1,13 +1,13 @@
 # Code examples — Domain
 
-Consult when the pattern is unknown, or when this is the first implementation of an element type in this layer.
-Rules and pitfalls → `.claude/rules/` (loaded automatically).
+Consult when the pattern is unknown, or on the first implementation of an element type in this layer.
+Rules and pitfalls → `.claude/rules/` (auto-loaded).
 
 ---
 
 ## Domain - Aggregate Root
 
-Private constructor. Factory methods `Create()` (new instance + event) and `Restore()` (rehydration, no business validation). Business mutation methods that emit events.
+Private constructor. Factories `Create()` (new instance + event) and `Restore()` (rehydration, no business validation). Business mutation methods emit events.
 
 ```csharp
 public class Product : AggregateRoot<ProductId>
@@ -60,15 +60,15 @@ public class Product : AggregateRoot<ProductId>
 - Immutable properties: `{ get; }` (set in the constructor)
 - Never a public setter
 - Collections: `private readonly List<T> _items` + `public IReadOnlyList<T> Items => _items.AsReadOnly()`
-- A business concept carrying a format rule: a VO type (`Name`, `TechnicalName`, `DiagramName`), never `string` (DDD-04). The rule lives in the VO; `Create()` and `Update()` call `Name.Create(name)`, they do not rewrite the validation. An empty name throws `EmptyNameException`, not a local `ArgumentException`.
-- `Restore()` rebuilds the VO without validation (`Name.Restore(name)`): the data comes from the database, it was already validated on write.
+- A business concept carrying a format rule: a VO type (`Name`, `TechnicalName`, `DiagramName`), never `string` (DDD-04). The rule lives in the VO; `Create()` and `Update()` call `Name.Create(name)`, they don't rewrite the validation. An empty name throws `EmptyNameException`, not a local `ArgumentException`.
+- `Restore()` rebuilds the VO without validation (`Name.Restore(name)`): data comes from the database, already validated on write.
 - The persistence event carries the primitive form (`validatedName.Value`): it feeds the EF mapper, not the Domain.
 
 ---
 
 ## Domain - EntityId
 
-Uses ULID, inherits from `EntityId<T>`:
+Uses ULID, inherits `EntityId<T>`:
 
 ```csharp
 public class ProductId : EntityId<ProductId> { }
@@ -80,23 +80,7 @@ Creation: `ProductId.Create()` (new) or `ProductId.From(ulid)` (existing).
 
 ## Domain - Value Objects
 
-Implement `GetEqualityComponents()`:
-
-```csharp
-public class DisplaySettings : ValueObject
-{
-    public int Brightness { get; }
-    public static DisplaySettings Create(int brightness) => new(brightness);
-    private DisplaySettings(int brightness) { Brightness = brightness; }
-
-    protected override IEnumerable<object?> GetEqualityComponents()
-    {
-        yield return Brightness;
-    }
-}
-```
-
-A VO carrying a format rule exposes `Create()` (validation, called by the Domain) and `Restore()` (rehydration from the database, no validation). That pair is what takes validation out of the aggregates:
+Implement `GetEqualityComponents()`. A VO carrying a format rule exposes `Create()` (validation, called by the Domain) and `Restore()` (rehydration from the database, no validation) — that pair is what takes validation out of the aggregates:
 
 ```csharp
 public sealed class Name : ValueObject
@@ -125,13 +109,15 @@ public sealed class Name : ValueObject
 }
 ```
 
+A VO with no format rule keeps only the private constructor, a `Create()` factory and `GetEqualityComponents()`.
+
 `Name`, `TechnicalName` and `DiagramName` already exist under `Domain/Core/ValueObjects/`: reuse them before creating one.
 
 ---
 
 ## Domain - Domain Events
 
-Records inheriting from `DomainEvent<TEntityId>`. Emitted through `AddEvent()` inside the aggregate:
+Records inheriting `DomainEvent<TEntityId>`. Emitted through `AddEvent()` inside the aggregate:
 
 ```csharp
 public sealed record ProductCreated(
@@ -147,9 +133,9 @@ public sealed record ProductCreated(
 
 ## Domain - Exceptions
 
-Inherit from a base under `Domain/Core/Exceptions/Base/`: `NotFoundException` (404), `ConflictException` (409), `ForbiddenException` (403), `ValidationException` (400, carries an error dictionary), or `DomainException` (400) by default. Name it `{Entity}{Reason}Exception`.
+Inherit a base under `Domain/Core/Exceptions/Base/`: `NotFoundException` (404), `ConflictException` (409), `ForbiddenException` (403), `ValidationException` (400, carries an error dictionary), or `DomainException` (400) by default. Name it `{Entity}{Reason}Exception`.
 
-`NotFoundException` and `ConflictException` derive from `DomainException`; `ValidationException` and `ForbiddenException` derive from `Exception` + `IInternalException`. The status comes from the chosen base — the full mapping is at the end of the WebAPI file (§ WebAPI - Endpoint).
+`NotFoundException` and `ConflictException` derive from `DomainException`; `ValidationException` and `ForbiddenException` derive from `Exception` + `IInternalException`. The status comes from the chosen base — full mapping at the end of the WebAPI file (§ WebAPI - Endpoint).
 
 ```csharp
 public class ProductNotFoundException(ProductId id)

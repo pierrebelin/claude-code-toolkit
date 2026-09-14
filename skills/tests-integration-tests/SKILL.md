@@ -7,24 +7,24 @@ model: sonnet
 
 # Integration tests — Builder pattern + direct DbContext
 
-They verify persistence against a real SQL Server isolated by `MsSqlContainerPool`. A builder for the data, seeding through the `DbContext` directly, never through the repository under test.
+Verify persistence against real SQL Server isolated by `MsSqlContainerPool`. Builder for data, seeding through `DbContext` directly, never through repository under test.
 
-Read `references/examples.md` only if the template below does not cover the persistence pattern at hand.
+`references/examples.md` only when template below misses the persistence pattern at hand.
 
-If the batch is supplied, read only its Tests and DDD Design sections: they decide whether this level is required; this skill does not review the whole plan.
+Batch supplied → read only its Tests and DDD Design sections: they decide whether this level is required. No review of whole plan.
 
 ## Strict rules
 
-- A test covering a rule of a handler's `## Règles métier` table carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under its `[Fact]`/`[Theory]`. A trait is read in every suite — this is how a rule proven only here stops counting as untested. A test covering no documented rule carries none.
+- Test covering rule of handler's `## Règles métier` table carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]`. Trait read in every suite — rule proven only here stops counting untested. No documented rule → no trait.
 - **One builder per aggregate**: `With*()` for properties (chaining `this`), `As*()` for presets (`AsDraft`, `AsPublished`). `Build()` uses `Restore()`. Never `Create()` directly.
-- **Seed through the DbContext directly**: never through the repository under test (that would be circular).
-- **SQL Server Testcontainers database**: reuse `BaseTestFixture` / `MsSqlContainerPool`, never SQLite in-memory nor a shared database.
-- **Arrange-Act-Assert on persistence**: separate setup, repository action, re-read/verification. Use a fresh context instance or detach the entities before checking the persisted state when the test requires it.
-- **Extend existing files** in the same folder. A new file only when no test exists for the feature.
-- **Independent**: no shared state. Each fixture receives an isolated SQL Server database from the pool and releases it after the test.
-- **Naming** of tests and classes → `.claude/rules/tests.md` (loaded as soon as you open a file under `tests/`).
-- Do not add a comment that restates the code. Keep the ones explaining a decision, a constraint or an exception; touch them only **within the lines you touch**, never elsewhere in the file.
-- **Scope**: invoke only when the plan touches a repository, an EF mapping, a SQL query or a persistence constraint. Business rules stay covered by handler unit tests.
+- **Seed through DbContext directly**: never through repository under test (circular).
+- **SQL Server Testcontainers database**: reuse `BaseTestFixture` / `MsSqlContainerPool`, never SQLite in-memory nor shared database.
+- **Arrange-Act-Assert on persistence**: separate setup, repository action, re-read/verification. Fresh context instance or detached entities when checking persisted state needs it.
+- **Extend existing files** in same folder. New file only when no test exists for the feature.
+- **Independent**: no shared state. Each fixture gets isolated SQL Server database from pool, releases it after the test.
+- **Naming** of tests, classes → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
+- No comment restating code. Keep those explaining decision, constraint, exception; touch them only **within lines you touch**, never elsewhere.
+- **Scope**: only when plan touches repository, EF mapping, SQL query, persistence constraint. Business rules stay in handler unit tests.
 
 ## Structure
 
@@ -116,15 +116,15 @@ public class [MethodName]Tests : IAsyncLifetime
 1. **CRUD**: Save (insert), Save (update through events), GetById, Delete
 2. **Queries**: filtering, pagination, includes (navigation properties)
 3. **Constraints**: unique constraints, FK enforced
-4. **Domain representation**: values, relations and dates restored correctly without re-running `Create()`
+4. **Domain representation**: values, relations, dates restored correctly without re-running `Create()`
 
 ## Final verification
 
 - [ ] Target test green: `APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore --filter-class "*[MethodName]Tests"`
-- [ ] A fluent builder per aggregate
-- [ ] Direct DbContext seeding, never through the repository under test
-- [ ] `BaseTestFixture` / `MsSqlContainerPool` fixture, never SQLite in-memory nor a shared database
+- [ ] Fluent builder per aggregate
+- [ ] Direct DbContext seeding, never through repository under test
+- [ ] `BaseTestFixture` / `MsSqlContainerPool` fixture, never SQLite in-memory nor shared database
 - [ ] Persisted state verified after detaching or re-reading where needed
 - [ ] Useful comments kept or improved
 - [ ] `Should..._When...` naming
-- [ ] Business rules and orchestration stay in handler unit tests; this test really covers persistence
+- [ ] Business rules, orchestration stay in handler unit tests; this test really covers persistence

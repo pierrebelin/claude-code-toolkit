@@ -1,6 +1,6 @@
 # E2E lifecycle patterns
 
-Read only if the selected lifecycle needs more than the minimal template.
+Only when the selected lifecycle needs more than the minimal template.
 
 ## Stable reference data
 
@@ -11,7 +11,7 @@ Assert.NotEmpty(blueprints.Value!.Blueprints);
 var blueprintId = blueprints.Value.Blueprints[0].Id;
 ```
 
-Read the reference data, do not modify it. Any mutable data the test creates is deleted at the end of the journey.
+Read reference data, never modify it. Mutable data the test creates is deleted at the end of the journey.
 
 ## API dependencies
 
@@ -25,7 +25,7 @@ var child = await fixture.Client.CreateChildAsync(
 Assert.True(child.IsSuccess);
 ```
 
-Create the dependencies in the required business order, never through database access.
+Create dependencies in business order, never through database access.
 
 ## Temporarily blocked test
 
@@ -37,4 +37,4 @@ public async Task ShouldCompleteLifecycle_WhenCreateThenActivateThenDelete()
 }
 ```
 
-Remove `Skip` as soon as the route and the SDK are available.
+Remove `Skip` as soon as route and SDK exist.

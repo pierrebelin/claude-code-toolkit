@@ -1,5 +1,8 @@
 {
   "includeCoAuthoredBy": false,
+  "env": {
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "900000"
+  },
   "permissions": {
     "allow": [
       "Edit",
@@ -71,15 +74,6 @@
             "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/affected-blast-radius.sh"
           }
         ]
-      },
-      {
-        "matcher": "Read|Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/delegation-nudge.sh"
-          }
-        ]
       }
     ],
     "PostToolUse": [
@@ -99,6 +93,10 @@
           {
             "type": "command",
             "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/implement-tdd-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/clear-nudge.sh"
           }
         ]
       }
@@ -116,6 +114,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/tools/doctor --quiet || true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/worktree-graphify-link.sh"
           }
         ]
@@ -126,7 +132,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/graphify-autosync.sh"
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/graphify-autosync.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/subagent-report-shape.sh"
           }
         ]
       }

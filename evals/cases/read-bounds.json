@@ -1,0 +1,99 @@
+{
+  "fixtures": [
+    {"path": "big.cs", "lines": 300},
+    {"path": "small.cs", "lines": 50},
+    {"path": "flat.cs", "lines": 200, "kind": "flat"},
+    {"path": "heavy.md", "lines": 119, "kind": "md"},
+    {"path": "rules/big-rule.md", "lines": 300, "kind": "md"},
+    {"path": "img.png", "lines": 300}
+  ],
+  "cases": [
+    {
+      "name": "bounded read of a big file passes",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs", "offset": 10, "limit": 40}},
+      "expect": {"decision": "none"}
+    },
+    {
+      "name": "unbounded read of a small file passes",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/small.cs"}},
+      "expect": {"decision": "none"}
+    },
+    {
+      "name": "unbounded read of a big file is denied with the frozen literal and the bulk-read way out",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+      "expect": {"decision": "deny", "reason": "Unbounded Read on"}
+    },
+    {
+      "name": "denial names bulk-read as the third way out",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+      "expect": {"decision": "deny", "reason": "tools/bulk-read"}
+    },
+    {
+      "name": "re-issuing the identical read forces it through",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [{"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}}],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+      "expect": {"decision": "none"}
+    },
+    {
+      "name": "a forcing by one agent does not exempt another agent of the same session",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-b", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+      "expect": {"decision": "deny"}
+    },
+    {
+      "name": "a forcing by a subagent does not exempt the main chain",
+      "hook": "hooks/read-bounds.sh",
+      "pre": [
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}}
+      ],
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+      "expect": {"decision": "deny"}
+    },
+    {
+      "name": "instruction file is read whole or not at all",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/rules/big-rule.md"}},
+      "expect": {"decision": "none"}
+    },
+    {
+      "name": "binary formats are left to the tool",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/img.png"}},
+      "expect": {"decision": "none"}
+    },
+    {
+      "name": "flat file past the threshold passes (outline would cost more than it saves)",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/flat.cs"}},
+      "expect": {"decision": "none"}
+    },
+    {
+      "name": "119-line markdown over 8 kB is denied on the byte bound (was a Read/cat divergence)",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/heavy.md"}},
+      "expect": {"decision": "deny", "reason": "bytes"}
+    },
+    {
+      "name": "another tool's payload is ignored",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/big.cs"}},
+      "expect": {"decision": "none"}
+    },
+    {
+      "name": "missing file is left to the tool's own error",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/does-not-exist.cs"}},
+      "expect": {"decision": "none"}
+    }
+  ]
+}

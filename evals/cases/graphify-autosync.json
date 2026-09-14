@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "name": "a stale graph detaches the rebuild and the hook returns at once",
+      "cmd": "d={{FIX}}/autosync-{{SID}}; mkdir -p $d/graphify-out $d/src $d/bin; printf '{}' > $d/graphify-out/graph.json; touch -t 202001010000 $d/graphify-out/graph.json; echo 'class A {}' > $d/src/A.cs; printf '#!/bin/bash\\nsleep 3\\ntouch \"$2/graphify-out/graph.json\"\\necho updated\\n' > $d/bin/graphify; chmod +x $d/bin/graphify; s=$(python3 -c 'import time;print(time.time())'); printf '{\"session_id\":\"{{SID}}\"}' | GRAPHIFY_REPO=$d GRAPHIFY_BIN=$d/bin/graphify GRAPHIFY_HOOK_LOG=/tmp/claude-autosync-log-{{SID}} GRAPHIFY_AUTOSYNC_LOCK=/tmp/claude-autosync-lock-{{SID}} bash .claude/hooks/graphify-autosync.sh; e=$(python3 -c 'import time;print(time.time())'); speed=$(python3 -c \"print('fast' if $e-$s < 2 else 'slow')\"); sleep 5; echo \"$speed:$(grep -c 'update OK' /tmp/claude-autosync-log-{{SID}})\"",
+      "expect": {"exit": 0, "stdout": "fast:1"}
+    },
+    {
+      "name": "an up-to-date graph spawns nothing",
+      "cmd": "d={{FIX}}/autosync-{{SID}}; mkdir -p $d/graphify-out $d/src $d/bin; echo 'class A {}' > $d/src/A.cs; touch -t 202001010000 $d/src/A.cs; printf '{}' > $d/graphify-out/graph.json; printf '#!/bin/bash\\necho never\\n' > $d/bin/graphify; chmod +x $d/bin/graphify; printf '{\"session_id\":\"{{SID}}\"}' | GRAPHIFY_REPO=$d GRAPHIFY_BIN=$d/bin/graphify GRAPHIFY_HOOK_LOG=/tmp/claude-autosync-log-{{SID}} GRAPHIFY_AUTOSYNC_LOCK=/tmp/claude-autosync-lock-{{SID}} bash .claude/hooks/graphify-autosync.sh; tail -1 /tmp/claude-autosync-log-{{SID}}",
+      "expect": {"exit": 0, "stdout": "skip, graph up to date"}
+    },
+    {
+      "name": "a missing graph is an alert, never a rebuild",
+      "cmd": "d={{FIX}}/autosync-{{SID}}; mkdir -p $d/src $d/bin; echo 'class A {}' > $d/src/A.cs; printf '#!/bin/bash\\necho never\\n' > $d/bin/graphify; chmod +x $d/bin/graphify; printf '{\"session_id\":\"{{SID}}\"}' | GRAPHIFY_REPO=$d GRAPHIFY_BIN=$d/bin/graphify GRAPHIFY_HOOK_LOG=/tmp/claude-autosync-log-{{SID}} GRAPHIFY_AUTOSYNC_LOCK=/tmp/claude-autosync-lock-{{SID}} bash .claude/hooks/graphify-autosync.sh; tail -1 /tmp/claude-autosync-log-{{SID}}",
+      "expect": {"exit": 0, "stdout": "graph.json missing"}
+    }
+  ]
+}

@@ -9,13 +9,17 @@
 # Widened on 2026-09-11. It only ever matched `subagent_type == "Explore"`, so
 # `general-purpose` and `Plan` — the two other spawns that read the repo and hand
 # back a free-form report — walked past the graphify requirement, past the model
-# choice and past any bound on the report. Three checks now, in cost order:
+# choice and past any bound on the report. Two checks now, in cost order:
 #
 #   1. every Agent call carries a `description`     (CLAUDE.md, delegation rule)
-#   2. graphify considered before a read-only spawn (a spawn costs ~55k, a query ~300)
-#   3. the model is chosen, never inherited         (no parameter == Opus)
+#   2. the model is chosen, never inherited         (no parameter == Opus)
 #
-# and, when all three pass, the report contract is appended to the prompt itself.
+# and, when both pass, the report contract is appended to the prompt itself.
+#
+# A third check — "the prompt mentions graphify" — sat between them until
+# 2026-09-13. A keyword test: 12 denials over 60 sessions, each a lost round trip
+# after which the model added the word and relaunched. The advice itself stays in
+# the appended contract, where it costs no turn.
 # `additionalContext` would land in the *caller's* context, not the subagent's;
 # only `updatedInput.prompt` reaches the agent being spawned. The final report of
 # an agent is re-injected whole into the main conversation, so the contract is the
@@ -34,6 +38,13 @@ deny() {
 description=$(echo "$input" | jq -r '.tool_input.description // ""')
 [ -z "$description" ] && deny "Agent spawn blocked: every Agent call carries a description (CLAUDE.md). A delegation with no name is a delegation that was never scoped."
 
+# A scoped spawn is a delegation: restart the window lib/delegation-nudge.sh
+# counts direct reads in. Every subagent type counts — the TDD agents delegate as
+# much as an Explore does — which is why this sits before the type filter below.
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
+IFS=$'\x1f' read -r session_id agent_id <<<"$(echo "$input" | jq -j '[(.session_id // "unknown"), (.agent_id // "")] | join("\u001f")')"
+HOOK_SESSION_ID="$session_id" HOOK_AGENT_ID="$agent_id" bash "$LIB/delegation-nudge.sh" reset
+
 subagent=$(echo "$input" | jq -r '.tool_input.subagent_type // ""')
 case "$subagent" in
   Explore|general-purpose|Plan) ;;
@@ -42,10 +53,6 @@ esac
 
 prompt=$(echo "$input" | jq -r '.tool_input.prompt // ""')
 model=$(echo "$input" | jq -r '.tool_input.model // ""')
-
-if ! echo "$prompt" | tr '[:upper:]' '[:lower:]' | grep -q 'graphify'; then
-  deny "$subagent blocked: use graphify query/explain/path before spawning it. Mention graphify in the prompt if you already did."
-fi
 
 # Explore is read-only by definition: haiku, always. `general-purpose` also writes
 # sometimes, so the model is not forced there — only made explicit, because an

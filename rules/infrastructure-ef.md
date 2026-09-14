@@ -7,21 +7,20 @@ paths:
 
 # Infrastructure rules
 
-Full code examples for this layer: `.claude/skills/implement-tdd/references/examples-infrastructure.md`.
+Examples: `.claude/skills/implement-tdd/references/examples-infrastructure.md`.
 
-
-Infrastructure translates IO. It carries no business rule (APP-04).
+Infrastructure translates IO. No business rule (APP-04).
 
 ## Repositories
 
-- Inject `IUnitOfWork<AppDbContext>` + `IAuditTrailWriter`. `Save` switches over the domain events (APP-03).
+- Inject `IUnitOfWork<AppDbContext>` + `IAuditTrailWriter`. `Save` switches over domain events (APP-03).
 - Read for consultation with `AsNoTracking()`; a read feeding a `Save` stays tracked.
 - Rehydration always through the aggregate's `Restore()`, never `Create()`.
 - One repository per **aggregate root**. A sub-entity never gets its own repository; extend the root's.
 
 ## Uniqueness is owned by the persistence constraint
 
-The repository translates the constraint violation into a domain exception (`{Entity}{Reason}AlreadyExistsException`), with a filter naming the precise index. Without that translation, a concurrent creation surfaces as a 500 instead of a 409. An upstream uniqueness check in a handler or aggregate is an early failure, never the guard.
+Repository translates constraint violation into domain exception (`{Entity}{Reason}AlreadyExistsException`), filter naming precise index. Without it, concurrent creation = 500 not 409. Upstream check in handler or aggregate = early failure, never the guard.
 
 ## EF Core entities
 
@@ -33,7 +32,7 @@ Static `{Entity}Mapper` with `MapToDomain()` (calls `Restore()`) and `MapToEntit
 
 ## DI
 
-Explicit registration `AddScoped<IRepo, Repo>()` in `InfrastructureServicesExtensions.cs`. Unlike Application handlers, Infrastructure is not auto-scanned.
+Explicit `AddScoped<IRepo, Repo>()` in `InfrastructureServicesExtensions.cs`. Unlike Application handlers, Infrastructure not auto-scanned.
 
 ## DB storage
 
@@ -44,11 +43,11 @@ Explicit registration `AddScoped<IRepo, Repo>()` in `InfrastructureServicesExten
 
 ## Access cost (PERF-01)
 
-The number of Infrastructure calls for a behaviour is **bounded and independent of the input size**. No test observes the call count, so the pressure comes from design, not from the suite. An `await` on a repository inside a loop is a design defect.
+Call count per behaviour **bounded, independent of input size**. No test observes it: pressure comes from design, not suite. `await` on repository inside loop = design defect.
 
-Before adding a repository method, check no existing one already answers in one query. A dedicated method is justified when it **changes the shape** of the read (SQL filter, projection, join), not when it renames the existing one.
+Before adding repository method, check none answers in one query already. Dedicated method justified when it **changes shape** of read (SQL filter, projection, join), not when renaming existing.
 
-Symptom/fix table and the COST step of the TDD cycle → skill `/implement-tdd`, `.claude/skills/implement-tdd/references/conventions.md` § "Data access".
+Symptom/fix table, COST step of TDD cycle → skill `/implement-tdd`, `.claude/skills/implement-tdd/references/conventions.md` § "Data access".
 
 ## Naming
 

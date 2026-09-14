@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "name": "a complete ## RED passes",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Command: `rtk dotnet test ...` — exit 1\n- Production diff: `git diff --stat -- src/` — empty\n- Expected failure: the rule is not carried yet\n\n| Test | Case covered |\n|---|---|\n| `BTests.Refuses` | refusal without delegation |\n"},
+      "expect": {"exit": 0, "decision": "none"}
+    },
+    {
+      "name": "a ## RED without its table is sent back",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Command: `rtk dotnet test ...` — exit 1\n- Production diff: `git diff --stat -- src/` — empty\n- Expected failure: the rule is not carried yet\n"},
+      "expect": {"exit": 0, "stdout": "Case covered"}
+    },
+    {
+      "name": "a ## RED missing a required line names it",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Command: `rtk dotnet test ...` — exit 1\n- Expected failure: the rule is not carried yet\n\n| Test | Case covered |\n|---|---|\n| `BTests.Refuses` | refusal |\n"},
+      "expect": {"exit": 0, "stdout": "Production diff"}
+    },
+    {
+      "name": "a ## Command line without an observed exit code is sent back",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Command: `rtk dotnet test ...`\n- Production diff: `git diff --stat -- src/` — empty\n- Expected failure: nothing carries the rule\n\n| Test | Case covered |\n|---|---|\n| `BTests.Refuses` | refusal |\n"},
+      "expect": {"exit": 0, "stdout": "observed exit code"}
+    },
+    {
+      "name": "a complete ## GREEN passes",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"last_assistant_message": "## GREEN\n- Production: `src/A/B.cs`\n- Command: `rtk dotnet test ...` — exit 0\n- Tests diff: `git diff --stat -- tests/` — empty\n- Cost: `Infrastructure in loop or in-memory filter: none` — independent of the number of keys\n- Deleted at REFACTOR: nothing\n- Reported without fixing: nothing\n"},
+      "expect": {"exit": 0, "decision": "none"}
+    },
+    {
+      "name": "a ## GREEN without its cost line is sent back",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"last_assistant_message": "## GREEN\n- Production: `src/A/B.cs`\n- Command: `rtk dotnet test ...` — exit 0\n- Tests diff: `git diff --stat -- tests/` — empty\n- Deleted at REFACTOR: nothing\n- Reported without fixing: nothing\n"},
+      "expect": {"exit": 0, "stdout": "Cost"}
+    },
+    {
+      "name": "the block asks for a re-emission, never for a new run",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"last_assistant_message": "## GREEN\n- Production: `src/A/B.cs`\n- Command: `rtk dotnet test ...` — exit 0\n"},
+      "expect": {"exit": 0, "stdout": "without re-running a test or touching code"}
+    },
+    {
+      "name": "a ## BLOCKED is never policed",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"last_assistant_message": "## BLOCKED\nThe test cannot pass without modifying its assertion.\n"},
+      "expect": {"exit": 0, "decision": "none"}
+    },
+    {
+      "name": "another agent's answer passes untouched",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"last_assistant_message": "src/A/B.cs:42 — the method is called here\n"},
+      "expect": {"exit": 0, "decision": "none"}
+    },
+    {
+      "name": "a second pass never blocks twice",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {"stop_hook_active": true, "last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n"},
+      "expect": {"exit": 0, "decision": "none"}
+    },
+    {
+      "name": "an empty payload is a no-op",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {},
+      "expect": {"exit": 0, "decision": "none"}
+    }
+  ]
+}

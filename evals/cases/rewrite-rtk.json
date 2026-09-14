@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "name": "dotnet test is prefixed with rtk (upstream declines it, the module does it)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "dotnet test --project tests/X/X.csproj --no-build --no-restore"}},
+      "expect": {"decision": "allow", "command": "rtk dotnet test --project"}
+    },
+    {
+      "name": "VAR=value dotnet test is prefixed behind the assignment",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "STID_TEST_MODE=true dotnet test --project tests/X/X.csproj --no-build"}},
+      "expect": {"decision": "allow", "command": "STID_TEST_MODE=true rtk dotnet test"}
+    },
+    {
+      "name": "an already prefixed rtk dotnet test is not prefixed twice",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "rtk dotnet test --project tests/X/X.csproj"}},
+      "expect": {"command_absent": "rtk rtk"}
+    },
+    {
+      "name": "dotnet test inside a heredoc body is text, not a command, and stays untouched",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat <<'EOF' > /tmp/claude-evalhd-{{SID}}\ndotnet test --project x\nEOF"}},
+      "expect": {"command_absent": "rtk dotnet"}
+    },
+    {
+      "name": "dotnet reached through a tool path is not a dotnet command",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "~/.dotnet/tools/ilspycmd --help"}},
+      "expect": {"command_absent": "rtk dotnet"}
+    },
+    {
+      "name": "grep on a symbol absent from the graph goes to rtk, not to graphify (upstream emits updatedInput without a decision)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "grep -rn ZzzNotASymbolXyz src"}},
+      "expect": {"decision": "not_deny", "command": "rtk grep"}
+    },
+    {
+      "name": "/usr/bin/grep is normalized so the rtk regex catches it",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "/usr/bin/grep -rn ZzzNotASymbolXyz src"}},
+      "expect": {"decision": "not_deny", "command": "rtk grep"}
+    },
+    {
+      "name": "dotnet build is rewritten by rtk itself",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "dotnet build --no-restore"}},
+      "expect": {"decision": "allow", "command": "rtk dotnet build"}
+    }
+  ]
+}

@@ -9,7 +9,6 @@ contract snapshot, a persistence rule by an integration test.
 
     python3 scripts/rules-coverage.py               # report
     python3 scripts/rules-coverage.py --untested    # only the rules with no test
-    python3 scripts/rules-coverage.py --fix-index   # recompute the feature index counters
     python3 scripts/rules-coverage.py --ids <fiche>  # DDD/APP/PERF ids the sheet never cites
 """
 import os
@@ -152,33 +151,6 @@ def declared_values():
     return values
 
 
-def fix_index(traits):
-    counts = {}
-    for rel, md in handlers():
-        feature = os.path.dirname(rel)
-        handler = os.path.basename(rel)
-        rows = rules_of(md)
-        covered = sum(1 for rid, _ in rows if f"{handler}/{rid}" in traits)
-        counts[(feature, handler)] = (len(rows), covered)
-    for feature in sorted({f for f, _ in counts}):
-        idx = os.path.join(APP, feature, "CLAUDE.md")
-        if not os.path.isfile(idx):
-            continue
-        src = open(idx, encoding="utf-8").read()
-
-        def repl(m):
-            st = counts.get((feature, m.group(1)))
-            if st is None:
-                return m.group(0)
-            total, covered = st
-            head = m.group(0).rsplit("|", 2)[0]
-            return head + (f"| {total} rules, {covered} tested |" if total else "| — |")
-
-        out = re.sub(r"^\| \[(\w+)\]\([^)]*\) \|.*\|.*\|$", repl, src, flags=re.M)
-        if out != src:
-            open(idx, "w", encoding="utf-8").write(out)
-            print(f"index recomputed: {feature}")
-
 
 def referential_ids():
     """Every id the referential defines, in file order."""
@@ -234,9 +206,6 @@ def main():
     only_untested = "--untested" in sys.argv
     traits, methods = scan_traits()
 
-    if "--fix-index" in sys.argv:
-        fix_index(traits)
-        return
 
     total, untested = 0, 0
     lines = []

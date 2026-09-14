@@ -1,0 +1,14 @@
+id: await-member-in-lambda
+language: cs
+severity: info
+message: awaited member call inside a lambda
+rule:
+  kind: await_expression
+  has:
+    kind: invocation_expression
+    has:
+      field: function
+      kind: member_access_expression
+  inside:
+    kind: lambda_expression
+    stopBy: end

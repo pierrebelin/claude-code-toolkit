@@ -5,7 +5,9 @@
 # import, reload after /compact). The exit code is ignored by the harness: this
 # hook has no blocking power, it observes.
 #
-# Log:    .claude/context-log.tsv   (timestamp, reason, bytes, ~tokens, path)
+# Log:    .claude/context-log.tsv   (timestamp, reason, bytes, ~tokens, path, session, agent)
+#         agent is empty on the main chain — added 2026-09-12 so the report can
+#         split what the expensive chain loads from what its subagents load.
 # Report: bash .claude/lib/context-report.sh
 set -u
 LOG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,6 +37,7 @@ def pick(*names):
 
 reason = pick("reason", "load_reason", "matcher", "trigger") or "?"
 sid    = (pick("session_id") or "?")[:8]
+agent  = (pick("agent_id") or "")[:8]
 
 # a load may carry one file or a list
 paths = []
@@ -51,11 +54,11 @@ ts = datetime.datetime.now().isoformat(timespec="seconds")
 log = os.environ["LOG"]
 with open(log, "a", encoding="utf-8") as f:
     if not paths:
-        f.write(f"{ts}\t{reason}\t0\t0\t(no path in the payload — see context-log.raw.json)\t{sid}\n")
+        f.write(f"{ts}\t{reason}\t0\t0\t(no path in the payload — see context-log.raw.json)\t{sid}\t{agent}\n")
     for p in paths:
         if not p: continue
         try:    n = os.path.getsize(p)
         except OSError: n = 0
-        f.write(f"{ts}\t{reason}\t{n}\t{n//4}\t{p}\t{sid}\n")
+        f.write(f"{ts}\t{reason}\t{n}\t{n//4}\t{p}\t{sid}\t{agent}\n")
 ' 2>/dev/null || true
 exit 0

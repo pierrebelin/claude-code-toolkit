@@ -29,6 +29,12 @@ DEFAULT_PROJECT = re.sub(r"[^A-Za-z0-9]+", "-", os.path.basename(REPO_ROOT)).str
 READ_TOOLS = {"Read", "Grep", "Glob"}
 # Emitted verbatim by .claude/hooks/read-bounds.sh — frozen literal.
 DENIAL_MARK = "Unbounded Read on"
+# Emitted verbatim by .claude/lib/guard-cat-bounds.sh — frozen literals.
+BASH_DENIAL_MARKS = ("Unbounded cat on", "Unbounded head on", "Unbounded tail on")
+# Count line that .claude/tools/bulk-read writes on stderr.
+BULK_READ_RE = re.compile(r"\[bulk-read: (\d+) file\(s\), (\d+) bytes, (\d+) tokens in")
+FUNNEL_HEADER = "=== appel suivant un refus de garde (chaine principale) ==="
+BULK_LABEL = "bulk-read : "
 
 LB = {
     "read_bounded": "Read with offset/limit: ",
@@ -77,6 +83,33 @@ def is_read_only(name, command):
     if name != "Bash":
         return False
     return command.strip().split(" ")[0] in READ_COMMANDS
+
+
+def after_denial(name, command, payload, refused):
+    """Classe l'appel qui suit un refus de garde : la seule mesure du chemin pris.
+
+    Le ratio forces/refuses dit si la garde tient ; ceci dit ce que le modele fait
+    a la place — Read borne, forcage, bulk-read, sous-agent, ou un cat qui deplace
+    le volume vers Bash (mesure 2026-09-09, d'ou guard-cat-bounds).
+    """
+    if name == "Read":
+        if "offset" in payload or "limit" in payload:
+            return "Read borne"
+        if payload.get("file_path") == refused:
+            return "forcage (meme Read reemis)"
+        return "Read entier d'un autre fichier"
+    if name == "Bash":
+        head = command.strip()
+        if "tools/bulk-read" in head:
+            return "bulk-read"
+        if re.match(r"^(sed -n|head |tail |grep |rg |git grep|graphify |rtk )", head):
+            return "Bash borne (sed -n, head, grep, graphify)"
+        if head.startswith("cat "):
+            return "cat"
+        return "Bash autre"
+    if name == "Agent":
+        return "sous-agent"
+    return name or "?"
 
 
 def turns_of(path, seen, cutoff=None, until=None):
@@ -128,17 +161,20 @@ def turns_of(path, seen, cutoff=None, until=None):
                                 if isinstance(part, dict)
                             )
                         )
-                        results[block.get("tool_use_id")] = (size, text[:200])
+                        bulk = BULK_READ_RE.search(text)
+                        results[block.get("tool_use_id")] = (
+                            size, text[:200], int(bulk.group(2)) if bulk else 0)
     for turn_id, block in order:
         payload = block.get("input") or {}
-        size, text = results.get(block.get("id"), (0, ""))
+        size, text, bulk_bytes = results.get(block.get("id"), (0, "", 0))
         yield (
             turn_id,
             block.get("name"),
             payload.get("command", "") or "",
             payload,
             size,
-            DENIAL_MARK in text,
+            DENIAL_MARK in text or any(mark in text for mark in BASH_DENIAL_MARKS),
+            bulk_bytes,
         )
 
 
@@ -148,17 +184,22 @@ def main():
     parser.add_argument("--save-baseline", help=LB["help_save"])
     parser.add_argument("--compare", help=LB["help_compare"])
     parser.add_argument("--until", help=LB["help_until"])
-    parser.add_argument("--project", default=DEFAULT_PROJECT, help="filter on the project folder name")
+    parser.add_argument("--project", default=DEFAULT_PROJECT,
+                        help="filter on the project folder name; path separators and dots are "
+                             "normalised to dashes, like the transcript folders")
     args = parser.parse_args()
 
-    pattern = os.path.join(PROJECTS_DIR, f"*{args.project}*", "*.jsonl")
+    # A transcript folder is the repository path with every non-alphanumeric turned into a dash:
+    # `My.Repo` passed as is matched nothing (measured 2026-09-13).
+    project = re.sub(r"[^A-Za-z0-9*]", "-", args.project)
+    pattern = os.path.join(PROJECTS_DIR, f"*{project}*", "*.jsonl")
     files = glob.glob(pattern)
     cutoff = time.time() - args.days * 86400 if args.days else None
     until = datetime.datetime.fromisoformat(args.until).timestamp() if args.until else None
     if cutoff:
         files = [f for f in files if os.path.getmtime(f) >= cutoff]
     if not files:
-        print(f"No transcript for the filter '{args.project}'.")
+        print(f"No transcript for the filter '{project}'.")
         return 1
 
     seen = set()
@@ -169,16 +210,27 @@ def main():
     tool_calls = collections.Counter()
     denials = collections.Counter()
     forcings = collections.Counter()
+    funnel = collections.Counter()
     total_calls = read_calls = 0
+    bulk_calls = bulk_bytes_total = 0
 
     for path in files:
         run = set()
         session_reads = collections.defaultdict(list)
         refused = set()
-        for turn_id, name, command, payload, size, denied in turns_of(path, seen, cutoff, until):
+        pending = None
+        for turn_id, name, command, payload, size, denied, bulk_bytes in turns_of(path, seen, cutoff, until):
             total_calls += 1
             tool_bytes[name] += size
             tool_calls[name] += 1
+            if pending is not None:
+                funnel[after_denial(name, command, payload, pending)] += 1
+                pending = None
+            if denied:
+                pending = payload.get("file_path") or command
+            if bulk_bytes:
+                bulk_calls += 1
+                bulk_bytes_total += bulk_bytes
             if name == "Read":
                 target = payload.get("file_path", "?")
                 if denied:
@@ -245,6 +297,12 @@ def main():
         suffix = LB["forced"] if forcings.get(target) else ""
         print(f"  x{count}  {os.path.basename(target)}{suffix}")
 
+    if funnel:
+        print(f"\n{FUNNEL_HEADER}")
+        for kind, count in funnel.most_common():
+            print(f"  x{count:<3d} {kind}")
+    print(f"\n{BULK_LABEL}{bulk_calls} appel(s) · {bulk_bytes_total // 1000} ko tenus hors contexte")
+
     snapshot = {
         "turns": turns,
         "calls": total_calls,
@@ -258,6 +316,9 @@ def main():
         "reread_whole": len(full),
         "denials": denied_total,
         "forcings": forced_total,
+        "after_denial": dict(funnel.most_common()),
+        "bulk_read_calls": bulk_calls,
+        "bulk_read_bytes": bulk_bytes_total,
     }
     if args.save_baseline:
         with open(args.save_baseline, "w", encoding="utf-8") as handle:

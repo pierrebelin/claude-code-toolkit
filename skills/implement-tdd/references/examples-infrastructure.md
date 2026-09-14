@@ -1,13 +1,13 @@
 # Code examples — Infrastructure
 
-Consult when the pattern is unknown, or when this is the first implementation of an element type in this layer.
-Rules and pitfalls → `.claude/rules/` (loaded automatically).
+Consult when the pattern is unknown, or on the first implementation of an element type in this layer.
+Rules and pitfalls → `.claude/rules/` (auto-loaded).
 
 ---
 
 ## Infrastructure - Repository
 
-Repositories use `IUnitOfWork<AppDbContext>` and `IAuditTrailWriter`. They process domain events through a switch. Mutated entities are loaded **in a single query before the loop**: no `await` on the database inside the `foreach`.
+Repositories use `IUnitOfWork<AppDbContext>` and `IAuditTrailWriter`, and process domain events through a switch. Mutated entities loaded **in a single query before the loop**: no `await` on the database inside the `foreach`.
 
 ```csharp
 public class ProductRepository(
@@ -84,23 +84,23 @@ public class ProductRepository(
 }
 ```
 
-**Translating a constraint**: the repository is the only place that sees the violation. It turns it into a domain exception (`ProductNameAlreadyExistsException` → 409); without it, the `DbUpdateException` bubbles up untreated and surfaces as a 500.
+**Translating a constraint**: the repository is the only place that sees the violation. It turns it into a domain exception (`ProductNameAlreadyExistsException` → 409); without it the `DbUpdateException` bubbles up untreated and surfaces as a 500.
 
 The filter names **the precise index**. A fallback such as `message.Contains("duplicate")` catches every uniqueness violation on the table and returns a wrong 409 as soon as another constraint breaks.
 
 **Cost**: 1 read + 1 write, whatever the number of events. The loop then only dispatches in memory.
 
 **Rules**:
-- No database read inside the event loop. The mutated identifiers are known before entering it: one `Contains` query loads them all at once. One `await FindAsync` per event means N queries for a single command.
+- No database read inside the event loop. Mutated identifiers are known before entering it: one `Contains` query loads them all at once. One `await FindAsync` per event = N queries for a single command.
 - The `Save` read is **tracked** (no `AsNoTracking`): that tracking is what persists the mutations. Only consultation reads (`GetProduct`, `GetProducts`) are `AsNoTracking()`.
 - Entity expected but missing: throw the domain exception (`ProductNotFoundException`). An `if (entity is not null)` with no `else` swallows the failure and returns a falsely successful `Save`.
-- `auditTrailWriter.Track(@event)` once, after the switch: it applies to every event, it does not get copied into each `case`.
+- `auditTrailWriter.Track(@event)` once, after the switch: it applies to every event, never copied into each `case`.
 
 ---
 
 ## Infrastructure - EF Core Entity
 
-Infrastructure entities inherit from `AbstractEntity<Ulid>` and use `[EntityTypeConfiguration]` for inline configuration:
+Infrastructure entities inherit `AbstractEntity<Ulid>` and use `[EntityTypeConfiguration]` for inline configuration:
 
 ```csharp
 [EntityTypeConfiguration(typeof(ProductEntityConfiguration))]

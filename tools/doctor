@@ -1,0 +1,201 @@
+#!/bin/bash
+# doctor — read-only readiness check of the Claude Code setup in this repo.
+#
+# Why. The setup has at least six failure modes that make no visible error: the
+# guard simply does not fire, and the miss shows up on the bill. Each was found
+# after the fact and documented somewhere in a comment — this puts them in one
+# place, checked in a second. Shape borrowed from Spotify's portal plugin
+# (`skills/doctor`: "Keep doctor read-only"). It observes, never repairs: every
+# line that is not `ok` names the command that would.
+#
+# Usage:
+#   bash .claude/tools/doctor            # every check, one line each
+#   bash .claude/tools/doctor --quiet    # only WARN and FAIL lines (SessionStart hook)
+#   bash .claude/tools/doctor --evals    # also run .claude/evals/run.sh and report its summary
+#
+# Exit 1 when any check FAILs, 0 otherwise. The SessionStart registration appends
+# `|| true`: a doctor must never block a session, only report.
+set -u
+
+QUIET=0
+EVALS=0
+for a in "$@"; do
+  case "$a" in
+    --quiet|-q) QUIET=1 ;;
+    --evals) EVALS=1 ;;
+    -h|--help) sed -n '2,19p' "$0" | sed -e 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "doctor: unknown argument: $a" >&2; exit 2 ;;
+  esac
+done
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${CLAUDE_DOCTOR_ROOT:-$(cd "$HERE/../.." && pwd)}"
+CL="$ROOT/.claude"
+FAILS=0
+WARNS=0
+
+report() { # level name detail
+  local level=$1 name=$2 detail=${3:-}
+  case "$level" in
+    FAIL) FAILS=$((FAILS + 1)) ;;
+    WARN) WARNS=$((WARNS + 1)) ;;
+    ok) [ "$QUIET" -eq 1 ] && return ;;
+  esac
+  if [ -n "$detail" ]; then
+    printf '%-4s %-28s %s\n' "$level" "$name" "$detail"
+  else
+    printf '%-4s %s\n' "$level" "$name"
+  fi
+}
+
+# --- binaries ------------------------------------------------------------------
+for bin in bash jq python3 perl; do
+  command -v "$bin" >/dev/null 2>&1 && report ok "binary $bin" || report FAIL "binary $bin" "required by the hooks"
+done
+if command -v rtk >/dev/null 2>&1; then
+  v=$(rtk --version 2>/dev/null | head -1)
+  case "$v" in
+    rtk\ [0-9]*)
+      if rtk gain >/dev/null 2>&1; then report ok "rtk" "$v"
+      else report FAIL "rtk" "$v answers --version but 'rtk gain' fails — name collision with another rtk on PATH? (which -a rtk)"; fi ;;
+    *) report FAIL "rtk" "'rtk --version' printed '${v:-nothing}' — not Rust Token Killer (which -a rtk)" ;;
+  esac
+else
+  report FAIL "rtk" "not on PATH — rewrite-rtk.sh has nothing to call"
+fi
+command -v graphify >/dev/null 2>&1 && report ok "binary graphify" "$(command -v graphify)" || report FAIL "binary graphify" "not on PATH — affected-blast-radius and the autosync are dead (.claude/docs/GRAPHIFY-SETUP.md)"
+command -v claude >/dev/null 2>&1 && report ok "binary claude" "$(claude --version 2>/dev/null | head -1)" || report WARN "binary claude" "not on PATH — bulk-read cannot run"
+command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report ok "binary ast-grep" || report WARN "binary ast-grep" "scripts/access-cost.py exits 3, COUT stated by hand; structural search unavailable (brew install ast-grep)"
+
+# --- settings and hook registrations --------------------------------------------
+SETTINGS="$CL/settings.local.json"
+if [ ! -e "$SETTINGS" ]; then
+  report FAIL "settings.local.json" "absent — not one project hook fires here (worktree? see TOOLING.md, post-checkout hook)"
+elif [ -L "$SETTINGS" ] && [ ! -f "$SETTINGS" ]; then
+  report FAIL "settings.local.json" "dead symlink → $(readlink "$SETTINGS")"
+elif ! jq -e . "$SETTINGS" >/dev/null 2>&1; then
+  report FAIL "settings.local.json" "invalid JSON — every hook registration is lost"
+else
+  [ -L "$SETTINGS" ] && report ok "settings.local.json" "symlink → $(readlink "$SETTINGS")" || report ok "settings.local.json" "valid"
+  commands=$(jq -r '.hooks // {} | to_entries[] | .value[] | .hooks[]? | .command // empty' "$SETTINGS" 2>/dev/null)
+  missing=0
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    script=$(printf '%s' "$c" | sed -n 's/^bash \([^ ]*\).*/\1/p')
+    [ -n "$script" ] || continue
+    script=${script//\$CLAUDE_PROJECT_DIR/$ROOT}
+    script=${script//\"/}
+    if [ ! -f "$script" ]; then
+      report FAIL "hook registered, script gone" "$c"
+      missing=$((missing + 1))
+    fi
+  done <<EOF
+$commands
+EOF
+  [ "$missing" -eq 0 ] && report ok "hook registrations" "$(printf '%s\n' "$commands" | grep -c . ) commands, every script present"
+  for s in "$CL"/hooks/*.sh; do
+    b=$(basename "$s")
+    printf '%s' "$commands" | grep -q "$b" || report WARN "hook script not registered" "$b — never fires (dead hook, or add it to settings.local.json)"
+  done
+  case "$commands" in
+    *CLAUDE_PROJECT_DIR*) report ok "hook paths" "relative to \$CLAUDE_PROJECT_DIR" ;;
+    *) report WARN "hook paths" "absolute — a worktree runs the main worktree's scripts, another clone none" ;;
+  esac
+fi
+
+# --- dispatcher modules --------------------------------------------------------
+if [ -f "$CL/hooks/bash-dispatch.sh" ]; then
+  mods=$(sed -n '/^MODULES=(/,/^)/p' "$CL/hooks/bash-dispatch.sh" | grep -o '"[^"]*"' | tr -d '"' | awk '{print $1}')
+  bad=0
+  for m in $mods; do
+    [ -f "$CL/lib/$m" ] || { report FAIL "dispatch module" "$m listed in bash-dispatch.sh, missing in .claude/lib"; bad=1; }
+  done
+  [ "$bad" -eq 0 ] && report ok "dispatch modules" "$(printf '%s\n' "$mods" | grep -c .) present"
+fi
+
+# --- worktree wiring -----------------------------------------------------------
+if git -C "$ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
+  common=$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null)
+  case "$common" in /*) ;; *) common="$ROOT/$common" ;; esac
+  pc="$common/hooks/post-checkout"
+  if [ -f "$pc" ] && grep -q 'settings.local.json' "$pc" 2>/dev/null; then
+    report ok "git post-checkout hook" "links settings.local.json into new worktrees"
+  else
+    report FAIL "git post-checkout hook" "absent — a new worktree runs unguarded (bash scripts/install-git-hooks.sh)"
+  fi
+  main=$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
+  here=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)
+  if [ -n "$main" ] && [ "$here" != "$main" ]; then
+    [ -L "$SETTINGS" ] && report ok "worktree" "$here, settings linked from $main" \
+      || report WARN "worktree" "$here has its own settings.local.json — edits here never reach $main"
+  fi
+else
+  report WARN "git" "$ROOT is not a git checkout"
+fi
+
+# --- graphify graph ------------------------------------------------------------
+GRAPH="$ROOT/graphify-out/graph.json"
+if [ -f "$GRAPH" ]; then
+  if [ -x "$CL/lib/graphify-freshness.sh" ] || [ -f "$CL/lib/graphify-freshness.sh" ]; then
+    lag=$(GRAPHIFY_REPO="$ROOT" bash "$CL/lib/graphify-freshness.sh" --count 2>/dev/null)
+    case "$lag" in
+      0) report ok "graphify graph" "up to date ($(date -r "$GRAPH" '+%Y-%m-%d %H:%M'))" ;;
+      ''|*[!0-9]*) report WARN "graphify graph" "freshness unknown" ;;
+      *) report WARN "graphify graph" "$lag source(s) newer than graph.json — the Stop hook resyncs, or graphify update ." ;;
+    esac
+  fi
+  log=/tmp/graphify-hook.log
+  if [ -f "$log" ] && tail -5 "$log" 2>/dev/null | grep -q 'Refusing'; then
+    report WARN "graphify autosync" "last run refused to overwrite a smaller graph — graphify update . --force after a deleting refactor"
+  fi
+else
+  report FAIL "graphify graph" "graphify-out/graph.json absent — graphify update . (or GRAPHIFY-SETUP.md)"
+fi
+
+# --- worker login --------------------------------------------------------------
+if command -v claude >/dev/null 2>&1; then
+  case "$(uname -s)" in
+    Darwin)
+      security find-generic-password -s 'Claude Code-credentials' >/dev/null 2>&1 \
+        && report ok "claude login" "keychain entry present (bulk-read can run)" \
+        || report WARN "claude login" "no keychain entry — bulk-read will answer 'Not logged in' (claude /login)" ;;
+    *)
+      [ -f "$HOME/.claude/.credentials.json" ] \
+        && report ok "claude login" "credentials file present" \
+        || report WARN "claude login" "no credentials file — bulk-read will answer 'Not logged in'" ;;
+  esac
+fi
+
+# --- tools, evals, rules -------------------------------------------------------
+for t in "$CL"/tools/* "$CL"/evals/run.sh; do
+  [ -f "$t" ] || continue
+  [ -x "$t" ] && report ok "executable $(basename "$t")" || report WARN "executable $(basename "$t")" "missing +x (chmod +x $t)"
+done
+for r in "$CL"/rules/*.md; do
+  [ -f "$r" ] || continue
+  if [ "$(head -1 "$r")" != "---" ] || ! sed -n '1,/^---$/p' "$r" | grep -q '^paths:'; then
+    report WARN "rule without paths:" "$(basename "$r") — never loads by path"
+  fi
+done
+
+# --- /tmp leftovers ------------------------------------------------------------
+# session-cleanup.sh purges at `-mtime +2`, and BSD find counts whole 24 h
+# periods: a file 71 h old at SessionStart survives, and would trip a `+2` here
+# an hour later. `+3` only reports what a cleanup actually missed.
+orphans=$(find -H /tmp -maxdepth 1 -name 'claude-*' -mtime +3 2>/dev/null | wc -l | tr -d ' ')
+[ "${orphans:-0}" -eq 0 ] && report ok "/tmp state" "nothing older than 3 days" \
+  || report WARN "/tmp state" "$orphans claude-* file(s) older than 3 days survived session-cleanup.sh — check its PREFIXES list"
+
+# --- evals on demand -----------------------------------------------------------
+if [ "$EVALS" -eq 1 ] && [ -f "$CL/evals/run.sh" ]; then
+  summary=$(bash "$CL/evals/run.sh" 2>&1 | tail -1)
+  case "$summary" in
+    *", 0 failed") report ok "hook evals" "$summary" ;;
+    *) report FAIL "hook evals" "$summary — bash .claude/evals/run.sh for the detail" ;;
+  esac
+fi
+
+if [ "$QUIET" -eq 0 ] || [ "$FAILS" -gt 0 ] || [ "$WARNS" -gt 0 ]; then
+  printf '%s\n' "doctor: $FAILS FAIL, $WARNS WARN"
+fi
+[ "$FAILS" -eq 0 ]

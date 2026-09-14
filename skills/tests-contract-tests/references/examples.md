@@ -1,6 +1,6 @@
 # Contract examples
 
-Use only when the skill's templates are not enough. A test covers a route's nominal path; errors and business rules stay in the handler unit tests.
+Only when the skill's templates are not enough. A test covers a route's nominal path; errors and business rules stay in handler unit tests.
 
 ## Nominal endpoint
 
@@ -56,4 +56,4 @@ protected async Task VerifyResponse(HttpResponseMessage response, params string[
 }
 ```
 
-Keep the fixture IDs deterministic. Pass the expected public headers explicitly to `VerifyResponse`; do not snapshot internal or volatile headers. Scrub ULIDs, GUIDs, timestamps and paths. Review every `received` file before promoting it to `verified`.
+Fixture IDs deterministic. Pass expected public headers explicitly to `VerifyResponse`; never snapshot internal or volatile headers. Scrub ULIDs, GUIDs, timestamps, paths. Review every `received` file before promoting it to `verified`.

@@ -1,0 +1,125 @@
+{
+  "fixtures": [
+    {"path": "big.cs", "lines": 300},
+    {"path": "small.cs", "lines": 50},
+    {"path": "heavy.md", "lines": 119, "kind": "md"},
+    {"path": "rules/big-rule.md", "lines": 300, "kind": "md"}
+  ],
+  "cases": [
+    {
+      "name": "bare cat of a big file is denied with the frozen literal",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/big.cs"}},
+      "expect": {"decision": "deny", "reason": "Unbounded cat on"}
+    },
+    {
+      "name": "piped cat passes (the pipe bounds it)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/big.cs | grep C1"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "redirected cat passes (never enters the context)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/big.cs > /tmp/claude-evalout-{{SID}}"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "cat behind a cd is still a bare cat (Spotify's anchored regex misses this)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cd /tmp && cat {{FIX}}/big.cs"}},
+      "expect": {"decision": "deny", "reason": "Unbounded cat on"}
+    },
+    {
+      "name": "cat of a small file passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/small.cs"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "re-issuing the identical cat forces it through",
+      "hook": "hooks/bash-dispatch.sh",
+      "pre": [{"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/big.cs"}}],
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/big.cs"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "instruction file passes the cat guard too (same skip list as Read)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/rules/big-rule.md"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "119-line markdown over 8 kB is denied on the byte bound",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/heavy.md"}},
+      "expect": {"decision": "deny", "reason": "bytes"}
+    },
+    {
+      "name": "sed -n range is a bounded read and passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "sed -n '1,40p' {{FIX}}/big.cs"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "head -20 on a big file is bounded by definition and passes (Spotify's hook blocks it)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "head -20 {{FIX}}/big.cs"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "head -n 5000 on a big file is a dump in disguise and is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "head -n 5000 {{FIX}}/big.cs"}},
+      "expect": {"decision": "deny", "reason": "Unbounded head on"}
+    },
+    {
+      "name": "head -200 (past the 120-line bound) is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "head -200 {{FIX}}/big.cs"}},
+      "expect": {"decision": "deny", "reason": "Unbounded head on"}
+    },
+    {
+      "name": "tail -n +1 is the whole file and is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "tail -n +1 {{FIX}}/big.cs"}},
+      "expect": {"decision": "deny", "reason": "Unbounded tail on"}
+    },
+    {
+      "name": "tail -n +250 of a 300-line file is 51 lines and passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "tail -n +250 {{FIX}}/big.cs"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "tail -n 20 passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "tail -n 20 {{FIX}}/big.cs"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "head -c past the byte bound on a heavy markdown is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "head -c 100000 {{FIX}}/heavy.md"}},
+      "expect": {"decision": "deny", "reason": "Unbounded head on"}
+    },
+    {
+      "name": "head -c within the byte bound passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "head -c 4000 {{FIX}}/heavy.md"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "head with no count is 10 lines and passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "head {{FIX}}/big.cs"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "piped head passes whatever the span",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "head -n 5000 {{FIX}}/big.cs | grep C1"}},
+      "expect": {"decision": "not_deny"}
+    }
+  ]
+}

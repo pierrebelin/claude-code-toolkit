@@ -13,17 +13,23 @@ if len(sys.argv) > 2 and sys.argv[2] == "--session" and rows:
     last = rows[-1][5] if len(rows[-1]) > 5 else None
     rows = [l for l in rows if len(l) > 5 and l[5] == last]
 
-per_file   = collections.defaultdict(lambda: [0, 0])   # path -> [loads, tokens]
+per_file   = collections.defaultdict(lambda: [0, 0])   # path -> [loads, tokens per load]
 per_reason = collections.Counter()
+loads = loaded = main = sub = 0
 for l in rows:
     if len(l) < 5: continue
     _, reason, size, tk, path = l[0], l[1], int(l[2]), int(l[3]), l[4]
+    agent = l[6] if len(l) > 6 else ""
     per_file[path][0] += 1
     per_file[path][1]  = tk
     per_reason[reason] += tk
+    loads += 1; loaded += tk
+    if agent: sub += tk
+    else:     main += tk
 
-total = sum(v[1] for v in per_file.values())
-print(f"{len(per_file)} distinct files, ~{total} tokens cumulated\n")
+# Rows written before 2026-09-12 carry no agent column and count as main chain.
+print(f"{len(per_file)} distinct files · {loads} loads · ~{loaded} tokens loaded "
+      f"(main chain ~{main}, subagents ~{sub})\n")
 print("by load reason:")
 for r, tk in per_reason.most_common():
     print(f"  {tk:>7} tk  {r}")

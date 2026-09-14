@@ -1,98 +1,108 @@
 ---
 name: implement-tdd
 description: "Use when implementing a .NET/DDD feature or batch across every layer under strict TDD: orchestrates the red-test, implementation and final-audit chain with subagents."
-argument-hint: "[batch FX | batch FX — correction: manual finding]"
+argument-hint: "[batch FX <global plan path> | batch FX — correction: manual finding]"
 ---
 
 # Implementation orchestrator — strict TDD (Red-Green-Refactor)
 
-Drives the whole **test-first** chain: test subagent → implementation → verification subagent. Explicit RED-GREEN-REFACTOR loop per behaviour. Stops once everything is verified, or blocks on a business ambiguity.
+Drives whole **test-first** chain: test subagent → implementation → verification subagent. Explicit RED-GREEN-REFACTOR loop per behaviour. Stop when all verified; block on business ambiguity.
 
 $ARGUMENTS
 
+Measurements + reasons: `references/rationale.md`, same headings. **Never open during batch.**
+
 ## Common rules
 
-Code and test-first TDD (Iron Law, cycle, Red Flags, rationalisations) → **read `references/common-rules.md`**. **Never commit.** Test rules → the `/tests-*` skills. Use `rtk dotnet` for build/test; RTK compacts logs but never replaces an exit code.
+`references/common-rules.md` (Iron Law, cycle, Red Flags, exceptions) binds the two coding agents, which read it. **You don't code → don't open it.** Your own two rules:
+
+- **Declarative artefacts yours, no red before them** (§4.5): EF entity + its `IEntityTypeConfiguration`, `DbSet` registration, `Abstractions.Models` request/response DTO — pure declaration/mapping, covered by integration or contract test of behaviour they serve. One carrying branch, validation or mapping decision → back through RED.
+- **Test green on first run never kept**: covered elsewhere → delete; assertion too weak → strengthen until red. `tdd-test-author` decides, says which in its `## RED`.
+
+**Never commit.** Test rules → `/tests-*` skills. `rtk dotnet` for build/test; RTK compacts logs, never replaces exit code.
 
 ## Mandatory orchestration
 
-This skill stays in the main agent: do **not** give it `context: fork`. A subagent cannot delegate in turn.
+Skill stays in main agent: **no** `context: fork`. Subagent can't delegate in turn.
 
-Use these project agents:
+Project agents:
 
 | Phase | Agent | Authorisation |
 |---|---|---|
-| RED | `tdd-test-author` | Write only the requested test |
+| RED | `tdd-test-author` | Write only requested test |
 | GREEN + REFACTOR | `tdd-implementer` | Write production code; test files read-only |
-| Final verification | forked `/verify-ddd-tdd` | Read and run validations, without modifying |
+| Final verification | forked `/verify-ddd-tdd` | Read + run validations, no modification |
 
-**On a given behaviour the phases are strictly sequential**: RED → GREEN → REFACTOR → COST, no overlap. Wait for the test subagent's result before touching any production file. Wait for global GREEN before launching the verifier.
+**One behaviour → phases strictly sequential**: RED → GREEN → REFACTOR → COST, no overlap. Test subagent result before touching any production file; global GREEN before launching verifier.
 
-**Across behaviours, the RED phase parallelises — the GREEN phase never does.** Two behaviours whose **target test files are disjoint** get their `tdd-test-author` launched in the same message. Check disjointness on the sheet before launching: a shared fixture, a shared builder in `CoreTests/` or a single test class carrying both scenarios forbids it — those go sequential. GREEN stays serialised whatever happens, it writes production code and two implementers on the same layer collide. Measured on 2026-09-08: 50 subagent runs over three batches, **zero overlap**, for about half the wall-clock time of each session.
+**Across behaviours RED parallelises — GREEN never.** Two behaviours, **disjoint target test files** → both `tdd-test-author` in one message. Check disjointness on sheet first: shared fixture, shared `CoreTests/` builder, or one test class carrying both scenarios → sequential. GREEN serialised whatever happens.
 
-If `tdd-test-author` or `tdd-implementer` is missing, stop before coding and name the missing file under `.claude/agents/`; do not silently take over its responsibility.
+`tdd-test-author` or `tdd-implementer` missing → stop before coding, name missing file under `.claude/agents/`; never take its role.
 
-You stay responsible for **design**: splitting into behaviours, arbitrating an unbounded cost, settling an ambiguity, updating the plan and the documentation. Subagents produce and declare; you judge.
+You own **design**: split into behaviours, arbitrate unbounded cost, settle ambiguity, update plan + docs. Subagents produce and declare; you judge.
 
 ## Workspace projects
 
 Production — `src/{{PRODUCT}}.{Abstractions.Models, Domain, Application, Infrastructure, WebAPI}/`.
 Suites — `tests/{{PRODUCT}}.{UnitTests, IntegrationTests, ContractTests, E2ETests, ArchitectureTests, DslTests}/`.
-`tests/{{PRODUCT}}.CoreTests/` is not a suite: shared test infrastructure (doubles, builders, assets), referenced by the others.
+`tests/{{PRODUCT}}.CoreTests/` not a suite: shared test infra (doubles, builders, assets).
 
-EF migrations live in another project: **never modify them from this workspace**.
+EF migrations sit in another project: **never modify from this workspace**.
 
 ## Build and tests
 
-Runner, commands, which test level to write, suite scope and integration-test filtering → **`references/test-scope.md`**. Single source, shared with `/verify-ddd-tdd`: do not restate those rules here.
+Runner, commands, test level, suite scope, integration-test filtering → **`references/test-scope.md`**, single source shared with `/verify-ddd-tdd`. Not restated here.
 
 ## Workflow
 
 ### 1. Analysis
 
-**Entry guard — one batch, one session. Check this before any read.** If this session has already closed a batch (a `/verify-ddd-tdd` verdict was relayed, or a `→ Batch FX complete` line was printed), **stop here**: read nothing, delegate nothing, write nothing. Print `→ Batch FZ already closed in this session. Run /clear, then relaunch /implement-tdd batch FX.` and end the turn. A second batch launched without `/clear` pays the whole accumulated context of the first on every one of its turns — the measurement is in "End of batch" below, and it is the single largest avoidable cost of this skill. The user relaunching without clearing is not an authorisation to continue: say it and stop.
+**Entry guard — one batch, one session. Check before any read.** Batch already closed this session (`/verify-ddd-tdd` verdict relayed, or `→ Batch FX complete` printed) → **stop**, read/delegate/write nothing; print `→ Batch FZ already closed in this session. Run /clear, then relaunch /implement-tdd batch FX.`, end turn. Relaunch without clear ≠ authorisation: say it, stop. `.claude/hooks/implement-tdd-guard.sh` enforces outside model; identical relaunch forces through — false positive only, never chaining.
 
-This guard is also enforced outside the model, by `.claude/hooks/implement-tdd-guard.sh` (`UserPromptSubmit` + `PreToolUse:Skill`): it reads the transcript for the closing literal and denies the second launch. Re-issuing the identical launch forces it through — the escape hatch exists for a false positive, not for chaining batches.
 
-**The reads of this phase go out in a single message.** Global plan (located sections), batch sheet, `references/test-scope.md`, `references/conventions.md`: one `Read` each, all in the same turn. Same rule for every diff or status capture, and for every group of independent `Bash` probes anywhere in the batch. Measured on 2026-09-08 over four batches: 611 tool turns, **not one carrying two calls**. A turn is one billed round trip that resends the whole accumulated context, not one call — sequencing independent reads pays that context once per read, and adds one latency per read.
+**Phase reads in one message**: global plan (located sections), batch sheet, `references/test-scope.md`, one `Read` each. Same for every diff/status capture and every group of independent `Bash` probes anywhere in batch.
 
-- **Argument = `batch FX`** (e.g. `implement-tdd batch F1`):
-  1. Read the global plan (`*-PLAN.md`) **by section, never whole**: its summary and its batch-execution index, then the `### Batch FX` section only — locate them with `grep -n "^## \|^### "` and `Read` the ranges. Measured: the plan read whole is 12k tokens carried by every later turn of the session, the second heaviest line after the startup.
-  2. Read the batch sheet (`*-PLAN-FX.md`) — technical detail; it is scoped to the batch, read it whole
-  3. **Steps already ticked ✅** in the global plan → skip, resume at the first ⬜ step
-  4. Follow the sheet's remaining elements and steps
-  5. Check the global plan's DDD/APP/PERF coverage, then collect the applied ids from the sheet. In `/plan-implementation`, read `references/ddd-rules.md` and `architecture-rules.md` **only** on the lines of those ids; open `ddd-examples.md` only if the pattern is still unknown.
-- **Argument = `batch FX — correction: [manual finding]`** → read `references/correction-mode.md` and follow it. Do not open that file on a plain `batch FX`.
-- **Otherwise**: do not code. DDD design must be explicit in a plan; route to `/plan-implementation`.
+- **Argument = `batch FX <global plan path>`** (e.g. `implement-tdd batch F1 todo/<feature>/<CODE>-PLAN.md`) — **path as text, never an `@` mention**, which attaches the whole plan to every turn. Attached anyway → don't re-read, use the located sections from the attachment. No path → `ls todo/*/*-PLAN.md`; several candidates → ask.
+  1. Global plan (`*-PLAN.md`) **by section, never whole**: summary + batch-execution index, then `### Batch FX` only — locate with `grep -n "^## \|^### "`, `Read` those ranges.
+  2. Batch sheet (`*-PLAN-FX.md`) — technical detail, batch-scoped, read whole
+  3. **Steps already ticked ✅** in global plan → skip, resume at first ⬜ step
+  4. Follow sheet's remaining elements + steps
+  5. Check global plan's DDD/APP/PERF coverage, collect applied ids from sheet. In `/plan-implementation`, read `references/ddd-rules.md` + `architecture-rules.md` **only** on those ids' lines; open `ddd-examples.md` only if pattern still unknown.
+- **Argument = `batch FX — correction: [manual finding]`** → read `references/correction-mode.md`, follow it. Never open on plain `batch FX`.
+- **Otherwise**: don't code. DDD design must be explicit in plan → route to `/plan-implementation`.
 
-**Invariants → what they REMOVE.** A sheet states invariants ("a copy has a single owner", "every key comes from the same product"). Do not merely copy them into the docs: write **what they take out of the code** — a loop, a `GroupBy`, a dictionary, a defensive branch, a second read. A documented but unexploited invariant produces code that defends an impossible case.
+**Invariants → what they REMOVE.** Sheet states invariants ("a copy has a single referent", "every key comes from the same keyring"). Write **what they take out of code** — loop, `GroupBy`, dictionary, defensive branch, second read.
 
-**Ambiguity mid-batch → traced assumption, never a silent decision.** A question that changes the scope, an RM/CU or a design decision stops the batch (back to `/business-spec` or `/plan-implementation`). A question that changes none of those gets settled, but written down: add to the batch sheet, under `## Assumptions`, a line `Hn — [what you assume] — to be validated by [who]`, and carry it into the final summary. An unwritten assumption is a decision nobody can review.
+**Mid-batch ambiguity → traced assumption, never silent decision.** Question changing scope, RM/CU or design decision stops batch (back to `/business-spec` or `/plan-implementation`). Question changing none: settle, but write down — batch sheet, under `## Assumptions`, line `Hn — [what you assume] — to be validated by [who]`; carry into final summary.
 
-**At the start (once)**: read `references/test-scope.md` (test level, suite scope) and `references/conventions.md` ("Data access"). Layer conventions — naming, base classes, folder structure, pitfalls — arrive on their own through `.claude/rules/*.md` as soon as you read a file of that layer: do not go looking for them, do not ask for them again. Full code examples are split by layer (`references/examples-domain.md`, `-application`, `-infrastructure`, `-webapi`): the layer rule gives you the exact path. Open one only if the pattern is unknown to you.
+**At start (once)**: read `references/test-scope.md` (test level, suite scope). `references/conventions.md` § "Data access" **on demand only** — stated cost you can't validate against code, or `## BLOCKED` on cost — never at start. Layer conventions (naming, base classes, folder structure, pitfalls) arrive alone via `.claude/rules/*.md` on reading a file of that layer: don't hunt them. Layer examples (`references/examples-domain.md`, `-application`, `-infrastructure`, `-webapi`): layer rule gives exact path; open one only if pattern unknown.
 
-**Do not open a source file outside the target handler folder — delegate that look.** Reading a neighbouring feature to copy its pattern is legitimate work; doing it in the orchestrator is not. Every `Read` under `src/` or `tests/` makes the harness attach that folder's `CLAUDE.md` and its layer rules, and the orchestrator then carries them to the end of the batch without ever writing the code they govern. Ask `graphify explain|path|query` first — a relation between symbols is answered there, with no attachment. If files still have to be opened, send an `Explore` subagent (`model: haiku`, prompt naming `graphify`, `hooks/explore-guard.sh` denies it otherwise; bounded report: a `file:line` table, 20 lines max) and work from its answer. Measured on {{PRODUCT}}.Studio, session 1a39aeca: six `Read` on a neighbouring feature at turn 6 pulled in that feature's `CLAUDE.md` (14.8 kB) plus four `rules/*.md`, 60 kB carried by 127 turns — **$3.1 of the session's $25** — and the same `CLAUDE.md` was loaded again by the subagent that actually needed it. Attached documents cost $0.049/kB in the orchestrator against $0.0015/kB in a subagent: the same reading, 32x cheaper, in the run that uses it.
+**Never open source file outside target handler folder — delegate that look.** Every `Read` under `src/` or `tests/` attaches that folder's `CLAUDE.md` + layer rules for rest of batch. `graphify explain|path|query` first — symbol relation answered there, no attachment. Files still needed → `Explore` subagent (`model: haiku`, prompt naming `graphify`; bounded report: `file:line` table, 20 lines max). Feature cross-cutting design = `DESIGN.md` beside index `CLAUDE.md`, never auto-loaded: behaviour needs a chapter → name that section on agent's `Read bounded` line, never open it yourself. Same for `grep`/`sed`/`cat` over `tests/` hunting builder method, fixture or snapshot: paths sit in sheet's `## Ancrages` table.
 
 ### 2. Red-Green-Refactor loop per behaviour
 
-Split the batch into **end-to-end business behaviours** carried by a Command/Query+Handler, an endpoint or a repository — each tied to an RM/CU. An aggregate method stays an internal step of that behaviour, never a standalone test target. Apply the **RED → GREEN → REFACTOR → COST** cycle (`common-rules.md` §2) to each one, in dependency order **Domain → Application → Infrastructure → WebAPI**.
+Split batch into **end-to-end business behaviours** carried by Command/Query+Handler, endpoint or repository, each tied to RM/CU. Aggregate method = internal step, never standalone test target. Apply **RED → GREEN → REFACTOR → COST** (`common-rules.md` §2) to each, order **Domain → Application → Infrastructure → WebAPI**.
 
-**The sheet's steps are the evidence checklist, not the cycle unit — regroup them first.** Before entering the loop, map the sheet's steps onto behaviours: **several steps targeting the same handler and the same aggregate method make one cycle**. A guard, a refusal, a visibility or uniqueness check is an extra scenario of the behaviour that carries the method, not a cycle of its own. Its RED goes out in the same `tdd-test-author` contract, as one more line of `Scenarios`; its GREEN in the same `tdd-implementer` contract. Tick **every** merged step of the sheet once the cycle closes, each keeping its own RM and its own cost annotation. Announce the mapping to the user before the first RED — steps 1-2-3 → behaviour A, steps 4-5 → behaviour B. Measured on 2026-09-09: a batch split into 5 rule-steps for 2 handlers merged one pair after the fact and widened one step mid-cycle, for 3 subagent launches and 3 solution builds that produced no extra code.
+**Sheet steps = evidence checklist, not cycle unit — regroup first.** **Several steps on same handler + same aggregate method = one cycle.** Guard, refusal, visibility or uniqueness check = extra scenario of that behaviour, not own cycle: its RED = one more `Scenarios` line in same `tdd-test-author` contract, its GREEN in same `tdd-implementer` contract. Tick **every** merged step once cycle closes, each keeping own RM + cost annotation. Announce mapping to user before first RED — steps 1-2-3 → behaviour A, steps 4-5 → behaviour B.
 
-This regrouping does **not** relax `references/common-rules.md` §2: within a merged cycle the scenarios are still all red before any production code, and the "out of scope — next behaviour" line of the GREEN contract still names the guards belonging to a **later** behaviour. What merges is the cycle, never the test-first order.
+Regrouping doesn't relax `references/common-rules.md` §2: inside merged cycle all scenarios red before any production code, and GREEN contract's "out of scope — next behaviour" line still names guards of a **later** behaviour. Cycle merges, test-first order never.
 
-**Group the behaviours into waves before entering the loop.** Two behaviours share a wave when their tests touch neither the same test file nor the same production code — typically an Application behaviour and an Infrastructure or WebAPI one. A wave's REDs go out in a single message, one `Agent` call each; the GREENs stay sequential, they edit the same files. Measured on 2026-09-09: 4 REDs launched one by one where 2 waves covered the batch.
+**Group behaviours into waves before entering loop.** Wave = behaviours whose tests touch neither same test file nor same production code — typically one Application + one Infrastructure or WebAPI. Wave's REDs in one message, one `Agent` call each; GREENs sequential.
 
-**COST is mandatory before moving to the next behaviour.** `tdd-implementer` states it in one line ("1 read + 1 write"); you **validate** it against the delivered code, you do not take it at face value. No test observes that number: green proves nothing here. An `await` on a repository inside a loop is a **design** defect, and design is where you go back to. Symptom/fix table → `references/conventions.md` § "Data access".
+**Next wave's REDs go in same message as current wave's first GREEN.** Safe while wave n+1 test files stay disjoint from wave n's and no signature stub RED(n+1) needs lands in a file GREEN(n) fills — check both on sheet; shared stub → that RED back to sequential. `CS2012` / `file in use` in an agent = build collision, not design fault → have it re-issue its filtered command, don't re-delegate.
 
-**RED = ALWAYS delegate writing the test** to the `tdd-test-author` subagent, telling it which skill to apply (+ scenario name + RM). Level choice, Infrastructure integration-test obligation and its only waiver → `references/test-scope.md` §1. Aggregate, query, command and interaction policy → the same file, §5. Both are absolute: a deviation is Blocking at audit.
+**COST mandatory before next behaviour.** `tdd-implementer`'s `Cost` line = last line of `scripts/access-cost.py` over its files — awaited Infrastructure calls read off the syntax tree, loop, lambda and in-memory filter flagged — plus its input-independence clause. You **validate the line, never the file**: no Infrastructure call in a loop and no in-memory filter, counts consistent with the sheet's access cost, clause naming the input. Line without the script's form → `SendMessage` to the agent; never open the handler to rebuild it. Any flag delivered as `## GREEN` = **design** defect → back to design. Symptom/fix table → `references/conventions.md` § "Data access".
 
-Read the plans once, in the main agent. For each behaviour, delegate this compact contract, without attaching the plan or asking for it to be re-read:
+**RED = ALWAYS delegate test writing** to `tdd-test-author`, naming skill to apply + scenario name + RM. Level choice, Infrastructure integration-test obligation + its only waiver → `references/test-scope.md` §1; aggregate/query/command/interaction policy → same file §5. Both absolute: deviation = Blocking at audit.
+
+Read plans once, in main agent. Per behaviour delegate this compact contract, no plan attached, no re-read asked:
 
 ```text
 RM/CU: …
 Behaviour: …
 Level / skill: …
+Test class / fixture: `XTests` / `YFixture` — existing or to create
+Methods: `Should…_When…` — one per scenario, in the order of the Scenarios line, with its RM when the behaviour carries several
 Rewritten by you (read in full): test file, fixture — exact paths, existing or to create
 Read bounded (context only): handler / aggregate under test, shared doubles and builders under tests/{{PRODUCT}}.CoreTests/ — exact paths
 Scenarios: …
@@ -100,17 +110,15 @@ Expected observation: …
 Forbidden: any file search. A missing path comes back as ## BLOCKED.
 ```
 
-**The exact paths are not optional.** You have just read the sheet, you hold them; the subagent does not and pays a full exploration to rebuild them. Measured on 2026-09-08: 23 `tdd-test-author` runs for 445 turns, **19 turns to write one test**. A contract that names the four paths removes that exploration. If you cannot name one, it is missing from the sheet — that is a plan gap, settle it before delegating.
+**Exact paths, class, fixture, method names not optional — copied, not searched.** Sheet's `## Ancrages` table carries test class, fixture, `CoreTests` builders + doubles, production files, contract snapshot of every step; method names from its `Tests` line. Missing row = plan gap: one `ls` to confirm path, one `Edit` adding the row to the sheet, then delegate — never `grep` hunt across `tests/` here.
 
-**Sort the paths into the two lines, do not merge them.** A file the agent rewrites has to be read whole: it needs the exact strings an `Edit` matches on, and an outline does not carry them. A file it only consults is read around one declaration. `read in full` and `read bounded (context only)` are the two literals that say which is which — keep them verbatim, they are the vocabulary both agents key on. Getting it wrong costs a denied read and a turn; leaving a path out costs the exploration the contract exists to remove.
+**Sort paths into the two lines, don't merge.** `read in full` = file agent rewrites, `read bounded (context only)` = file only consulted — two literals both agents key on, keep verbatim.
 
-Behaviours cleared as disjoint go out **in the same message**, one `Agent` call each.
+Agent writes test files only, runs filtered test, returns compact `## RED`. Don't ask it to re-explain plan or copy logs.
 
-The agent modifies test files only, runs the filtered test and returns its compact `## RED` format. Do not ask it to re-explain the plan nor to copy its logs.
+Its `## RED` carries `Production diff` — `git diff --stat -- src/`, expected empty — plus filtered command + exit code. Empty line + red assertion = enough, don't open diff. Non-empty → back to agent: production code ahead of red test deleted, never kept.
 
-Once it returns: read its diff, confirm it contains no production code, then check the filtered test's expected failure. Never production code ahead of a red test.
-
-**Relay its `## RED` table to the user immediately, before GREEN.** A subagent's report is never shown to the user: an unrelayed table is a table nobody reads. The subagent returns method names and cases; **you** add the `RM/CU` column from the contract you handed it — it is your id, not its output. Print, under the behaviour's name, with the observed exit code:
+**Relay its `## RED` table to user immediately, before GREEN.** Subagent returns method names + cases; **you** add `RM/CU` from the contract you handed it. Print under behaviour name, with observed exit code:
 
 ```markdown
 ### RED — [behaviour] (exit 1)
@@ -120,9 +128,9 @@ Once it returns: read its diff, confirm it contains no production code, then che
 | `[Class]Tests.[Method]` | RM-XX | what the test observes |
 ```
 
-Check the table against the diff before relaying: a test method present in the diff but absent from the table comes back to the subagent. Keep these rows for the batch — they are the material of the final recap (step 5, `references/closing.md`); do not rebuild them from the diff at the end.
+Check table against diff before relaying: test method in diff but absent from table → back to subagent. Keep rows — material of final recap (`references/closing.md` §4).
 
-**GREEN + REFACTOR = delegate to the `tdd-implementer` subagent.** It writes the production code, deletes what its code orphaned, runs the filtered test and states the cost. Test files are read-only to it: a test that cannot go green without being modified comes back as `## BLOCKED`, it does not get weakened. Delegate this compact contract, without attaching the plan or having it re-read:
+**GREEN + REFACTOR = delegate to `tdd-implementer`.** It writes production code, deletes what its code orphaned, runs filtered test, states cost. Test files read-only to it: test that can't go green without modification comes back `## BLOCKED`, never weakened. Contract, no plan attached, no re-read asked:
 
 ```text
 RM/CU: …
@@ -140,59 +148,44 @@ Expected access cost: n reads + n writes to Infrastructure, independent of [inpu
 Snapshot (approval-testing suites only): approved-file path + literal seeded values expected
 ```
 
-**The contract carries only what the agent cannot know.** Never restate what `.claude/agents/tdd-implementer.md` already binds it to: zero comments, test files read-only, validation commands, REFACTOR, orphan deletion, `## GREEN` / `## BLOCKED` format. Each restatement is paid on every delegation and becomes a second source that drifts from the charter.
+**Contract carries only what agent can't know.** Never restate what `.claude/agents/tdd-implementer.md` binds: zero comments, test files read-only, validation commands, REFACTOR, orphan deletion, `## GREEN` / `## BLOCKED` format.
 
-**Signature means declaration** — name, parameters, return type. A dictated body makes your own mistake read as the spec, and no review catches it: the code matches the contract. If you need to dictate the body, you are doing the GREEN yourself — do it, do not delegate.
+**Signature = declaration** — name, parameters, return type. Dictating a body → you're doing GREEN yourself: do it, don't delegate.
 
-**Name the ripple, or it gets rediscovered file by file.** When the behaviour moves a signature — a parameter dropped from an aggregate method, a member leaving a repository interface — the change lands in files that are neither stubbed nor created: mappers, repository implementations, hand-written doubles, integration fixtures. You know where, you have just read the sheet and the RED diff. The agent does not, so it reads each of them whole looking for the landing site. Measured on 2026-09-10: one `tdd-implementer` run opened four such files unbounded, two of them past 550 lines, none named by the contract. One clause per file — "loses the `hasBeenTransferred` parameter", "stops hydrating from the repository" — replaces that.
+**Name the ripple.** Signature moved (parameter dropped from aggregate method, member leaving repository interface) → changes land in files neither stubbed nor created: mappers, repository implementations, hand-written doubles, integration fixtures. One clause per file — "loses the `hasBeenTransferred` parameter", "stops hydrating from the repository".
 
-**The two stub lists are not optional.** `tdd-test-author` writes signature stubs to make the RED observable (`references/common-rules.md` §1). You have just read its diff: a file it already created, announced as "to create", sends the agent looking for work that is done.
+**Two stub lists not optional.** `tdd-test-author` writes signature stubs to make RED observable (`references/common-rules.md` §1); read its diff → file it created never announced "to create".
 
-**Expected access cost is Infrastructure calls**, not files to read. A contract stating "1 read" while prescribing six file reads sets a budget the agent must break to obey it.
+**Expected access cost = Infrastructure calls**, not files to read.
 
-Snapshot acceptance procedure and its single allowed write under `tests/` → `references/test-scope.md` §6.
+Snapshot acceptance + its single allowed write under `tests/` → `references/test-scope.md` §6.
 
-**A GREEN contract carries the current behaviour only.** Never put in it a guard, a branch or a rule belonging to a behaviour whose test is not yet written: its RED then comes back green, and the only way out is to strip the code, observe the red and re-delegate. Measured on 2026-09-09: two guards written ahead in the GREEN of behaviour 1 cost the removal, the re-observation and the restoration of the same code, plus a user interruption.
+**GREEN contract carries current behaviour only.** Never a guard, branch or rule of a behaviour whose test isn't written yet: its RED comes back green, only exit = strip code, observe red, re-delegate.
 
-Once it returns `## GREEN`: read its diff, check the announced cost against the code, and each hunk's attachment. A `## BLOCKED` on an unbounded cost or a design ambiguity is settled here — or escalated to `/plan-implementation` if it moves a decision of the plan. Never by re-running the agent with the same instruction.
+On `## GREEN`: its `Tests diff` line — `git diff --stat -- tests/` since RED, expected empty or accepted `.verified.txt` alone — settles test integrity, no diff opened; its `Cost` line settles COST the same way (§2), no handler opened. Hunk-by-hunk walk of batch = auditor's (`/verify-ddd-tdd` §1.4), not yours. `## BLOCKED` on unbounded cost or design ambiguity settled here — escalate to `/plan-implementation` if it moves a plan decision. Never re-run agent with same instruction.
 
-**Correction of a returned agent: `SendMessage` under 3 turns, a fresh `Agent` beyond.** `SendMessage` resumes the agent with its whole transcript, which is re-sent on every further turn: an agent stopped at 49 turns carries ~80 k of context and every correction turn pays it. A fresh `Agent` restarts at ~17 k of preamble plus ~11 k of reloaded rules and files. Measured on 2026-09-09: a 10-turn correction costs ~850 k in continuation against ~350 k in a fresh agent. Beyond 3 turns, re-delegate — the returned `## RED` / `## GREEN` report already carries the handoff (test paths, command, exit code).
+**Correcting a returned agent: `SendMessage` under 3 turns, fresh `Agent` beyond.** Returned `## RED` / `## GREEN` already carries handoff (test paths, command, exit code).
 
 ### 3. Global green loop
 
-**Whole suites run here, once per batch — never inside the loop.** During the RED → GREEN cycle the subagents run only their behaviour's `--filter-class`, and their `rtk dotnet build --no-restore` is what makes that filtered run possible: it is the loop's only batch-wide command, one per cycle. Fewer cycles is therefore fewer solution builds — that is what the regrouping of §2 buys. A whole unit, contract or architecture suite run mid-loop proves nothing the filtered test did not, and pays minutes per behaviour.
+**Whole suites run here, once per batch — never inside loop.** In the cycle subagents run only their behaviour's `--filter-class`; their `rtk dotnet build --no-restore` = loop's only batch-wide command, one per cycle.
 
-Fix until fully green (every behaviour of the batch). **Each suite's scope is decided, not endured** — which suites to run whole or filtered, how to build the integration-test filter, how to report the scope → `references/test-scope.md` §2-4.
+Fix until fully green (every behaviour). **Each suite's scope decided, not endured** — whole or filtered, integration-test filter, scope reporting → `references/test-scope.md` §2-4.
 
-**Every suite you run from here writes to a file, not to the context**: `> "$SCRATCH/test-<Suite>.txt" 2>&1; echo "exit=$?"; tail -15 …` — form and rationale in `references/test-scope.md`, "Runner". The suites whose scopes are independent go out in a **single message**.
+**Every suite run from here writes to file, not context**: `> "$SCRATCH/test-<Suite>.txt" 2>&1; echo "exit=$?"; tail -15 …` — form in `references/test-scope.md`, "Runner". Independent suites in **one message**.
 
-In the batch sheet, tick RED only after the filtered test's expected failure, GREEN after success, COST after reviewing the cost. Never tick evidence you have not observed.
+**Tick sheet once per behaviour, after COST**: one `Edit` sets `RED ✅ · GREEN ✅ · COST ✅` together, each observed first — RED on filtered test's expected failure, GREEN on its success, COST on its `Cost` line checked against the sheet. Locate step line with `grep -n`, edit that line; sheet read once in §1, never re-read whole for a tick. Never tick unobserved evidence.
 
-### 4. Delegated final audit
+### 4. Close the batch
 
-After the global green loop, produce the audit capture in **one call** — `bash scripts/audit-capture.sh FX <sheet> <scratchpad>/audit-FX.txt` — then invoke `/verify-ddd-tdd batch FX`, passing in the argument the path of that capture and the FX section of the sheet, which you already hold. Its `context: fork` runs it in an isolated subagent, in fast mode, writing no file. Wait for its verdict before concluding.
-
-The capture carries the status, the diff, the RM/CU and DDD/APP/PERF coverage, and the `build` / `ArchitectureTests` exit codes. Handing that over is what keeps the audit from spending thirty turns collecting what a single script produces in five seconds — measured on 2026-09-08: five audits, 259 turns, not one of them carrying two tool calls. It deliberately leaves the targeted filters out: their scope stays an audit decision.
-
-- Verdict `VALID`: keep its evidence table and its commands with exit codes in the final summary. If it lists **Minor** deviations, carry them over as they are, without fixing or hiding them: the user decides.
-- Verdict `GAPS`: fix in the main agent, re-run the affected validations, then re-delegate with `/verify-ddd-tdd batch FX resume`, quoting the previous verdict's deviation table. The audit then re-examines those deviations and the diff produced since, not the whole batch.
-- After two correction/audit rounds still in deviation, stop and return the blocking deviations; work around neither the plan nor the audit.
-
-A `VALID` verdict closes **the current batch only**. Stop there: do not start, delegate or suggest any following batch. End with `→ Batch FX complete — manual validation required. Run /clear before any other batch.`
-
-### 5. Closing the batch
-
-Plan update, handler `CLAUDE.md`, diff re-read hunk by hunk, final summary and test recap table → **read `references/closing.md` and follow it**. Open it here, after the verdict, not at the start of the batch.
-
+Read `references/closing.md` whole, follow §1 → §5 in order: sheet + handler docs (§1-2), gate + delegated audit (§3), summary (§4), batching (§5). `VALID` verdict closes **current batch only**. Stop: don't start, delegate or suggest following batch. End with `→ Batch FX complete — manual validation required. Run /clear before any other batch.`
 
 ---
 
 ## Reference
 
-Per-layer DDD conventions (naming, base classes, structure, pitfalls) → `.claude/rules/*.md`, loaded automatically. Full code examples → `references/examples-{domain,application,infrastructure,webapi}.md`, one per layer. Data-access cost → `references/conventions.md`.
+Layer DDD conventions → `.claude/rules/*.md`, auto-loaded. Code examples → `references/examples-{domain,application,infrastructure,webapi}.md`. Data-access cost → `references/conventions.md`. Measurements + reasons → `references/rationale.md`, outside batch only.
 
 ## End of batch
 
-After a `VALID` verdict, wait for the user's manual validation before any new `/implement-tdd` command.
-
-**One batch, one session.** Never chain a second batch in the current session: the batch that follows pays the accumulated context of the one before, which contributes nothing to it. Measured on 2026-09-08 over three batches — at equal request count, the second half of a session costs **1.9×** the input of the first, and 55 % of its requests run past 200 k of prompt, where the API bills a premium rate. Chaining also drags the session into a `/compact`, whose summary is then carried to the end. What grouping saves is one `(startup)`, about $4.50; what it costs is its whole tail at 1.9×. `/clear` between batches.
+After `VALID` verdict, wait for user's manual validation before any new `/implement-tdd`. **One batch, one session**: never chain a second in current session — `/clear` between batches.

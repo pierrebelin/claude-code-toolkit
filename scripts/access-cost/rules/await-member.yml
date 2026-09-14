@@ -1,0 +1,11 @@
+id: await-member
+language: cs
+severity: info
+message: awaited call on a member
+rule:
+  kind: await_expression
+  has:
+    kind: invocation_expression
+    has:
+      field: function
+      kind: member_access_expression

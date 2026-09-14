@@ -1,0 +1,131 @@
+# Project-local RTK filters — commit this file with your repo.
+# Filters here override user-global and built-in filters.
+# Docs: https://github.com/rtk-ai/rtk#custom-filters
+schema_version = 1
+
+[filters.clean-restore]
+description = "Compact clean-restore.sh output"
+match_command = "^.*clean-restore\\.sh"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^Determining projects to restore",
+  "^\\s+Restored ",
+  "^\\s+OK https?://",
+  "^Downloading ",
+]
+max_lines = 40
+on_empty = "clean-restore: ok"
+
+[filters.dotnet-restore-configfile]
+description = "Compact dotnet restore with custom configfile"
+match_command = "^dotnet restore.*--configfile"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\s+Restored .* in \\d",
+  "^Determining projects",
+]
+max_lines = 30
+on_empty = "restore: ok"
+
+[filters.sonar-scanner]
+description = "Compact SonarScanner output"
+match_command = "^dotnet sonarscanner|^sonar-scanner"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^INFO: ",
+  "^\\d{2}:\\d{2}:\\d{2}\\.\\d+ ",
+]
+max_lines = 50
+
+[filters.stryker]
+description = "Compact Stryker mutation output"
+match_command = "^dotnet stryker"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\[\\d+:\\d+:\\d+ ",
+  "^Tests progress",
+]
+max_lines = 80
+
+[filters.dotnet-ef]
+description = "Compact dotnet ef migrations output"
+match_command = "^dotnet ef"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^Build started",
+  "^Build succeeded",
+  "^info: ",
+  "^dbug: ",
+  "^Done\\.",
+]
+max_lines = 60
+on_empty = "ef: ok"
+
+[filters.dotnet-publish-pack]
+description = "Compact dotnet publish/pack output"
+match_command = "^dotnet (publish|pack)"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\s+\\S+ -> ",
+  "^Determining projects",
+  "^Restored ",
+  "^Build succeeded",
+]
+max_lines = 30
+on_empty = "publish: ok"
+
+[filters.dotnet-format]
+description = "Compact dotnet format output"
+match_command = "^dotnet format"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\s+Running formatters",
+  "^\\s+Formatted code file",
+  "^\\s+Format complete",
+]
+max_lines = 50
+on_empty = "format: ok"
+
+[filters.dotnet-list-package]
+description = "Compact dotnet list package output"
+match_command = "^dotnet list .* package"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\s+The given project",
+  "^Project '",
+]
+max_lines = 80
+
+[filters.coverlet]
+description = "Strip coverlet noise from dotnet test output"
+match_command = "^dotnet test.*coverlet|^dotnet test.*--collect"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^Calculating coverage",
+  "^Generating report",
+  "^\\+ Coverage History",
+  "^\\| Module ",
+]
+max_lines = 100
+
+[filters.reportgenerator]
+description = "Compact ReportGenerator HTML coverage output"
+match_command = "^reportgenerator|^dotnet reportgenerator"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\d{4}-\\d{2}-\\d{2}T",
+  "^Initializing report builders",
+  "^Analyzing ",
+]
+max_lines = 30
+on_empty = "reportgenerator: ok"

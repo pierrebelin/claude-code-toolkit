@@ -6,150 +6,126 @@ argument-hint: "[path of the specification to turn into a plan]"
 
 # Implementation plan from a spec
 
-**Implementation plan** from a business spec. Detailed enough for `/implement-tdd` to work without ambiguity, while staying a design document (not final code).
+Spec → plan. Unambiguous for `/implement-tdd`; design doc, not code.
 
 $ARGUMENTS
 
 ## Mission
 
-Spec → a plan **split by feature** (not by layer):
+Plan split by feature, not layer:
 
-1. Trace every **RM-XX** + **CU-XX** to the code elements that own it.
-2. Describe every element: **name**, **role**, **public signature**, **pseudo-code bullets**.
-3. Classify and trace the **DDD and Architecture rules**: owning aggregate, invariants, consistency, events, boundaries and access cost.
-4. List the **test scenarios** + their RM + the right level: unit test for handlers, integration test for repositories, contract test for endpoints, E2E for a lifecycle.
-5. Respect the `/implement-tdd` conventions and the `/tests-*` skills.
+1. Trace every RM-XX + CU-XX to owning code elements.
+2. Per element: name, role, public signature, pseudo-code bullets, exact path — existing or new.
+3. Classify + trace DDD/Architecture rules: owning aggregate, invariants, consistency, events, boundaries, access cost.
+4. Test scenarios + RM + level (unit: handlers; integration: repositories; contract: endpoints; E2E: lifecycle) + anchors: test class file, fixture, shared builders, doubles.
+5. Respect `/implement-tdd` conventions + `/tests-*` skills.
 
-**No final code**: no method bodies, no assertions, no SQL. A plan is **what**, **why**, **in which order**.
+No final code: no method bodies, assertions, SQL. Plan = what, why, where, order.
 
-## Approach
+## Workflow
 
-### Phase 1 — Understand
+### 1. Understand
 
-1. Read the spec in full.
-2. Read `references/ddd-rules.md` and `references/architecture-rules.md`. Classify each id as `applied` or `N/A — reason` in the global plan. A batch sheet then references only the applied ids. Read `references/ddd-examples.md` only if a retained id stays ambiguous.
-3. Explore `src/`: aggregates, repositories, handlers, endpoints, existing VOs, naming conventions, test builders and doubles (`tests/{{PRODUCT}}.CoreTests/`).
-4. **Analyse the target codebase** — scan the bounded context, brief:
-   - Reusable VOs/entities/aggregates (exact names)
-   - Similar or conflicting repositories/handlers/endpoints
-   - **A handler that already owns the same business act**: read its folder `CLAUDE.md` before concluding
-   - Routes in `Endpoints/Endpoints.cs` (collision risk)
-   - Local patterns of the bounded context (naming, conventions)
-   - Document it in section "1. Scope > Reuse".
-5. **Measure the blast radius of every existing type the plan modifies** — one `graphify affected "<Type>"` per aggregate, value object or domain interface already in `src/`. Roll the output up per project (`grep -oE '(src|tests)/[^/]+' | sort | uniq -c | sort -rn`); never paste the file:line list into a plan. A new type has no radius: skip it. The rollup goes into section "1. Scope" as the **measured** cost of the change, and it decides the split in Phase 2 — a type whose radius spans four test projects is a batch of its own, not a line inside a larger one. Estimating this by hand is what the graph exists to stop.
-6. Blocking technical ambiguities → **ask the user before planning** through **AskUserQuestion** (≤4 decisions per call, recommended answer as the first option). No plan while a blocking question is open.
-7. **Technical challenge** — at most 3 questions through **AskUserQuestion**, only if an answer can **remove work**:
-   - Can this need ship without a new type, service, endpoint or table?
-   - Does extending an existing element cover 80 % of the need (see Maximum reuse)?
-   - Which part of the scope can wait for a later batch without blocking the value?
-   Skip it when the answers are obvious from the exploration. An answer that reduces scope is carried into the plan, section Scope.
+1. Read spec fully.
+2. Read `references/ddd-rules.md` + `references/architecture-rules.md`. Each id → `applied` or `N/A — reason` in global plan. Sheet cites applied ids only. `references/ddd-examples.md` only if id ambiguous.
+3. Inventory bounded context: delegate, never walk here (`Read`/`cat`/`sed`/`grep` under `src/` or `tests/` attaches layer rules to every later turn). `graphify explain "<Aggregate>"` first, then one `Explore` subagent (`model: haiku`, a `description`, prompt naming `graphify explain|path|query` before grep), contract:
 
-### Phase 2 — Split
+   ```text
+   Bounded context: … — spec: [path] — need: [one sentence]
+   Return `path:line` tables, 60 lines max, no code excerpt:
+   1. Aggregates, value objects, entities, domain interfaces reusable for the need — exact names
+   2. Repositories, handlers, endpoints owning the same business act or a similar one; per handler, the path of its folder CLAUDE.md
+   3. Routes of the context in Endpoints/Endpoints.cs (collision risk)
+   4. Test anchors: test class file and fixture per handler of item 2; contract fixture and .verified.txt per route of item 3; builders and doubles under tests/{{PRODUCT}}.CoreTests/ for the aggregates of item 1
+   5. Local conventions of the context — naming, folder layout — one line each
+   ```
 
-Cross-cutting functional batches (Domain + App + Infra + WebAPI + tests). Each batch independently deliverable, build green.
+   Only file you open: folder `CLAUDE.md` of handler owning same business act, bounded to `## Règles métier` table — rewrite vs twin = your call. Inventory → "1. Scope > Reuse".
+4. Blast radius per existing type modified: one `graphify affected "<Type>"` per aggregate, VO, domain interface already in `src/`; new type: skip. Roll up per project (`grep -oE '(src|tests)/[^/]+' | sort | uniq -c | sort -rn`), never paste file:line. Rollup → "1. Scope" as measured cost; drives split (step 2) — radius over four test projects = own batch.
+5. Blocking technical ambiguity → AskUserQuestion before planning (≤4 decisions/call, recommended answer first). No plan while blocking question open.
+6. Technical challenge — ≤3 AskUserQuestion questions, only if answer removes work:
+   - Ship without new type, service, endpoint, table?
+   - Extending existing covers 80 % (see Maximum reuse)?
+   - Which scope part waits for later batch without blocking value?
 
-For each batch, also establish its **execution status**: `sequential` by default, or `parallelisable with F?` in two worktrees. Declare two batches parallelisable only if their prerequisites are already finished and they share no functional dependency, no file, fixture, configuration, migration or route. Work on the same aggregate, handler, endpoint, `.csproj` project, DI, EF migration or test fixture is sequential. State the concrete reason in the plan; at the slightest doubt, sequential.
+   Skip if obvious from inventory. Scope-reducing answer → section Scope.
 
-### Phase 3 — Write
+### 2. Split
 
-**Read the `references/plan-template.md` template first.** Two levels:
+Cross-cutting functional batches (Domain + App + Infra + WebAPI + tests), each independently deliverable, build green.
 
-1. **Folder** `todo/[code-kebab-case]/` — the one where `/business-spec` wrote `SPEC-[code-kebab-case].md`. Reuse it; create it only if it does not exist.
-2. **Global plan** (`[CODE]-PLAN.md`): compact view, tables, readable in under 2 minutes per batch. In that folder.
-3. **Batch sheets** (`[CODE]-PLAN-F1.md`, `-F2.md`…): technical detail per batch. `/implement-tdd batch F1` loads the global plan + the F1 sheet alone. Same folder.
+Status per batch: `sequential` default, or `parallelisable with F?` (two worktrees). Parallelisable only if prerequisites done + nothing shared — functional dependency, file, fixture, configuration, migration, route. Same aggregate, handler, endpoint, `.csproj`, DI, EF migration, test fixture → sequential. Concrete reason in plan; doubt → sequential.
+
+### 3. Write
+
+1. Read `references/plan-template.md` first. Two levels, one folder:
+   - `todo/[code-kebab-case]/` — where `/business-spec` wrote `SPEC-[code-kebab-case].md`. Reuse; create only if absent.
+   - Global plan (`[CODE]-PLAN.md`): compact, tables, <2 min read per batch.
+   - Batch sheets (`[CODE]-PLAN-F1.md`, `-F2.md`…): detail per batch. `/implement-tdd batch F1` loads global plan by section + F1 sheet alone.
+2. Handler doc — per handler created/modified: sheet step updating handler folder `CLAUDE.md` (business rules, flow + access cost, events). New handler or changed intent → also parent feature index `CLAUDE.md` (link, intent). Format: `/implement-tdd` `references/claude-md-handler.md`.
+3. Self-validation: re-read plan vs checklist. Deviation → fix plan. Doubt on business intent → ask user.
+4. Summary: batch count, RM/CU traced, files produced, folder path.
 
 ## Execution-plan rules (3.FX.3)
 
-- A step is an **end-to-end business behaviour**, not a layer, not a file
-- **One step = one production artifact**: a Command/Query+Handler, an endpoint, a repository. Two steps whose target production code is the same handler and the same aggregate method are **one step**. A guard, a refusal, a uniqueness check or a visibility check on a method already carried by a step is **not a step** — it is one more scenario of that step, listed on its `Tests` line. Splitting them buys a separate TDD cycle (a subagent launch, a report, a re-read of the same two files) for code that ships as one method.
-- Every step → **≥1 test named after the target skill's convention** + its RM + the target test project: unit/integration/E2E `Should{result}_When{condition}`, contract `Should{Action}()`. A step with no nameable business behaviour is an internal mechanism ("scan", "detect", "map", "convert") → **recast it as a behaviour**. No file paths and no assertions (→ the `/tests-*` skills).
-- **2-5 behaviour steps per batch**, plus the documentation step and the verification step. Past 6, the split went down to the rule instead of the artifact: regroup by target method before writing the sheet. A batch legitimately needing more than 8 is a batch to split in two.
-- The last step is `dotnet build` + `dotnet test` with its **named scope**: suites run whole, filtered project and filter root, suites deliberately not run and why. A bare "`dotnet test`" is a weak success criterion
-- No meta-step, no pure-layer step, no file-only step
+- Step = end-to-end business behaviour, not layer, not file
+- One step = one production artifact: Command/Query+Handler, endpoint, repository. Two steps on same handler + same aggregate method = one step. Guard, refusal, uniqueness/visibility check on method already in a step = not a step — extra scenario on its `Tests` line.
+- Every step → ≥1 test named per target skill convention + RM + target test project: unit/integration/E2E `Should{result}_When{condition}`, contract `Should{Action}()`. Unnameable behaviour = internal mechanism ("scan", "detect", "map", "convert") → recast as behaviour. Paths → sheet `## Ancrages`; assertions → `/tests-*` skills.
+- 2-5 behaviour steps per batch + documentation step + verification step. Past 6: split hit rule level → regroup by target method. Legitimately >8 → split batch in two.
+- Last step = `dotnet build` + `dotnet test`, named scope: whole suites, filtered project + filter root, suites skipped + why. Bare "`dotnet test`" = weak criterion
+- No meta-step, pure-layer step, file-only step
 
 ## Plan contents
 
 ### Global plan (`-PLAN.md`)
 
-**Principle**: WHAT + WHY + ORDER. Readable in under 2 minutes per batch.
+WHAT + WHY + ORDER. <2 min read per batch.
 
-**MUST**: a compact table per batch (Layer | Element | Action | Detail), RM/CU → code traceability, test scenario names + RM, non-obvious decisions, explicit reuse, link to the batch sheet and its execution status (dependencies + possible parallelisation).
+MUST: compact table per batch (Layer | Element | Action | Detail), RM/CU → code traceability, test scenario names + RM, non-obvious decisions, explicit reuse, link to sheet + execution status (dependencies, parallelisation).
 
-**FORBIDDEN**: signatures, pseudo-code, fixture/mock/builder structure, any detail derivable from the layer rules (`.claude/rules/*.md`).
+FORBIDDEN: signatures, pseudo-code, file paths, fixture/mock/builder structure, anything derivable from `.claude/rules/*.md`.
 
 ### Batch sheets (`-PLAN-FX.md`)
 
-**Principle**: enough technical detail for `/implement-tdd`. 1 file = 1 batch.
+Enough detail for `/implement-tdd`. 1 file = 1 batch.
 
-**MUST**: exact element names (`/implement-tdd` conventions), public signatures, pseudo-code bullets, a **Design** section with the applied DDD/APP/PERF ids, owning aggregate, invariants + RM, consistency, internal events + payload, induced simplifications and access cost. Provide an empty **Assumptions** section, which `/implement-tdd` fills in during the batch (`Hn — [assumption] — to be validated by [who]`). List the test scenarios + RM + target project: a handler unit test is mandatory for a business behaviour, **an integration test is mandatory as soon as an element of the batch lives in `src/{{PRODUCT}}.Infrastructure/`** (repository, EF mapper, entity configuration, persistence-exception translation), a contract test if a route changes, E2E only for a multi-operation lifecycle. A waiver on the integration test only for an element with no effect on persistence — DI registration, adapter of an already-doubled external service — written in the sheet with its reason. No file paths and no assertions → the `/tests-*` skills.
+MUST: exact element names (`/implement-tdd` conventions), public signatures, pseudo-code bullets. Design section: applied DDD/APP/PERF ids, owning aggregate, invariants + RM, consistency, internal events + payload, induced simplifications, access cost. Empty Assumptions section, filled by `/implement-tdd` mid-batch (`Hn — [assumption] — to be validated by [who]`). Test scenarios + RM + target project: unit test per handler behaviour; integration test as soon as element lives in `src/{{PRODUCT}}.Infrastructure/` (repository, EF mapper, entity configuration, persistence-exception translation); contract test if route changes; E2E only for multi-operation lifecycle. Sole integration waiver: element without persistence effect — DI registration, adapter of already-doubled external service — written in sheet with reason.
 
-**FORBIDDEN**: C# method bodies, test assertions, SQL/DDL, LINQ, full DI configuration, fixture/mock/builder structure (delegated to the test skills), long justifications.
+`## Ancrages` table, one row per step: exact path of test class + fixture, `tests/{{PRODUCT}}.CoreTests/` builders + doubles extended (member to add), production files filled/created; contract step: fixture + `.verified.txt`. Existing path from inventory (1.3); new file carries future path, mirrored on sibling it imitates. Path not copyable from sheet = plan hole.
+
+FORBIDDEN: C# method bodies, test assertions, SQL/DDL, LINQ, full DI configuration, internal structure of fixture/mock/builder (test skills own it), long justifications.
 
 ## Conventions
 
-DDD naming and per-layer conventions → **`.claude/rules/*.md`** (loaded automatically as soon as a file of the layer is read, subagents included). Do not duplicate them here.
+DDD naming + layer conventions → `.claude/rules/*.md` (auto-loaded on layer file read, subagents included). Don't duplicate.
 
-Design rules live in `references/ddd-rules.md` and `architecture-rules.md`, DDD counter-examples in `references/ddd-examples.md`. Do not duplicate them into a sheet: cite the ids, then apply them to the context.
-
-## Workflow
-
-1. **Read the spec** in full.
-2. **Explore the bounded context's code** — what is reusable, what the conventions are.
-3. **Blocking questions** through **AskUserQuestion** (recommended answer first). **No plan while answers are missing.** Then the **technical challenge** (Phase 1 §6) if an answer can remove work.
-4. **Folder** `todo/[code-kebab-case]/` (the spec's).
-5. **Write the global plan** (`-PLAN.md`) + the **batch sheets** (`-PLAN-F1.md`…) in that folder.
-6. **Handler documentation** — for every handler created or modified by the plan, provide for updating the handler folder's `CLAUDE.md` (business rules, flow + access cost, events). New handler or changed intent → also provide for updating the parent feature folder's index `CLAUDE.md` (link, intent, rule count). Format: `/implement-tdd` `references/claude-md-handler.md`. Add it as a step in the batch sheet.
-7. **Self-validation** — re-read the produced plan and check:
-   - DDD naming conforms (the `Naming` tables of `.claude/rules/*.md`) for every proposed element
-   - Architecture: business logic in Domain/Application (not WebAPI), Commands → ID, Queries → direct payload (`Paging<T>` / `IReadOnlyList<T>` / aggregate), never `Result<T>`
-   - Every DDD/APP/PERF id is classified `applied` or `N/A — reason` in the global plan; no silent omission
-   - Every batch references its applied ids; aggregate, invariants, consistency, internal event and cost are explicit
-   - Every RM/CU → at least one test named after the target skill's convention
-   - Tests: query handler = mock fed with data + result; command handler = type + content of `SavedEvents`; never a spy, a counter or a call assertion
-   - Every batch with an element living in `src/{{PRODUCT}}.Infrastructure/` carries at least one integration-test scenario, or a written waiver with its reason
-   - E2E chosen only when a scenario covers at least two chained business operations
-   - No "new" element where the existing one suffices (see Maximum reuse)
-   - Feasibility: dependencies resolved, no unflagged breaking change
-   - Each batch's last step names the expected test scope, not a bare `dotnet test`
-   - Every batch sheet carries an `Assumptions` section, empty at writing time
-   - No element planned for flexibility, configurability or an extension not expressed in the spec
-   - Every batch is `sequential` or explicitly declared parallelisable with a single other batch; a parallelisation states finished dependencies and the absence of shared files, configurations and fixtures
-   Deviation → fix the plan directly. Doubt about business intent → ask the user.
-8. **Summary**: number of batches, RM/CU traced, files produced, folder path.
+Design rules: `references/ddd-rules.md`, `architecture-rules.md`; counter-examples: `references/ddd-examples.md`. Don't copy into sheet: cite ids, apply.
 
 ## Maximum reuse
 
-**Before a new class/service/VO**: look in the existing code for a mechanism already doing 80 %+. Enrich and extend it, do not create something new.
+Before new class/service/VO: find mechanism already doing 80 %+. Extend, don't create.
 
-- **The same business act already owned by a handler** → **rewrite that handler**, never a second parallel use case. Two handlers for one act means two business rules drifting apart. The same holds for the endpoint and the contract: the existing route evolves, a twin is not opened.
-- **An existing type of the same shape** → rename/extend the existing type, do not create a second identical record.
-- **An existing method with a similar pattern** → an optional parameter or an overload, not a new service
-- **A dictionary/lookup already in place** (e.g. `DiagramDependencies`, handler mapping) → reuse it, not a new mapping VO
-- **Existing filtering/exclusion** (e.g. `excludedNodeIds` in `DuplicateInternal`) → extend it, do not duplicate
-- **An existing Application service** (e.g. `PortBreakingDetection`) → call it directly, no wrapper
+- Business act already owned by handler → rewrite it, never second parallel use case. Same for endpoint: existing route evolves, no twin.
+- Existing type of same shape → rename/extend, no second record.
+- Existing method, similar pattern → optional parameter or overload, not new service
+- Existing dictionary/lookup (`DiagramDependencies`, handler mapping) → reuse, no new mapping VO; existing filtering/exclusion (`excludedNodeIds` in `DuplicateInternal`) → extend; existing Application service (`PortBreakingDetection`) → call directly, no wrapper
 
-**In the plan**: every "new" element → justify why the existing one does not suffice. A weak justification means it is an extension, not a new element.
+In plan: every "new" element justifies why existing insufficient. Weak justification = extension.
 
-## Pitfalls
+## Self-validation checklist
 
-- Splitting by layer instead of by feature
-- Full C# code instead of pseudo-code
-- An RM/CU with no code owner = a hole
-- A DDD/APP/PERF id missing from the coverage, or an `N/A` without a reason = a hole
-- A rule applied with no owning aggregate, or with no concrete effect on the code = a hole
-- Test scenarios with no associated RM
-- **A second handler/endpoint for a business act already owned**, instead of rewriting the existing one
-- A test filter in VSTest syntax (`--filter "FullyQualifiedName~..."`): the runner is Microsoft.Testing.Platform (`--project` + `--filter-class`)
-- Planning an EF migration: they live in another project, outside scope, never modified here
-- An element planned in `src/{{PRODUCT}}.Infrastructure/` with no integration-test scenario and no written waiver
-- E2E chosen for a single endpoint
-- A spy, counter or call-count assertion in a handler scenario
-- Names not conforming to `/implement-tdd`
-- A plan with unresolved ambiguities
-- Non-existent elements referenced without Grep/Read
-- **Creating classes/services where enriching the existing one suffices**
-- An element planned "for later": flexibility, configurability or an extension point with no need expressed in the spec
-- A last "build + test" step with no named scope
+- DDD naming conforms (`Naming` tables of `.claude/rules/*.md`)
+- Business logic in Domain/Application, not WebAPI; Commands → ID; Queries → direct payload (`Paging<T>` / `IReadOnlyList<T>` / aggregate), never `Result<T>`
+- Every DDD/APP/PERF id `applied` or `N/A — reason`; every batch cites applied ids with aggregate, invariants, consistency, internal event, cost
+- Every RM/CU → ≥1 named test; every step has `## Ancrages` row, existing paths from inventory, never guessed
+- Tests: query handler = mock fed + result; command handler = type + content of `SavedEvents`; never spy, counter, call assertion. E2E only when ≥2 chained business operations
+- Element in `src/{{PRODUCT}}.Infrastructure/` → ≥1 integration scenario, or written waiver + reason
+- No "new" where existing suffices; no second handler/endpoint for owned act; nothing for flexibility/extension spec doesn't express
+- Feasibility: dependencies resolved, no unflagged breaking change; no EF migration planned (other project — schema change flagged, not scheduled)
+- Last step names test scope in Microsoft.Testing.Platform form (`--project` + `--filter-class`): VSTest `--filter "FullyQualifiedName~..."` doesn't exist here
+- Every sheet has `Assumptions` section, empty at writing
+- Every batch `sequential` or parallelisable with single other batch, stating finished dependencies + no shared files, configurations, fixtures
+- No unresolved ambiguity: blocking question asked, not assumed
 
 ## Next step
 

@@ -99,6 +99,12 @@ python3 scripts/rules-coverage.py --untested >>"$OUT" 2>&1
 section "DDD/APP/PERF id coverage of the sheet"
 python3 scripts/rules-coverage.py --ids "$SHEET" >>"$OUT" 2>&1
 
+# Awaited Infrastructure calls per modified file, read off the syntax tree;
+# loop, lambda and in-memory filter flagged, added lines told from pre-existing
+# ones. The `Cost` axis judges this section instead of re-opening the handlers.
+section "access cost (scripts/access-cost.py --diff)"
+python3 scripts/access-cost.py --diff >>"$OUT" 2>&1 || true
+
 # `rtk dotnet build` covers the whole solution; a red build makes every verdict
 # below it meaningless, so it runs first and unconditionally when code moved.
 if grep -qE '^\+\+\+ b/(src|tests)/' "$DIFF_FILE"; then

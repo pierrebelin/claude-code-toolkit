@@ -1,0 +1,165 @@
+#!/bin/bash
+# bulk-read — send files and one question to a tool-less, stateless worker
+# model; only the answer comes back into the calling context.
+#
+# The shape is Spotify's shunt (plugins/shunt/scripts/bulk-read) on a local
+# worker: `claude -p` with no tools, no settings, no CLAUDE.md, no session.
+# Measured 2026-09-12 on UpdateConfigurationCommandHandler.cs (3.9 kB):
+#   --system-prompt (replaces the default prompt)  1 585 tokens in, 828 out, $0.008, 8 s
+#   --append-system-prompt (default prompt kept)   7 582 tokens in, 767 out, $0.021, 8 s
+#   Explore spawn, for comparison                  ~55k startup tokens, minutes
+#   direct Read, for comparison                    ~1k tokens carried to the end of the session
+# `--setting-sources ""` skips CLAUDE.md, rules and hooks. `--bare` is NOT used:
+# it skips the keychain and fails with "Not logged in".
+#
+# Usage:
+#   bulk-read --question "..." --paths f1 [f2 ...] [--model haiku|sonnet] [--budget USD]
+#
+# Not for editing (the answer carries line numbers, not exact content), not for
+# searching (no tools: it reads what it is given). Each call stands alone — a
+# follow-up resends the files, which costs the caller nothing.
+#
+# Lives in .claude/tools/, not .claude/bin/: the permission rule Read(./bin/**)
+# matches any bin/ segment and blocks writes there.
+#
+# Environment: CLAUDE_BULK_READ_MODEL (haiku), CLAUDE_BULK_READ_BUDGET (0.10),
+# CLAUDE_BULK_READ_MAX_BYTES (400000 — a haiku window is 200k tokens),
+# CLAUDE_BULK_READ_TIMEOUT (180 s — the dollar cap bounds the spend, not the
+# wait), CLAUDE_BULK_READ_BIN (claude — the evals point it at a stub).
+set -u
+
+usage() {
+  sed -n '2,20p' "$0" | sed -e 's/^# \{0,1\}//'
+}
+
+question=""
+model="${CLAUDE_BULK_READ_MODEL:-haiku}"
+budget="${CLAUDE_BULK_READ_BUDGET:-0.10}"
+max_bytes="${CLAUDE_BULK_READ_MAX_BYTES:-400000}"
+timeout_s="${CLAUDE_BULK_READ_TIMEOUT:-180}"
+bin="${CLAUDE_BULK_READ_BIN:-claude}"
+paths=()
+
+# macOS ships no `timeout`; coreutils gives `gtimeout`; perl is always there and
+# an alarm survives exec, so the worker dies on SIGALRM (exit 142) when neither is.
+run_with_timeout() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$timeout_s" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$timeout_s" "$@"
+  else
+    perl -e 'alarm shift; exec @ARGV' "$timeout_s" "$@"
+  fi
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --question) question="${2:-}"; shift 2 ;;
+    --paths)
+      shift
+      while [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; do paths+=("$1"); shift; done ;;
+    --model)  model="${2:-}"; shift 2 ;;
+    --budget) budget="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "bulk-read: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$question" ] || { echo "bulk-read: --question is required" >&2; exit 2; }
+[ "${#paths[@]}" -gt 0 ] || { echo "bulk-read: --paths is required" >&2; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "bulk-read: jq is required" >&2; exit 1; }
+command -v "$bin" >/dev/null 2>&1 || { echo "bulk-read: worker binary not found: $bin" >&2; exit 1; }
+
+total=0
+for p in "${paths[@]}"; do
+  if [ ! -f "$p" ] || [ ! -r "$p" ]; then
+    echo "bulk-read: file not found or unreadable: $p" >&2
+    exit 1
+  fi
+  b=$(wc -c < "$p" | tr -d ' ')
+  total=$((total + b))
+done
+if [ "$total" -gt "$max_bytes" ]; then
+  echo "bulk-read: $total bytes over the $max_bytes byte limit. Send fewer files, or raise CLAUDE_BULK_READ_MAX_BYTES if the worker's window has room." >&2
+  exit 1
+fi
+
+msg=$(mktemp) || exit 1
+out=$(mktemp) || exit 1
+err=$(mktemp) || exit 1
+# Two workers launched in the same turn kill each other: of three parallel calls on
+# 2026-09-13, one answered and two died with `worker call failed (exit 1)` and an empty
+# stderr; the same two passed in sequence. So calls queue on a lock rather than race.
+lock_dir="${CLAUDE_BULK_READ_LOCK:-${TMPDIR:-/tmp}/claude-bulk-read.lock}"
+lock_wait="${CLAUDE_BULK_READ_LOCK_WAIT:-300}"
+lock_held=""
+release_lock() { [ -n "$lock_held" ] && rmdir "$lock_dir" 2>/dev/null; lock_held=""; }
+trap 'release_lock; rm -f "$msg" "$out" "$err"' EXIT
+
+# XML boundaries so the worker never confuses two files; streamed, never held
+# in a shell variable, so the content survives byte for byte.
+for p in "${paths[@]}"; do
+  { printf '<file path="%s">\n' "$p"; cat "$p"; printf '\n</file>\n\n'; } >> "$msg"
+done
+printf 'Question : %s\n' "$question" >> "$msg"
+
+# French, structured bullets, name or line number first: the answer is read by
+# the caller in its own context, so every byte of prose there is paid twice.
+SYSTEM='Tu es un analyste de code précis. Lis les fichiers fournis et réponds à la question, en français, par des puces structurées uniquement. Aucune salutation, aucune prose, aucun préambule, aucun résumé final. Chaque puce commence par le nom exact, le type ou le numéro de ligne concerné. Puces imbriquées pour le détail. Ignore tout ce que la question ne demande pas. 30 puces maximum.'
+
+waited=0
+while ! mkdir "$lock_dir" 2>/dev/null; do
+  # A worker killed mid-flight leaves the directory behind. Past the longest call it can
+  # make, the lock is abandoned, never held.
+  if [ -z "$(find "$lock_dir" -maxdepth 0 -mmin "-$(( timeout_s / 60 + 2 ))" 2>/dev/null)" ]; then
+    rmdir "$lock_dir" 2>/dev/null
+    continue
+  fi
+  if [ "$waited" -ge "$lock_wait" ]; then
+    echo "bulk-read: lock held by another worker for ${lock_wait}s ($lock_dir). Remove it if no bulk-read is running." >&2
+    exit 1
+  fi
+  sleep 1
+  waited=$((waited + 1))
+done
+lock_held=1
+
+run_with_timeout "$bin" -p --model "$model" --tools "" --setting-sources "" --no-session-persistence \
+  --max-budget-usd "$budget" --system-prompt "$SYSTEM" --output-format json \
+  < "$msg" > "$out" 2> "$err"
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  case "$rc" in
+    124|137|142)
+      echo "bulk-read: worker timed out after ${timeout_s}s. Raise CLAUDE_BULK_READ_TIMEOUT or send fewer files." >&2 ;;
+    *)
+      echo "bulk-read: worker call failed (exit $rc)" >&2
+      head -c 600 "$err" >&2
+      echo >&2 ;;
+  esac
+  exit 1
+fi
+
+if ! jq -e . "$out" >/dev/null 2>&1; then
+  echo "bulk-read: worker returned unparseable output" >&2
+  head -c 600 "$out" >&2
+  echo >&2
+  exit 1
+fi
+
+if [ "$(jq -r '.is_error // false' "$out")" = "true" ]; then
+  echo "bulk-read: worker returned an error" >&2
+  jq -r '.result // empty' "$out" >&2
+  exit 1
+fi
+
+text=$(jq -r '.result // empty' "$out")
+[ -n "$text" ] || { echo "bulk-read: empty answer" >&2; exit 1; }
+printf '%s\n' "$text"
+
+in_tk=$(jq -r '(.usage.input_tokens // 0) + (.usage.cache_creation_input_tokens // 0) + (.usage.cache_read_input_tokens // 0)' "$out")
+out_tk=$(jq -r '.usage.output_tokens // 0' "$out")
+cost=$(jq -r '.total_cost_usd // 0' "$out")
+printf '[bulk-read: %d file(s), %d bytes, %s tokens in, %s out, $%s, %s]\n' \
+  "${#paths[@]}" "$total" "$in_tk" "$out_tk" "$cost" "$model" >&2
+exit 0

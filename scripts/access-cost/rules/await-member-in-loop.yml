@@ -1,0 +1,18 @@
+id: await-member-in-loop
+language: cs
+severity: info
+message: awaited member call inside a loop
+rule:
+  kind: await_expression
+  has:
+    kind: invocation_expression
+    has:
+      field: function
+      kind: member_access_expression
+  inside:
+    any:
+      - kind: foreach_statement
+      - kind: for_statement
+      - kind: while_statement
+      - kind: do_statement
+    stopBy: end

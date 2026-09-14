@@ -8,7 +8,9 @@
 # a response-shape rule is only provable by a contract snapshot, a persistence rule only
 # by an integration test.
 #
-# Warning only: exit 0 in every case, never blocking.
+# Warning only: exit 0 in every case, never blocking. Output goes through
+# hookSpecificOutput.additionalContext: on PostToolUse, plain stdout at exit 0 lands in the
+# transcript only and never reaches the model (231 emissions, 0 read, probe of 2026-09-13).
 
 INPUT=$(cat)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -17,7 +19,7 @@ FILE_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin);
 [ -z "$FILE_PATH" ] && exit 0
 
 REPO_ROOT="$REPO_ROOT" FILE_PATH="$FILE_PATH" python3 <<'PYEOF'
-import os, re, sys, unicodedata
+import json, os, re, sys, unicodedata
 
 ROOT = os.environ["REPO_ROOT"]
 APP = os.path.join(ROOT, "src", "{{PRODUCT}}.Application")
@@ -251,12 +253,14 @@ for md in sorted(focus):
         out.append(f"{rel_md}: rules/tests traceability up to date.")
 
 if out:
-    print("Rules ↔ tests traceability")
-    print("\n".join(out))
+    msg = ["Rules ↔ tests traceability", "\n".join(out)]
     total_untested = sum(1 for md, rows in rules.items() for rid, _ in rows
                          if f"{prefix_of[md]}/{rid}" not in traits)
     if total_untested:
-        print(f"({total_untested} rules with no test across Application/)")
+        msg.append(f"({total_untested} rules with no test across Application/)")
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
+                                             "additionalContext": "\n".join(msg)}},
+                     ensure_ascii=False))
 PYEOF
 
 exit 0

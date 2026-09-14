@@ -1,0 +1,53 @@
+{
+  "cases": [
+    {
+      "name": "IntegrationTests whole suite is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
+        "tool_input": {"command": "STID_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore"}},
+      "expect": {"decision": "deny", "reason": "IntegrationTests suite entière refusée"}
+    },
+    {
+      "name": "IntegrationTests redirected to a file, still whole, still denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
+        "tool_input": {"command": "export SCRATCH=/tmp/x; STID_TEST_MODE=true dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore > \"$SCRATCH/test-IntegrationTests.txt\" 2>&1; echo \"exit=$?\"; tail -15 \"$SCRATCH/test-IntegrationTests.txt\""}},
+      "expect": {"decision": "deny", "reason": "filter-class"}
+    },
+    {
+      "name": "IntegrationTests with --filter-class passes (rtk rewrite applies)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
+        "tool_input": {"command": "STID_TEST_MODE=true dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore --filter-class \"*.Editor.Templates.Save.*\""}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "IntegrationTests with --filter-method passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
+        "tool_input": {"command": "rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore --filter-class \"*SaveTests\" --filter-method \"ShouldSave*\""}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "UnitTests whole suite passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
+        "tool_input": {"command": "dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "dotnet build naming IntegrationTests passes (not a test run)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
+        "tool_input": {"command": "dotnet build tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-restore"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "subagent is denied too",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "agent-abc", "transcript_path": "",
+        "tool_input": {"command": "STID_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore"}},
+      "expect": {"decision": "deny", "reason": "suite entière"}
+    }
+  ]
+}

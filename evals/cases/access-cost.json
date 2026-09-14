@@ -1,0 +1,54 @@
+{
+  "fixtures": [
+    { "path": "cost/FlatHandler.cs", "kind": "cs-flat" },
+    { "path": "cost/LoopHandler.cs", "kind": "cs-loop" },
+    { "path": "cost/FilterHandler.cs", "kind": "cs-filter" }
+  ],
+  "cases": [
+    {
+      "name": "flat handler: two reads, one write, exit 0",
+      "cmd": "python3 scripts/access-cost.py {{FIX}}/cost/FlatHandler.cs",
+      "expect": { "exit": 0, "stdout": "Cost: 2 reads + 1 write outside loop; Infrastructure in loop or in-memory filter: none" }
+    },
+    {
+      "name": "receiver the heuristic does not know is listed to classify, not counted",
+      "cmd": "python3 scripts/access-cost.py {{FIX}}/cost/FlatHandler.cs",
+      "expect": { "exit": 0, "stdout": "Other awaits — to classify (1): L7 quotaChecker.HasAvailableQuota [outside loop]" }
+    },
+    {
+      "name": "repository await inside foreach is flagged, exit 2",
+      "cmd": "python3 scripts/access-cost.py {{FIX}}/cost/LoopHandler.cs",
+      "expect": { "exit": 2, "stdout": "Infrastructure in loop (1): L8 signatureRepository.GetSignature" }
+    },
+    {
+      "name": "flagged file ends with a Cost line naming the defect",
+      "cmd": "python3 scripts/access-cost.py {{FIX}}/cost/LoopHandler.cs",
+      "expect": { "stdout": "Cost: 0 read + 1 write outside loop; Infrastructure in loop or in-memory filter: 1 — design to revisit" }
+    },
+    {
+      "name": "in-memory Where on an awaited result is flagged, exit 2",
+      "cmd": "python3 scripts/access-cost.py {{FIX}}/cost/FilterHandler.cs",
+      "expect": { "exit": 2, "stdout": "In-memory filter on awaited result (1): L5" }
+    },
+    {
+      "name": "several files: one Cost line for the whole set",
+      "cmd": "python3 scripts/access-cost.py {{FIX}}/cost/FlatHandler.cs {{FIX}}/cost/LoopHandler.cs",
+      "expect": { "exit": 2, "stdout": "Cost: 2 reads + 2 writes outside loop; Infrastructure in loop or in-memory filter: 1 — design to revisit" }
+    },
+    {
+      "name": "no argument prints the usage, exit 2",
+      "cmd": "python3 scripts/access-cost.py",
+      "expect": { "exit": 2, "stdout": "--diff" }
+    },
+    {
+      "name": "missing file is named, exit 2",
+      "cmd": "python3 scripts/access-cost.py src/Nope/NopeHandler.cs",
+      "expect": { "exit": 2, "stdout": "not found: src/Nope/NopeHandler.cs" }
+    },
+    {
+      "name": "ast-grep missing: exit 3 and a line saying the cost is stated by hand",
+      "cmd": "PATH=/usr/bin:/bin python3 scripts/access-cost.py {{FIX}}/cost/FlatHandler.cs",
+      "expect": { "exit": 3, "stdout": "cost not checked mechanically" }
+    }
+  ]
+}

@@ -5,10 +5,9 @@ paths:
 
 # Domain rules
 
-Full code examples for this layer: `.claude/skills/implement-tdd/references/examples-domain.md`.
+Examples: `.claude/skills/implement-tdd/references/examples-domain.md`.
 
-
-**Domain depends on nothing** — no HTTP, EF, SQL, DTO or Infrastructure (DDD-10). Enforced by ArchitectureTests, which also checks that API contracts live in `Abstractions` and don't leak internals.
+**Domain depends on nothing** — no HTTP, EF, SQL, DTO, Infrastructure (DDD-10). Enforced by ArchitectureTests, which also checks API contracts live in `Abstractions`, leak no internals.
 
 ## Base classes (`Domain/Core/`)
 
@@ -23,22 +22,22 @@ Full code examples for this layer: `.claude/skills/implement-tdd/references/exam
 
 ## Rules
 
-- **Aggregate Root**: private constructor, `Create()` + event, `Restore()` without validation, mutations through business methods + event. `UserContext` passed as a parameter for audit.
-- **`Create()` vs `Restore()`**: `Create()` builds, validates and emits; `Restore()` rehydrates from the DB with no validation and no event. A repository **always** calls `Restore()` to read (DDD-06).
+- **Aggregate Root**: private constructor, `Create()` + event, `Restore()` without validation, mutations via business methods + event. `UserContext` parameter for audit.
+- **`Create()` vs `Restore()`**: `Create()` builds, validates, emits; `Restore()` rehydrates from DB, no validation, no event. Repository **always** reads via `Restore()` (DDD-06).
 - **Collections**: `private readonly List<T> _items` exposed as `public IReadOnlyList<T> Items => _items.AsReadOnly()`.
-- **Value Objects**: reuse existing ones (`TechnicalName`, `DiagramName`, …). Never a raw `string` when a VO exists. Records rebuilt from the DB go through the VO's `Restore()`.
-- **Typed IDs**: never a raw `Ulid` for an identifier (`TemplateId`, `DiagramNodeId`, …). Conversion `Ulid` → typed ID happens at the endpoint boundary; Domain, Application and Infrastructure only handle typed IDs.
-- **Mutation through business methods** (DDD-03): no public setter, no mutation driven from a handler.
+- **Value Objects**: reuse existing (`TechnicalName`, `DiagramName`, …). Never raw `string` when VO exists. Records rebuilt from DB go through VO's `Restore()`.
+- **Typed IDs**: never raw `Ulid` for identifier (`TemplateId`, `DiagramNodeId`, …). `Ulid` → typed ID conversion at endpoint boundary; Domain, Application, Infrastructure handle typed IDs only.
+- **Mutation via business methods** (DDD-03): no public setter, no handler-driven mutation.
 - **Inter-aggregate reference by ID** (DDD-05), never object navigation.
-- **Logic belongs to the object owning the data** (DDD-09): `exportDiagramsContext.Serialize()`, not `DiagramExportSerializer.Serialize(context)`; `ParsedImportFile.Create(json)`, not `IParser.Parse(json)`. A Domain Service only when no business object owns the operation naturally — stateless, no Infrastructure dependency, never a repository wrapper.
-- **Repository interface**: one per aggregate root, centred on that aggregate, with `Save(List<IDomainEvent<TId>>, CancellationToken)`.
-- **Aggregate methods read their own state**: an aggregate never receives its own sub-entities as parameters. `release.Activate(userContext)` consuming `_draftBlockIds`, not `release.Activate(draftBlockIds, userContext)`.
+- **Logic belongs to object owning data** (DDD-09): `exportDiagramsContext.Serialize()`, not `DiagramExportSerializer.Serialize(context)`; `ParsedImportFile.Create(json)`, not `IParser.Parse(json)`. Domain Service only when no business object owns operation naturally — stateless, no Infrastructure dependency, never repository wrapper.
+- **Repository interface**: one per aggregate root, centred on it, with `Save(List<IDomainEvent<TId>>, CancellationToken)`.
+- **Aggregate methods read own state**: aggregate never receives own sub-entities as parameters. `release.Activate(userContext)` consuming `_draftBlockIds`, not `release.Activate(draftBlockIds, userContext)`.
 
 ## No nullable in Domain (DDD-11)
 
-Absence is modelled, never a convenience `null`. Missing collection → `[]`, `IReadOnlyList<T>` non-nullable, semantics documented on the method ("empty = no filter" / "unchanged"). Optional concept → Null Object (`NoConstraint` instead of `PortConstraint?`), not a nullable field. `null` is only admissible for a genuinely optional scalar business value (`string? Description`).
+Absence modelled, never convenience `null`. Missing collection → `[]`, `IReadOnlyList<T>` non-nullable, semantics documented on method ("empty = no filter" / "unchanged"). Optional concept → Null Object (`NoConstraint` instead of `PortConstraint?`), not nullable field. `null` admissible only for genuinely optional scalar business value (`string? Description`).
 
-C# can't default a parameter to `[]`, so make it required and place it before the optional parameters.
+C# can't default parameter to `[]`: make it required, place before optional parameters.
 
 ## Folder layout
 
@@ -52,7 +51,7 @@ C# can't default a parameter to `[]`, so make it required and place it before th
 └── I{Entity}Repository.cs
 ```
 
-`{Context}` is the bounded context root (`Catalog/`, `Studio/`, `Core/`).
+`{Context}` = bounded context root (`Catalog/`, `Studio/`, `Core/`).
 
 ## Naming
 
@@ -65,9 +64,9 @@ C# can't default a parameter to `[]`, so make it required and place it before th
 
 ## Traps
 
-- Anaemic domain (logic sitting in handlers) → logic in the aggregate
+- Anaemic domain (logic in handlers) → logic in aggregate
 - Public setters → mutation methods emitting events
-- One repository per entity → one repository per **aggregate root**. A sub-entity never gets its own repository (`IDiagramNodeSnapshotRepository` alongside `IModuleDiagramRepository`); extend the root's.
-- `Create()` to rebuild from the DB → always `Restore()`
-- Nullable field for an optional concept → Null Object
-- Parallel collection for a new graph node type (`SnapshotReferences` alongside `Blocks`) → subtype implementing `INode`, added to the existing `Blocks`. Heterogeneity through polymorphism, not parallel lists.
+- Repository per entity → one per **aggregate root**. Sub-entity never gets own repository (`IDiagramNodeSnapshotRepository` alongside `IModuleDiagramRepository`); extend root's.
+- `Create()` to rebuild from DB → always `Restore()`
+- Nullable field for optional concept → Null Object
+- Parallel collection for new graph node type (`SnapshotReferences` alongside `Blocks`) → subtype implementing `INode`, added to existing `Blocks`. Heterogeneity via polymorphism, not parallel lists.

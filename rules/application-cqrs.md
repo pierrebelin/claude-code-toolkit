@@ -5,38 +5,37 @@ paths:
 
 # Application layer rules
 
-Full code examples for this layer: `.claude/skills/implement-tdd/references/examples-application.md`.
+Examples: `.claude/skills/implement-tdd/references/examples-application.md`.
 
-This file owns the layer's technical conventions. The folder `CLAUDE.md` files under `src/` carry the business rules and the handler/feature intent — never a technical convention: a convention added there would only be seen by the sessions that open that folder.
+Layer technical conventions live here. Folder `CLAUDE.md` under `src/` = business rules, handler/feature intent — never technical convention: only sessions opening that folder see it.
 
-
-A handler orchestrates: load, call the Domain, save events, return the result (APP-01). No business rule and no direct mutation inside a handler. A pure query only reads and returns.
+Handler orchestrates: load, call Domain, save events, return result (APP-01). No business rule, no direct mutation. Pure query reads, returns.
 
 ## Commands
 
-Inherit `CommandHandler<TCommand, TResult>` with `ITransactionManager`, implement `HandleCommand()`, return the aggregate id. Failures are domain exceptions.
+Inherit `CommandHandler<TCommand, TResult>` with `ITransactionManager`, implement `HandleCommand()`, return aggregate id. Failures = domain exceptions.
 
-One command modifies and saves **a single aggregate** (DDD-08). An external read stays targeted and non-mutating.
+One command modifies, saves **single aggregate** (DDD-08). External read targeted, non-mutating.
 
 ## Queries
 
-Implement `IHandler<TQuery, T>` directly — no base class, no transaction. Return the payload:
+`IHandler<TQuery, T>` directly — no base class, no transaction. Payload:
 
 | Shape | Return |
 |-------|--------|
 | Paginated list | `Paging<T>` |
 | Bounded list | `IReadOnlyList<T>` |
-| Single read | the aggregate or its response |
+| Single read | aggregate or its response |
 
-**Never `Result<T>`** — it does not exist in this codebase.
+**Never `Result<T>`** — absent from codebase.
 
-A paginated list returned as `IReadOnlyList<T>` loses the page total: use `Paging<T>`.
+Paginated list as `IReadOnlyList<T>` loses page total: use `Paging<T>`.
 
 ## Bounds (APP-05)
 
-- Pagination: `PaginationBounds.Normalize(query)` inside the query's `Create`; filter and sort pushed to SQL through Gridify
+- Pagination: `PaginationBounds.Normalize(query)` in query's `Create`; filter, sort pushed to SQL via Gridify
 - Unpaginated branch: capped by `QueryLimits.MAX_UNPAGINATED_RESULTS`
-- Never recode a bound by hand in a handler
+- Never hand-code bound in handler
 
 ## Multi-tenancy
 
@@ -46,7 +45,7 @@ Always `IUserContextWrapper.GetUserContext()`, then `OrganizationId.From(userCon
 
 Handlers auto-registered by reflection. No manual registration.
 
-A required dependency is never optional: no `IFooService? service = null`. If it can be absent, the design needs revisiting.
+Required dependency never optional: no `IFooService? service = null`. Can be absent → revisit design.
 
 ## Folder layout
 
@@ -58,7 +57,7 @@ A required dependency is never optional: no `IFooService? service = null`. If it
     └── {Action}{Entity}CommandHandler.cs
 ```
 
-`{Context}` is the bounded context root (`Catalog/`, `Studio/`, `AuditTrails/`, `Import/`, `Peers/`).
+`{Context}` = bounded context root (`Catalog/`, `Studio/`, `AuditTrails/`, `Import/`, `Peers/`).
 
 ## Naming
 
@@ -70,18 +69,17 @@ A required dependency is never optional: no `IFooService? service = null`. If it
 
 ## No nullable in Application (DDD-11)
 
-Same rule as the Domain: commands, queries and repository signatures don't take a convenience `null`. The transport nullable (WebAPI DTO, query parameter) is converted at the boundary (`request.GroupIds ?? []`), never propagated down.
+As Domain: commands, queries, repository signatures take no convenience `null`. Transport nullable (WebAPI DTO, query parameter) converted at boundary (`request.GroupIds ?? []`), never propagated down.
 
 ## Documentation duty
 
-Touching this layer, the done checklist is not satisfied until:
+Done checklist unsatisfied until:
 
-1. **Handler or its tests modified** → update the handler folder `CLAUDE.md`, and carry a `[Trait("RM", "…")]` on every test written
-2. **New handler or changed intent** → update the index `CLAUDE.md` of the parent feature folder (links, intent)
+1. **Handler or its tests modified** → update handler folder `CLAUDE.md`, `[Trait("RM", "…")]` on every test written
 
 ### Fixed shape of a handler `CLAUDE.md`
 
-**Closed list — exactly these three `##` sections, in this order, nothing else.** No `## Decisions`, no `## Rationale`, no ad-hoc section: what is neither a rule, nor the flow, nor an event belongs in `docs/` or in the plan file, not here.
+**Closed list — exactly these three `##` sections, this order, nothing else.** No `## Decisions`, no `## Rationale`, no ad-hoc section: neither rule, flow nor event → `docs/` or plan file, not here.
 
 ```markdown
 # {Handler}
@@ -110,21 +108,21 @@ Authoring rules:
 
 | Element | Rule |
 |---------|------|
-| `RM-xx` | Business rule shared by several handlers of the same aggregate. Numbering is **per aggregate** — `RM-02` means nothing without the aggregate it belongs to. Before assigning a number, read the sibling handler `CLAUDE.md` under the same feature and reuse the number the rule already carries there; never renumber an existing one |
+| `RM-xx` | Rule shared by several handlers of same aggregate. Numbering **per aggregate** — `RM-02` meaningless without it. Before assigning, read sibling handler `CLAUDE.md` under same feature, reuse number rule already carries; never renumber existing |
 | `RL-xx` | Rule local to this handler. Numbering restarts per file |
-| *Règle* cell | A label, not a paragraph. The table is an index |
-| Rule ↔ test link | Declared **on the test**, `[Trait("RM", "{HandlerFolder}/{RM\|RL-xx}")]`. No cell to fill: a rule carried by no trait is a knowingly untested rule |
-| Cost line | Mandatory under the flow. The only durable trace of a decision no test locks |
-| Sections | Those three and no other. The hook reports a forbidden, missing or out-of-order section |
+| *Règle* cell | Label, not paragraph. Table = index |
+| Rule ↔ test link | **On the test**, `[Trait("RM", "{HandlerFolder}/{RM\|RL-xx}")]`. No cell to fill: rule with no trait = knowingly untested |
+| Cost line | Mandatory under flow. Only durable trace of decision no test locks |
+| Sections | Those three, no other. Hook reports forbidden, missing, out-of-order section |
 
-`handler-claude-md-check.sh` (PostToolUse) reports untested rules, traits citing a rule absent from the table, and tests with no trait. Warning only.
+`handler-claude-md-check.sh` (PostToolUse) reports untested rules, traits citing rule absent from table, tests with no trait. Warning only.
 
-Repo-wide report: `python3 scripts/rules-coverage.py [--untested]`; `--fix-index` recomputes the `N rules, M tested` column of the feature index `CLAUDE.md`.
+Repo report: `python3 scripts/rules-coverage.py [--untested]`.
 
-Detailed authoring guide, including the feature index format: `.claude/skills/implement-tdd/references/claude-md-handler.md`.
+Guide: `.claude/skills/implement-tdd/references/claude-md-handler.md`.
 
 ## Traps
 
-- Redundant named arguments: never `Create(foo: foo, bar: bar)` when the variables already carry the parameter names
-- Bulk `SaveImport(list)` → `Save(aggregate.DomainEvents)` per aggregate, through the existing repositories
-- A separate context object alongside a session → merge into one business object when the context has no reason to exist alone
+- Redundant named arguments: never `Create(foo: foo, bar: bar)` when variables already carry parameter names
+- Bulk `SaveImport(list)` → `Save(aggregate.DomainEvents)` per aggregate, via existing repositories
+- Separate context object alongside session → merge into one business object when context has no reason to exist alone

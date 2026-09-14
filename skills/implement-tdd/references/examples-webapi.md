@@ -1,33 +1,13 @@
 # Code examples — WebAPI
 
-Consult when the pattern is unknown, or when this is the first implementation of an element type in this layer.
-Rules and pitfalls → `.claude/rules/` (loaded automatically).
+Consult when the pattern is unknown, or on the first implementation of an element type in this layer.
+Rules and pitfalls → `.claude/rules/` (auto-loaded).
 
 ---
 
 ## Abstractions.Models - Request DTO
 
 Request DTOs define the API endpoints' contract. They live in `Abstractions.Models`, never in the WebAPI project. The endpoint imports the DTO.
-
-```
-src/{{PRODUCT}}.Abstractions.Models/
-└── Requests/
-    └── Studio/
-        └── Diagram/
-            ├── DeleteTemplate/
-            │   └── DeleteTemplateRequest.cs
-            └── ExportDiagrams/
-                └── ExportDiagramsRequest.cs
-```
-
-Examples:
-
-```csharp
-// Requests/Studio/Diagram/DeleteTemplate/DeleteTemplateRequest.cs
-namespace {{PRODUCT}}.Abstractions.Models.Requests.Studio.Diagram.DeleteTemplate;
-
-public sealed record DeleteTemplateRequest(Ulid[] Ids);
-```
 
 ```csharp
 // Requests/Studio/Diagram/ExportDiagrams/ExportDiagramsRequest.cs
@@ -49,9 +29,7 @@ public sealed record ExportDiagramsRequest(
 
 ## WebAPI - Endpoint
 
-Every endpoint is a static class with a static handler and a nested `Endpoint : IEndpoint` class. Discovered automatically by reflection.
-
-The Request DTO is imported from `Abstractions.Models` (never declared locally):
+Every endpoint is a static class with a static handler and a nested `Endpoint : IEndpoint` class, discovered automatically by reflection. The Request DTO is imported from `Abstractions.Models`, never declared locally:
 
 ```csharp
 using {{PRODUCT}}.Abstractions.Models.Requests.Catalog.Products.CreateProduct;
@@ -93,9 +71,9 @@ public static class CreateProduct
 - **PUT**: `Results.Ok(id.Value)` → 200
 - **DELETE**: `Results.NoContent()` → 204
 
-Errors are handled globally by `GlobalExceptionHandler`. No `try/catch` in the endpoint: it lets them bubble up.
+Errors handled globally by `GlobalExceptionHandler`. No `try/catch` in the endpoint: let them bubble up.
 
-The mapping is an **ordered** `switch` — the first matching branch wins. A more specialised exception must therefore be declared before its base (`PartnerApiException` before `UpstreamServiceException`), otherwise it gets absorbed.
+The mapping is an **ordered** `switch` — first matching branch wins. A more specialised exception must be declared before its base (`PartnerApiException` before `UpstreamServiceException`), otherwise it gets absorbed.
 
 | Exception | Status | Payload |
 |-----------|--------|--------------|
@@ -114,6 +92,6 @@ The mapping is an **ordered** `switch` — the first matching branch wins. A mor
 | `UpstreamServiceException` (other than PartnerApi) | **503** | — |
 | everything else | **500** | detail hidden outside Development |
 
-Real hierarchy of the base exceptions, to know before creating one: `NotFoundException` and `ConflictException` inherit from `DomainException`. `ValidationException` and `ForbiddenException` do **not** — they derive from `Exception` and carry `IInternalException`. `UpstreamServiceException` deliberately does not carry `IInternalException`: an upstream outage is not the client's fault, it must surface as 503 and not as 400.
+Real hierarchy of the base exceptions, to know before creating one: `NotFoundException` and `ConflictException` inherit from `DomainException`. `ValidationException` and `ForbiddenException` do **not** — they derive from `Exception` and carry `IInternalException`. `UpstreamServiceException` deliberately doesn't carry `IInternalException`: an upstream outage is not the client's fault, it must surface as 503 and not as 400.
 
-`.ProducesProblem(...)` declares only the statuses **this** route can produce — they come from the exceptions its handler throws, not from the whole table. `500` is always declared; `413` only on a route receiving a large body; `422` only on a route triggering a workflow validation.
+`.ProducesProblem(...)` declares only the statuses **this** route can produce — from the exceptions its handler throws, not from the whole table. `500` always declared; `413` only on a route receiving a large body; `422` only on a route triggering a workflow validation.

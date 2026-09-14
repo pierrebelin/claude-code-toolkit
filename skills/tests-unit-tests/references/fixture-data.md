@@ -1,6 +1,6 @@
 # Fixture: data and repetition
 
-Read only if the test needs DSL, JSON, payloads, constructed objects or several data cases.
+Read only for DSL, JSON, payloads, constructed objects or several data cases.
 
 ## Business data in the fixture
 
@@ -21,7 +21,7 @@ public sealed class GenerationServiceFixture
 }
 ```
 
-The test class calls only `WithSampleDiagramNode()` then the handler/service. Do not declare a source, a private builder or a business payload there.
+Test class calls `WithSampleDiagramNode()` then the handler/service. No source, private builder or business payload there.
 
 ## Repetitive scenarios
 
@@ -33,4 +33,4 @@ public static IEnumerable<object?[]> InvalidNames()
 }
 ```
 
-Expose `InvalidNames` from the fixture (or a dedicated test provider), then use `MemberData`. Keep `InlineData` only for a trivial technical value, never for business data or a payload.
+Expose `InvalidNames` from fixture (or dedicated test provider), then `MemberData`. `InlineData` only for a trivial technical value, never business data or payload.

@@ -35,20 +35,30 @@ cmd="${HOOK_CMD:-}"
 
 # The `dotnet` expression only fires in command position — start of line, or after
 # one of `; & | (` — optionally behind a run of VAR=value assignments, so
-# `STID_TEST_MODE=true dotnet test` is covered. Anything else is left alone: a
-# `dotnet test` quoted inside a heredoc, a doc string or an argument is text, not a
-# command, and prefixing it there corrupts the payload. `dotnet` reached through a
-# path (~/.dotnet/tools/...) fails the same way — no command boundary before it.
-# An already-prefixed `rtk dotnet` / `proxy dotnet` is parked behind a placeholder
+# `STID_TEST_MODE=true dotnet test` is covered. `dotnet` reached through a path
+# (~/.dotnet/tools/...) is left alone — no command boundary before it. An
+# already-prefixed `rtk dotnet` / `proxy dotnet` is parked behind a placeholder
 # so the expression cannot prefix it twice, `proxy` included since that spelling is
 # the deliberate way to bypass the filter.
-# One sed, four -e: the expressions apply to each line in order, exactly as the
-# four-stage pipe did, for three spawns fewer (~8.5 ms measured 2026-09-11).
-normalized=$(printf '%s' "$cmd" | sed -E \
-  -e 's#(^|[[:space:]|;&(])/(usr/local/bin|usr/bin|bin)/(grep|rg|find|egrep|fgrep)([[:space:]]|$)#\1\3\4#g' \
-  -e 's#(rtk|proxy)[[:space:]]+dotnet#\1 @@RTKDOTNET@@#g' \
-  -e 's#(^|[;&|(])([[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*)dotnet[[:space:]]+(test|restore|format)([[:space:]]|$)#\1\2rtk dotnet \4\5#g' \
-  -e 's#@@RTKDOTNET@@#dotnet#g')
+#
+# A heredoc body is text, and the expression must not touch it. It did: sed
+# applies each expression per line and `^` matches the start of every line, so
+# `dotnet test` on a line of a heredoc body was prefixed and the payload written
+# to disk was corrupted — found by evals/cases/rewrite-rtk.json on 2026-09-12,
+# while the comment here claimed the opposite. The expression is now skipped for
+# any command carrying `<<`; rtk upstream still sees the command.
+#
+# One sed, up to four -e: the expressions apply to each line in order, exactly as
+# the four-stage pipe did, for three spawns fewer (~8.5 ms measured 2026-09-11).
+sed_args=(-E
+  -e 's#(^|[[:space:]|;&(])/(usr/local/bin|usr/bin|bin)/(grep|rg|find|egrep|fgrep)([[:space:]]|$)#\1\3\4#g'
+  -e 's#(rtk|proxy)[[:space:]]+dotnet#\1 @@RTKDOTNET@@#g')
+case "$cmd" in
+  *'<<'*) ;;
+  *) sed_args+=(-e 's#(^|[;&|(])([[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*)dotnet[[:space:]]+(test|restore|format)([[:space:]]|$)#\1\2rtk dotnet \4\5#g') ;;
+esac
+sed_args+=(-e 's#@@RTKDOTNET@@#dotnet#g')
+normalized=$(printf '%s' "$cmd" | sed "${sed_args[@]}")
 
 if [ "$normalized" != "$cmd" ]; then
   input=$(printf '%s' "$input" | jq --arg c "$normalized" '.tool_input.command = $c')
