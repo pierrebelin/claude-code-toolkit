@@ -224,6 +224,40 @@ update:
 | `explore-guard` (PreToolUse:Agent) | one spawn, then read the subagent transcript | the 20-line report contract sits in the received prompt |
 | `subagent-report-shape` (SubagentStop) | one `tdd-test-author` run whose `## RED` drops its table | the agent re-emits a complete report on its own |
 | deny guards (`read-bounds`, `cat-bounds`, `guard-git`, `guard-integration`) | one refused call | the reason appears |
+| orchestrator effort via the statusline (`implement-tdd-guard`) | `/effort high`, then launch a batch | the launch is refused and names `/effort medium` |
+
+State channels count too. The effort one has no hook event of its own: the statusline is the only
+place Claude Code hands over `.effort.level`, so `statusline-command.sh` drops it in
+`$TMPDIR/claude-effort-<session>` (plus `claude-effort-last` as the fallback for a guard that runs
+before the first render) and `implement-tdd-guard.sh` reads it back. Missing file = unknown effort
+= the batch starts: a statusline that has not run yet must never block a launch.
+`CLAUDE_EFFORT_LEVEL` forces the value for evals and troubleshooting. Measured on ten batches:
+155 min of model latency out of 628, 8.6 s per turn over 1 087 turns, all at effort high.
+
+## Batch wall-clock — `scripts/batch-wallclock.py`
+
+Per-batch counterpart to the per-window "wall clock" section of `turn-batching-check.py`. One line
+per `/implement-tdd` session: wall time split into model, tools, agent wait and human, turns (and
+how many fall after the first audit), audit durations, Bash calls over two minutes, context at the
+first and last turn. `--subagents` adds the per-type table (runs, mean wall, mean turns, latency
+per turn). A batch is a session that both launched the skill and delegated at least one `tdd-*`
+agent — the launch alone also matches a session that merely talks about it.
+
+```bash
+python3 scripts/batch-wallclock.py                          # batches detected over 14 days
+python3 scripts/batch-wallclock.py --sessions <id> --subagents
+```
+
+## caveman without the plugin
+
+Installing the caveman plugin puts 7 skills and 3 agents in the listing of every turn, ~900 tokens,
+and `skillOverrides` cannot switch them off (official docs: names are unqualified, plugin skills are
+not affected). What actually carries the mode is two node hooks. Keeping them outside the plugin —
+copied to `~/.claude/caveman-local` and registered in `~/.claude/settings.json` — keeps the mode and
+drops the listing: `caveman-activate.js` (SessionStart, emits the ruleset read from
+`skills/caveman/SKILL.md`) and `caveman-mode-tracker.js` (UserPromptSubmit, 204 bytes per prompt,
+still serving `/caveman <level>` and `/caveman-stats`). Lost with the plugin: `/caveman-commit`,
+`/caveman-review`, `/caveman-compress`, `/caveman-help`, `/cavecrew` and the three cavecrew agents.
 
 ## Hook evals
 

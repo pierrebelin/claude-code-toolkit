@@ -18,6 +18,17 @@ duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty')
 lines_added=$(echo "$input" | jq -r '.cost.total_lines_added // empty')
 lines_removed=$(echo "$input" | jq -r '.cost.total_lines_removed // empty')
 effort=$(echo "$input" | jq -r '.effort.level // empty')
+# Current effort: the statusline is the only channel that receives .effort.level,
+# and implement-tdd-guard.sh needs it to refuse a batch launched at effort high.
+# Two files: the session one is authoritative, `last` is the fallback for a guard
+# that runs before the session's first render.
+if [ -n "$effort" ]; then
+  sid=$(echo "$input" | jq -r '.session_id // empty')
+  state_dir="${TMPDIR:-/tmp}"
+  printf '%s' "$effort" > "$state_dir/claude-effort-${sid:-last}" 2>/dev/null
+  [ -n "$sid" ] && printf '%s' "$effort" > "$state_dir/claude-effort-last" 2>/dev/null
+fi
+
 rate_used=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
 rate_resets=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
 

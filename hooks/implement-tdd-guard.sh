@@ -35,6 +35,51 @@ case "$event" in
   *) exit 0 ;;
 esac
 
+session=$(echo "$input" | jq -r '.session_id // "nosession"')
+
+# --- Orchestrator effort ---
+#
+# Measured on ten batches (07-10/09/2026): 155 min of model latency out of 628 min,
+# 8.6 s per turn over 1 087 turns, every one at effort high. Effort is settable
+# neither by a hook nor by a skill frontmatter — only /effort changes it, and it
+# holds for the whole session. So the harness can only refuse the launch, the way
+# it already refuses a batch relaunched without /clear.
+#
+# Channel: the statusline is the only place that receives .effort.level; it drops
+# the value in $TMPDIR (statusline-command.sh). Missing file = unknown effort = let
+# it through: a batch must never be blocked by a statusline that has not run yet.
+# CLAUDE_EFFORT_LEVEL forces the value (evals, troubleshooting).
+state_dir="${CLAUDE_EFFORT_STATE_DIR:-${TMPDIR:-/tmp}}"
+effort="${CLAUDE_EFFORT_LEVEL:-}"
+if [[ -z "$effort" ]]; then
+  for f in "$state_dir/claude-effort-$session" "$state_dir/claude-effort-last"; do
+    [[ -f "$f" ]] || continue
+    effort=$(head -c 16 "$f" 2>/dev/null | tr -cd 'a-z')
+    [[ -n "$effort" ]] && break
+  done
+fi
+
+case "$effort" in
+  high|xhigh|max)
+    effort_marker="${TMPDIR:-/tmp}/claude-implement-tdd-effort-${session}"
+    if [[ -f "$effort_marker" ]]; then
+      rm -f "$effort_marker"
+    else
+      touch "$effort_marker"
+      effort_reason="Effort \"${effort}\" — switch to /effort medium before the batch.
+The loop runs 100 to 180 orchestrator turns at 8.6 s of latency each, measured at effort high over ten batches; the auditor and the writing agents keep their own, fixed in their frontmatter.
+Type /effort medium, then relaunch /implement-tdd batch FX.
+Force: re-issue the identical launch a second time."
+      if [[ "$event" == "PreToolUse" ]]; then
+        jq -n --arg r "$effort_reason" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
+        exit 0
+      fi
+      echo "$effort_reason" >&2
+      exit 2
+    fi
+    ;;
+esac
+
 # Correction mode reopens the batch that is already closed — that is its purpose.
 echo "$launch" | grep -qiE 'correction' && exit 0
 
@@ -58,7 +103,6 @@ closed=$(jq -rs '
 
 lot=$(echo "$launch" | grep -oiE '\bF[0-9]+\b' | head -1 | tr '[:lower:]' '[:upper:]')
 
-session=$(echo "$input" | jq -r '.session_id // "nosession"')
 marker="${TMPDIR:-/tmp}/claude-implement-tdd-guard-${session}-${closed}-${lot:-next}"
 
 if [[ -f "$marker" ]]; then
