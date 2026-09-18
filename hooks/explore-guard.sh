@@ -14,6 +14,10 @@
 #   1. every Agent call carries a `description`     (CLAUDE.md, delegation rule)
 #   2. the model is chosen, never inherited         (no parameter == Opus)
 #
+# Widened again on 2026-09-17, to every type and to the typeless spawn: check 2
+# now covers a custom agent whose file pins no `model:`, and a call with no
+# subagent_type at all, which is where the Opus leak actually sat.
+#
 # and, when both pass, the report contract is appended to the prompt itself.
 #
 # A third check — "the prompt mentions graphify" — sat between them until
@@ -46,13 +50,32 @@ IFS=$'\x1f' read -r session_id agent_id <<<"$(echo "$input" | jq -j '[(.session_
 HOOK_SESSION_ID="$session_id" HOOK_AGENT_ID="$agent_id" bash "$LIB/delegation-nudge.sh" reset
 
 subagent=$(echo "$input" | jq -r '.tool_input.subagent_type // ""')
+model=$(echo "$input" | jq -r '.tool_input.model // ""')
+
+# An Agent call that omits subagent_type starts general-purpose (Agent tool
+# description). Until 2026-09-17 the case below matched "" against nothing and
+# exited: a typeless spawn walked past the model check and inherited Opus. That
+# was the whole leak — 83 subagent transcripts on Opus over 14 days, among them
+# the mechanical CA1002 refactors of 2026-09-12, each carrying its own list of
+# files and the rule to apply. Default the type here, before the filter.
+[ -n "$subagent" ] || subagent="general-purpose"
+
 case "$subagent" in
   Explore|general-purpose|Plan) ;;
-  *) exit 0 ;;
+  *)
+    # A custom agent (.claude/agents/<type>.md) that pins `model:` in its
+    # frontmatter needs no parameter — the frontmatter wins, which is how the
+    # two TDD agents have run on sonnet since 2026-09-12. One that pins nothing
+    # inherits Opus like anything else, so it is asked for the parameter.
+    if grep -qE '^model:[[:space:]]*[^[:space:]]' "$LIB/../agents/$subagent.md" 2>/dev/null; then
+      exit 0
+    fi
+    [ -n "$model" ] || deny "$subagent blocked: pass an explicit model, or pin \`model:\` in .claude/agents/$subagent.md. Without either the agent inherits Opus."
+    exit 0
+    ;;
 esac
 
 prompt=$(echo "$input" | jq -r '.tool_input.prompt // ""')
-model=$(echo "$input" | jq -r '.tool_input.model // ""')
 
 # Explore is read-only by definition: haiku, always. `general-purpose` also writes
 # sometimes, so the model is not forced there — only made explicit, because an

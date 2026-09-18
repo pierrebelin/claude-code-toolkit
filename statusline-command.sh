@@ -14,6 +14,8 @@ fi
 # --- Claude Code elements ---
 model=$(echo "$input" | jq -r '.model.display_name // empty')
 used=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
+ctx_tokens=$(echo "$input" | jq -r '(.context_window | (.total_input_tokens // 0) + (.total_output_tokens // 0)) // empty')
+ctx_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
 duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty')
 lines_added=$(echo "$input" | jq -r '.cost.total_lines_added // empty')
 lines_removed=$(echo "$input" | jq -r '.cost.total_lines_removed // empty')
@@ -97,8 +99,10 @@ if [ -n "$used" ]; then
   filled=$(( used_int * bar_width / 100 ))
   [ "$filled" -gt "$bar_width" ] && filled=$bar_width
   empty=$(( bar_width - filled ))
-  bar_filled=$(printf '%0.s█' $(seq 1 $filled 2>/dev/null))
-  bar_empty=$(printf '%0.s░' $(seq 1 $empty 2>/dev/null))
+  bar_filled=""
+  [ "$filled" -gt 0 ] && bar_filled=$(printf '%0.s█' $(seq 1 $filled))
+  bar_empty=""
+  [ "$empty" -gt 0 ] && bar_empty=$(printf '%0.s░' $(seq 1 $empty))
   if [ "$used_int" -ge 85 ]; then
     color='\033[31m'
   elif [ "$used_int" -ge 60 ]; then
@@ -106,7 +110,22 @@ if [ -n "$used" ]; then
   else
     color='\033[32m'
   fi
-  line2=$(printf "Context ${color}${bar_filled}${bar_empty}\033[0m %s%%" "$used_int")
+  # Exact count before the percentage: "Context ██░░ 69.3k/1M 7%".
+  ctx_label=""
+  case "$ctx_tokens" in
+    ''|*[!0-9]*) ;;
+    *) ctx_label=$(awk -v n="$ctx_tokens" -v w="${ctx_size:-0}" 'BEGIN {
+         if (n >= 1000) label = sprintf("%.1fk", n / 1000); else label = sprintf("%d", n)
+         if (w >= 1000000) printf "%s/%gM", label, w / 1000000
+         else if (w >= 1000) printf "%s/%dk", label, w / 1000
+         else printf "%s", label
+       }') ;;
+  esac
+  if [ -n "$ctx_label" ]; then
+    line2=$(printf "Context ${color}${bar_filled}${bar_empty}\033[0m \033[2m%s\033[0m %s%%" "$ctx_label" "$used_int")
+  else
+    line2=$(printf "Context ${color}${bar_filled}${bar_empty}\033[0m %s%%" "$used_int")
+  fi
 fi
 if [ -n "$duration_ms" ] && [ "$duration_ms" != "null" ]; then
   duration_s=$(( ${duration_ms%.*} / 1000 ))
@@ -132,8 +151,10 @@ if [ -n "$rate_used" ] && [ "$rate_used" != "null" ]; then
   rfilled=$(( rate_int * rbar_width / 100 ))
   [ "$rfilled" -gt "$rbar_width" ] && rfilled=$rbar_width
   rempty=$(( rbar_width - rfilled ))
-  rbar_filled=$(printf '%0.s█' $(seq 1 $rfilled 2>/dev/null))
-  rbar_empty=$(printf '%0.s░' $(seq 1 $rempty 2>/dev/null))
+  rbar_filled=""
+  [ "$rfilled" -gt 0 ] && rbar_filled=$(printf '%0.s█' $(seq 1 $rfilled))
+  rbar_empty=""
+  [ "$rempty" -gt 0 ] && rbar_empty=$(printf '%0.s░' $(seq 1 $rempty))
   if [ "$rate_int" -ge 85 ]; then
     rcolor='\033[31m'
   elif [ "$rate_int" -ge 60 ]; then

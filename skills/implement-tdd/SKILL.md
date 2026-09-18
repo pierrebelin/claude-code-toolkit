@@ -110,7 +110,7 @@ Expected observation: …
 Forbidden: any file search. A missing path comes back as ## BLOCKED.
 ```
 
-**Exact paths, class, fixture, method names not optional — copied, not searched.** Sheet's `## Ancrages` table carries test class, fixture, `CoreTests` builders + doubles, production files, contract snapshot of every step; method names from its `Tests` line. Missing row = plan gap: one `ls` to confirm path, one `Edit` adding the row to the sheet, then delegate — never `grep` hunt across `tests/` here.
+**Exact paths, class, fixture, method names not optional — copied, not searched.** Sheet's `## Ancrages` table carries test class, fixture, `CoreTests` builders + doubles, production files, contract snapshot of every step; test names, levels and RM from the step's table under `## TDD sequence`. Missing row = plan gap: one `ls` to confirm path, one `Edit` adding the row to the sheet, then delegate — never `grep` hunt across `tests/` here.
 
 **Sort paths into the two lines, don't merge.** `read in full` = file agent rewrites, `read bounded (context only)` = file only consulted — two literals both agents key on, keep verbatim.
 
@@ -129,6 +129,8 @@ Its `## RED` carries `Production diff` — `git diff --stat -- src/`, expected e
 ```
 
 Check table against diff before relaying: test method in diff but absent from table → back to subagent. Keep rows — material of final recap (`references/closing.md` §4).
+
+**Relay cap — one RED table, one `## GREEN` line, nothing else.** Never reprint the batch state, the remaining cycles, the plan mapping or a table already relayed: measured 2026-09-17, your own replies resent as input are 16 % of the bill, and they grow with the number of turns, not with their length. A recap belongs to the end of the batch (`references/closing.md`), never to a cycle boundary. Progress between cycles = one line, `→ Cycle n/N clos — [comportement]`.
 
 **GREEN + REFACTOR = delegate to `tdd-implementer`.** It writes production code, deletes what its code orphaned, runs filtered test, states cost. Test files read-only to it: test that can't go green without modification comes back `## BLOCKED`, never weakened. Contract, no plan attached, no re-read asked:
 

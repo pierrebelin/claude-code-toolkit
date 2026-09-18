@@ -15,9 +15,10 @@
 # Order:
 #   1. guard-git         deny / ask -> terminal, nothing else runs
 #   2. guard-cat-bounds  deny       -> terminal, an unbounded dump never reaches rtk
-#   3. guard-integration deny       -> terminal, a whole IntegrationTests suite never runs
-#   4. piped-filter x2   rewrite    -> terminal, rtk knows neither of these tools
-#   5. rewrite-rtk       rewrite    -> the default path
+#   3. guard-diff-bounds deny       -> terminal, a whole patch never reaches rtk either
+#   4. guard-integration deny       -> terminal, a whole IntegrationTests suite never runs
+#   5. piped-filter x2   rewrite    -> terminal, rtk knows neither of these tools
+#   6. rewrite-rtk       rewrite    -> the default path
 #
 # guard-graphify-grep sat in second position until 2026-09-13: it ran a
 # `graphify explain` on every symbol-looking grep to decide whether to
@@ -91,6 +92,7 @@ emit() {
 MODULES=(
   "guard-git.sh"
   "guard-cat-bounds.sh"
+  "guard-diff-bounds.sh"
   "guard-integration-filter.sh"
   "rewrite-piped-filter.sh graphify-query"
   "rewrite-piped-filter.sh git-grep"

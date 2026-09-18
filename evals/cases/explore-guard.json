@@ -3,62 +3,251 @@
     {
       "name": "an Agent call without a description is denied",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Agent", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"subagent_type": "Explore", "prompt": "graphify first", "model": "haiku"}},
-      "expect": {"decision": "deny", "reason": "description"}
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "Explore",
+          "prompt": "graphify first",
+          "model": "haiku"
+        }
+      },
+      "expect": {
+        "decision": "deny",
+        "reason": "description"
+      }
     },
     {
       "name": "Explore without graphify in the prompt is allowed since 2026-09-13, the contract carries the advice",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Agent", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"subagent_type": "Explore", "description": "locate X", "prompt": "find every caller of X", "model": "haiku"}},
-      "expect": {"decision": "allow", "prompt": "graphify explain|path|query"}
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "Explore",
+          "description": "locate X",
+          "prompt": "find every caller of X",
+          "model": "haiku"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "prompt": "graphify explain|path|query"
+      }
     },
     {
       "name": "Explore without model: haiku is denied",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Agent", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"subagent_type": "Explore", "description": "locate X", "prompt": "use graphify explain first"}},
-      "expect": {"decision": "deny", "reason": "haiku"}
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "Explore",
+          "description": "locate X",
+          "prompt": "use graphify explain first"
+        }
+      },
+      "expect": {
+        "decision": "deny",
+        "reason": "haiku"
+      }
     },
     {
       "name": "a well-formed Explore is allowed with the report contract appended",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Agent", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"subagent_type": "Explore", "description": "locate X", "prompt": "use graphify explain first", "model": "haiku"}},
-      "expect": {"decision": "allow", "prompt": "Hard cap: 20 lines"}
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "Explore",
+          "description": "locate X",
+          "prompt": "use graphify explain first",
+          "model": "haiku"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "prompt": "Hard cap: 20 lines"
+      }
     },
     {
       "name": "the contract is not stacked twice on a retried spawn",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Agent", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"subagent_type": "Explore", "description": "locate X", "prompt": "use graphify explain first\n--- Report contract (explore-guard) ---\nalready here", "model": "haiku"}},
-      "expect": {"decision": "none"}
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "Explore",
+          "description": "locate X",
+          "prompt": "use graphify explain first\n--- Report contract (explore-guard) ---\nalready here",
+          "model": "haiku"
+        }
+      },
+      "expect": {
+        "decision": "none"
+      }
     },
     {
       "name": "general-purpose without an explicit model is denied",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Agent", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"subagent_type": "general-purpose", "description": "search", "prompt": "graphify then grep"}},
-      "expect": {"decision": "deny", "reason": "explicit model"}
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "general-purpose",
+          "description": "search",
+          "prompt": "graphify then grep"
+        }
+      },
+      "expect": {
+        "decision": "deny",
+        "reason": "explicit model"
+      }
     },
     {
       "name": "general-purpose with a model is allowed with the contract",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Agent", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"subagent_type": "general-purpose", "description": "search", "prompt": "graphify then grep", "model": "sonnet"}},
-      "expect": {"decision": "allow", "prompt": "Report contract (explore-guard)"}
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "general-purpose",
+          "description": "search",
+          "prompt": "graphify then grep",
+          "model": "sonnet"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "prompt": "Report contract (explore-guard)"
+      }
     },
     {
       "name": "Plan gets the 40-line cap",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Agent", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"subagent_type": "Plan", "description": "plan X", "prompt": "graphify the module first"}},
-      "expect": {"decision": "allow", "prompt": "Hard cap: 40 lines"}
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "Plan",
+          "description": "plan X",
+          "prompt": "graphify the module first"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "prompt": "Hard cap: 40 lines"
+      }
     },
     {
       "name": "a TDD agent is outside the guard's scope",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Agent", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"subagent_type": "tdd-implementer", "description": "green phase", "prompt": "make the test pass"}},
-      "expect": {"decision": "none"}
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "tdd-implementer",
+          "description": "green phase",
+          "prompt": "make the test pass"
+        }
+      },
+      "expect": {
+        "decision": "none"
+      }
     },
     {
       "name": "another tool's payload is ignored",
       "hook": "hooks/explore-guard.sh",
-      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "x.cs"}},
-      "expect": {"decision": "none"}
+      "input": {
+        "tool_name": "Read",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "file_path": "x.cs"
+        }
+      },
+      "expect": {
+        "decision": "none"
+      }
+    },
+    {
+      "name": "a spawn with no subagent_type is treated as general-purpose: no model, denied",
+      "hook": "hooks/explore-guard.sh",
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "description": "refactor CA1002",
+          "prompt": "replace List<T> by IReadOnlyList<T> in the files below"
+        }
+      },
+      "expect": {
+        "decision": "deny",
+        "reason": "general-purpose blocked"
+      }
+    },
+    {
+      "name": "a typeless spawn with an explicit model gets the contract",
+      "hook": "hooks/explore-guard.sh",
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "description": "refactor CA1002",
+          "prompt": "replace List<T> by IReadOnlyList<T>",
+          "model": "sonnet"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "prompt": "Report contract (explore-guard)"
+      }
+    },
+    {
+      "name": "a custom agent pinning model: in its frontmatter needs no parameter",
+      "hook": "hooks/explore-guard.sh",
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "tdd-implementer",
+          "description": "GREEN phase",
+          "prompt": "make the red test green"
+        }
+      },
+      "expect": {
+        "decision": "none"
+      }
+    },
+    {
+      "name": "an unknown custom agent with no model is denied",
+      "hook": "hooks/explore-guard.sh",
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "statusline-setup",
+          "description": "set statusline",
+          "prompt": "configure it"
+        }
+      },
+      "expect": {
+        "decision": "deny",
+        "reason": "inherits Opus"
+      }
     }
   ]
 }

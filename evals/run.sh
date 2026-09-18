@@ -36,6 +36,15 @@ set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
+# Two layouts: `.claude/evals/` inside a project, and `evals/` at the root of the
+# toolkit repo, where the hooks sit one level up with no `.claude` segment. Before
+# 2026-09-17 only the first was handled: in the toolkit, ROOT resolved one directory
+# above the repo and every hook path pointed at a file that does not exist. The runs
+# still reported passes — a missing hook prints nothing, which reads as "not_deny" —
+# so 139 broken cases looked like 60 green ones. Resolve the layout, never assume it.
+[ -d "$ROOT/.claude/hooks" ] || ROOT="$(cd "$HERE/.." && pwd)"
+CLAUDE_DIR="$ROOT/.claude"
+[ -d "$CLAUDE_DIR" ] || CLAUDE_DIR="$ROOT"
 FIX="$HERE/.fixtures"
 RUN="eval-$$-$(date +%s)"
 ERRF="/tmp/claude-evalerr-$RUN"
@@ -161,7 +170,7 @@ jc() { printf '%s' "$1" | jq -c "$2"; }
 ENVARGS=()
 
 run_payload() {
-  (cd "$ROOT" && printf '%s' "$2" | env ${ENVARGS[@]+"${ENVARGS[@]}"} bash "$ROOT/.claude/$1" 2>"$ERRF")
+  (cd "$ROOT" && printf '%s' "$2" | env ${ENVARGS[@]+"${ENVARGS[@]}"} bash "$CLAUDE_DIR/$1" 2>"$ERRF")
 }
 
 check() {

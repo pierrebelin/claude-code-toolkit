@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "name": "an unbounded patch over the threshold is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"CLAUDE_DIFF_BOUNDS_LINES": "0"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git show HEAD"}},
+      "expect": {"decision": "deny", "reason": "Unbounded patch"}
+    },
+    {
+      "name": "the same patch under the threshold passes — no denial on a small diff",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"CLAUDE_DIFF_BOUNDS_LINES": "999999999"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git show HEAD"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "--stat is the advice, never blocked",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"CLAUDE_DIFF_BOUNDS_LINES": "0"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git show --stat HEAD"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "--name-only passes too",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"CLAUDE_DIFF_BOUNDS_LINES": "0"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git diff --name-only"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "a piped patch passes (the pipe bounds it)",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"CLAUDE_DIFF_BOUNDS_LINES": "0"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git show HEAD | head -40"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "git log without -p is not a patch dump",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"CLAUDE_DIFF_BOUNDS_LINES": "0"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git log --oneline -20"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "git log -p over the threshold is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"CLAUDE_DIFF_BOUNDS_LINES": "0"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git log -p --no-merges -1"}},
+      "expect": {"decision": "deny", "reason": "Unbounded patch"}
+    },
+    {
+      "name": "re-issuing the identical command forces the full patch through",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"CLAUDE_DIFF_BOUNDS_LINES": "0"},
+      "pre": [
+        {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git show HEAD"}}
+      ],
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "git show HEAD"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "a non-git command is untouched by the module",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"CLAUDE_DIFF_BOUNDS_LINES": "0"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "ls src"}},
+      "expect": {"decision": "not_deny"}
+    }
+  ]
+}
