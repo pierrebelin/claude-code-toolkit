@@ -18,7 +18,7 @@ $ARGUMENTS
    - **Answer in code → explore, don't ask.** Ask only what can't be deduced.
    - Via **AskUserQuestion**: 1 question = 1 decision, **recommended answer as first option** (`(recommended)`).
    - **Business constraint = decision too**: regulation, standard, SLA, contractual commitment, existing behaviour that must survive. Elicit here; lands as business rule carrying its origin, never its own section. Technical, temporal or resource constraint: out of scope, belongs to `/plan-implementation`.
-   - Continue until no decision left that would change a use case, business rule, data, states or scope. Settled → spec; unsettled → section 11.
+   - Continue until no decision left that would change a use case, business rule, data, states or scope. Settled → spec; unsettled → section 12.
 3. **Challenge the product owner** only when a decision cuts scope, complexity or risk — ≤3 questions via **AskUserQuestion**:
    - Minimal scope: ship less, still validate the need?
    - Alternative: simpler path (configuration, extending existing, convention)?
@@ -40,7 +40,7 @@ The spec is a produced artefact, proofread by a business expert.
 - **Authority of a rule**: rule owned by external system (product/key service, delegation between organisations, organisation catalogue) → spec names **the authority** and what the product merely consumes. Never replay or restate a rule owned elsewhere — cite it, name its owner.
 - **Target of a share, transfer or delegation**: a target organisation is validated by an **existing delegation**, never by its mere existence. Phrase the business rule in those terms.
 - **What must not break**: an existing behaviour the feature must preserve is stated as a business rule with `Origine` = existing product behaviour, not as a passing remark. Left unnamed, it will not be tested.
-- Unsettled → `TBD`, listed in section 11.
+- Unsettled → `TBD`, listed in section 12.
 
 ## Verbosity budget (produced document)
 
@@ -68,43 +68,46 @@ Which problem, for whom, impact if nothing is done. 2-4 sentences.
 | Term | Definition |
 Specific or ambiguous terms only. One-line definition.
 
-## 3. Use cases
+## 3. Overview
+One mermaid flowchart (fenced `mermaid` block) of the whole behaviour: entry points, branches of the main decision, derived state, lifecycle states and transitions, consumption. Business labels only, `RM-XX`/`CU-XX` ids in parentheses. Delete the section when the feature has neither branch nor lifecycle.
+
+## 4. Use cases
 ### CU-XX — [Name]
 **Actor** · **Intent** (1 sentence) · **Frequency**
 **Nominal scenario:** numbered steps.
 **Variants:** alternative paths. **Errors:** behaviour on failure.
 **Expected outcome:** observable final state in business language (what gets checked) — only if not obvious from the scenario.
 
-## 4. Business rules
+## 5. Business rules
 ### RM-XX — [Short name]
 - **Statement** (testable) · **Origin** · **Severity** (blocking / warning / informational)
 - **Applies to**: CU-XX governed (or `cross-cutting` if global).
 - **Compliant / non-compliant example** if not obvious.
 
-## 5. Data
+## 6. Data
 | Datum | Description | Source | Importance |
 Source = entered / computed / imported / catalogue. Importance = essential / secondary / expert. Non-trivial data only.
 
-## 6. States & transitions
+## 7. States & transitions
 _Only if the entity has a lifecycle._
 | State | Event | Next state | Condition |
 Business level (e.g. draft → validated → archived). No enum, no technical state machine.
 
-## 7. Cross-cutting behaviours
+## 8. Cross-cutting behaviours
 Only what fits neither in a single CU nor in a single RM: default values, cascade deletion, duplication, catalogue. **If it concerns a single case → put it in the CU/RM, not here.** One subsection per behaviour, only if applicable.
 
-## 8. Relations
+## 9. Relations
 | Upstream | Downstream |
 One line per dependency, in business language.
 
-## 9. Out of scope
+## 10. Out of scope
 | Exclusion | Reason |
 
-## 10. Assumptions
+## 11. Assumptions
 | # | Assumption | To be validated by |
 What you assumed for lack of an answer — distinct from an open question.
 
-## 11. Open questions
+## 12. Open questions
 | # | Question | Impact | Options |
 Every TBD in the document.
 ```
@@ -123,7 +126,7 @@ Re-read produced spec. Check and fix directly:
 **Completeness**:
 - Use cases cover lifecycle (creation, read, update, deletion/withdrawal as relevant).
 - Errors + edge cases where they matter. Non-trivial data listed.
-- Every `TBD` in body appears in section 11.
+- Every `TBD` in body appears in section 12.
 - Every business rule precise enough to decide its DDD owner later, without naming that owner.
 - Rules, variants, errors readable without inferring a condition from a telegraphic fragment.
 
