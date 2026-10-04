@@ -8,6 +8,7 @@ export type Band = {
   streak: number
   turn: number
   contributions: Contribution[]
+  cost: number | null
 }
 
 declare module 'claude-code' {
