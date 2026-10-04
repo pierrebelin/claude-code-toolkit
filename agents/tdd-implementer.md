@@ -41,7 +41,7 @@ Delegation *is* context contract: no re-read of plan or batch sheet. Take only w
 
 ## Coding rules
 
-`.claude/skills/implement-tdd/references/common-rules.md` §1, §2 before writing. Summary, not replacement:
+`skills/implement-tdd/references/common-rules.md` §1, §2 before writing. Summary, not replacement:
 
 - **Zero comments**, XML `///` included. Naming carries intent.
 - **Minimum GREEN**: this test alone. No branch, option, abstraction, configurability it does not demand.
@@ -51,7 +51,7 @@ Delegation *is* context contract: no re-read of plan or batch sheet. Take only w
 - **Reuse before creation**: existing element covering 80 % of need → extend. Second type sharing shape of existing one: rename, not duplicate.
 - **Placement**: business rule in aggregate, not handler, repository, Infrastructure, WebAPI. Resource limits in WebAPI.
 
-Layer conventions — naming, base classes, structure, pitfalls — load alone via `.claude/rules/*.md` on reading a file of that layer. Do not seek them. Code examples: `.claude/skills/implement-tdd/references/examples-{domain,application,infrastructure,webapi}.md` — open only when pattern unknown.
+Layer conventions — naming, base classes, structure, pitfalls — load alone via `.claude/rules/*.md` on reading a file of that layer. Do not seek them. Code examples: `skills/implement-tdd/references/examples-{domain,application,infrastructure,webapi}.md` — open only when pattern unknown.
 
 Order: Domain → Application → Infrastructure → WebAPI.
 
@@ -64,15 +64,15 @@ rtk dotnet build --no-restore
 rtk dotnet test --project tests/{{PRODUCT}}.<Suite>/{{PRODUCT}}.<Suite>.csproj --no-build --no-restore --filter-class "*<Class>Tests"
 ```
 
-`--project` mandatory, `--filter-class` / `--filter-method` accept `*` wildcards. VSTest syntax `--filter "FullyQualifiedName~..."` fails here. Full scope, suite selection → `.claude/skills/implement-tdd/references/test-scope.md`.
+`--project` mandatory, `--filter-class` / `--filter-method` accept `*` wildcards. VSTest syntax `--filter "FullyQualifiedName~..."` fails here. Full scope, suite selection → `skills/implement-tdd/references/test-scope.md`.
 
-Fix compilation errors, re-run until green, never touching test. No green without exit `0`. With final green run, **same message**: `git diff --stat -- tests/` — must print nothing, or the single `.verified.txt` accepted under `test-scope.md` §6 — output = `Tests diff` line of report; and `python3 scripts/access-cost.py <production files you created or edited>` — last line = `Cost` line of report. Orchestrator reads those two lines, not your diff, not your handler.
+Fix compilation errors, re-run until green, never touching test. No green without exit `0`. With final green run, **same message**: `git diff --stat -- tests/` — must print nothing, or the single `.verified.txt` accepted under `test-scope.md` §6 — output = `Tests diff` line of report; and `cctoolkit access-cost <production files you created or edited>` — last line = `Cost` line of report. Orchestrator reads those two lines, not your diff, not your handler.
 
 ## Access cost
 
 `scripts/access-cost.py` lists, from the syntax tree, every awaited Infrastructure call of your files (repository, service, wrapper, client, provider, unit of work), flags the ones inside a loop or a lambda and the in-memory filters on an awaited result, and prints the `Cost` line. Copy it verbatim, then add which input the count is independent of. Receivers under `to classify` — naming heuristic does not know them: decide yourself; an Infrastructure one raises your count, an in-memory validator or a stream does not.
 
-**Bounded, independent of input size**. No test observes it: green proves nothing here. Exit `2` — Infrastructure call in loop or lambda, one query per identifier, `Save` inside loop, in-memory filter of what SQL can filter — on a line you wrote: do not deliver. `## BLOCKED` quoting the flagged line — design defect, back to orchestrator. Symptom/fix table → `.claude/skills/implement-tdd/references/conventions.md` § "Data access". Exit `3` (ast-grep missing): state cost by hand, say so on the line.
+**Bounded, independent of input size**. No test observes it: green proves nothing here. Exit `2` — Infrastructure call in loop or lambda, one query per identifier, `Save` inside loop, in-memory filter of what SQL can filter — on a line you wrote: do not deliver. `## BLOCKED` quoting the flagged line — design defect, back to orchestrator. Symptom/fix table → `skills/implement-tdd/references/conventions.md` § "Data access". Exit `3` (ast-grep missing): state cost by hand, say so on the line.
 
 ## Report
 

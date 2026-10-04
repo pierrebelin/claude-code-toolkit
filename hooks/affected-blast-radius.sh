@@ -36,17 +36,16 @@ file_path=$(echo "$input" | jq -r '.tool_input.file_path // ""')
 # Domain aggregates and value objects only. An Application handler or an EF
 # mapper has a fan-out of one or two callers — the model already holds it.
 #
-# Matched on `*.Domain/` rather than a hardcoded assembly so the file is byte
-# identical across repositories: {{PRODUCT}}.Catalog.Domain and {{PRODUCT}}.Studio.Domain
-# both hit it, and the same copy ships from claude-code-toolkit/hooks/ to either.
-case "$file_path" in
-  */*.Domain/*/Aggregates/*.cs|*/*.Domain/*/ValueObjects/*.cs) ;;
-  *) exit 0 ;;
-esac
+# Which files those are is `layout.aggregate` of kit.config.json, shell-`case`
+# patterns on the full path (clean-architecture: `*/*.Domain/*/Aggregates/*.cs`,
+# `*/*.Domain/*/ValueObjects/*.cs` — any `*.Domain` project, so one copy serves a
+# repo split in several bounded contexts). Missing python3, lib or config: exit 0.
+kit_lib="$(dirname "${BASH_SOURCE[0]}")/../lib"
+python3 "$kit_lib/kit_config.py" match aggregate "$file_path" 2>/dev/null || exit 0
 
 command -v graphify >/dev/null 2>&1 || exit 0
 
-symbol=$(basename "$file_path" .cs)
+symbol=$(basename "$file_path"); symbol=${symbol%.*}
 [ -n "$symbol" ] || exit 0
 
 # Once per (agent, symbol). A refactor touches the same value object across a

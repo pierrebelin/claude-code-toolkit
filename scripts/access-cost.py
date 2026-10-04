@@ -13,8 +13,8 @@ This script lists what the code actually awaits, from the syntax tree
 cost from evidence and the orchestrator validates a line instead of a file.
 
 Usage:
-    python3 scripts/access-cost.py <file.cs> [...]       # files the implementer touched
-    python3 scripts/access-cost.py --diff                # every .cs modified under src/,
+    cctoolkit access-cost <file.cs> [...]       # files the implementer touched
+    cctoolkit access-cost --diff                # every .cs modified under src/,
                                                          # added lines flagged (audit)
 
 Exit 0: no Infrastructure call inside a loop or lambda, no in-memory filter on
@@ -34,8 +34,14 @@ import shutil
 import subprocess
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG = os.path.join(ROOT, "scripts", "access-cost", "sgconfig.yml")
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(HERE, "lib"))
+try:
+    from kit_config import project_root
+    ROOT = project_root()
+except ImportError:
+    ROOT = HERE
+CONFIG = os.path.join(HERE, "scripts", "access-cost", "sgconfig.yml")
 
 INFRA = re.compile(
     r"repositor|service|wrapper|client|provider|unitofwork|dbcontext|dbset|gateway|store|"

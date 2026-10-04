@@ -1,0 +1,110 @@
+{
+  "description": "Domain core, ports and adapters: src/domain/ (model), src/application/ (use cases behind driving ports), src/adapters/ (driven and driving adapters). Stack-neutral markers: C#, Python, Java/Kotlin, TypeScript.",
+  "layout": {
+    "sources": {
+      "roots": [
+        "src"
+      ],
+      "extensions": [
+        ".cs",
+        ".py",
+        ".java",
+        ".kt",
+        ".ts",
+        ".tsx",
+        ".js"
+      ],
+      "comment": {
+        ".cs": "//",
+        ".py": "#",
+        ".java": "//",
+        ".kt": "//",
+        ".ts": "//",
+        ".tsx": "//",
+        ".js": "//"
+      }
+    },
+    "aggregate": [
+      "*/src/domain/*",
+      "*/src/Domain/*",
+      "*/src/*/domain/*",
+      "*/src/*/Domain/*"
+    ],
+    "useCase": {
+      "roots": [
+        "src/application",
+        "src/Application",
+        "src/{product}/application",
+        "src/{product}/Application"
+      ],
+      "label": "application/",
+      "marker": [
+        {
+          "file": "*UseCase.cs",
+          "contains": "\\bclass\\s+\\w*UseCase\\b"
+        },
+        {
+          "file": "*Handler.cs",
+          "contains": "\\bclass\\s+\\w*Handler\\b"
+        },
+        {
+          "file": "*use_case.py",
+          "contains": "^\\s*(?:async\\s+)?def\\s+(?:execute|handle)\\b|^class\\s+\\w*UseCase\\b"
+        },
+        {
+          "file": "*UseCase.java",
+          "contains": "\\bclass\\s+\\w*UseCase\\b"
+        },
+        {
+          "file": "*UseCase.kt",
+          "contains": "\\bclass\\s+\\w*UseCase\\b"
+        },
+        {
+          "file": "*[uU]se[cC]ase.ts",
+          "contains": "\\bclass\\s+\\w*UseCase\\b|\\bfunction\\s+\\w+\\b"
+        }
+      ]
+    },
+    "ruleSheet": "CLAUDE.md",
+    "tests": {
+      "roots": [
+        "tests",
+        "test",
+        "src/test"
+      ],
+      "bound": [
+        "tests/unit",
+        "test/unit",
+        "src/test"
+      ],
+      "interaction": [
+        "tests/unit",
+        "test/unit",
+        "src/test"
+      ]
+    },
+    "skipDirs": [
+      "bin",
+      "obj",
+      "node_modules",
+      "__pycache__",
+      ".venv",
+      "venv",
+      "dist",
+      "build",
+      "target",
+      ".pytest_cache"
+    ]
+  },
+  "testTag": {
+    "framework": "xunit"
+  },
+  "commands": {
+    "build": "",
+    "test": "",
+    "architectureTest": {
+      "run": "",
+      "when": ""
+    }
+  }
+}

@@ -1,6 +1,0 @@
-{
-  "disableClaudeAiConnectors": true,
-  "syncClaudeAiSkills": false,
-  "syncClaudeAiPlugins": false,
-  "disableWorkflows": true
-}

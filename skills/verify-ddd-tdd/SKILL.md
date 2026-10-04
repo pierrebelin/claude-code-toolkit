@@ -2,7 +2,7 @@
 name: verify-ddd-tdd
 description: "Check, after /implement-tdd, that a .NET batch respects the coding rules — correctness, reuse, simplification, cost — then its conformance to the plan, its handler test policy and its TDD evidence. Use before moving to the next batch, in fast mode by default or full on explicit request."
 context: fork
-agent: ddd-tdd-auditor
+agent: cctoolkit:ddd-tdd-auditor
 background: false
 ---
 
@@ -34,7 +34,7 @@ Coverage check: read compact indexes `ddd-rules.md` + `architecture-rules.md` di
 
 1. Require `batch FX`. Caller supplies sheet FX section + path of capture from `scripts/audit-capture.sh`: use as is. Locate and read global plan or `*-PLAN-FX.md` sheet yourself **only** if missing or contradicting repo — never re-read whole sheet whose FX section was handed over.
 2. **Open capture once, bounded; scope comes from it.** Carries `git status --short`, `git diff --check`, modified files, diff, `rules-coverage.py --untested`, `rules-coverage.py --ids <sheet>`, `access-cost.py --diff` (awaited Infrastructure calls per modified file, loop / lambda / in-memory filter flagged, pre-existing lines marked), `build` / `ArchitectureTests` exit codes. Never re-establish any of it — turn paid for nothing. From sheet take rest: owning aggregate, consistency, cost, test levels, named scenarios.
-3. No full coverage, or no **Design** section: still audit delivered code (§2), report plan gap as **Major**, fix = update sheet. Every id `applied` on a sheet `| Applied rules |` row of the plan folder, or `N/A — reason` once in global plan `1. Scope`. **Capture `not cited` line settles mechanical half** — id it lists = **Blocking** unclassified id; recounting proves nothing. Yours: judge whether stated `N/A` reason holds. Never reconstruct design from code, never infer it from implementation.
+3. No full coverage, or no **Design** section: still audit delivered code (§2), report plan gap as **Major**, fix = update sheet. Every id `applied` on a sheet `kit:applied-rules` row of the plan folder, or `N/A — reason` once on the global plan's `kit:na-rules` line. **Capture `not cited` line settles mechanical half** — id it lists = **Blocking** unclassified id; recounting proves nothing. Yours: judge whether stated `N/A` reason holds. Never reconstruct design from code, never infer it from implementation.
 4. Status, check, diff come from capture; produce them yourself, one command, only if no capture supplied. **Never re-read file whole when diff carries its modified lines** — bounded read of hunk context, only when judged axis needs it; no batched `cat` of files diff just showed. Expected diff already committed → require explicit base in argument, never guess history. Walk diff **hunk by hunk**, tie each to RM/CU or sheet step; what ties to nothing = **Scope** deviation (§2).
 
 ### 2. Audit the delivered code
@@ -73,7 +73,7 @@ RM/CU with no code owner stays blocking in all three cases: hole, not divergence
 
 ### 3. Run the minimal validations
 
-Runner, filters, suite scope, integration filter construction → `.claude/skills/implement-tdd/references/test-scope.md`. Single source, shared with `/implement-tdd`: apply it, never restate it.
+Runner, filters, suite scope, integration filter construction → `skills/implement-tdd/references/test-scope.md`. Single source, shared with `/implement-tdd`: apply it, never restate it.
 
 **Test volume = audit decision, not reflex.** Whole suite where filter would do proves nothing more, costs minutes. Never re-run identically what `/implement-tdd` just ran: read its exit code, run only what is missing or was scoped too narrowly.
 

@@ -9,6 +9,7 @@ Per-layer DDD conventions (naming, base classes, structure, pitfalls) → `.clau
 - **Never add a comment**, XML `///` doc included. Intent carried by naming.
 - Delete comments you wrote + useless ones (restating code, stale, ownerless TODO) **within lines your change touches**. Useless comment elsewhere in file: report, don't delete. Keep pre-existing ones explaining a decision, constraint or exception not deducible from code.
 - Naming must make flow and invariants readable without a comment. Durable business rule also documented in handler folder's `CLAUDE.md`.
+- **A predicate on Domain state is a business rule** — "does it change", "is it excluded", "is it eligible": call the aggregate or value object member that states it (add it there if missing), never re-code it in a handler `if` or an Infrastructure `Where`. A query filter needing it reads the boundary from the Domain (exposed set or constant), never a copied comparison.
 - **Surgical change**: every modified line ties to the behaviour at hand. No improving adjacent working code, no renaming/reformatting outside scope, no flexibility or configurability nobody asked for. File's local style beats personal preference. Delete orphans (`using`, variable, method, type) **your** change created; pre-existing dead code reported, not deleted.
 - **`var`** for local variables.
 - **1 class = 1 file**, file name = class name.
@@ -28,7 +29,7 @@ No exceptions: don't keep it "for reference", don't "adapt" it while writing the
 1. **RED** — 1 test of an **observable business behaviour** (final state verifiable through public API / output), tied to an RM/CU, which **fails**. **Never** a private helper or internal detail — sheet step is a mechanism ("scan", "detect", "map", "convert") → go up to the business behaviour it serves, test that. Filtered test → confirm expected failure (red assertion, not incidental compile error).
 2. **GREEN** — minimal code to pass **this test alone**. Nothing more. Build + filtered test → green.
 3. **REFACTOR — clean up, then delete.** Duplication and naming first, behaviour unchanged. Then what must **go**: defensive branch made impossible by a sheet invariant, wrapper/indirection/mapping with a single caller, parameter never read, abstraction with no second implementer, second type sharing an existing one's shape. GREEN's minimum ≠ batch's minimum: what remains after three behaviours is. Scope: delete what **your** code orphaned, not pre-existing dead code. Rewriting a test keeps its discriminating assertion (targeted id, not a count); a test is deleted only when its rule is gone from the handler table. Re-test → green.
-4. **COST** — **state the behaviour's access cost** from `python3 scripts/access-cost.py <production files>`: "n reads, n writes" towards Infrastructure
+4. **COST** — **state the behaviour's access cost** from `cctoolkit access-cost <production files>`: "n reads, n writes" towards Infrastructure
    (repository, external service, file). Green ≠ done: no test observes the call count.
    - Cost **bounded and independent of input size**. N candidates → not N queries.
    - Infrastructure call **inside a loop** → back to **design**, not cosmetic refactoring.

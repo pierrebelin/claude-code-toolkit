@@ -26,7 +26,7 @@ The table below stays here: inseparable from the **COST** step of the cycle (`co
 
 **No test locks down the call count**: a handler making 1 query and a handler making 2N+2 are equally green. The pressure has to come from here, not from the test suite.
 
-**Rule**: a behaviour's number of Infrastructure calls is **bounded and independent of input size**. Stating that cost is part of the cycle (`common-rules.md` §2, COST step). `python3 scripts/access-cost.py <files>` reads the awaited Infrastructure calls off the syntax tree and flags the first five symptoms below; the last two stay a reading.
+**Rule**: a behaviour's number of Infrastructure calls is **bounded and independent of input size**. Stating that cost is part of the cycle (`common-rules.md` §2, COST step). `cctoolkit access-cost <files>` reads the awaited Infrastructure calls off the syntax tree and flags the first five symptoms below; the last two stay a reading.
 
 | Symptom | Fix |
 |---|---|

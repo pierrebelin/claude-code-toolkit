@@ -30,7 +30,7 @@
       "name": "denial names bulk-read as the third way out",
       "hook": "hooks/read-bounds.sh",
       "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
-      "expect": {"decision": "deny", "reason": "tools/bulk-read"}
+      "expect": {"decision": "deny", "reason": "cctoolkit bulk-read"}
     },
     {
       "name": "re-issuing the identical read forces it through",

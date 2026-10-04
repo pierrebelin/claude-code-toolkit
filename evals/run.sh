@@ -12,9 +12,9 @@
 # for 2 hooks; the shape (JSON cases, jq runner) is borrowed from it.
 #
 # Usage:
-#   bash .claude/evals/run.sh                    # every cases/*.json
-#   bash .claude/evals/run.sh -v cases/guard-git.json
-#   LATENCY_MAX_MS=200 bash .claude/evals/run.sh   # looser latency budget
+#   cctoolkit evals                              # every cases/*.json
+#   bash evals/run.sh -v cases/guard-git.json      # from the toolkit checkout
+#   LATENCY_MAX_MS=200 cctoolkit evals             # looser latency budget
 #
 # Every hook case is also timed: a hook whose median exceeds its budget fails the
 # run like a wrong decision would (budgets below LATENCY_MAX_MS).
@@ -22,7 +22,7 @@
 # Case file shape:
 #   { "fixtures": [ {"path": "big.cs", "lines": 300, "kind": "sparse|flat|md|transcript|stub|stub-error|stub-slow|cs-flat|cs-loop|cs-filter|text", "ctx": N, "content": "..." } ],
 #     "cases": [ { "name": "...",
-#                  "hook": "hooks/x.sh"  |  "cmd": "bash .claude/tools/x ...",
+#                  "hook": "hooks/x.sh"  |  "cmd": "bash {{KIT}}/tools/x ...",
 #                  "pre": [payload, ...],          # replayed first, output ignored
 #                  "input": payload,               # hook payload on stdin
 #                  "env": {"VAR": "value"},
@@ -32,7 +32,8 @@
 #                              "context": "substring", "no_context": true,
 #                              "exit": N, "stdout": "substring", "stderr": "substring" } } ] }
 #
-# {{FIX}} expands to the fixtures directory, {{ROOT}} to the project root, {{SID}}
+# {{FIX}} expands to the fixtures directory, {{ROOT}} to the project root, {{KIT}}
+# to the kit (the directory holding hooks/, lib/, scripts/), {{SID}}
 # to a session id unique to the case — so escape hatches keyed on the session
 # never leak between cases. Hooks run with the project root as cwd, as Claude Code
 # runs them. Everything the run leaves in /tmp carries the run id and is removed.
@@ -47,8 +48,14 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 # still reported passes — a missing hook prints nothing, which reads as "not_deny" —
 # so 139 broken cases looked like 60 green ones. Resolve the layout, never assume it.
 [ -d "$ROOT/.claude/hooks" ] || ROOT="$(cd "$HERE/.." && pwd)"
+# The kit is the directory holding hooks/: `.claude/` in a copied install, the
+# root itself in the toolkit or the plugin cache — where a bare `.claude/` may
+# exist for the runtime files the hooks write, and is not the kit.
 CLAUDE_DIR="$ROOT/.claude"
-[ -d "$CLAUDE_DIR" ] || CLAUDE_DIR="$ROOT"
+[ -d "$CLAUDE_DIR/hooks" ] || CLAUDE_DIR="$ROOT"
+# A fixture repo is its own project: an inherited CLAUDE_PROJECT_DIR would point
+# every hook and script at the repo the runner was launched from.
+unset CLAUDE_PROJECT_DIR
 FIX="$HERE/.fixtures"
 RUN="eval-$$-$(date +%s)"
 ERRF="/tmp/claude-evalerr-$RUN"
@@ -172,7 +179,7 @@ CS
 }
 
 expand() {
-  printf '%s' "$1" | sed -e "s|{{FIX}}|$FIX|g" -e "s|{{ROOT}}|$ROOT|g" -e "s|{{SID}}|$2|g"
+  printf '%s' "$1" | sed -e "s|{{FIX}}|$FIX|g" -e "s|{{ROOT}}|$ROOT|g" -e "s|{{KIT}}|$CLAUDE_DIR|g" -e "s|{{SID}}|$2|g"
 }
 
 jf() { printf '%s' "$1" | jq -r "$2"; }

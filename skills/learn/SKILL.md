@@ -18,11 +18,11 @@ Run after `/clear`, never during a batch: one axis at a time keeps context small
 
 ## 1. Backlog
 
-`python3 scripts/learn-candidates.py` — pending gaps per axis, batch count, already refused motifs. Argument names an axis → that one only. Otherwise take axes with ≥ 3 batches, most batches first. The end-of-batch nudge (`--count`) fires at 2 batches, one early: an axis it names may still hold no motif — say so, stop.
+`cctoolkit learn-candidates` — pending gaps per axis, batch count, already refused motifs. Argument names an axis → that one only. Otherwise take axes with ≥ 3 batches, most batches first. The end-of-batch nudge (`--count`) fires at 2 batches, one early: an axis it names may still hold no motif — say so, stop.
 
 ## 2. One axis
 
-`python3 scripts/learn-candidates.py --axis <Axis>` — pending rows, oldest first.
+`cctoolkit learn-candidates --axis <Axis>` — pending rows, oldest first.
 
 Group rows into **motifs**: same root cause, whatever wording. Keep a motif only if it passes all three filters; otherwise drop it, say which filter in one line:
 
@@ -39,12 +39,14 @@ Pick the narrowest owner. One motif → one destination.
 | Motif | Destination |
 |---|---|
 | Layer convention (naming, placement, base class, pitfall) | `.claude/rules/<layer>.md` — `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests` |
-| Sheet written incomplete (ids unclassified, anchors missing, assumptions untraced) | `.claude/skills/plan-implementation/` template or checklist |
-| Mistake the coding agents keep making | `.claude/skills/implement-tdd/references/common-rules.md` |
-| Auditor misses or misjudges it | axis table of `.claude/skills/verify-ddd-tdd/SKILL.md` |
-| Checkable without judgement | `ArchitectureTests`, `scripts/pre-audit.sh` gate, or hook + case under `.claude/evals/cases/` |
+| Sheet written incomplete (ids unclassified, anchors missing, assumptions untraced) | kit: `skills/plan-implementation/` template or checklist |
+| Mistake the coding agents keep making | kit: `skills/implement-tdd/references/common-rules.md` |
+| Auditor misses or misjudges it | kit: axis table of `skills/verify-ddd-tdd/SKILL.md` |
+| Checkable without judgement | `ArchitectureTests`, or kit: `scripts/pre-audit.sh` gate, hook + case under `evals/cases/` |
 
 Mechanical check beats prose whenever both fit: prose is read, a check fails.
+
+**Kit destinations are never edited in place.** `cctoolkit root` is the plugin cache, replaced on every update. A kit change is written in a checkout of the toolkit repo — its path asked once with AskUserQuestion — then flows back through the plugin update (`README` § Updating). No checkout → hand the user the exact patch (file, old line, new line) instead of writing.
 
 ## 4. Reconcile
 
@@ -72,9 +74,9 @@ Never write before the answer.
 
 ## 6. Write and mark
 
-1. Accepted options: apply the status — add, rewrite, replace or delete the line. Frozen literals verbatim (`.claude/rules/markdown-output.md`). Hook or tool touched → add its eval case, run `bash .claude/evals/run.sh`.
-2. Each refused motif: `python3 scripts/learn-candidates.py --refuse "<motif>"`. Refused `retire`: `--refuse "keep: <line>"`.
-3. Axis done: `python3 scripts/learn-candidates.py --treat-axis <Axis>` — every pending row of the axis, kept, refused or dropped.
+1. Accepted options: apply the status — add, rewrite, replace or delete the line. Frozen literals verbatim (`.claude/rules/markdown-output.md`). Hook or tool touched → add its eval case, run `cctoolkit evals`.
+2. Each refused motif: `cctoolkit learn-candidates --refuse "<motif>"`. Refused `retire`: `--refuse "keep: <line>"`.
+3. Axis done: `cctoolkit learn-candidates --treat-axis <Axis>` — every pending row of the axis, kept, refused or dropped.
 
 Independent commands of steps 2-3 go in one message.
 
@@ -86,7 +88,7 @@ Per axis, one table, nothing else:
 | Motif | Batches | Status | Decision | Destination | Δ lines |
 |-------|---------|--------|----------|-------------|---------|
 | DDD ids left unclassified in the sheet | 9 | new | added | `scripts/pre-audit.sh` | +1 |
-| Classify the DDD ids (prose) | — | retire | deleted | `.claude/skills/plan-implementation/SKILL.md` | −1 |
+| Classify the DDD ids (prose) | — | retire | deleted | `skills/plan-implementation/SKILL.md` | −1 |
 | … | 3 | refines | refused | — | 0 |
 ```
 
@@ -96,11 +98,11 @@ End with net `Δ lines` of the axis, then remaining backlog line from `--count`,
 
 A stale entry is worse than none: recalled, then followed. Only the `description` and the index line are read at recall — those are what must stay true.
 
-1. **Mechanical** — `python3 scripts/learn-candidates.py --memory`: memory folder path, file indexed twice, not indexed, indexed but gone, frontmatter incomplete, cited repo path missing. Each line is a lead, not a verdict: a path from another repository, or a plan removed once its feature shipped, can leave a still-true decision.
+1. **Mechanical** — `cctoolkit learn-candidates --memory`: memory folder path, file indexed twice, not indexed, indexed but gone, frontmatter incomplete, cited repo path missing. Each line is a lead, not a verdict: a path from another repository, or a plan removed once its feature shipped, can leave a still-true decision.
 2. **Judgement** — `MEMORY.md` is already in context: compare index lines for entries on one subject stating different states (frozen then unfrozen, rule then reversal). Read whole only the entries a step-1 line or such a pair names. Symbol or decision cited → `graphify explain` or one `grep -n`, never a sweep. `user` and `feedback` entries are preferences: retire one only on contradiction with a later entry, never because code moved.
 3. **Status per entry**, same spirit as §4: `refines` (description or index line no longer matches the body or the code), `merges` (two entries, one subject — keep the later state), `retire` (decision reversed, subject gone), `index` (mechanical fix: index line added, doubled or dead one removed). Untouched entries: not listed.
 4. **Confirm** — one `AskUserQuestion`, `multiSelect: true`, one option per entry; description = defect + evidence (`path:line`, command output) + exact new description or `deleted`. Mechanical `index` fixes grouped in one option. Never write before the answer.
-5. **Write** — memory folder only: edit or delete the file, then its `MEMORY.md` line in the same message. Refused option: `python3 scripts/learn-candidates.py --refuse "keep: <file>"`, and never propose it again while the refusal stands.
+5. **Write** — memory folder only: edit or delete the file, then its `MEMORY.md` line in the same message. Refused option: `cctoolkit learn-candidates --refuse "keep: <file>"`, and never propose it again while the refusal stands.
 
 Output, one table:
 

@@ -19,12 +19,12 @@ treated ids, refused motifs. A refused motif is handed back to /learn so that it
 does not propose it again.
 
 Usage:
-  python3 scripts/learn-candidates.py                   # summary per axis
-  python3 scripts/learn-candidates.py --axis Plan       # untreated gaps of one axis
-  python3 scripts/learn-candidates.py --count           # one line, for doctor
-  python3 scripts/learn-candidates.py --treat-axis Plan # marks the axis treated
-  python3 scripts/learn-candidates.py --refuse "motif"  # refused motif, never proposed again
-  python3 scripts/learn-candidates.py --memory          # mechanical defects of the memory
+  cctoolkit learn-candidates                   # summary per axis
+  cctoolkit learn-candidates --axis Plan       # untreated gaps of one axis
+  cctoolkit learn-candidates --count           # one line, for doctor
+  cctoolkit learn-candidates --treat-axis Plan # marks the axis treated
+  cctoolkit learn-candidates --refuse "motif"  # refused motif, never proposed again
+  cctoolkit learn-candidates --memory          # mechanical defects of the memory
 
 Memory. /learn memory audits the project auto-memory. This script delivers its
 judgement-free half: index (file indexed twice, not indexed, gone), incomplete
@@ -44,7 +44,13 @@ import subprocess
 import sys
 import unicodedata
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(HERE, "lib"))
+try:
+    from kit_config import project_root
+    ROOT = project_root()
+except ImportError:
+    ROOT = HERE
 STATE = os.environ.get("LEARN_STATE") or os.path.join(ROOT, ".claude", "learn-state.json")
 TRANSCRIPTS = os.environ.get("LEARN_TRANSCRIPTS") or os.path.join(
     os.path.expanduser("~/.claude/projects"), re.sub(r"[^A-Za-z0-9]", "-", ROOT))

@@ -1,0 +1,22 @@
+{
+  "name": "cctoolkit",
+  "owner": { "name": "Pierre Belin" },
+  "description": "The cctoolkit plugin and its optional mods.",
+  "plugins": [
+    {
+      "name": "cctoolkit",
+      "source": ".",
+      "description": "DDD/TDD kit: skills, agents, hooks, presets, cctoolkit command"
+    },
+    {
+      "name": "context-band",
+      "source": "./mods/context-band",
+      "description": "Band above the prompt: context trend, 150k/250k steps, cache expiry, single-call turns, graph rebuild"
+    },
+    {
+      "name": "tdd-batch",
+      "source": "./mods/tdd-batch",
+      "description": "Live pane of an /implement-tdd batch, read from the batch sheet"
+    }
+  ]
+}

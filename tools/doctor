@@ -9,9 +9,12 @@
 # line that is not `ok` names the command that would.
 #
 # Usage:
-#   bash .claude/tools/doctor            # every check, one line each
-#   bash .claude/tools/doctor --quiet    # only WARN, FAIL and NOTE lines (SessionStart hook)
-#   bash .claude/tools/doctor --evals    # also run .claude/evals/run.sh and report its summary
+#   cctoolkit doctor            # every check, one line each
+#   cctoolkit doctor --quiet    # only WARN, FAIL and NOTE lines (SessionStart hook)
+#   cctoolkit doctor --evals    # also run the kit's evals/run.sh and report its summary
+#
+# The repo is the one lib/project-root.sh resolves ($CLAUDE_PROJECT_DIR, else the
+# git top level); CLAUDE_DOCTOR_ROOT overrides it (evals).
 #
 # Exit 1 when any check FAILs, 0 otherwise. The SessionStart registration appends
 # `|| true`: a doctor must never block a session, only report.
@@ -23,14 +26,17 @@ for a in "$@"; do
   case "$a" in
     --quiet|-q) QUIET=1 ;;
     --evals) EVALS=1 ;;
-    -h|--help) sed -n '2,19p' "$0" | sed -e 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,22p' "$0" | sed -e 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "doctor: unknown argument: $a" >&2; exit 2 ;;
   esac
 done
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="${CLAUDE_DOCTOR_ROOT:-$(cd "$HERE/../.." && pwd)}"
+. "$HERE/../lib/project-root.sh"
+# KIT_DIR: the plugin (cache directory) or the toolkit checkout. ROOT: the repo.
+ROOT="${CLAUDE_DOCTOR_ROOT:-$PROJECT_ROOT}"
 CL="$ROOT/.claude"
+KIT="$KIT_DIR"
 FAILS=0
 WARNS=0
 
@@ -65,65 +71,89 @@ if command -v rtk >/dev/null 2>&1; then
 else
   report FAIL "rtk" "not on PATH — rewrite-rtk.sh has nothing to call"
 fi
-command -v graphify >/dev/null 2>&1 && report ok "binary graphify" "$(command -v graphify)" || report FAIL "binary graphify" "not on PATH — affected-blast-radius and the autosync are dead (.claude/docs/GRAPHIFY-SETUP.md)"
+command -v graphify >/dev/null 2>&1 && report ok "binary graphify" "$(command -v graphify)" || report FAIL "binary graphify" "not on PATH — affected-blast-radius and the autosync are dead (docs/TOOLING.md of the kit)"
 command -v claude >/dev/null 2>&1 && report ok "binary claude" "$(claude --version 2>/dev/null | head -1)" || report WARN "binary claude" "not on PATH — bulk-read cannot run"
-command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report ok "binary ast-grep" || report WARN "binary ast-grep" "scripts/access-cost.py exits 3, COUT stated by hand; structural search unavailable (brew install ast-grep)"
+command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report ok "binary ast-grep" || report WARN "binary ast-grep" "cctoolkit access-cost exits 3, COUT stated by hand; structural search unavailable (brew install ast-grep)"
 
-# --- settings and hook registrations --------------------------------------------
-# The kit registers its hooks in settings.json (shared, README step 2); a team
-# that keeps them to itself moves the `hooks` key to settings.local.json. Both
-# files are read: the registrations are their union.
-SETTINGS="$CL/settings.local.json"
-commands=""
+# --- plugin registration and hook wiring ----------------------------------------
+# The hooks ship in the plugin (hooks/hooks.json, paths under ${CLAUDE_PLUGIN_ROOT});
+# what the repo carries is the plugin's enablement in a settings file. Committed in
+# .claude/settings.json it reaches every clone and worktree; in settings.local.json
+# only this checkout (a worktree then needs scripts/install-git-hooks.sh).
 local_hooks=0
-for f in "$CL/settings.json" "$SETTINGS"; do
-  name=$(basename "$f")
+enabled_in=""
+for f in "$CL/settings.json" "$CL/settings.local.json" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"; do
   [ -e "$f" ] || continue
+  name=${f/#$ROOT\//}; name=${name/#$HOME/\~}
   if [ -L "$f" ] && [ ! -f "$f" ]; then
     report FAIL "$name" "dead symlink → $(readlink "$f")"; continue
   fi
   if ! jq -e . "$f" >/dev/null 2>&1; then
     report FAIL "$name" "invalid JSON — every setting it carries is lost"; continue
   fi
-  [ -L "$f" ] && report ok "$name" "symlink → $(readlink "$f")" || report ok "$name" "valid"
-  c=$(jq -r '.hooks // {} | to_entries[] | .value[] | .hooks[]? | .command // empty' "$f" 2>/dev/null)
-  [ "$f" = "$SETTINGS" ] && [ -n "$c" ] && local_hooks=1
-  [ -n "$c" ] && commands="$commands$c"$'\n'
+  if jq -e '[.enabledPlugins // {} | to_entries[] | select((.key | startswith("cctoolkit@")) and .value == true)] | length > 0' "$f" >/dev/null 2>&1; then
+    enabled_in="$enabled_in $name"
+    [ "$f" = "$CL/settings.local.json" ] && local_hooks=1
+  fi
+  # A copy installed before the plugin registered its hooks here, by path. Left in
+  # place next to the plugin, every guard fires twice — README § Migrating.
+  legacy=$(jq -r '.hooks // {} | to_entries[] | .value[] | .hooks[]? | .command // empty' "$f" 2>/dev/null | grep -c '\.claude/hooks/')
+  [ "${legacy:-0}" -gt 0 ] && report WARN "legacy hook wiring" "$name registers $legacy command(s) under .claude/hooks/ — remove its \"hooks\" key (README § Migrating)"
 done
-if [ -z "$commands" ]; then
-  report FAIL "hook registrations" "no hook registered in settings.json nor settings.local.json — not one project hook fires here (worktree? see TOOLING.md)"
+if [ -n "$enabled_in" ]; then
+  report ok "plugin enabled" "cctoolkit in${enabled_in}"
+  case "$enabled_in" in *settings.json*) local_hooks=0 ;; esac
 else
+  report FAIL "plugin enabled" "cctoolkit is not enabled for $ROOT — no kit hook fires here (README § Installation)"
+fi
+HJ="$KIT/hooks/hooks.json"
+if [ ! -f "$HJ" ]; then
+  report FAIL "hooks/hooks.json" "absent from the kit at $KIT"
+elif ! jq -e . "$HJ" >/dev/null 2>&1; then
+  report FAIL "hooks/hooks.json" "invalid JSON — not one kit hook fires"
+else
+  commands=$(jq -r '.hooks | to_entries[] | .value[] | .hooks[]? | .command // empty' "$HJ")
   missing=0
   while IFS= read -r c; do
     [ -n "$c" ] || continue
-    script=$(printf '%s' "$c" | sed -n 's/^bash \([^ ]*\).*/\1/p')
+    script=$(printf '%s' "$c" | sed -n 's/^bash \([^ ]*\).*/\1/p' | tr -d '"')
     [ -n "$script" ] || continue
-    script=${script//\$CLAUDE_PROJECT_DIR/$ROOT}
-    script=${script//\"/}
-    if [ ! -f "$script" ]; then
-      report FAIL "hook registered, script gone" "$c"
-      missing=$((missing + 1))
-    fi
+    script=${script//\$\{CLAUDE_PLUGIN_ROOT\}/$KIT}
+    [ -f "$script" ] || { report FAIL "hook registered, script gone" "$c"; missing=$((missing + 1)); }
   done <<EOF
 $commands
 EOF
-  [ "$missing" -eq 0 ] && report ok "hook registrations" "$(printf '%s' "$commands" | grep -c . ) commands, every script present"
-  for s in "$CL"/hooks/*.sh; do
-    b=$(basename "$s")
-    printf '%s' "$commands" | grep -q "$b" || report WARN "hook script not registered" "$b — never fires (dead hook, or add it to settings.json)"
+  [ "$missing" -eq 0 ] && report ok "hook registrations" "$(printf '%s\n' "$commands" | grep -c .) commands in hooks/hooks.json, every script present"
+  for sh in "$KIT"/hooks/*.sh; do
+    b=$(basename "$sh")
+    printf '%s' "$commands" | grep -q "$b" || report WARN "hook script not registered" "$b — never fires (dead hook, or add it to hooks/hooks.json)"
   done
-  case "$commands" in
-    *CLAUDE_PROJECT_DIR*) report ok "hook paths" "relative to \$CLAUDE_PROJECT_DIR" ;;
-    *) report WARN "hook paths" "absolute — a worktree runs the main worktree's scripts, another clone none" ;;
-  esac
+fi
+# A copy predating the plugin: its skills and agents load beside the plugin's, under
+# their bare names, and they read the copy's hooks and scripts — two kits in one session.
+if [ "$ROOT" != "$KIT" ]; then
+  for p in hooks/bash-dispatch.sh lib/kit_config.py skills/implement-tdd agents/tdd-implementer.md tools/doctor presets evals/run.sh; do
+    [ -e "$CL/$p" ] && report WARN "legacy copy" ".claude/${p%%/*}/ from a manual install — delete it once the plugin is enabled (README § Migrating)"
+  done
+  [ -f "$ROOT/scripts/pre-audit.sh" ] \
+    && report WARN "legacy copy" "scripts/ holds the kit's scripts from a manual install — delete them (README § Migrating)"
+fi
+
+# --- repo-owned files ------------------------------------------------------------
+# What a plugin cannot ship: the rules (no plugin component loads them) and the
+# config. /cctoolkit:kit-init writes both.
+if [ -f "$CL/rules/markdown-output.md" ]; then
+  report ok "rules" "$(ls "$CL"/rules/*.md 2>/dev/null | wc -l | tr -d ' ') file(s) in .claude/rules/"
+else
+  report FAIL "rules" ".claude/rules/markdown-output.md absent — the skills cite it on every document (/cctoolkit:kit-init)"
 fi
 
 # --- dispatcher modules --------------------------------------------------------
-if [ -f "$CL/hooks/bash-dispatch.sh" ]; then
-  mods=$(sed -n '/^MODULES=(/,/^)/p' "$CL/hooks/bash-dispatch.sh" | grep -o '"[^"]*"' | tr -d '"' | awk '{print $1}')
+if [ -f "$KIT/hooks/bash-dispatch.sh" ]; then
+  mods=$(sed -n '/^MODULES=(/,/^)/p' "$KIT/hooks/bash-dispatch.sh" | grep -o '"[^"]*"' | tr -d '"' | awk '{print $1}')
   bad=0
   for m in $mods; do
-    [ -f "$CL/lib/$m" ] || { report FAIL "dispatch module" "$m listed in bash-dispatch.sh, missing in .claude/lib"; bad=1; }
+    [ -f "$KIT/lib/$m" ] || { report FAIL "dispatch module" "$m listed in bash-dispatch.sh, missing in lib/"; bad=1; }
   done
   [ "$bad" -eq 0 ] && report ok "dispatch modules" "$(printf '%s\n' "$mods" | grep -c .) present"
 fi
@@ -134,11 +164,11 @@ if git -C "$ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
   case "$common" in /*) ;; *) common="$ROOT/$common" ;; esac
   pc="$common/hooks/post-checkout"
   if [ "$local_hooks" -eq 0 ]; then
-    report ok "git post-checkout hook" "not needed — hooks registered in the committed settings.json reach every worktree"
+    report ok "git post-checkout hook" "not needed — the plugin enabled in the committed settings.json reaches every worktree"
   elif [ -f "$pc" ] && grep -q 'settings.local.json' "$pc" 2>/dev/null; then
     report ok "git post-checkout hook" "links settings.local.json into new worktrees"
   else
-    report FAIL "git post-checkout hook" "absent — a new worktree runs unguarded (bash scripts/install-git-hooks.sh)"
+    report FAIL "git post-checkout hook" "absent — a new worktree runs unguarded (cctoolkit install-git-hooks)"
   fi
   main=$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
   here=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)
@@ -153,8 +183,8 @@ fi
 # --- graphify graph ------------------------------------------------------------
 GRAPH="$ROOT/graphify-out/graph.json"
 if [ -f "$GRAPH" ]; then
-  if [ -x "$CL/lib/graphify-freshness.sh" ] || [ -f "$CL/lib/graphify-freshness.sh" ]; then
-    lag=$(GRAPHIFY_REPO="$ROOT" bash "$CL/lib/graphify-freshness.sh" --count 2>/dev/null)
+  if [ -f "$KIT/lib/graphify-freshness.sh" ]; then
+    lag=$(GRAPHIFY_REPO="$ROOT" bash "$KIT/lib/graphify-freshness.sh" --count 2>/dev/null)
     case "$lag" in
       0) report ok "graphify graph" "up to date ($(date -r "$GRAPH" '+%Y-%m-%d %H:%M'))" ;;
       ''|*[!0-9]*) report WARN "graphify graph" "freshness unknown" ;;
@@ -166,7 +196,7 @@ if [ -f "$GRAPH" ]; then
     report WARN "graphify autosync" "last run refused to overwrite a shrunken graph — graphify update . --force after a deleting refactor"
   fi
 else
-  report FAIL "graphify graph" "graphify-out/graph.json absent — graphify update . (or GRAPHIFY-SETUP.md)"
+  report FAIL "graphify graph" "graphify-out/graph.json absent — graphify update . (docs/TOOLING.md of the kit)"
 fi
 
 # --- worker login --------------------------------------------------------------
@@ -183,17 +213,25 @@ if command -v claude >/dev/null 2>&1; then
   esac
 fi
 
-# --- tools, evals, rules -------------------------------------------------------
-for t in "$CL"/tools/* "$CL"/evals/run.sh; do
+# --- tools, evals ---------------------------------------------------------------
+for t in "$KIT"/tools/* "$KIT"/bin/* "$KIT"/evals/run.sh; do
   [ -f "$t" ] || continue
   [ -x "$t" ] && report ok "executable $(basename "$t")" || report WARN "executable $(basename "$t")" "missing +x (chmod +x $t)"
 done
-for r in "$CL"/rules/*.md; do
-  [ -f "$r" ] || continue
-  if [ "$(head -1 "$r")" != "---" ] || ! sed -n '1,/^---$/p' "$r" | grep -q '^paths:'; then
-    report WARN "rule without paths:" "$(basename "$r") — never loads by path"
-  fi
-done
+
+# --- kit.config.json --------------------------------------------------------------
+# The hooks read it through lib/kit_config.py and go silent on any defect — a
+# broken file, an unknown preset, a layout matching no directory. That silence is
+# exactly a doctor's case. rules/*.md is the repo's own: never parsed here.
+if out=$(python3 "$KIT/lib/kit_config.py" validate "$ROOT" 2>&1); then
+  while IFS=$'\t' read -r level name detail; do
+    [ -n "$level" ] && report "$level" "$name" "$detail"
+  done <<KITEOF
+$out
+KITEOF
+else
+  report FAIL "kit.config.json" "validation crashed: $(printf '%s' "$out" | tail -1)"
+fi
 
 # --- /tmp leftovers ------------------------------------------------------------
 # session-cleanup.sh purges at `-mtime +2`, and BSD find counts whole 24 h
@@ -207,17 +245,17 @@ orphans=$(find -H /tmp -maxdepth 1 -name 'claude-*' -mtime +3 2>/dev/null | wc -
 # Verdict deviations nobody turned into a rule yet. The script only refreshes its
 # own transcript cache (.claude/learn-state.json, ignored by git): nothing in the
 # repo changes. Silent below two lots, so a single bad batch does not nag.
-if [ -f "$ROOT/scripts/learn-candidates.py" ]; then
-  backlog=$(python3 "$ROOT/scripts/learn-candidates.py" --count 2>/dev/null)
+if [ -f "$KIT/scripts/learn-candidates.py" ]; then
+  backlog=$(CLAUDE_PROJECT_DIR="$ROOT" python3 "$KIT/scripts/learn-candidates.py" --count 2>/dev/null)
   [ -n "$backlog" ] && report NOTE "learn" "$backlog"
 fi
 
 # --- evals on demand -----------------------------------------------------------
-if [ "$EVALS" -eq 1 ] && [ -f "$CL/evals/run.sh" ]; then
-  summary=$(bash "$CL/evals/run.sh" 2>&1 | tail -1)
+if [ "$EVALS" -eq 1 ] && [ -f "$KIT/evals/run.sh" ]; then
+  summary=$(bash "$KIT/evals/run.sh" 2>&1 | tail -1)
   case "$summary" in
     *", 0 failed") report ok "hook evals" "$summary" ;;
-    *) report FAIL "hook evals" "$summary — bash .claude/evals/run.sh for the detail" ;;
+    *) report FAIL "hook evals" "$summary — cctoolkit evals for the detail" ;;
   esac
 fi
 

@@ -2,24 +2,79 @@
   "cases": [
     {
       "name": "--help prints the usage and exits 0",
-      "cmd": "bash .claude/tools/doctor --help",
-      "expect": {"exit": 0, "stdout": "Usage:"}
+      "cmd": "bash {{KIT}}/tools/doctor --help",
+      "expect": {
+        "exit": 0,
+        "stdout": "Usage:"
+      }
     },
     {
       "name": "unknown argument is a usage error",
-      "cmd": "bash .claude/tools/doctor --repair",
-      "expect": {"exit": 2, "stderr": "unknown argument"}
+      "cmd": "bash {{KIT}}/tools/doctor --repair",
+      "expect": {
+        "exit": 2,
+        "stderr": "unknown argument"
+      }
     },
     {
       "name": "the full report names the registrations, the graph and the git hook",
-      "cmd": "bash .claude/tools/doctor",
-      "expect": {"stdout": "hook registrations"}
+      "cmd": "bash {{KIT}}/tools/doctor",
+      "expect": {
+        "stdout": "hook registrations"
+      }
     },
     {
-      "name": "a root without a settings file is a FAIL, not a crash",
-      "cmd": "bash .claude/tools/doctor --quiet",
-      "env": {"CLAUDE_DOCTOR_ROOT": "{{FIX}}"},
-      "expect": {"exit": 1, "stdout": "no hook registered"}
+      "name": "a root where the plugin is not enabled is a FAIL, not a crash",
+      "cmd": "bash {{KIT}}/tools/doctor --quiet",
+      "env": {
+        "CLAUDE_DOCTOR_ROOT": "{{FIX}}"
+      },
+      "expect": {
+        "exit": 1,
+        "stdout": "cctoolkit is not enabled"
+      }
+    },
+    {
+      "name": "a kit.config.json naming an unknown preset is a FAIL with the presets available",
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude/lib\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf '%s' '{\"preset\": \"onion\"}' > $R/.claude/kit.config.json\nbash {{KIT}}/tools/doctor --quiet",
+      "env": {
+        "CLAUDE_DOCTOR_ROOT": "{{FIX}}/doc-{{SID}}"
+      },
+      "expect": {
+        "exit": 1,
+        "stdout": "unknown preset 'onion' — available: clean-architecture, hexagonal, vertical-slices"
+      }
+    },
+    {
+      "name": "a root without rules nor config is told to run kit-init",
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude\nbash {{KIT}}/tools/doctor --quiet",
+      "env": {
+        "CLAUDE_DOCTOR_ROOT": "{{FIX}}/doc-{{SID}}"
+      },
+      "expect": {
+        "exit": 1,
+        "stdout": "/cctoolkit:kit-init"
+      }
+    },
+    {
+      "name": "a manual copy left beside the plugin is flagged, hooks wiring included",
+      "env": {
+        "CLAUDE_DOCTOR_ROOT": "{{FIX}}/doc-{{SID}}"
+      },
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/rules\n: > $R/.claude/hooks/bash-dispatch.sh\n: > $R/.claude/rules/markdown-output.md\nprintf '%s' '{\"enabledPlugins\":{\"cctoolkit@cctoolkit\":true},\"hooks\":{\"PreToolUse\":[{\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":\"bash $CLAUDE_PROJECT_DIR/.claude/hooks/bash-dispatch.sh\"}]}]}}' > $R/.claude/settings.json\nbash {{KIT}}/tools/doctor --quiet",
+      "expect": {
+        "stdout": "legacy hook wiring"
+      }
+    },
+    {
+      "name": "the plugin enabled in the committed settings is ok",
+      "env": {
+        "CLAUDE_DOCTOR_ROOT": "{{FIX}}/doc-{{SID}}"
+      },
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude\nprintf '%s' '{\"enabledPlugins\":{\"cctoolkit@cctoolkit\":true}}' > $R/.claude/settings.json\nbash {{KIT}}/tools/doctor",
+      "expect": {
+        "stdout": "ok   plugin enabled"
+      }
     }
   ]
 }

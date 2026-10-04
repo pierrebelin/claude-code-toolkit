@@ -1,0 +1,36 @@
+{
+  "cases": [
+    {
+      "name": "a .NET solution in the clean-architecture shape: preset first, product and xunit read off the manifests",
+      "cmd": "R={{FIX}}/ds-{{SID}}\nmkdir -p $R/src/Acme.Application/Catalog/CreateProduct $R/tests/Acme.UnitTests\nprintf x > $R/Acme.sln\nprintf '<PackageReference Include=\"xunit.v3\"/>' > $R/tests/Acme.UnitTests/Acme.UnitTests.csproj\nprintf 'public sealed class CreateProductCommandHandler { }' > $R/src/Acme.Application/Catalog/CreateProduct/CreateProductCommandHandler.cs\npython3 {{KIT}}/scripts/detect-stack.py $R | jq -r '[.product, .testTag, .presets[0].preset, (.presets[0].useCaseFolders|tostring), (.fits|tostring)] | join(\"|\")'",
+      "expect": {
+        "exit": 0,
+        "stdout": "Acme|xunit|clean-architecture|1|true"
+      }
+    },
+    {
+      "name": "a pytest repo with feature folders: vertical-slices first, pytest tag",
+      "cmd": "R={{FIX}}/ds-{{SID}}\nmkdir -p $R/src/features/create_product\nprintf '[project]\\nname = \"shop\"\\ndependencies = [\"pytest\"]\\n' > $R/pyproject.toml\nprintf 'class CreateProductHandler:\\n    async def handle(self, c):\\n        pass\\n' > $R/src/features/create_product/create_product_handler.py\npython3 {{KIT}}/scripts/detect-stack.py $R | jq -r '[.product, .testTag, .presets[0].preset] | join(\"|\")'",
+      "expect": {
+        "exit": 0,
+        "stdout": "shop|pytest|vertical-slices"
+      }
+    },
+    {
+      "name": "no use-case folder anywhere: fits is false, the layers are listed for the draft rules",
+      "cmd": "R={{FIX}}/ds-{{SID}}\nmkdir -p $R/src/billing $R/src/shipping\nprintf '{\"name\":\"@acme/store\",\"devDependencies\":{\"vitest\":\"1\"}}' > $R/package.json\nprintf 'export const x = 1' > $R/src/billing/invoice.ts\nprintf 'export const y = 1' > $R/src/shipping/parcel.ts\npython3 {{KIT}}/scripts/detect-stack.py $R | jq -r '[.product, .testTag, (.fits|tostring), ([.layers[].dir]|join(\",\"))] | join(\"|\")'",
+      "expect": {
+        "exit": 0,
+        "stdout": "store|jest|false|src/billing,src/shipping"
+      }
+    },
+    {
+      "name": "a manual copy of the kit is reported as legacy",
+      "cmd": "R={{FIX}}/ds-{{SID}}\nmkdir -p $R/.claude/hooks $R/scripts\n: > $R/scripts/pre-audit.sh\npython3 {{KIT}}/scripts/detect-stack.py $R | jq -r '.existing.legacyCopy | join(\",\")'",
+      "expect": {
+        "exit": 0,
+        "stdout": "hooks,../scripts"
+      }
+    }
+  ]
+}

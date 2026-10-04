@@ -11,7 +11,7 @@ Freeze nominal HTTP contract: method, route, status, headers, body. Batch suppli
 
 ## Rules
 
-- Every test carries the rule of the route's handler `## Règles métier` table it proves: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]` — `ContractTests` bind every test (`.claude/rules/tests.md`). Trait read in every suite — rule proven only here stops counting untested.
+- Every test carries the rule of the route's handler rules table (`kit:rules`) it proves: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]` — `ContractTests` bind every test (`.claude/rules/tests.md`). Trait read in every suite — rule proven only here stops counting untested.
 - One `{HTTP} {route}` = one happy-path contract test. Error test only when public HTTP representation of error changes (status, headers, body).
 - Status per verb → `.claude/rules/webapi-endpoints.md`, `Responses` table.
 - Validation, business rules → handler unit tests. `GlobalExceptionHandler` or public error contract changes → freeze affected HTTP mapping once, never duplicate every business case per endpoint.

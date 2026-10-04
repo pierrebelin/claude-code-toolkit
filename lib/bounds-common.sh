@@ -26,7 +26,7 @@ BOUNDS_FLAT_PCT=${CLAUDE_BOUNDS_FLAT_PCT:-33}
 # file goes to the one-shot worker and the file never enters the context at all.
 # Added 2026-09-12 with .claude/tools/bulk-read; measured ~500 fixed tokens
 # against ~1k carried to the end of the session for a direct read of a 4 kB file.
-BOUNDS_BULK_READ="A question about the file rather than an edit (what it does, which rules, which dependencies): bash ${CLAUDE_PROJECT_DIR:-.}/.claude/tools/bulk-read --question \"...\" --paths <file> — one-shot haiku worker, ~500 fixed tokens, the file never enters this context."
+BOUNDS_BULK_READ="A question about the file rather than an edit (what it does, which rules, which dependencies): cctoolkit bulk-read --question \"...\" --paths <file> — one-shot haiku worker, ~500 fixed tokens, the file never enters this context."
 
 bounds_lower() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'

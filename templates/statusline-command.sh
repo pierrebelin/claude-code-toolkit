@@ -1,5 +1,6 @@
 #!/bin/bash
-# Claude Code statusLine script
+# Claude Code statusLine script — installed by /cctoolkit:kit-init into
+# <repo>/.claude/statusline-command.sh: a plugin cannot set `statusLine`.
 
 input=$(cat)
 
@@ -55,9 +56,14 @@ fi
 # --- Graphify freshness badge ---
 # Cached read (20s TTL on the helper side), ~10ms warm.
 graphify_badge=""
-FRESH_SCRIPT="$cwd/.claude/lib/graphify-freshness.sh"
-if [ -x "$FRESH_SCRIPT" ]; then
-  stale=$("$FRESH_SCRIPT" --count 2>/dev/null)
+# The helper ships in the cctoolkit plugin, whose cache directory changes with each
+# version: take the newest one. A copy predating the plugin kept it in .claude/lib/.
+project=$(echo "$input" | jq -r '.workspace.project_dir // empty')
+[ -n "$project" ] || project="$cwd"
+FRESH_SCRIPT=$(ls -t "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/cctoolkit/*/lib/graphify-freshness.sh 2>/dev/null | head -1)
+[ -n "$FRESH_SCRIPT" ] || FRESH_SCRIPT="$project/.claude/lib/graphify-freshness.sh"
+if [ -f "$FRESH_SCRIPT" ]; then
+  stale=$(GRAPHIFY_REPO="$project" bash "$FRESH_SCRIPT" --count 2>/dev/null)
   case "$stale" in
     ''|*[!0-9-]*) ;;
     -1) graphify_badge=$(printf '\033[31m[graph missing]\033[0m') ;;

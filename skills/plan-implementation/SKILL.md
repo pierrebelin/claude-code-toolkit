@@ -29,7 +29,7 @@ No final code: no method bodies, assertions, SQL. Plan = what, why, where, order
 0. **Gate — open blocking questions.** Before any read:
 
    ```bash
-   awk '/^## 12\./{p=1;next} /^## /{p=0} p && /\| *Blocking *\|/' <spec>
+   awk '/^## .*<!-- *kit:open-questions *-->/{p=1;next} /^## /{p=0} p && /\| *Blocking *\|/' <spec>
    ```
 
    Any line → **stop**: list them, end with `→ Open blocking questions: /business-spec to settle them.` No plan while a `Blocking` is open — same contract as `## BLOCKED` in a batch, moved before design.
@@ -47,7 +47,7 @@ No final code: no method bodies, assertions, SQL. Plan = what, why, where, order
    5. Local conventions of the context — naming, folder layout — one line each
    ```
 
-   Only file you open: folder `CLAUDE.md` of handler owning same business act, bounded to `## Règles métier` table — rewrite vs twin = your call. Inventory → "1. Scope > Reuse".
+   Only file you open: folder `CLAUDE.md` of handler owning same business act, bounded to its `kit:rules` table — rewrite vs twin = your call. Inventory → "1. Scope > Reuse".
 4. Blast radius per existing type modified: one `graphify affected "<Type>"` per aggregate, VO, domain interface already in `src/`; new type: skip. Roll up per project (`grep -oE '(src|tests)/[^/]+' | sort | uniq -c | sort -rn`), never paste file:line. Rollup → "1. Scope" as measured cost; drives split (step 2) — radius over four test projects = own batch.
 5. Blocking technical ambiguity → AskUserQuestion before planning (≤4 decisions/call, recommended answer first). No plan while blocking question open.
 6. Technical challenge — ≤3 AskUserQuestion questions, only if answer removes work:
@@ -71,7 +71,7 @@ Status per batch: `sequential` default, or `parallelisable with F?` (two worktre
    - Batch sheets (`[CODE]-PLAN-F1.md`, `-F2.md`…): detail per batch. `/implement-tdd batch F1` loads global plan by section + F1 sheet alone.
 2. Handler doc — per handler created/modified: sheet step updating handler folder `CLAUDE.md` (business rules, flow + access cost, events). Parent feature index `CLAUDE.md` only when its two or three sentences on the bounded context no longer hold — no handler list, no link, no table. Format: `/implement-tdd` `references/claude-md-handler.md`.
 3. Self-validation: re-read plan vs checklist. Deviation → fix plan. Doubt on business intent → ask user.
-4. **Adversarial review.** `Agent` with `subagent_type: adversarial-reviewer`, a `description`, prompt starting `mode: plan todo/<code>/`. `Blocking` → fix plan, or AskUserQuestion when the answer is the user's; `Major` → fix, or keep with one line in the sheet's `## Decisions` saying why. Never re-run it on the corrected plan.
+4. **Adversarial review.** `Agent` with `subagent_type: cctoolkit:adversarial-reviewer`, a `description`, prompt starting `mode: plan todo/<code>/`. `Blocking` → fix plan, or AskUserQuestion when the answer is the user's; `Major` → fix, or keep with one line in the sheet's `## Decisions` saying why. Never re-run it on the corrected plan.
 5. Summary: batch count, RM/CU traced, files produced, folder path, review rows settled and how.
 
 ## Execution-plan rules (`0. Summary` > `### Batch FX`)
@@ -99,7 +99,7 @@ FORBIDDEN — each belongs to the sheet, never duplicated here: per-batch elemen
 
 Enough detail for `/implement-tdd`. 1 file = 1 batch.
 
-Section order, fixed — why, then what to write, then where: `## Intent`, `## Design`, `## Decisions`, `## TDD sequence`, `## Test policy and scopes`, `## Code elements`, `## Ancrages`, `## Assumptions`. Reading line under the blockquote states that split. `## Code elements` is a reference appendix read while writing, never the reading path: it never comes before `## TDD sequence`.
+Section order, fixed — why, then what to write, then where: `## Intent`, `## Design`, `## Decisions`, `## TDD sequence`, `## Test policy and scopes`, `## Code elements`, `## Ancrages`, `## Assumptions` — each heading carrying its template anchor, title in `language.docs`. Reading line under the blockquote states that split. `## Code elements` is a reference appendix read while writing, never the reading path: it never comes before `## TDD sequence`.
 
 MUST: exact element names (`/implement-tdd` conventions), public signatures, pseudo-code bullets. Design section: applied DDD/APP/PERF ids, owning aggregate, invariants + RM, consistency, internal events + payload, induced simplifications, access cost. Empty Assumptions section, filled by `/implement-tdd` mid-batch (`Hn — [assumption] — to be validated by [who]`). Test scenarios + RM + target project: unit test per handler behaviour; integration test as soon as element lives in `src/{{PRODUCT}}.Infrastructure/` (repository, EF mapper, entity configuration, persistence-exception translation); contract test if route changes; E2E only for multi-operation lifecycle. Sole integration waiver: element without persistence effect — DI registration, adapter of already-doubled external service — written in sheet with reason.
 

@@ -74,7 +74,7 @@ printf '%s' "$count" > "${base}.nudged"
 
 ctx="Delegation: $count distinct .cs files read directly since the last subagent.
 Measured over 180 sessions: a Read returns 9,091 bytes on average, an Agent 1,639. The subagent reads, then hands back a conclusion; the files read here stay in context until the session ends.
-If what is left to cover is exploration — locating, mapping, checking a convention across N files — send an Agent (\`model: haiku\`, report bounded in the prompt). If it is a question about files you can already name — what X does, which rules, which dependencies — \`bash .claude/tools/bulk-read --question \"...\" --paths f1 f2\`: one-shot haiku worker, ~500 fixed tokens, no spawn. If it is targeted reading on a path already known, stay with Read: it is the right tool."
+If what is left to cover is exploration — locating, mapping, checking a convention across N files — send an Agent (\`model: haiku\`, report bounded in the prompt). If it is a question about files you can already name — what X does, which rules, which dependencies — \`cctoolkit bulk-read --question \"...\" --paths f1 f2\`: one-shot haiku worker, ~500 fixed tokens, no spawn. If it is targeted reading on a path already known, stay with Read: it is the right tool."
 
 jq -cn --arg c "$ctx" \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $c}}'
