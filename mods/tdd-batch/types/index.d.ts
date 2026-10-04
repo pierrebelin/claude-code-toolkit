@@ -12,9 +12,17 @@ export type Step = {
 
 export type Sheet = { lot: string; name: string; isDone: boolean; steps: Step[]; hypotheses: number }
 
-export type Run = { id: string; kind: 'RED' | 'GREEN'; description: string }
+export type AgentKind = 'RED' | 'GREEN' | 'AUDIT'
 
-export type Blocked = { kind: 'RED' | 'GREEN'; description: string }
+export type Run = { id: string; kind: AgentKind; description: string; startedAt: number }
+
+export type Blocked = { kind: AgentKind; description: string }
+
+export type Gate = { isGreen: boolean; failures: number }
+
+export type Verdict = { isValid: boolean; blocking: number; major: number }
+
+export type Audit = { passes: number; verdict: Verdict | null }
 
 export type Batch = {
   path: string | null
@@ -23,10 +31,13 @@ export type Batch = {
   wave: number
   running: Run[]
   blocked: Blocked[]
+  startedAt: number | null
+  gate: Gate | null
+  audit: Audit
 }
 
 declare module 'claude-code' {
   interface PluginState {
-    'tdd-batch': { batch: Batch }
+    'tdd-batch': { batch: Batch; now: number }
   }
 }

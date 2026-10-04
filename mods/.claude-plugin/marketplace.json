@@ -1,0 +1,8 @@
+{
+  "name": "pierrebelinmods",
+  "owner": { "name": "Pierre Belin" },
+  "plugins": [
+    { "name": "context-band", "source": "./context-band", "description": "Bandeau au-dessus du prompt : contexte, paliers, cache, tours à un appel, graphify" },
+    { "name": "tdd-batch", "source": "./tdd-batch", "description": "Pane d'avancement d'un lot /implement-tdd lu depuis la fiche de lot" }
+  ]
+}

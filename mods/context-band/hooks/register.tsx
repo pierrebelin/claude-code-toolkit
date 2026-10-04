@@ -28,6 +28,7 @@ const EMPTY: Band = {
   streak: 0,
   turn: 0,
   contributions: [],
+  cost: null,
 }
 
 const band = atom({ plugin: 'context-band', key: 'band' } as const, EMPTY)
@@ -139,6 +140,19 @@ export const topContributions = (
     .slice(0, count)
 }
 
+export const calibrate = (
+  calls: { label: string; tokens: number }[],
+  delta: number | null,
+): { calls: { label: string; tokens: number }[]; text: number } => {
+  const measured = calls.reduce((sum, one) => sum + one.tokens, 0)
+  if (delta === null || delta <= 0) return { calls, text: 0 }
+  if (measured <= delta) return { calls, text: delta - measured }
+  const ratio = delta / measured
+  return { calls: calls.map(one => ({ ...one, tokens: Math.round(one.tokens * ratio) })), text: 0 }
+}
+
+export const dollars = (usd: number): string => `${usd.toFixed(2).replace('.', ',')} $`
+
 async function recordStep($: EngineInterface, tools: number): Promise<void> {
   await update($, band, current => {
     const full = complete(current)
@@ -167,7 +181,7 @@ export const register: Register = on => {
     if (e.agentId !== undefined) return next(e)
     toolsInStep += 1
     const result = await next(e)
-    const input = (e.input ?? {}) as Record<string, unknown>
+    const input = e as unknown as Record<string, unknown>
     const output = typeof result.deny === 'string' ? result.deny : (result.text ?? '')
     pending.push({
       label: callLabel(e.tool, input),
@@ -201,18 +215,19 @@ export const register: Register = on => {
     await update($, band, stored => {
       const current = complete(stored)
       const base = current.startedAt === usage.startedAt ? current : { ...EMPTY, startedAt: usage.startedAt }
-      if (tokens === undefined) return { ...base, lastTurnAt: at }
+      const cost = usage.cost?.usd ?? base.cost
+      if (tokens === undefined) return { ...base, cost, lastTurnAt: at }
       const turn = base.turn + 1
       const previous = base.readings[base.readings.length - 1]
-      const measured = calls.reduce((sum, one) => sum + one.tokens, 0)
-      const text = previous === undefined ? 0 : tokens - previous - measured
+      const calibrated = calibrate(calls, previous === undefined ? null : tokens - previous)
       const added: Contribution[] = [
-        ...calls.map(one => ({ turn, ...one })),
-        ...(text > 0 ? [{ turn, label: TEXT_LABEL, tokens: text }] : []),
+        ...calibrated.calls.map(one => ({ turn, ...one })),
+        ...(calibrated.text > 0 ? [{ turn, label: TEXT_LABEL, tokens: calibrated.text }] : []),
       ]
       return {
         ...base,
         turn,
+        cost,
         window: usage.context.window,
         readings: [...base.readings, tokens].slice(-SPARK_TURNS),
         contributions: [...base.contributions, ...added].filter(one => one.turn > turn - TOP_TURNS),
@@ -255,6 +270,8 @@ export const register: Register = on => {
           {state.streak >= STREAK_SHOWN && <Text dimColor> · </Text>}
           {state.streak >= STREAK_SHOWN && <Text color="yellow">{state.streak} tours à un seul appel : grouper</Text>}
           {rebuilding && <Text dimColor> · graphe en reconstruction</Text>}
+          <Text dimColor> · {state.turn} tour{state.turn > 1 ? 's' : ''}</Text>
+          {state.cost !== null && <Text dimColor> · {dollars(state.cost)}</Text>}
         </Text>
         {showsTop && (
           <Text wrap="truncate-end">
