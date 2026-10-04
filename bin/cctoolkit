@@ -1,0 +1,50 @@
+#!/bin/bash
+# cctoolkit — one entry point for the kit's scripts and tools.
+#
+# Why. Installed as a plugin, the kit lives in a versioned cache directory whose
+# path changes on every update. Claude Code puts the plugin's bin/ on the Bash
+# tool's PATH, so `cctoolkit pre-audit FX` reads the same in a skill, a reference
+# file, an agent or a terminal — where `bash <kit>/scripts/pre-audit.sh` would need
+# a path no reference file can know.
+#
+# Usage:
+#   cctoolkit <script> [args]   scripts/<script>.sh or scripts/<script>.py
+#   cctoolkit doctor [args]     tools/doctor
+#   cctoolkit bulk-read [args]  tools/bulk-read
+#   cctoolkit context-report    lib/context-report.sh
+#   cctoolkit evals [args]      evals/run.sh
+#   cctoolkit root              the kit directory (plugin cache or toolkit checkout)
+#   cctoolkit list              every command
+#
+# The repo is resolved by each script (lib/project-root.sh, kit_config.py
+# project_root()): $CLAUDE_PROJECT_DIR, else the git top level of the working
+# directory. Run it from inside the repo.
+set -u
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+list() {
+  printf '%s\n' doctor bulk-read context-report evals root
+  for f in "$KIT"/scripts/*.sh "$KIT"/scripts/*.py; do
+    [ -f "$f" ] || continue
+    b=$(basename "$f"); printf '%s\n' "${b%.*}"
+  done | sort -u
+}
+
+cmd="${1:-}"
+[ -n "$cmd" ] || { sed -n '2,23p' "$0" | sed -e 's/^# \{0,1\}//'; exit 2; }
+shift
+case "$cmd" in
+  -h|--help) sed -n '2,23p' "$0" | sed -e 's/^# \{0,1\}//'; exit 0 ;;
+  root) printf '%s\n' "$KIT"; exit 0 ;;
+  list) list; exit 0 ;;
+  doctor|bulk-read) exec bash "$KIT/tools/$cmd" "$@" ;;
+  context-report) exec bash "$KIT/lib/context-report.sh" "$@" ;;
+  evals) exec bash "$KIT/evals/run.sh" "$@" ;;
+esac
+case "$cmd" in
+  */*|.*) echo "cctoolkit: invalid command '$cmd'" >&2; exit 2 ;;
+esac
+[ -f "$KIT/scripts/$cmd.sh" ] && exec bash "$KIT/scripts/$cmd.sh" "$@"
+[ -f "$KIT/scripts/$cmd.py" ] && exec python3 "$KIT/scripts/$cmd.py" "$@"
+echo "cctoolkit: unknown command '$cmd' — cctoolkit list" >&2
+exit 2

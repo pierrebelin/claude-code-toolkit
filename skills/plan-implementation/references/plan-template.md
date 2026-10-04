@@ -6,7 +6,7 @@ Structure expected by `/implement-tdd`. Two levels:
 
 **Principle**: global plan = WHAT + WHY + ORDER. Batch sheet = WHAT + HOW for that batch alone. A fact belongs to exactly one of the two — element lists, decisions, test names, applied rule ids live in the sheet only.
 
-**Templates below reproduced verbatim** — produced artefacts, read by the team. Copy the structure as-is, fill the placeholders.
+**Templates below reproduced verbatim** — produced artefacts, read by the team. Copy the structure as-is, fill the placeholders. Every `<!-- kit:… -->` anchor is copied as is; the prose around it — titles included — is written in `language.docs` (`.claude/rules/markdown-output.md`).
 
 ---
 
@@ -18,7 +18,7 @@ Structure expected by `/implement-tdd`. Two levels:
 > Plan derived from `[path of the spec]`.
 > Batch sheets: `[CODE]-PLAN-F1.md`, `[CODE]-PLAN-F2.md`...
 
-## 0. Summary
+## 0. Summary <!-- kit:summary -->
 
 **Progress**: `X / N` (`Y %`)
 
@@ -39,7 +39,7 @@ Structure expected by `/implement-tdd`. Two levels:
 ### Batch F2 — [Name] — ⬜
 - [ ] 1. [Step title]
 
-## 1. Scope
+## 1. Scope <!-- kit:scope -->
 
 - **Spec**: `[path]`
 - **Bounded context**: [name]
@@ -47,22 +47,22 @@ Structure expected by `/implement-tdd`. Two levels:
 - **Reuse**: [existing elements identified during codebase analysis]
 - **Out of scope**: [what the plan does not do, and where that gets decided]
 - **Assumptions**: [points settled with the user, with the date] / [points still to validate, and why they do not block]
-- **Non-applicable rules**: [DDD-XX: N/A — reason; APP-XX: N/A — reason] — no list of applied ids here: every batch sheet carries them in its `## Design` `Applied rules` row
+- **Non-applicable rules** <!-- kit:na-rules -->: [DDD-XX: N/A — reason; APP-XX: N/A — reason] — no list of applied ids here: every batch sheet carries them in its `## Design` `kit:applied-rules` row
 
-## 2. Traceability
+## 2. Traceability <!-- kit:traceability -->
 
 | RM/CU | Code owner(s) | Batch |
 |-------|---------------|-------|
 | RM-01 — [statement] | `[Aggregate].[Method]()` + `[Exception]` | F1 |
 | CU-01 — [statement] | `[Command]` → `[Handler]` → `[Endpoint]` | F1 |
 
-## 3. DDD and Architecture design
+## 3. DDD and Architecture design <!-- kit:ddd-design -->
 
 | RM/CU | Owning aggregate | Invariant / code consequence | Consistency | Batch |
 |-------|------------------|------------------------------|-------------|-------|
 | RM-01 / CU-01 | `[Aggregate]` | [invariant] → [branch/read removed] | synchronous, 1 aggregate | F1 |
 
-## 4. Cross-cutting elements (if applicable)
+## 4. Cross-cutting elements (if applicable) <!-- kit:cross-cutting -->
 
 - **DI**: registrations | **Routes**: `Endpoints.cs` constants | **Bounds** (APP-05): `RequestLimits` (transport) / `PaginationBounds` (pagination) / `QueryLimits` (read)
 - **EF migrations**: out of scope — another project, never modified here. A required schema change is reported, it is not planned as a step.
@@ -80,26 +80,26 @@ Section order is fixed: why (`Intent`, `Design`, `Decisions`), then what gets wr
 > Batch F1 of plan `[CODE]-PLAN.md`. Spec: `[path]`.
 > Reading: **Intent**, **Design**, **Decisions** say why; **TDD sequence** what gets written and in which order; **Code elements** the signature detail; **Ancrages** the exact paths where all of it lands.
 
-## Intent
+## Intent <!-- kit:intent -->
 
 [1 sentence — CU ref]. **RM**: RM-01, RM-03 | **CU**: CU-01
 
-## Design
+## Design <!-- kit:design -->
 
 | Point | Decision |
 |-------|----------|
-| Applied rules | DDD-01, DDD-02, DDD-03, DDD-08, APP-01, APP-02, PERF-01 |
+| Applied rules <!-- kit:applied-rules --> | DDD-01, DDD-02, DDD-03, DDD-08, APP-01, APP-02, PERF-01 |
 | Owning aggregate | `[Aggregate]`; the handler only orchestrates |
 | Invariants | [RM-XX]; consequence: [defensive code/read/collection avoided] |
 | Consistency | one command modifies/saves `[Aggregate]`; targeted non-mutating external read if needed |
 | Events | internal to persistence: `[Event]` in the past tense, payload [fields] / N/A — reason |
 | Access cost | [n reads + n writes, bounded independently of the input] |
 
-## Decisions
+## Decisions <!-- kit:decisions -->
 
 [Non-obvious choices, trade-offs, reuses, with the date of the user decisions. Omitted if nothing notable.]
 
-## TDD sequence
+## TDD sequence <!-- kit:tdd-sequence -->
 
 One step = one RED → GREEN → COST cycle. The tests below are **written and red before a single production line** of the step. Order inside a step: success first (it fixes the signatures), refusals next, integration then contract last[, E2E at the very end].
 
@@ -129,7 +129,7 @@ No test: update of the handler `CLAUDE.md` files; feature index only if its boun
 
 No new test: replay of the scopes named in `## Test policy and scopes`.
 
-## Test policy and scopes
+## Test policy and scopes <!-- kit:test-policy -->
 
 **Handler policy**: query = mock fed with data then result asserted; command = `SavedEvents` asserted by type and payload. Never a spy, a counter, nor a call assertion. Never a direct test on the aggregate: its behaviour is proven through the handler.
 
@@ -139,7 +139,7 @@ No new test: replay of the scopes named in `## Test policy and scopes`.
 
 **E2E**: [lifecycle scenario name ≥2 operations, carrying step] / omitted — [no cross-cutting lifecycle].
 
-## Code elements
+## Code elements <!-- kit:code-elements -->
 
 Signature and pseudo-code detail of every artefact anchored in `## Ancrages`. Reference section, consulted during RED for the signatures and during GREEN for the content; it dictates neither order nor scope.
 
@@ -180,7 +180,7 @@ Signature and pseudo-code detail of every artefact anchored in `## Ancrages`. Re
 
 **`[Action][Entity]`** — `[VERB] /[route]` → `[Request]` → command → dispatch → [status]
 
-## Ancrages
+## Ancrages <!-- kit:ancrages -->
 
 **What this table is for.** `/implement-tdd` searches for no file: it copies these paths as they stand into the contracts it gives to the RED and GREEN subagents. One row = one step. Column 2 = where the test is written; column 3 = the shared `CoreTests` builders and doubles to extend (with the member to add); column 4 = the production files GREEN is allowed to touch — nothing else. A path marked _existing_ comes from the plan's inventory; a path _to create_ is the future path, mirrored on the named sibling. **A missing row or a path that cannot be copied is a plan hole**, to fill in this sheet before starting the step.
 
@@ -192,7 +192,7 @@ Signature and pseudo-code detail of every artefact anchored in `## Ancrages`. Re
 | N — Documentation | — | — | `src/{{PRODUCT}}.Application/[Context]/[Feature]/CLAUDE.md` ; `…/[Action]/CLAUDE.md` |
 | N+1 — Verification | — | — | — |
 
-## Assumptions
+## Assumptions <!-- kit:assumptions -->
 
 _Empty when the plan is written. Filled by `/implement-tdd` on every non-obvious decision settled mid-batch._
 

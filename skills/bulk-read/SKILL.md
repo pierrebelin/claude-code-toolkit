@@ -4,7 +4,7 @@ description: "Answer a question over files you can already name without reading 
 ---
 
 ```bash
-bash .claude/tools/bulk-read --question "<question>" --paths <file1> [<file2> ...] [--model sonnet]
+cctoolkit bulk-read --question "<question>" --paths <file1> [<file2> ...] [--model sonnet]
 ```
 
 Each call standalone. Follow-up resends same `--paths`: files go to worker, never this context — resend costs nothing here.

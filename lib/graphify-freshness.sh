@@ -14,9 +14,10 @@
 #   graphify-freshness.sh --check     exit 0 if up to date, 1 if stale
 #   graphify-freshness.sh --refresh   force recomputation (bypass the cache)
 
-# Repo derived from the script location (.claude/lib/ -> root). Without that, a
-# hardcoded default would update the graph of ANOTHER repo from this hook.
-REPO="${GRAPHIFY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+# Repo resolved by project-root.sh ($CLAUDE_PROJECT_DIR in a session). Without
+# that, a hardcoded default would update the graph of ANOTHER repo from this hook.
+. "$(dirname "${BASH_SOURCE[0]}")/project-root.sh"
+REPO="${GRAPHIFY_REPO:-$PROJECT_ROOT}"
 GRAPH="$REPO/graphify-out/graph.json"
 CACHE="/tmp/graphify-fresh-$(echo "$REPO" | md5 -q 2>/dev/null || echo default)"
 TTL=20

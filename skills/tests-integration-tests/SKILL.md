@@ -15,7 +15,7 @@ Batch supplied → read only its Tests and DDD Design sections: they decide whet
 
 ## Strict rules
 
-- Test covering rule of handler's `## Règles métier` table carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]`. Trait read in every suite — rule proven only here stops counting untested. No documented rule → no trait.
+- Test covering rule of handler's rules table (`kit:rules`) carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]`. Trait read in every suite — rule proven only here stops counting untested. No documented rule → no trait.
 - **One builder per aggregate**: `With*()` for properties (chaining `this`), `As*()` for presets (`AsDraft`, `AsPublished`). `Build()` uses `Restore()`. Never `Create()` directly.
 - **Seed through DbContext directly**: never through repository under test (circular).
 - **SQL Server Testcontainers database**: reuse `BaseTestFixture` / `MsSqlContainerPool`, never SQLite in-memory nor shared database.

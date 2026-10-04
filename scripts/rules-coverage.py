@@ -1,50 +1,70 @@
 #!/usr/bin/env python3
 """Business-rule coverage by the tests.
 
-Reads the `## Règles métier` tables of the handler CLAUDE.md files
-(`src/{{PRODUCT}}.Application/**/<Handler>/`) and matches them against the
-`[Trait("RM", "<Handler>/<RM|RL-xx>")]` traits placed on the `[Fact]`/`[Theory]`
-methods under `tests/`. Every suite counts: a response-shape rule is proved by a
-contract snapshot, a persistence rule by an integration test.
+Reads the rules tables (heading anchored `<!-- kit:rules -->`) of the rule sheets
+(`layout.ruleSheet` in each `layout.useCase` folder of `.claude/kit.config.json`;
+clean-architecture: `src/<Product>.Application/**/<Handler>/CLAUDE.md`) and matches
+them against the `<Folder>/<RM|RL-xx>` tags the tests carry (`testTag` adapter;
+xUnit: `[Trait("RM", "…")]` on the `[Fact]`/`[Theory]` methods) under the test roots.
+Every suite counts: a response-shape rule is proved by a contract snapshot, a
+persistence rule by an integration test.
 
-    python3 scripts/rules-coverage.py               # report
-    python3 scripts/rules-coverage.py --untested    # only the rules with no test
-    python3 scripts/rules-coverage.py --ids <sheet>  # DDD/APP/PERF ids the plan never classifies
+    cctoolkit rules-coverage               # report
+    cctoolkit rules-coverage --untested    # only the rules with no test
+    cctoolkit rules-coverage --ids <sheet>  # DDD/APP/PERF ids the plan never classifies
 """
 import os
 import re
 import sys
-import unicodedata
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-APP = os.path.join(ROOT, "src", "{{PRODUCT}}.Application")
-TESTS = os.path.join(ROOT, "tests")
-SKIP = {"bin", "obj", "bin-linux", "obj-linux", "Properties"}
-# A trait is read from any suite. But only these two cover rule by rule: an
-# integration or E2E test proves persistence or a journey, never a single table
-# row — demanding a trait per test there produces nothing but noise.
-BOUND_SUITES = [
-    os.path.join(TESTS, "{{PRODUCT}}.UnitTests"),
-    os.path.join(TESTS, "{{PRODUCT}}.ContractTests"),
-]
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The kit (plugin cache, toolkit checkout): scripts/ next to lib/. A copy predating
+# the plugin: <repo>/scripts/ next to <repo>/.claude/lib/.
+for _lib in (os.path.join(HERE, "lib"), os.path.join(HERE, ".claude", "lib")):
+    if os.path.isfile(os.path.join(_lib, "kit_config.py")):
+        sys.path.insert(0, _lib)
+        break
+try:
+    from kit_config import project_root
+    ROOT = project_root()
+except ImportError:
+    ROOT = HERE
+C = AD = None
 
-CLASS = re.compile(r"^\s*(?:public|internal)\s+(?:sealed\s+|abstract\s+|partial\s+)*class\s+(\w+)")
-ATTR = re.compile(r"^\s*\[(?:Fact|Theory)[\](]")
-TRAIT = re.compile(r'^\s*\[Trait\("RM",\s*"([^"]+)"\)\]')
-METHOD = re.compile(r"^\s*(?:public|internal)\s+(?:async\s+)?(?:Task|void|ValueTask)\s+(\w+)\s*\(")
-ROW = re.compile(r"^\|\s*(R[ML]-\d+)\s*\|(.*)$")
-SECTION = re.compile(r"^##\s+R[eè]gles?\s+m[eé]tier", re.I)
+
+def load_kit():
+    """Layout and tag adapter — loaded for the coverage report only: `--ids`
+    reads the plan, never the layout, and keeps working on a broken config."""
+    global C, AD, kit_testtag
+    try:
+        import kit_config
+        import kit_testtag
+        C = kit_config.load(ROOT)
+        AD = kit_testtag.adapter(C)
+    except ImportError:
+        sys.exit("kit_config.py not found beside scripts/ — reinstall the cctoolkit plugin")
+    except (kit_config.KitConfigError, kit_testtag.TestTagError) as e:
+        sys.exit(f"kit.config.json: {e} — cctoolkit doctor")
+
+
+# Sections and rows are found by their `<!-- kit:… -->` anchor, never by their
+# title: titles are prose in the language of kit.config.json `language.docs`.
+ANCHOR = re.compile(r"<!--\s*kit:([a-z][a-z0-9-]*)")
+COLS = re.compile(r"<!--\s*kit:cols\s+([\w,-]+)\s*-->")
+RULE_ID = re.compile(r"R[ML]-\d+")
 
 # The DDD/APP/PERF referential: one markdown table per file, the id in the first
 # cell. `/plan-implementation` owns those two files; the sheets cite them.
-REFS = [os.path.join(ROOT, ".claude", "skills", "plan-implementation", "references", f)
+_SKILLS = next((d for d in (os.path.join(HERE, "skills"), os.path.join(HERE, ".claude", "skills")) if os.path.isdir(d)),
+               os.path.join(HERE, "skills"))
+REFS = [os.path.join(_SKILLS, "plan-implementation", "references", f)
         for f in ("ddd-rules.md", "architecture-rules.md")]
 REF_ROW = re.compile(r"^\|\s*((?:DDD|APP|PERF)-\d+)\s*\|")
-# A sheet declares the ids it applies on `| Applied rules | … |`, and on the
-# deviation variant when it carries one. The global plan lists the others once,
-# on its `**Non-applicable rules**` line: an id is classified when either says so.
-APPLIED_ROW = re.compile(r"^\|([^|]+)\|(.*)$")
-NA_LINE = re.compile(r"^\s*[-*]\s*\*\*Non-applicable rules\*\*\s*:(.*)$", re.I)
+# A sheet declares the ids it applies on the row anchored `kit:applied-rules`, and
+# on the deviation variant when it carries one. The global plan lists the others
+# once, on its line anchored `kit:na-rules`: an id is classified when either says so.
+APPLIED_ROW = re.compile(r"^\|([^|]*<!--\s*kit:applied-rules\s*-->[^|]*)\|(.*)$")
+NA_LINE = re.compile(r"<!--\s*kit:na-rules\s*-->(.*)$")
 SHEET = re.compile(r"-PLAN(?:-F\d+)?\.md$")
 ID = re.compile(r"(DDD|APP|PERF)-(\d+)")
 # `DDD-05 → DDD-08` stands for the four ids: the sheets write ranges.
@@ -55,101 +75,68 @@ L_UNKNOWN, L_NONE_M, L_NONE_F = "unknown references", "(none)", "(none)"
 L_USAGE = "--ids expects the path of a batch sheet"
 
 
-def fold(s):
-    """Section titles compared without accents: the repo mixes "Regles metier"
-    and "Règles métier"."""
-    return "".join(c for c in unicodedata.normalize("NFD", s.strip().lower())
-                   if unicodedata.category(c) != "Mn")
-
-
 def scan_traits():
-    """Two indexes over `tests/`:
+    """Two indexes over the test roots:
     - traits[value] = [Class.Method, ...]
-    - methods[Class.Method] = (class, [values carried], binding required)"""
+    - methods[Class.Method] = (class, [values carried], binding required)
+
+    A tag is read from any suite. But only the `layout.tests.bound` ones cover rule
+    by rule: an integration or E2E test proves persistence or a journey, never a
+    single table row — demanding a tag per test there produces nothing but noise."""
     traits, methods = {}, {}
-    for base, dirs, files in os.walk(TESTS):
-        dirs[:] = [d for d in dirs if d not in SKIP]
-        bound = any(base.startswith(s + os.sep) for s in BOUND_SUITES)
-        for f in sorted(files):
-            if not f.endswith(".cs"):
-                continue
-            cls, armed, carried = None, False, []
-            for line in open(os.path.join(base, f), encoding="utf-8", errors="ignore"):
-                cm = CLASS.match(line)
-                if cm:
-                    cls, armed, carried = cm.group(1), False, []
-                    continue
-                if ATTR.match(line):
-                    armed, carried = True, []
-                    continue
-                if not armed:
-                    continue
-                tm = TRAIT.match(line)
-                if tm:
-                    carried.append(tm.group(1))
-                    continue
-                mm = METHOD.match(line)
-                if mm and cls:
-                    key = f"{cls}.{mm.group(1)}"
-                    methods[key] = (cls, carried, bound)
-                    for v in carried:
-                        traits.setdefault(v, []).append(key)
-                    armed = False
+    for t, bound in kit_testtag.scan_tree(C, AD):
+        methods[t.key] = (t.cls, t.tags, bound)
+        for v in t.tags:
+            traits.setdefault(v, []).append(t.key)
     return traits, methods
 
 
 def rules_of(md):
-    """(rule_id, label) of the rows of the `## Règles métier` table."""
-    rows, in_section = [], False
+    """(rule_id, label) of the rows of the table anchored `kit:rules`, read by
+    position or by the `kit:cols` schema anchor."""
+    rows, in_section, cols = [], False, ["id", "rule"]
     for line in open(md, encoding="utf-8").read().splitlines():
         if line.startswith("## "):
-            in_section = bool(SECTION.match(line))
+            m = ANCHOR.search(line)
+            in_section = bool(m) and m.group(1) == "rules"
             continue
         if not in_section:
             continue
-        m = ROW.match(line.strip())
-        if not m:
+        c = COLS.search(line)
+        if c:
+            cols = c.group(1).split(",")
             continue
-        cells = [c.strip() for c in m.group(2).split("|")]
-        rows.append((m.group(1), cells[0] if cells else ""))
+        s = line.strip()
+        if not s.startswith("|"):
+            continue
+        cells = [x.strip() for x in s.strip("|").split("|")]
+        i = cols.index("id") if "id" in cols else 0
+        j = cols.index("rule") if "rule" in cols else 1
+        if i < len(cells) and RULE_ID.fullmatch(cells[i]):
+            rows.append((cells[i], cells[j] if j < len(cells) else ""))
     return rows
 
 
-HANDLER_CLASS = re.compile(r"^\s*(?:public|internal)\s+(?:sealed\s+|abstract\s+|partial\s+)*class\s+\w*Handler\b", re.M)
-
-
-def is_handler_file(path):
-    """A class, not an interface. Testing `not f.startswith("I")` would take
-    `IFooCommandHandler.cs` for an interface, but would also exclude
-    `ImportGraphsCommandHandler.cs` — any handler whose name starts with I."""
-    try:
-        return bool(HANDLER_CLASS.search(open(path, encoding="utf-8", errors="ignore").read()))
-    except OSError:
-        return False
-
-
 def handlers():
-    """A handler folder carries its handler. The Application tree mixes depths
-    (Studio/X/Y/, Catalog/X/Y/Z/): depth does not discriminate."""
-    for base, dirs, files in os.walk(APP):
-        dirs[:] = [d for d in dirs if d not in SKIP]
-        if "CLAUDE.md" not in files:
+    """A use-case folder carries its handler (`layout.useCase.marker`). The tree
+    mixes depths (Studio/X/Y/, Catalog/X/Y/Z/): depth does not discriminate."""
+    for base, files in C.walk(C.use_case_roots):
+        if C.rule_sheet not in files:
             continue
-        if not any(f.endswith("Handler.cs") and is_handler_file(os.path.join(base, f)) for f in files):
+        if not C.is_use_case_dir(base):
             continue
-        yield os.path.relpath(base, APP), os.path.join(base, "CLAUDE.md")
+        yield os.path.relpath(base, C.root_of(base, C.use_case_roots)), os.path.join(base, C.rule_sheet)
 
 
 def declared_values():
-    """Every legitimate trait value, including those of the CLAUDE.md files that
-    declare rules without carrying a handler (Core/GroupAccess)."""
+    """Every legitimate tag value, including those of the sheets that declare
+    rules without carrying a handler (Core/GroupAccess)."""
     values = set()
-    for base, dirs, files in os.walk(APP):
-        dirs[:] = [d for d in dirs if d not in SKIP]
-        if "CLAUDE.md" not in files:
+    for base, files in C.walk(C.use_case_roots):
+        if C.rule_sheet not in files:
             continue
         prefix = os.path.basename(base)
-        for rule_id, _ in rules_of(os.path.join(base, "CLAUDE.md")):
+        for rule_id, _ in rules_of(os.path.join(base, C.rule_sheet)):
             values.add(f"{prefix}/{rule_id}")
     return values
 
@@ -178,8 +165,8 @@ def ids_in(cell):
 
 
 def cited_ids(fiche):
-    """Ids cited by the sheet's `Applied rules` rows and the global plan's
-    `Non-applicable rules` line, ranges expanded.
+    """Ids cited by the sheet's `kit:applied-rules` rows and the global plan's
+    `kit:na-rules` line, ranges expanded.
 
     Only the absence of a citation is decided here. Whether an id is applied or
     `N/A` is left to the audit: those cells are free prose — `**N/A**`,
@@ -187,11 +174,11 @@ def cited_ids(fiche):
     would report deviations that are not there."""
     cited = set()
     for line in open(fiche, encoding="utf-8").read().splitlines():
-        m = APPLIED_ROW.match(line)
-        if m and fold(m.group(1)).startswith(("applied rules", "regles appliquees")):
+        m = APPLIED_ROW.match(line.strip())
+        if m:
             cited |= ids_in(m.group(2))
             continue
-        m = NA_LINE.match(line)
+        m = NA_LINE.search(line)
         if m:
             cited |= ids_in(m.group(1))
     return cited
@@ -227,6 +214,7 @@ def main():
         ids_coverage(sys.argv[i + 1])
         return
 
+    load_kit()
     only_untested = "--untested" in sys.argv
     traits, methods = scan_traits()
 

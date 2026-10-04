@@ -1,0 +1,39 @@
+{
+  "description": "One project per layer: src/<Product>.<Layer>/ and tests/<Product>.<Suite>/, one handler folder per use case. The kit's original shape.",
+  "layout": {
+    "sources": {
+      "roots": ["src"],
+      "extensions": [".cs"],
+      "comment": "//"
+    },
+    "aggregate": [
+      "*/*.Domain/*/Aggregates/*.cs",
+      "*/*.Domain/*/ValueObjects/*.cs"
+    ],
+    "useCase": {
+      "roots": ["src/{product}.Application"],
+      "label": "Application/",
+      "marker": [
+        {"file": "*Handler.cs", "contains": "^\\s*(?:public|internal)\\s+(?:sealed\\s+|abstract\\s+|partial\\s+)*class\\s+\\w*Handler\\b"}
+      ]
+    },
+    "ruleSheet": "CLAUDE.md",
+    "tests": {
+      "roots": ["tests"],
+      "bound": ["tests/{product}.UnitTests", "tests/{product}.ContractTests"],
+      "interaction": ["tests/*.UnitTests", "tests/*.CoreTests"]
+    },
+    "skipDirs": ["bin", "obj", "bin-linux", "obj-linux", "Properties"]
+  },
+  "testTag": {
+    "framework": "xunit"
+  },
+  "commands": {
+    "build": "rtk dotnet build {product}.sln --no-restore",
+    "test": "rtk dotnet test --project tests/{product}.{suite}/{product}.{suite}.csproj --no-build --no-restore",
+    "architectureTest": {
+      "run": "rtk dotnet test --project tests/{product}.ArchitectureTests/{product}.ArchitectureTests.csproj --no-build --no-restore",
+      "when": "^src/.*(Handler|Endpoints/|Repositories/|Extensions/|DbContext)"
+    }
+  }
+}

@@ -5,12 +5,15 @@
 # import, reload after /compact). The exit code is ignored by the harness: this
 # hook has no blocking power, it observes.
 #
-# Log:    .claude/context-log.tsv   (timestamp, reason, bytes, ~tokens, path, session, agent)
+# Log:    <repo>/.claude/context-log.tsv   (timestamp, reason, bytes, ~tokens, path, session, agent)
 #         agent is empty on the main chain — added 2026-09-12 so the report can
 #         split what the expensive chain loads from what its subagents load.
-# Report: bash .claude/lib/context-report.sh
+# Report: cctoolkit context-report
 set -u
-LOG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/project-root.sh" 2>/dev/null \
+  || PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+LOG_DIR="$PROJECT_ROOT/.claude"
+mkdir -p "$LOG_DIR" 2>/dev/null || exit 0
 LOG="$LOG_DIR/context-log.tsv"
 RAW="$LOG_DIR/context-log.raw.json"
 

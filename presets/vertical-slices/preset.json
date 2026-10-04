@@ -1,0 +1,106 @@
+{
+  "description": "One folder per feature holding command, handler, endpoint and its unit tests; the domain model in a shared folder. Stack-neutral markers: C#, Python, Java/Kotlin, TypeScript.",
+  "layout": {
+    "sources": {
+      "roots": [
+        "src"
+      ],
+      "extensions": [
+        ".cs",
+        ".py",
+        ".java",
+        ".kt",
+        ".ts",
+        ".tsx",
+        ".js"
+      ],
+      "comment": {
+        ".cs": "//",
+        ".py": "#",
+        ".java": "//",
+        ".kt": "//",
+        ".ts": "//",
+        ".tsx": "//",
+        ".js": "//"
+      }
+    },
+    "aggregate": [
+      "*/src/*/Domain/*",
+      "*/src/*/domain/*",
+      "*/src/Domain/*",
+      "*/src/domain/*"
+    ],
+    "useCase": {
+      "roots": [
+        "src/{product}/Features",
+        "src/Features",
+        "src/features"
+      ],
+      "label": "the feature slices",
+      "marker": [
+        {
+          "file": "*Handler.cs",
+          "contains": "\\bclass\\s+\\w*Handler\\b"
+        },
+        {
+          "file": "*handler.py",
+          "contains": "^\\s*(?:async\\s+)?def\\s+handle\\b|^class\\s+\\w*Handler\\b"
+        },
+        {
+          "file": "*Handler.java",
+          "contains": "\\bclass\\s+\\w*Handler\\b"
+        },
+        {
+          "file": "*Handler.kt",
+          "contains": "\\bclass\\s+\\w*Handler\\b"
+        },
+        {
+          "file": "*[hH]andler.ts",
+          "contains": "\\bclass\\s+\\w*Handler\\b|\\bfunction\\s+handle\\w*\\b|\\bconst\\s+handle\\w*\\s*="
+        }
+      ]
+    },
+    "ruleSheet": "CLAUDE.md",
+    "tests": {
+      "roots": [
+        "src/{product}/Features",
+        "src/Features",
+        "src/features",
+        "tests"
+      ],
+      "bound": [
+        "src/{product}/Features",
+        "src/Features",
+        "src/features"
+      ],
+      "interaction": [
+        "src/{product}/Features",
+        "src/Features",
+        "src/features"
+      ]
+    },
+    "skipDirs": [
+      "bin",
+      "obj",
+      "node_modules",
+      "__pycache__",
+      ".venv",
+      "venv",
+      "dist",
+      "build",
+      "target",
+      ".pytest_cache"
+    ]
+  },
+  "testTag": {
+    "framework": "xunit"
+  },
+  "commands": {
+    "build": "",
+    "test": "",
+    "architectureTest": {
+      "run": "",
+      "when": ""
+    }
+  }
+}

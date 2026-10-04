@@ -137,7 +137,7 @@ Before delivering: arithmetic first, then judgement.
 **8.1 — Arithmetic, by script.** Once the JSON is written:
 
 ```bash
-python3 scripts/quality-report-check.py docs/metrics/quality-report-YYYY-MM-DD.json
+cctoolkit quality-report-check docs/metrics/quality-report-YYYY-MM-DD.json
 ```
 
 Checks per-type sums against totals (passed, failed, skipped, durations), `active + skip = total` on endpoints and pages, recomputed coverage and detection percentages, severity sum vs `issues_open_total`, duration thresholds per stack. 🔴 → fix the JSON **and** the Markdown section it comes from, re-run. ⚠️ → carry into the report as ⚠️, never silence.

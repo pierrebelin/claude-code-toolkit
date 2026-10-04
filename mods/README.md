@@ -1,6 +1,6 @@
 # Mods
 
-Function-hook plugins drawn inside Claude Code (terminal or desktop Code tab). Each folder is one plugin; `.claude-plugin/marketplace.json` lists them all as the `pierrebelinmods` marketplace. Mods live here and nowhere else — never under `skills/`, even though the engine would adopt a plugin folder there.
+Function-hook plugins drawn inside Claude Code (terminal or desktop Code tab). Each folder is one plugin, listed beside `cctoolkit` by the kit's marketplace (`.claude-plugin/marketplace.json` at the toolkit root). Mods live here and nowhere else — never under `skills/`, even though the engine would adopt a plugin folder there.
 
 | Mod | What it shows | Opens |
 |-----|---------------|-------|
@@ -13,20 +13,16 @@ A `tool.call` hook reads the tool's arguments flat on `e` (`e.skill`, `e.file_pa
 
 ## Install
 
-1. Copy this folder to `<repo>/.claude/mods/`.
-2. Add to `<repo>/.claude/settings.json` (write it yourself: the auto-mode classifier refuses an agent enabling plugins there):
-   ```json
-   "extraKnownMarketplaces": {
-     "pierrebelinmods": { "source": { "source": "directory", "path": "./.claude/mods" } }
-   },
-   "enabledPlugins": {
-     "context-band@pierrebelinmods": true,
-     "tdd-batch@pierrebelinmods": true
-   }
-   ```
-3. Restart Claude Code in the repo. The first launch registers the marketplace only; the mods load from the next one, straight from `.claude/mods/` (no cached copy).
+Optional, independent of `cctoolkit`. With the `cctoolkit` marketplace already known to the repo (README § Installation), add to `<repo>/.claude/settings.json` — write it yourself: the auto-mode classifier refuses an agent enabling plugins there:
+```json
+"enabledPlugins": {
+  "context-band@cctoolkit": true,
+  "tdd-batch@cctoolkit": true
+}
+```
+or `claude plugin install context-band@cctoolkit --scope project`. Restart Claude Code in the repo.
 
-Project-scoped on purpose: `CLAUDE_CODE_PLUGIN_DIRS` is read from the process or `~/.claude/settings.json` only, never from a project's settings, so it would load every repo's copy in every session.
+A repo that installed them from `.claude/mods/` (the former `pierrebelinmods` marketplace): delete `.claude/mods/`, the `pierrebelinmods` entry of `extraKnownMarketplaces` and the two `…@pierrebelinmods` lines of `enabledPlugins`.
 
 Check it loaded:
 ```bash
@@ -51,7 +47,7 @@ grep 'hooks module' /tmp/mods.log   # one "loaded" line per mod
 
 1. Load the `plugin-authoring` skill: it names the session's dev-mods folder and turns hot reload on. Write and iterate there.
 2. `claude plugin validate <mod>` and `claude plugin test <mod>` green.
-3. Copy it here without the engine-laid types: `rsync -a --exclude .claude-plugin/types/ <dev-mods>/<mod>/ mods/<mod>/`, delete the dev-mods copy (two loaded copies of one name collide), add its row to `.claude-plugin/marketplace.json` and to `enabledPlugins`.
-4. `claude plugin validate mods/` to check the marketplace.
+3. Copy it here without the engine-laid types: `rsync -a --exclude .claude-plugin/types/ <dev-mods>/<mod>/ mods/<mod>/`, delete the dev-mods copy (two loaded copies of one name collide), add its row to the toolkit root's `.claude-plugin/marketplace.json` and to `enabledPlugins`.
+4. `claude plugin validate .` from the toolkit root to check the marketplace.
 
 Traps met with the API: in tests, call hooks (`fs.read`, `store.get`, `ui.open`…) answer `{ value: … }`; the fallback `ui.render` returns a tree (`<Box key="engine" />`), never `null`; `$` is only passed to functions declared at module level; when the state shape changes, merge with the empty value (`{ ...EMPTY, ...stored }`), since `$.state` survives reloads; no toast, no sound.

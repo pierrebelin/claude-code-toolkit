@@ -19,7 +19,7 @@ Behaviour through real handler/service. Mock Infrastructure only. Batch supplied
 ## Non-negotiable rules
 
 - Test/class naming → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
-- **Every test carries its rule** — `UnitTests` bind every test (`.claude/rules/tests.md`) — under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its `## Règles métier` table. Two rules → two attributes. This attribute **is** traceability: table has no test column, rule with no trait counts untested (`scripts/rules-coverage.py`).
+- **Every test carries its rule** — `UnitTests` bind every test (`.claude/rules/tests.md`) — under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its `kit:rules` table. Two rules → two attributes. This attribute **is** traceability: table has no test column, rule with no trait counts untested (`scripts/rules-coverage.py`).
 - Aggregate factory/method tested only through its handler/service. No orphan aggregate test.
 - Query: data in double, assert output. Command: assert `SavedEvents` type + content.
 - Never observe interaction: no spy, counter, `CallCount`, `Called`, `Received`, `Verify`, call count — not even for cost.

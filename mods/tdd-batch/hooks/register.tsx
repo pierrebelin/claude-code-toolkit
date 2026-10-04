@@ -15,7 +15,10 @@ const AGENT_KINDS: Record<string, 'RED' | 'GREEN'> = {
   'tdd-implementer': 'GREEN',
 }
 const AUDIT_SKILL = 'verify-ddd-tdd'
-const GATE_SCRIPT = 'pre-audit.sh'
+// `cctoolkit pre-audit` since the plugin, `scripts/pre-audit.sh` before it.
+const GATE_SCRIPT = 'pre-audit'
+// Skills and agents of the cctoolkit plugin arrive namespaced.
+const bare = (name: unknown): string => (typeof name === 'string' ? name.replace(/^cctoolkit:/, '') : '')
 const TYPICAL_MS: Record<AgentKind, number> = { RED: 224_000, GREEN: 187_000, AUDIT: 309_000 }
 const SLOW_FACTOR = 2
 
@@ -284,7 +287,7 @@ export const register: Register = on => {
     if (e.agentId !== undefined) return next(e)
     const input = e as unknown as Record<string, unknown>
 
-    if (e.tool === 'Skill' && input.skill === 'implement-tdd') {
+    if (e.tool === 'Skill' && bare(input.skill) === 'implement-tdd') {
       const asked = sheetFromArgs(typeof input.args === 'string' ? input.args : '')
       const path = asked.path ?? (await findSheet($, asked.lot))
       if (path !== null) await follow($, path)
@@ -292,7 +295,7 @@ export const register: Register = on => {
       return next(e)
     }
 
-    if (e.tool === 'Skill' && input.skill === AUDIT_SKILL) {
+    if (e.tool === 'Skill' && bare(input.skill) === AUDIT_SKILL) {
       const id = e.tool_use_id ?? `AUDIT-${await $.clock.now()}`
       const reprise = typeof input.args === 'string' && /\breprise\b/i.test(input.args)
       await trackAgent($, id, 'AUDIT', reprise ? 'audit (reprise)' : 'audit')
@@ -305,7 +308,7 @@ export const register: Register = on => {
     }
 
     if (e.tool === 'Agent') {
-      const kind = AGENT_KINDS[typeof input.subagent_type === 'string' ? input.subagent_type : '']
+      const kind = AGENT_KINDS[bare(input.subagent_type)]
       if (kind === undefined) return next(e)
       const id = e.tool_use_id ?? `${kind}-${await $.clock.now()}`
       const description = typeof input.description === 'string' ? input.description : kind

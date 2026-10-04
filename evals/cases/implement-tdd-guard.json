@@ -2,7 +2,7 @@
   "cases": [
     {
       "name": "a second batch launched in a session that already closed one is refused",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -13,7 +13,7 @@
     },
     {
       "name": "the refusal names the cost, and asks for a /clear rather than a new run",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -24,7 +24,7 @@
     },
     {
       "name": "re-issuing the identical launch passes — the first attempt drops the marker, the second consumes it",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh 2>/dev/null; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh 2>/dev/null; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -34,7 +34,7 @@
     },
     {
       "name": "the escape hatch is scoped to the batch asked for, not to the session",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh 2>/dev/null; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F3\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh 2>/dev/null; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F3\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -45,7 +45,7 @@
     },
     {
       "name": "correction mode reopens the closed batch, which is its purpose",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd correction C1 on batch F1\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd correction C1 on batch F1\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -55,7 +55,7 @@
     },
     {
       "name": "the Skill call is denied through the decision, not through an exit code",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"implement-tdd\",\"args\":\"batch F2\"},\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"implement-tdd\",\"args\":\"batch F2\"},\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -67,7 +67,7 @@
     },
     {
       "name": "another skill is none of this hook's business",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"plan-implementation\",\"args\":\"\"},\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"plan-implementation\",\"args\":\"\"},\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -78,7 +78,7 @@
     },
     {
       "name": "a session that closed nothing lets the launch through",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"GREEN done\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"GREEN done\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -88,7 +88,7 @@
     },
     {
       "name": "the French closing of a transcript written before the translation is matched too",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Lot F1 terminé — validation manuelle requise\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Lot F1 terminé — validation manuelle requise\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -99,7 +99,7 @@
     },
     {
       "name": "the literal quoted by the skill sources carries no digit and never closes a batch",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch FX complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch FX complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -109,7 +109,7 @@
     },
     {
       "name": "a prompt that launches nothing is left alone",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"where is the implement-tdd-guard hook\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"where is the implement-tdd-guard hook\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -119,7 +119,7 @@
     },
     {
       "name": "a transcript path that does not exist is not an error",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/gone.jsonl\"}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/gone.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -129,7 +129,7 @@
     },
     {
       "name": "an empty payload exits 0",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; printf '{}' | bash .claude/hooks/implement-tdd-guard.sh",
+      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; printf '{}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
         "TMPDIR": "{{FIX}}/tmp-{{SID}}"
       },
@@ -346,6 +346,45 @@
         "hook_event_name": "UserPromptSubmit",
         "session_id": "{{SID}}",
         "prompt": "/implement-tdd batch F3 todo/PLAN-F.md"
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": "/effort medium"
+      }
+    },
+    {
+      "name": "the plugin's namespaced skill is guarded like the bare name",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "xhigh",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "{{SID}}",
+        "tool_name": "Skill",
+        "tool_input": {
+          "skill": "cctoolkit:implement-tdd",
+          "args": "batch F3 todo/PLAN-F.md"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "decision": "deny",
+        "reason": "/effort medium"
+      }
+    },
+    {
+      "name": "a namespaced slash command typed by the user is guarded too",
+      "hook": "hooks/implement-tdd-guard.sh",
+      "env": {
+        "CLAUDE_EFFORT_LEVEL": "xhigh",
+        "TMPDIR": "{{FIX}}"
+      },
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "{{SID}}",
+        "prompt": "/cctoolkit:implement-tdd batch F3 todo/PLAN-F.md"
       },
       "expect": {
         "exit": 2,

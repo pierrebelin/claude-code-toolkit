@@ -19,7 +19,7 @@ try:
 except Exception:
     pass' 2>/dev/null)"
 
-case "$skill" in
+case "${skill#cctoolkit:}" in
   plan-implementation|implement-tdd|implement-js|tests-unit-tests|tests-integration-tests|tests-contract-tests)
     cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
     flag="$cfg/.caveman-active"

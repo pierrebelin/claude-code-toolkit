@@ -24,10 +24,10 @@ ddd-tdd-auditor); what each phase reads and writes was missing. A "main chain"
 row gives the orchestrator's share: 56 % of the tokens read over 26 batches.
 
 Usage:
-  python3 scripts/batch-wallclock.py                        # batches found over 14 days
-  python3 scripts/batch-wallclock.py --days 30
-  python3 scripts/batch-wallclock.py --sessions 414e09fe cbbd2284
-  python3 scripts/batch-wallclock.py --project <repo folder> --subagents
+  cctoolkit batch-wallclock                        # batches found over 14 days
+  cctoolkit batch-wallclock --days 30
+  cctoolkit batch-wallclock --sessions 414e09fe cbbd2284
+  cctoolkit batch-wallclock --project <repo folder> --subagents
 """
 
 import argparse

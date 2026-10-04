@@ -48,7 +48,7 @@
     {
       "path": "mem/a.md",
       "kind": "text",
-      "content": "---\nname: a\ndescription: \"desc\"\nmetadata:\n  type: project\n---\n\nSee `scripts/learn-candidates.py`, `evals/run.sh`, branch `feature/x`, and `src/Nope/Gone.cs:12`.\n"
+      "content": "---\nname: a\ndescription: \"desc\"\nmetadata:\n  type: project\n---\n\nSee `{{KIT}}/scripts/learn-candidates.py`, `evals/run.sh`, branch `feature/x`, and `src/Nope/Gone.cs:12`.\n"
     },
     {
       "path": "mem/b.md",
@@ -64,7 +64,7 @@
   "cases": [
     {
       "name": "two audited batches with Blocking/Major rows raise the nudge; Minor and non-auditor agents are ignored",
-      "cmd": "python3 scripts/learn-candidates.py --count",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --count",
       "env": {
         "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -76,7 +76,7 @@
     },
     {
       "name": "a single batch stays silent",
-      "cmd": "python3 scripts/learn-candidates.py --count | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --count | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
       "env": {
         "LEARN_TRANSCRIPTS": "{{FIX}}/tr1",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -88,7 +88,7 @@
     },
     {
       "name": "'Stale plan' folds into the frozen axis Plan",
-      "cmd": "python3 scripts/learn-candidates.py --axis plan",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --axis plan",
       "env": {
         "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -100,7 +100,7 @@
     },
     {
       "name": "an axis marked treated leaves the backlog and the nudge goes silent",
-      "cmd": "python3 scripts/learn-candidates.py --treat-axis Plan >/dev/null && python3 scripts/learn-candidates.py --count | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --treat-axis Plan >/dev/null && python3 {{KIT}}/scripts/learn-candidates.py --count | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
       "env": {
         "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -112,7 +112,7 @@
     },
     {
       "name": "a refused motif is handed back in the summary",
-      "cmd": "python3 scripts/learn-candidates.py --refuse 'motif test' >/dev/null && python3 scripts/learn-candidates.py",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --refuse 'motif test' >/dev/null && python3 {{KIT}}/scripts/learn-candidates.py",
       "env": {
         "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -124,7 +124,7 @@
     },
     {
       "name": "doctor --quiet prints the backlog as a NOTE, not a WARN",
-      "cmd": "bash .claude/tools/doctor --quiet",
+      "cmd": "bash {{KIT}}/tools/doctor --quiet",
       "env": {
         "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -135,7 +135,7 @@
     },
     {
       "name": "--memory flags a memory file indexed twice",
-      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --memory",
       "env": {
         "LEARN_MEMORY": "{{FIX}}/mem",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -147,7 +147,7 @@
     },
     {
       "name": "--memory flags a memory file missing from the index",
-      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --memory",
       "env": {
         "LEARN_MEMORY": "{{FIX}}/mem",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -159,7 +159,7 @@
     },
     {
       "name": "--memory flags an index line whose file is gone",
-      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --memory",
       "env": {
         "LEARN_MEMORY": "{{FIX}}/mem",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -171,7 +171,7 @@
     },
     {
       "name": "--memory flags a frontmatter without type",
-      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --memory",
       "env": {
         "LEARN_MEMORY": "{{FIX}}/mem",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -183,7 +183,7 @@
     },
     {
       "name": "--memory flags a cited repo path that no longer exists",
-      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --memory",
       "env": {
         "LEARN_MEMORY": "{{FIX}}/mem",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -195,7 +195,7 @@
     },
     {
       "name": "--memory keeps existing paths, paths relative to a repo folder and branch names out of the report",
-      "cmd": "python3 scripts/learn-candidates.py --memory | grep -c 'learn-candidates.py\\|evals/run.sh\\|feature/x' | sed 's/^/count=/'",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --memory | grep -c 'learn-candidates.py\\|evals/run.sh\\|feature/x' | sed 's/^/count=/'",
       "env": {
         "LEARN_MEMORY": "{{FIX}}/mem",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
@@ -207,7 +207,7 @@
     },
     {
       "name": "--memory hands back entries kept after a refusal",
-      "cmd": "python3 scripts/learn-candidates.py --refuse 'keep: a.md' >/dev/null && python3 scripts/learn-candidates.py --memory",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --refuse 'keep: a.md' >/dev/null && python3 {{KIT}}/scripts/learn-candidates.py --memory",
       "env": {
         "LEARN_MEMORY": "{{FIX}}/mem",
         "LEARN_STATE": "{{FIX}}/state-{{SID}}.json",

@@ -1,0 +1,43 @@
+{
+  "includeCoAuthoredBy": false,
+  "env": {
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "900000"
+  },
+  "permissions": {
+    "allow": [
+      "Edit",
+      "WebSearch",
+      "Bash(cctoolkit *)",
+      "Bash(dotnet *)",
+      "Bash(rtk *)",
+      "Bash(gh pr *)",
+      "Bash(xargs *)",
+      "Bash(python3 *)",
+      "Bash(git check-ignore *)",
+      "Bash(graphify query *)",
+      "Bash(graphify explain *)",
+      "Bash(graphify path *)"
+    ],
+    "deny": [
+      "Read(./node_modules/**)",
+      "Read(./obj/**)",
+      "Read(./bin/**)",
+      "Read(./.git/**)"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash $CLAUDE_PROJECT_DIR/.claude/statusline-command.sh"
+  },
+  "extraKnownMarketplaces": {
+    "cctoolkit": {
+      "source": {
+        "source": "github",
+        "repo": "pierrebelin/claude-code-toolkit"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "cctoolkit@cctoolkit": true
+  }
+}

@@ -8,7 +8,7 @@ Adapt the bootstrap section to the repo: it is the only one that is not portable
 ## RTK
 
 Token-optimized CLI proxy (`~/.local/bin/rtk`, see `~/.claude/RTK.md`). **Rewriting is
-automatic**: the `PreToolUse:Bash` hook (`bash-dispatch.sh`, module `.claude/lib/rewrite-rtk.sh`) routes every Bash command through
+automatic**: the `PreToolUse:Bash` hook (`bash-dispatch.sh`, module `lib/rewrite-rtk.sh`) routes every Bash command through
 `rtk hook claude`, which rewrites `find`, `ls`, `cat`, `grep`, `git diff` and more. Do not prefix
 by hand.
 
@@ -73,22 +73,20 @@ normal after a refactor that deletes code — rerun with `--force`. Trap: **`upd
 when it writes nothing** (guard refusal, "Nothing to update"). Neither the exit code nor stdout
 proves the write — only the mtime of `graph.json` does.
 
-**Auto-sync** (`Stop` hook → `.claude/hooks/graphify-autosync.sh`): triggered by a working-tree
-fingerprint (`.claude/lib/graphify-freshness.sh`, source mtimes vs `graph.json`), not by an Edit/Write flag —
+**Auto-sync** (`Stop` hook → `hooks/graphify-autosync.sh`): triggered by a working-tree
+fingerprint (`lib/graphify-freshness.sh`, source mtimes vs `graph.json`), not by an Edit/Write flag —
 so it also catches IDE edits, merges, pulls and branch switches. Lock against concurrent
 rebuilds. Log: `/tmp/graphify-hook.log`.
 
 ## Project hooks inside a worktree
 
-Only concerns the setup where the hook REGISTRATION was moved out of the shipped, committed
-`.claude/settings.json` into `.claude/settings.local.json` — the variant you pick when the hooks
-must stay yours and not reach the team. With the shipped `settings.json`, there is nothing to fix:
-it is tracked, so a worktree carries it.
+The hooks ship in the plugin (`hooks/hooks.json`); a worktree runs them when the plugin is enabled
+there. Enabled in the committed `.claude/settings.json` (the shipped template, README §
+Installation), it is: the file is tracked, so every worktree carries it. Nothing to fix.
 
-In that variant the scripts under `.claude/hooks` and `.claude/lib` stay tracked, but
-`.claude/.gitignore` excludes their registration. A worktree is a checkout: it carries the scripts
-and none of the registrations, so not one project hook fires there — no git guard, no read bounds,
-no traceability check.
+Enabled at local scope instead (`claude plugin install cctoolkit@cctoolkit --scope local`, written
+to the gitignored `.claude/settings.local.json`), a worktree is a checkout that carries none of it,
+and not one kit hook fires there — no git guard, no read bounds, no traceability check.
 
 The link is made by `.git/hooks/post-checkout`: it lives in the common git dir, so every worktree
 of the repo shares it, and it is never committed. Worktree creation runs it with the new worktree
@@ -96,16 +94,14 @@ as the working directory, before any Claude session can start there, and it syml
 `.claude/settings.local.json` back to the main worktree. No-op on a plain `git checkout`, on the
 main worktree, and when the file is already there.
 
-Since 2026-09-12 the registrations are written as `bash $CLAUDE_PROJECT_DIR/.claude/hooks/x.sh`,
-not as absolute paths. Through the symlink a worktree therefore runs **its own** tracked copies of
-the scripts — the ones of the checked-out branch — instead of the main worktree's, and the same
-`settings.local.json` can be dropped into another clone of the repo unchanged. The statusline
-keeps its absolute path: `CLAUDE_PROJECT_DIR` is not guaranteed there.
+Every hook command is written `bash "${CLAUDE_PLUGIN_ROOT}/hooks/x.sh"` and resolves the repo
+through `$CLAUDE_PROJECT_DIR` (`lib/project-root.sh`): a worktree session serves the worktree, the
+scripts are the plugin's version, the same for every checkout.
 
 **A git hook cannot ship with a clone.** Install it per clone:
 
 ```bash
-bash scripts/install-git-hooks.sh
+cctoolkit install-git-hooks
 ```
 
 ## Bringing a worktree back onto the local branch
@@ -151,7 +147,7 @@ hatch: a doubt about scope is settled by widening the filter one level, never by
 
 ## bulk-read — the one-shot worker
 
-`.claude/tools/bulk-read --question "..." --paths f1 [f2 ...] [--model haiku|sonnet]` sends the
+`cctoolkit bulk-read --question "..." --paths f1 [f2 ...] [--model haiku|sonnet]` sends the
 files and one question to `claude -p --tools "" --setting-sources "" --system-prompt ...` and
 prints the answer; the files never enter the calling context. The shape is Spotify's shunt
 plugin (`spotify/portal-ai-plugins`, `plugins/shunt`) on a local worker instead of an internal
@@ -169,7 +165,7 @@ the output dominates, so keep the question tight and the bullet cap in the syste
 
 Refusals from `read-bounds.sh` and `guard-cat-bounds.sh`, the `delegation-nudge` text and the
 `explore-guard` refusal all name it as the third way out. `--bare` is not used: it skips the
-keychain and fails with `Not logged in`. Lives in `.claude/tools/`, not `.claude/bin/`: the
+keychain and fails with `Not logged in`. Lives in `tools/`, not `.claude/bin/`: the
 permission rule `Read(./bin/**)` matches any `bin/` segment and blocks writes there.
 `CLAUDE_BULK_READ_BIN` points the evals at a stub. `CLAUDE_BULK_READ_TIMEOUT` (180 s) kills a
 hung worker — `timeout`, else `gtimeout`, else a perl `alarm` that survives the exec — because
@@ -183,20 +179,23 @@ transcript — `input + cache_creation + cache_read` is what the next turn repla
 one line of `additionalContext` at every step of `CLAUDE_CLEAR_NUDGE_STEP` tokens (150k), once
 per step, asking the model to tell the user that `/clear` is due if the phase is done. Marker
 `/tmp/claude-clearnudge-<session>`, purged by `session-cleanup.sh`. Cache reads are ~60 % of
-the 30-day bill and nothing else guards them → `.claude/docs/CONTEXT-COST.md`.
+the 30-day bill and nothing else guards them → `docs/CONTEXT-COST.md`.
 
 ## doctor — the read-only readiness check
 
-`bash .claude/tools/doctor [--quiet] [--evals]`. One line per check, `ok` / `WARN` / `FAIL`, every
+`cctoolkit doctor [--quiet] [--evals]`. One line per check, `ok` / `WARN` / `FAIL`, every
 non-ok line naming the command that repairs; it never repairs itself (Spotify's rule for its own
 `doctor`). Checks: the binaries the hooks need (`jq`, `python3`, `perl`, `rtk` and its identity
-through `rtk gain`, `graphify`, `claude`, `ast-grep`); `settings.local.json` present, valid,
-symlinked in a worktree; every registered hook command pointing at an existing script and every
-`.claude/hooks/*.sh` registered somewhere (a tracked script nobody registered is a dead hook);
+through `rtk gain`, `graphify`, `claude`, `ast-grep`); `cctoolkit` enabled in a settings file
+of the repo or the user, every settings file valid; every command of `hooks/hooks.json` pointing
+at an existing script and every `hooks/*.sh` registered there (a script nobody registered is a
+dead hook); leftovers of a manual install — `.claude/hooks/` registrations, `.claude/{hooks,lib,
+skills,agents,tools,presets,evals}`, `scripts/` — that would run beside the plugin;
+`.claude/rules/markdown-output.md` present;
 the dispatcher's `MODULES` present in `lib/`; the git `post-checkout` hook that links the config
 into new worktrees; `graphify-out/graph.json` present, its lag through `graphify-freshness.sh`,
 the last autosync refusal in `/tmp/graphify-hook.log`; the keychain entry `bulk-read` needs;
-`+x` on tools and evals; rules without `paths:`; `/tmp` leftovers older than two days.
+`+x` on tools, `bin/` and evals; `kit.config.json` through `kit_config.py validate`; `/tmp` leftovers older than two days.
 `--evals` also runs the hook evals and reports their summary line.
 
 Registered on `SessionStart` as `doctor --quiet || true`, after `session-cleanup.sh`: silent when
@@ -244,8 +243,8 @@ per turn). A batch is a session that both launched the skill and delegated at le
 agent — the launch alone also matches a session that merely talks about it.
 
 ```bash
-python3 scripts/batch-wallclock.py                          # batches detected over 14 days
-python3 scripts/batch-wallclock.py --sessions <id> --subagents
+cctoolkit batch-wallclock                          # batches detected over 14 days
+cctoolkit batch-wallclock --sessions <id> --subagents
 ```
 
 ## caveman without the plugin
@@ -261,7 +260,7 @@ still serving `/caveman <level>` and `/caveman-stats`). Lost with the plugin: `/
 
 ## Hook evals
 
-`bash .claude/evals/run.sh [-v] [cases/x.json]` replays recorded payloads through the hooks and
+`cctoolkit evals [-v] [cases/x.json]` replays recorded payloads through the hooks and
 checks the decision, the rewritten command, the appended prompt or the injected context. 135
 cases in `evals/cases/*.json`, ~6 s, fixtures generated in `evals/.fixtures/` (ignored) and
 `/tmp` state keyed by a run id and removed. Each defect found in production before 2026-09-12 is
@@ -271,9 +270,9 @@ not finished.
 
 ## Mods — `context-band`, `tdd-batch`
 
-Function-hook plugins versioned under `skills/`: the engine adopts any `skills/<name>/` holding `.claude-plugin/plugin.json` as a plugin (`<name>@skills-dir`, no `SKILL.md` needed), in a trusted workspace only, and watches it for hot reload. Project-scoped on purpose: `CLAUDE_CODE_PLUGIN_DIRS` is read from the process or `~/.claude/settings.json` only, never from project settings, so it would load every repo's copy in every session.
+Function-hook plugins live under `mods/` and nowhere else — never under `skills/`, even though the engine would adopt a plugin folder there. The toolkit's `.claude-plugin/marketplace.json` lists them beside `cctoolkit`; a repo enables them in its `.claude/settings.json` (`enabledPlugins` `<mod>@cctoolkit`), independently of the kit. `CLAUDE_CODE_PLUGIN_DIRS` is ruled out, read from the process or `~/.claude/settings.json` only, so it would load every repo's copy in every session.
 
 - `context-band` — band above the prompt: context trend, 150k step and 250k ceiling, cache expiry, single-call turns, top contributions over 5 turns, graphify rebuild.
 - `tdd-batch` — pane following the `/implement-tdd` batch sheet (`*-PLAN-FX.md`) through `$.fs`, so it survives `/clear`: steps with their `TDD` line, `Correction Cn`, wave and `## BLOQUÉ`/`## BLOCKED` read off the `tdd-*` `Agent` calls. Opens on `/tdd-batch [sheet]` and on the `implement-tdd` Skill call; refreshes on Write/Edit under `todo/` and every 10 s. Parses French and English sheets alike: one file for every repo.
 
-Identical in Configurator, SES and the toolkit. Check: `claude plugin validate <mod>` and `claude plugin test <mod>`. `.claude-plugin/types/` is laid by the engine and ignored.
+One copy for every repo, served by the plugin cache. New mod: written in the session's dev-mods folder (`plugin-authoring` skill), then copied with `rsync --exclude .claude-plugin/types/` and added to the root `marketplace.json`. Check: `claude plugin validate .` and `claude plugin test mods/<mod>`. `.claude-plugin/types/` is laid by the engine and ignored.

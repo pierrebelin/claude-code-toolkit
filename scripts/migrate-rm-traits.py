@@ -1,33 +1,49 @@
 #!/usr/bin/env python3
-"""Migration: the `Tests` column of the handler CLAUDE.md files becomes an xUnit trait.
+"""Migration: the `Tests` column of the rule sheets becomes a tag on each test.
 
 The mapping already exists: the `Tests` column carries exactly the rule <-> test
 correspondence to write into the traits. This script reads it, puts the attributes
 in place, then removes the column.
 
-Trait shape: `[Trait("RM", "<HandlerFolder>/<RM|RL-xx>")]`. The prefix is the handler
-folder, not the aggregate: `RM` numbering is not unique per feature (13 collisions
-measured in one feature on the reference repo).
+Tag value: `<HandlerFolder>/<RM|RL-xx>`, written in the carrier of the `testTag`
+adapter (xUnit: `[Trait("RM", "…")]`). The prefix is the handler folder, not the
+aggregate: `RM` numbering is not unique per feature (13 collisions measured in one
+feature on the reference repo).
 
-    python3 scripts/migrate-rm-traits.py                 # report (dry run)
-    python3 scripts/migrate-rm-traits.py --apply-traits  # writes the attributes
-    python3 scripts/migrate-rm-traits.py --strip-column  # removes the 4th column
+    cctoolkit migrate-rm-traits                 # report (dry run)
+    cctoolkit migrate-rm-traits --apply-traits  # writes the attributes
+    cctoolkit migrate-rm-traits --strip-column  # removes the 4th column
 """
 import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-APP = os.path.join(ROOT, "src", "{{PRODUCT}}.Application")
-TESTS = os.path.join(ROOT, "tests")
-SKIP = {"bin", "obj", "bin-linux", "obj-linux", "Properties"}
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The kit (plugin cache, toolkit checkout): scripts/ next to lib/. A copy predating
+# the plugin: <repo>/scripts/ next to <repo>/.claude/lib/.
+for _lib in (os.path.join(HERE, "lib"), os.path.join(HERE, ".claude", "lib")):
+    if os.path.isfile(os.path.join(_lib, "kit_config.py")):
+        sys.path.insert(0, _lib)
+        break
+try:
+    from kit_config import project_root
+    ROOT = project_root()
+except ImportError:
+    ROOT = HERE
+try:
+    import kit_config
+    import kit_testtag
+    C = kit_config.load(ROOT)
+    AD = kit_testtag.adapter(C)
+except ImportError:
+    sys.exit("kit_config.py not found beside scripts/ — reinstall the cctoolkit plugin")
+except (kit_config.KitConfigError, kit_testtag.TestTagError) as e:
+    sys.exit(f"kit.config.json: {e} — cctoolkit doctor")
 
-CLASS = re.compile(r"^\s*(?:public|internal)\s+(?:sealed\s+|abstract\s+|partial\s+)*class\s+(\w+)")
-ATTR = re.compile(r"^(\s*)\[(?:Fact|Theory)[\](]")
-METHOD = re.compile(r"^\s*(?:public|internal)\s+(?:async\s+)?(?:Task|void|ValueTask)\s+(\w+)\s*\(")
-TRAIT = re.compile(r'^\s*\[Trait\("RM",\s*"([^"]+)"\)\]')
+# The rules section is the `## ` heading anchored `<!-- kit:rules -->`, whatever its
+# title. A sheet older than the anchors gets them first: scripts/migrate-anchors.py.
+ANCHOR = re.compile(r"<!--\s*kit:rules\s*-->")
 ROW = re.compile(r"^\|\s*(R[ML]-\d+)\s*\|(.*)$")
-SECTION = re.compile(r"^##\s+R[eè]gles?\s+m[eé]tier", re.I)
 
 
 def read(path):
@@ -36,11 +52,11 @@ def read(path):
 
 
 def rule_rows(md):
-    """(rule_id, refs) of the rows of the `## Règles métier` table."""
+    """(rule_id, refs) of the rows of the `kit:rules` table."""
     rows, in_section = [], False
     for line in read(md).splitlines():
         if line.startswith("## "):
-            in_section = bool(SECTION.match(line))
+            in_section = bool(ANCHOR.search(line))
             continue
         if not in_section:
             continue
@@ -54,12 +70,11 @@ def rule_rows(md):
 
 
 def handler_mds():
-    """Every CLAUDE.md carrying a rules table, under Application/."""
-    for base, dirs, files in os.walk(APP):
-        dirs[:] = [d for d in dirs if d not in SKIP]
-        if "CLAUDE.md" not in files:
+    """Every rule sheet carrying a rules table, under the use-case roots."""
+    for base, files in C.walk(C.use_case_roots):
+        if C.rule_sheet not in files:
             continue
-        md = os.path.join(base, "CLAUDE.md")
+        md = os.path.join(base, C.rule_sheet)
         if rule_rows(md):
             yield os.path.basename(base), md
 
@@ -81,56 +96,28 @@ def wanted_traits():
 
 
 def scan_tests():
-    """{Class.Method: [(path, index of the [Fact]/[Theory] line, indentation,
-    traits already present)]} — a list, to detect homonyms."""
+    """{Class.Method: [Test, ...]} — a list, to detect homonyms."""
     found = {}
-    for base, dirs, files in os.walk(TESTS):
-        dirs[:] = [d for d in dirs if d not in SKIP]
-        for f in sorted(files):
-            if not f.endswith(".cs"):
-                continue
-            path = os.path.join(base, f)
-            lines = read(path).splitlines()
-            cls, anchor, indent, traits = None, None, "", []
-            for i, line in enumerate(lines):
-                cm = CLASS.match(line)
-                if cm:
-                    cls, anchor, traits = cm.group(1), None, []
-                    continue
-                am = ATTR.match(line)
-                if am:
-                    anchor, indent, traits = i, am.group(1), []
-                    continue
-                if anchor is None:
-                    continue
-                tm = TRAIT.match(line)
-                if tm:
-                    traits.append(tm.group(1))
-                    continue
-                mm = METHOD.match(line)
-                if mm and cls:
-                    found.setdefault(f"{cls}.{mm.group(1)}", []).append(
-                        (path, anchor, indent, list(traits)))
-                    anchor = None
+    for t, _ in kit_testtag.scan_tree(C, AD):
+        found.setdefault(t.key, []).append(t)
     return found
 
 
 def apply_traits(wanted, present, dry):
-    """Inserts the missing attributes under the [Fact]/[Theory]."""
+    """Writes the missing tags in the adapter's carrier (xUnit: under the [Fact]/[Theory])."""
     edits = {}
     posed = 0
     for ref, values in sorted(wanted.items()):
-        for path, anchor, indent, traits in present.get(ref, []):
-            missing = [v for v in values if v not in traits]
+        for t in present.get(ref, []):
+            missing = [v for v in values if v not in t.tags]
             if not missing:
                 continue
-            edits.setdefault(path, []).append((anchor, indent, missing))
+            edits.setdefault(t.path, []).append((t.anchor, t, missing))
             posed += len(missing)
     for path, items in edits.items():
         lines = read(path).splitlines(keepends=True)
-        for anchor, indent, missing in sorted(items, reverse=True):
-            block = "".join(f'{indent}[Trait("RM", "{v}")]\n' for v in missing)
-            lines.insert(anchor + 1, block)
+        for _, t, missing in sorted(items, key=lambda x: x[0], reverse=True):
+            AD.apply(lines, t, missing)
         if not dry:
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("".join(lines))
@@ -138,18 +125,17 @@ def apply_traits(wanted, present, dry):
 
 
 def strip_column(dry):
-    """Removes the 4th column of the `## Règles métier` tables."""
+    """Removes the 4th column of the `kit:rules` tables."""
     touched, malformed = 0, []
-    for base, dirs, files in os.walk(APP):
-        dirs[:] = [d for d in dirs if d not in SKIP]
-        if "CLAUDE.md" not in files:
+    for base, files in C.walk(C.use_case_roots):
+        if C.rule_sheet not in files:
             continue
-        md = os.path.join(base, "CLAUDE.md")
+        md = os.path.join(base, C.rule_sheet)
         src = read(md)
         out, in_section, changed = [], False, False
         for line in src.splitlines():
             if line.startswith("## "):
-                in_section = bool(SECTION.match(line))
+                in_section = bool(ANCHOR.search(line))
                 out.append(line)
                 continue
             if not in_section or not line.strip().startswith("|"):
@@ -178,7 +164,7 @@ def main():
 
     if do_strip:
         touched, malformed = strip_column(False)
-        print(f"Tests column removed: {touched} CLAUDE.md")
+        print(f"Tests column removed: {touched} {C.rule_sheet}")
         for m in malformed:
             print(f"  ROW NOT SPLIT: {m}")
         return

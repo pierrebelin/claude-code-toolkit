@@ -173,6 +173,25 @@ test('pane suit la fiche dès le lancement de implement-tdd, sur chaque surface'
   }
 })
 
+test('pane suit les noms namespacés du plugin cctoolkit', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({
+    tool: 'Skill',
+    tool_use_id: 's1',
+    skill: 'cctoolkit:implement-tdd', args: 'lot F2 todo/package-configuration/PKG-CONF-PLAN.md',
+  })
+  await $.tool.call({
+    tool: 'Agent',
+    tool_use_id: 'a1',
+    subagent_type: 'cctoolkit:tdd-test-author', description: 'RED applet vide', prompt: 'x',
+  })
+  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...PANE })
+  expect(await ui.find({ type: 'Text', text: /Lot F2/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /vague 1/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test('pane sans fiche suivie invite à nommer la fiche', async ($, on) => {
   world(on, false)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })

@@ -17,7 +17,7 @@ Implementation references a plan (`todo/<code>/[CODE]-PLAN.md` + its `[CODE]-PLA
 
 Handler modified or created → **update the `CLAUDE.md` of the handler folder** (under `Application/`): three-column business-rules table, flow, emitted events. No test column — the rule ↔ test link lives on the test, as `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, posed by `tdd-test-author` in RED. New handler → create the `CLAUDE.md`. **Format and example → `claude-md-handler.md`** (read before writing).
 
-**"Flux" section: record the cost.** One line after the flow — "1 read + 1 write, whatever the number of candidates". Only durable trace of a decision no test locks down. Copy it from the `Cost` line of the behaviour's `## GREEN`, never re-derived from the code. Unbounded read loaded deliberately (`Include` of a collection growing without limit) → say so and why.
+**`kit:flow` section: record the cost.** One line after the flow — "1 read + 1 write, whatever the number of candidates". Only durable trace of a decision no test locks down. Copy it from the `Cost` line of the behaviour's `## GREEN`, never re-derived from the code. Unbounded read loaded deliberately (`Include` of a collection growing without limit) → say so and why.
 
 ## 3. Gate and audit
 
@@ -26,7 +26,7 @@ Handler modified or created → **update the `CLAUDE.md` of the handler folder**
 **Then gate, chained with capture in one call:**
 
 ```bash
-bash scripts/pre-audit.sh FX <sheet> && bash scripts/audit-capture.sh FX <sheet> <scratchpad>/audit-FX.txt
+cctoolkit pre-audit FX <sheet> && cctoolkit audit-capture FX <sheet> <scratchpad>/audit-FX.txt
 ```
 
 `pre-audit.sh` fails on: unclassified DDD/APP/PERF ids, comment added under `src/`, modified file outside batch the sheet doesn't name, trait or unbound test in touched test class, unclosed sheet, whitespace error. **RED = no fork.** Fix what it lists, re-run; capture runs only once GREEN. Then `/verify-ddd-tdd batch FX`, argument = capture path + FX section of sheet you hold. Its `context: fork` runs isolated, fast mode, writes no file. Wait for verdict before concluding.
@@ -37,7 +37,7 @@ Capture carries status, diff, RM/CU + DDD/APP/PERF coverage, `build` / `Architec
 - Verdict `GAPS`: fix in main agent, re-run affected validations, re-delegate `/verify-ddd-tdd batch FX resume`, quoting previous verdict's deviation table. Audit then re-examines those deviations + diff since, not whole batch.
 - Two correction/audit rounds still in deviation → stop, return blocking deviations; work around neither plan nor audit.
 
-**Next-sheet review — after `VALID` only.** Next ⬜ batch FY in global plan → `Agent` with `subagent_type: adversarial-reviewer`, a `description`, prompt starting `mode: next-batch <sheet FY> <sheet FX>`. Last batch → skip. Launch it before assembling the summary (§4), in the same message as the first independent call.
+**Next-sheet review — after `VALID` only.** Next ⬜ batch FY in global plan → `Agent` with `subagent_type: cctoolkit:adversarial-reviewer`, a `description`, prompt starting `mode: next-batch <sheet FY> <sheet FX>`. Last batch → skip. Launch it before assembling the summary (§4), in the same message as the first independent call.
 
 - `Major` (name, path, signature FX changed) → update FY sheet now, one `Edit`: you just delivered the value.
 - `Blocking` (design FX contradicts) → never settle: table under `Next batch:` in summary, user decides before `/implement-tdd batch FY`.
@@ -58,9 +58,9 @@ Summary: files created/modified, layers touched, **access cost per delivered beh
 
 One test per row, exact method name, the rule id it is tied to, concise description of the verified behaviour. Every row of every relayed `## RED` table appears here; a test deleted mid-batch does not. Assemble from those rows — don't rebuild from the diff.
 
-**`/learn` reminder** — after the table, run `python3 scripts/learn-candidates.py --count`. Non-empty output → print it verbatim as the line before the end-of-batch line. Never launch `/learn` yourself: next session, after `/clear`.
+**`/learn` reminder** — after the table, run `cctoolkit learn-candidates --count`. Non-empty output → print it verbatim as the line before the end-of-batch line. Never launch `/learn` yourself: next session, after `/clear`.
 
-**The handler half was cross-checked by `scripts/pre-audit.sh`** before the audit, through `python3 scripts/rules-coverage.py --untested` — do not run it again here. It reads the `## Règles métier` tables, confronts them with the `[Trait("RM", …)]` posed across **all** of `tests/`, and reports two things the recap cannot: a trait citing a rule absent from the tables (`DEAD REFERENCE` — a renamed or deleted rule), and a test with no trait in a class that carries some (`UNBOUND TEST`). That second signal is raised on `UnitTests` and `ContractTests` only: the other suites bind the tests that cover a documented rule, not all of theirs.
+**The handler half was cross-checked by `scripts/pre-audit.sh`** before the audit, through `cctoolkit rules-coverage --untested` — do not run it again here. It reads the `kit:rules` tables, confronts them with the `[Trait("RM", …)]` posed across **all** of `tests/`, and reports two things the recap cannot: a trait citing a rule absent from the tables (`DEAD REFERENCE` — a renamed or deleted rule), and a test with no trait in a class that carries some (`UNBOUND TEST`). That second signal is raised on `UnitTests` and `ContractTests` only: the other suites bind the tests that cover a documented rule, not all of theirs.
 
 ## 5. Batching
 

@@ -248,6 +248,23 @@
         "decision": "deny",
         "reason": "inherits Opus"
       }
+    },
+    {
+      "name": "a namespaced plugin agent pinning model: needs no parameter",
+      "hook": "hooks/explore-guard.sh",
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "cctoolkit:tdd-implementer",
+          "description": "GREEN phase",
+          "prompt": "make the red test green"
+        }
+      },
+      "expect": {
+        "decision": "none"
+      }
     }
   ]
 }

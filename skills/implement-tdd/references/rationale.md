@@ -51,5 +51,5 @@ Measurements and reasons behind `SKILL.md`, keyed by its headings. **Never load 
 ## Wall-clock
 
 Baseline of 2026-09-12 and the list of changes to measure against it in
-`.claude/docs/CONTEXT-COST.md`, "Wall-clock of a batch". Measured from the transcripts'
+`docs/CONTEXT-COST.md`, "Wall-clock of a batch". Measured from the transcripts'
 timestamps; the one-off script that did it was removed the same day.

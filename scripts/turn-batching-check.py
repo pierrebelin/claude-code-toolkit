@@ -6,7 +6,7 @@ accumulated context. Two independent calls made in two turns pay that accumulati
 twice. This script measures what could have fitted in a single message.
 
 Usage:
-    python3 scripts/turn-batching-check.py [--days N] [--project <substring>]
+    cctoolkit turn-batching-check [--days N] [--project <substring>]
 
 By default the project filter is derived from the repository folder name, which is
 how Claude Code names the transcript directory under ~/.claude/projects.
@@ -21,10 +21,17 @@ import glob
 import json
 import os
 import re
+import sys
 import time
 
 PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(HERE, "lib"))
+try:
+    from kit_config import project_root
+    REPO_ROOT = project_root()
+except ImportError:
+    REPO_ROOT = HERE
 DEFAULT_PROJECT = re.sub(r"[^A-Za-z0-9]+", "-", os.path.basename(REPO_ROOT)).strip("-")
 READ_TOOLS = {"Read", "Grep", "Glob"}
 # Emitted verbatim by .claude/hooks/read-bounds.sh — frozen literal.

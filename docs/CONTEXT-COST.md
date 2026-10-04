@@ -31,7 +31,7 @@ other, in two turns, pay the accumulation twice. A turn = one billed round trip,
 ## Weekly check
 
 ```bash
-python3 scripts/turn-batching-check.py --compare .claude/context-baseline.json
+cctoolkit turn-batching-check --compare .claude/context-baseline.json
 ```
 
 Fill per tool, share of bounded `Read`s, `read-bounds` denials and **forcings**. A high forcing
@@ -49,7 +49,7 @@ that day were on files of 23 to 303 lines. The cost was the count, not one huge 
 Create it on installation, from the transcripts that predate the hook going live:
 
 ```bash
-python3 scripts/turn-batching-check.py --until <YYYY-MM-DD> --save-baseline .claude/context-baseline.json
+cctoolkit turn-batching-check --until <YYYY-MM-DD> --save-baseline .claude/context-baseline.json
 ```
 
 Re-freeze it with `--save-baseline` only after a deliberate change of method — never to erase a
@@ -105,7 +105,7 @@ Spotify's shunt plugin routes I/O to a tool-less worker model and reports 82-94 
 reads of 1 281 to 7 408 lines. Its 350-line gate would have caught none of the 42 unbounded
 Reads measured here on 2026-09-08 (23 to 303 lines), and 193 of the 3 463 `.cs` files past that
 size are almost all EF `.Designer.cs` migrations. The idea transfers, the threshold does not.
-`.claude/tools/bulk-read` is the local worker; measured 2026-09-12 → `TOOLING.md`. The saving
+`cctoolkit bulk-read` is the local worker; measured 2026-09-12 → `TOOLING.md`. The saving
 is not in dollars (Haiku was $5.60 of the 30 days) but in what never enters the main chain.
 
 ## Instruction loads

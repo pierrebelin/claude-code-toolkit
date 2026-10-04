@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Inventory of the test methods carrying no `[Trait("RM", "…")]`.
+"""Inventory of the test methods carrying no rule tag (`testTag` adapter of
+`.claude/kit.config.json`; xUnit: `[Trait("RM", "…")]`).
 
 Two categories, which do not read the same way:
 
@@ -9,8 +10,8 @@ Two categories, which do not read the same way:
   objects, DSL parser, `Core` library. Useful to spot a forgotten handler, not to
   put a trait on every test.
 
-    python3 scripts/untagged-tests.py                        # report on stdout
-    python3 scripts/untagged-tests.py -o <file.md>           # report into a file
+    cctoolkit untagged-tests                        # report on stdout
+    cctoolkit untagged-tests -o <file.md>           # report into a file
 """
 import collections
 import datetime
@@ -18,51 +19,37 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TESTS = os.path.join(ROOT, "tests")
-SKIP = {"bin", "obj", "bin-linux", "obj-linux", "Properties"}
-PRODUCT = "{{PRODUCT}}."
-
-CLASS = re.compile(r"^\s*(?:public|internal)\s+(?:sealed\s+|abstract\s+|partial\s+)*class\s+(\w+)")
-ATTR = re.compile(r"^\s*\[(?:Fact|Theory)[\](]")
-TRAIT = re.compile(r'^\s*\[Trait\("RM",\s*"([^"]+)"\)\]')
-METHOD = re.compile(r"^\s*(?:public|internal)\s+(?:async\s+)?(?:Task|void|ValueTask)\s+(\w+)\s*\(")
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The kit (plugin cache, toolkit checkout): scripts/ next to lib/. A copy predating
+# the plugin: <repo>/scripts/ next to <repo>/.claude/lib/.
+for _lib in (os.path.join(HERE, "lib"), os.path.join(HERE, ".claude", "lib")):
+    if os.path.isfile(os.path.join(_lib, "kit_config.py")):
+        sys.path.insert(0, _lib)
+        break
+try:
+    from kit_config import project_root
+    ROOT = project_root()
+except ImportError:
+    ROOT = HERE
+try:
+    import kit_config
+    import kit_testtag
+    C = kit_config.load(ROOT)
+    AD = kit_testtag.adapter(C)
+except ImportError:
+    sys.exit("kit_config.py not found beside scripts/ — reinstall the cctoolkit plugin")
+except (kit_config.KitConfigError, kit_testtag.TestTagError) as e:
+    sys.exit(f"kit.config.json: {e} — cctoolkit doctor")
 
 
 def scan():
-    """(relative path, class, method, line, [trait values]) per test method."""
-    rows = []
-    for base, dirs, files in os.walk(TESTS):
-        dirs[:] = [d for d in dirs if d not in SKIP]
-        for f in sorted(files):
-            if not f.endswith(".cs"):
-                continue
-            path = os.path.join(base, f)
-            rel = os.path.relpath(path, ROOT)
-            cls, armed, carried = None, False, []
-            for i, line in enumerate(open(path, encoding="utf-8", errors="ignore"), 1):
-                cm = CLASS.match(line)
-                if cm:
-                    cls, armed, carried = cm.group(1), False, []
-                    continue
-                if ATTR.match(line):
-                    armed, carried = True, []
-                    continue
-                if not armed:
-                    continue
-                tm = TRAIT.match(line)
-                if tm:
-                    carried.append(tm.group(1))
-                    continue
-                mm = METHOD.match(line)
-                if mm and cls:
-                    rows.append((rel, cls, mm.group(1), i, list(carried)))
-                    armed = False
-    return rows
+    """(relative path, class, method, line, [tag values]) per test method."""
+    return [(os.path.relpath(t.path, ROOT), t.cls, t.method, t.line, list(t.tags))
+            for t, _ in kit_testtag.scan_tree(C, AD)]
 
 
 def suite_of(rel):
-    return rel.split(os.sep)[1].replace(PRODUCT, "")
+    return C.suite_of(rel)
 
 
 def by_file(items):
@@ -79,11 +66,14 @@ def report():
     strict = [r for r in untagged if (suite_of(r[0]), r[1]) in traited]
     loose = [r for r in untagged if (suite_of(r[0]), r[1]) not in traited]
 
+    roots = ", ".join(f"`{C.rel(d)}/`" for d in C.dirs(C.test_roots))
+    bound = list(dict.fromkeys(C.suite_of(b + "/x") for b in C.bound))
+    bound = " and ".join(f"`{b}`" for b in bound) if bound else "no suite"
     out = ["# Tests with no `RM` trait", ""]
     out.append(f"Generated on {datetime.date.today().isoformat()} by `scripts/untagged-tests.py`.")
     out.append("")
-    out.append(f"**{len(rows)}** `[Fact]`/`[Theory]` methods under `tests/`, of which **{len(rows) - len(untagged)}** "
-               f"carry at least one `[Trait(\"RM\", …)]` and **{len(untagged)}** carry none.")
+    out.append(f"**{len(rows)}** {AD.test_label} under {roots}, of which **{len(rows) - len(untagged)}** "
+               f"carry at least one {AD.tag_label} and **{len(untagged)}** carry none.")
     out.append("")
 
     out.append("## 1. Tests with no trait inside a class that carries some")
@@ -91,7 +81,7 @@ def report():
     out.append(f"**{len(strict)} methods.** This is the `UNBOUND TEST` signal of `rules-coverage.py` and of "
                "`handler-claude-md-check.sh`: the class documents its rules, this test cites none. Either it covers "
                "a rule missing from the table, or it covers no rule and the class is not the right place. Both "
-               "scanners raise this signal on `UnitTests` and `ContractTests` only — an `IntegrationTests` class "
+               f"scanners raise this signal on {bound} only — an `IntegrationTests` class "
                "covers persistence, not a row of a table.")
     out.append("")
     current = None

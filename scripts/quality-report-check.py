@@ -5,7 +5,7 @@ Runs the arithmetic and threshold checks of the quality-report skill (step 8).
 The judgement checks — status icons, section wording — stay in the skill.
 
 Usage:
-    python3 scripts/quality-report-check.py [path/to/report.json]
+    cctoolkit quality-report-check [path/to/report.json]
 
 Without an argument, the most recent docs/metrics/quality-report-*.json is used.
 Exit code 0 when every check passes, 1 otherwise.

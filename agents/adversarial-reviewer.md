@@ -42,7 +42,7 @@ Caller's first line: `mode: spec <path>`, `mode: plan <folder>` or `mode: next-b
 
 Read the spec whole. Where holes hide: who may do it, what if absent or failed, which state allows it, other organisation or delegation, how many, two at once, which external system owns the rule. Codebase alignment: `graphify explain` on key concepts, only to show the spec contradicts existing behaviour.
 
-Skip what section `## 12. Open questions` or `## 11. Assumptions` already carries.
+Skip what section `kit:open-questions` or `kit:assumptions` already carries.
 
 ### plan
 

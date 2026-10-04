@@ -25,11 +25,16 @@ event=$(echo "$input" | jq -r '.hook_event_name // ""')
 case "$event" in
   UserPromptSubmit)
     launch=$(echo "$input" | jq -r '.prompt // ""')
-    echo "$launch" | grep -qiE '(^|[[:space:]])/?implement-tdd([[:space:]]|$)' || exit 0
+    echo "$launch" | grep -qiE '(^|[[:space:]])/?(cctoolkit:)?implement-tdd([[:space:]]|$)' || exit 0
     ;;
   PreToolUse)
     [[ "$(echo "$input" | jq -r '.tool_name // ""')" == "Skill" ]] || exit 0
-    [[ "$(echo "$input" | jq -r '.tool_input.skill // ""')" == "implement-tdd" ]] || exit 0
+    # Installed as a plugin the skill is `cctoolkit:implement-tdd`; the bare name stays
+    # accepted for a copy predating the plugin.
+    case "$(echo "$input" | jq -r '.tool_input.skill // ""')" in
+      implement-tdd|cctoolkit:implement-tdd) ;;
+      *) exit 0 ;;
+    esac
     launch=$(echo "$input" | jq -r '.tool_input.args // ""')
     ;;
   *) exit 0 ;;
@@ -68,7 +73,7 @@ case "$effort" in
       touch "$effort_marker"
       effort_reason="Effort \"${effort}\" — switch to /effort medium before the batch.
 The loop runs 100 to 180 orchestrator turns at 8.6 s of latency each, measured at effort high over ten batches; the auditor and the writing agents keep their own, fixed in their frontmatter.
-Type /effort medium, then relaunch /implement-tdd batch FX.
+Type /effort medium, then relaunch /cctoolkit:implement-tdd batch FX.
 Force: re-issue the identical launch a second time."
       if [[ "$event" == "PreToolUse" ]]; then
         jq -n --arg r "$effort_reason" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
@@ -113,7 +118,7 @@ touch "$marker"
 
 reason="Batch ${closed} already closed in this session — /clear before batch ${lot:-next}.
 The next batch would pay the accumulated context of the previous one on every turn (measured: 1.9x the input at equal request count, see implement-tdd SKILL.md \"End of batch\").
-Read nothing, delegate nothing, write nothing. Relaunch /implement-tdd batch ${lot:-FX} after the /clear.
+Read nothing, delegate nothing, write nothing. Relaunch /cctoolkit:implement-tdd batch ${lot:-FX} after the /clear.
 Force: re-issue the identical launch a second time."
 
 if [[ "$event" == "PreToolUse" ]]; then

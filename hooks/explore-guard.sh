@@ -67,10 +67,12 @@ case "$subagent" in
     # frontmatter needs no parameter — the frontmatter wins, which is how the
     # two TDD agents have run on sonnet since 2026-09-12. One that pins nothing
     # inherits Opus like anything else, so it is asked for the parameter.
-    if grep -qE '^model:[[:space:]]*[^[:space:]]' "$LIB/../agents/$subagent.md" 2>/dev/null; then
+    # Plugin agents arrive namespaced (`cctoolkit:tdd-implementer`); the file is
+    # agents/tdd-implementer.md of the kit.
+    if grep -qE '^model:[[:space:]]*[^[:space:]]' "$LIB/../agents/${subagent#cctoolkit:}.md" 2>/dev/null; then
       exit 0
     fi
-    [ -n "$model" ] || deny "$subagent blocked: pass an explicit model, or pin \`model:\` in .claude/agents/$subagent.md. Without either the agent inherits Opus."
+    [ -n "$model" ] || deny "$subagent blocked: pass an explicit model, or pin \`model:\` in its agent file. Without either the agent inherits Opus."
     exit 0
     ;;
 esac

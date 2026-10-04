@@ -8,7 +8,7 @@ Two levels, never mixed:
 
 **Documentary tone** — these files are a produced artefact, read by the team. Name the exact types (`ProductItemEntity`, `QueryLimits.MAX_UNPAGINATED_RESULTS`): this is developer documentation, not a business spec.
 
-The three `##` headings are parsed verbatim by `.claude/hooks/handler-claude-md-check.sh` and by `scripts/rules-coverage.py`. Never reword them.
+The three `##` headings are found by their anchor (`<!-- kit:rules -->`, `<!-- kit:flow -->`, `<!-- kit:events -->`) by `hooks/handler-claude-md-check.sh` and `scripts/rules-coverage.py`. The title is prose in `language.docs`; the anchor never moves.
 
 ---
 
@@ -17,7 +17,7 @@ The three `##` headings are parsed verbatim by `.claude/hooks/handler-claude-md-
 Template, closed list of sections, `RM-xx` / `RL-xx` numbering, trait link and cost line → `.claude/rules/application-cqrs.md` § "Fixed shape of a handler `CLAUDE.md`" (single source, copied verbatim). Additions:
 
 - **The red test written during the TDD phase carries its trait from the start.**
-- _Pure query with no rule_: write "None (pure query)" and state the partitioning applied (e.g. scope restricted to the current organisation through `IUserContextWrapper`). No event → "None (query)" under `## Événements émis`.
+- _Pure query with no rule_: write "None (pure query) <!-- kit:none -->" under `kit:rules` — the anchor tells the parsers the section is empty on purpose — and state the partitioning applied (e.g. scope restricted to the current organisation through `IUserContextWrapper`). No event → "None (query)" under `kit:events`.
 - No ad-hoc section titled after some specific point (`## The value never leaves`, `## The resolver's nine checks`): neither rule, flow nor event → `docs/` or the plan.
 - Deliberately unbounded read (`Include` of a growing collection) → the cost line says so and why.
 

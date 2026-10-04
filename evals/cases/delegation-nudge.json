@@ -33,7 +33,7 @@
         {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A5.cs"}}
       ],
       "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "tool_input": {"file_path": "{{FIX}}/d/A6.cs"}},
-      "expect": {"context": "tools/bulk-read"}
+      "expect": {"context": "cctoolkit bulk-read"}
     },
     {
       "name": "a bounded read counts as much as an unbounded one",
@@ -122,12 +122,12 @@
     },
     {
       "name": "a delegation restarts the window: five reads, one Agent, then one read stays silent",
-      "cmd": "for i in 1 2 3 4 5; do printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A'$i'.cs\"}}' | bash .claude/hooks/read-bounds.sh >/dev/null; done; printf '{\"tool_name\":\"Agent\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"subagent_type\":\"Explore\",\"description\":\"x\",\"prompt\":\"graphify\",\"model\":\"haiku\"}}' | bash .claude/hooks/explore-guard.sh >/dev/null; printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A6.cs\"}}' | bash .claude/hooks/read-bounds.sh",
+      "cmd": "for i in 1 2 3 4 5; do printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A'$i'.cs\"}}' | bash {{KIT}}/hooks/read-bounds.sh >/dev/null; done; printf '{\"tool_name\":\"Agent\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"subagent_type\":\"Explore\",\"description\":\"x\",\"prompt\":\"graphify\",\"model\":\"haiku\"}}' | bash {{KIT}}/hooks/explore-guard.sh >/dev/null; printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A6.cs\"}}' | bash {{KIT}}/hooks/read-bounds.sh",
       "expect": {"no_context": true}
     },
     {
       "name": "after a delegation, six new distinct reads nudge again (was: silent for the rest of the session)",
-      "cmd": "for i in 1 2 3 4 5; do printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A'$i'.cs\"}}' | bash .claude/hooks/read-bounds.sh >/dev/null; done; printf '{\"tool_name\":\"Agent\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"subagent_type\":\"tdd-test-author\",\"description\":\"x\",\"prompt\":\"y\"}}' | bash .claude/hooks/explore-guard.sh >/dev/null; for i in 6 7 8 9 10; do printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A'$i'.cs\"}}' | bash .claude/hooks/read-bounds.sh >/dev/null; done; printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A11.cs\"}}' | bash .claude/hooks/read-bounds.sh",
+      "cmd": "for i in 1 2 3 4 5; do printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A'$i'.cs\"}}' | bash {{KIT}}/hooks/read-bounds.sh >/dev/null; done; printf '{\"tool_name\":\"Agent\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"subagent_type\":\"tdd-test-author\",\"description\":\"x\",\"prompt\":\"y\"}}' | bash {{KIT}}/hooks/explore-guard.sh >/dev/null; for i in 6 7 8 9 10; do printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A'$i'.cs\"}}' | bash {{KIT}}/hooks/read-bounds.sh >/dev/null; done; printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"agent_id\":\"\",\"tool_input\":{\"file_path\":\"{{FIX}}/d/A11.cs\"}}' | bash {{KIT}}/hooks/read-bounds.sh",
       "expect": {"context": "Delegation: 6 distinct"}
     },
     {

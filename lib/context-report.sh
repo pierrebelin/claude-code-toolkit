@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Report on the context log. Usage: bash .claude/lib/context-report.sh [--session]
+# Report on the context log. Usage: cctoolkit context-report [--session]
 #
-# Not a hook: a manual reader for what .claude/hooks/context-log.sh writes. Lived
+# Not a hook: a manual reader for what hooks/context-log.sh writes. Lived
 # in hooks/ until 2026-09-09, where it read like a dead hook.
 set -u
-LOG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/context-log.tsv"
+. "$(dirname "${BASH_SOURCE[0]}")/project-root.sh"
+LOG="$PROJECT_ROOT/.claude/context-log.tsv"
 [ -s "$LOG" ] || { echo "Empty log: $LOG"; echo "The InstructionsLoaded hook fires on the next session."; exit 0; }
 python3 - "$LOG" "${1:-}" <<'PY'
 import sys, collections

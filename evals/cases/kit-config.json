@@ -1,0 +1,268 @@
+{
+  "cases": [
+    {
+      "name": "vertical-slices + pytest: a feature-folder test file reports its sheet's gaps",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$F/test_create_product.py'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules with no test: RM-02",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + pytest: a tag citing a rule absent from the table is named",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$F/test_create_product.py'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "traits citing a rule absent from the table: CreateProduct/RM-09",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + pytest: an untagged test of a tagged class is an orphan",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$F/test_create_product.py'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "tests with no `RM` trait: TestCatalog.test_carries_no_tag",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + pytest: the total names the feature slices, not Application/",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$F/CLAUDE.md'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules with no test across the feature slices",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + pytest: a handler folder with no rule sheet is a reminder",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\nrm $F/CLAUDE.md\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$F/create_product_handler.py'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "stdout": "Reminder: no CLAUDE.md in CreateProduct",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + pytest: a file neither source, test nor sheet is left alone",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\nprintf 'notes\\n' > $F/notes.txt\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$F/notes.txt'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "no_context": true,
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + pytest: rules-coverage counts the tags off the decorators",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\npython3 $R/scripts/rules-coverage.py\n",
+      "expect": {
+        "stdout": "rules: 2 | with test: 1 | with no test: 1",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + pytest: rules-coverage names the dead reference and the unbound test",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\npython3 $R/scripts/rules-coverage.py | grep -E 'DEAD|UNBOUND' | tr '\\n' ' '\n",
+      "expect": {
+        "stdout": "DEAD REFERENCE: CreateProduct/RM-09 — trait citing a rule absent from the tables   UNBOUND TEST: TestCatalog.test_carries_no_tag",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + pytest: untagged-tests uses the adapter's labels",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\npython3 $R/scripts/untagged-tests.py | sed -n 5p\n",
+      "expect": {
+        "stdout": "**3** `test_*` functions under `src/Features/`, of which **2** carry at least one `@pytest.mark.rm(…)`",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + pytest: migrate-rm-traits writes the decorator above the def",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct\n\n## Business rules <!-- kit:rules -->\n\n| ID | Rule | Outcome | Tests |\n|----|------|---------|-------|\n| RM-01 | Unique name | X | `TestCatalog.test_carries_no_tag` |\nMDEOF\npython3 $R/scripts/migrate-rm-traits.py --apply-traits >/dev/null\ngrep -B1 'def test_carries_no_tag' $F/test_create_product.py | head -1\n",
+      "expect": {
+        "stdout": "    @pytest.mark.rm(\"CreateProduct/RM-01\")",
+        "exit": 0
+      }
+    },
+    {
+      "name": "hexagonal + junit: @Tag before or after @Test, untagged @Test unbound",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"hexagonal\", \"testTag\": {\"framework\": \"junit\"}}' > $R/.claude/kit.config.json\nF=$R/src/application/CreateProduct\nT=$R/src/test/java/catalog\nmkdir -p $F $T\ncat > $F/CreateProductUseCase.java <<'JEOF'\npublic final class CreateProductUseCase { }\nJEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductUseCaseTest.java <<'JEOF'\nclass CreateProductUseCaseTest {\n\n    @Test\n    @Tag(\"RM:CreateProduct/RM-01\")\n    void rejectsANameAlreadyUsed() {\n    }\n\n    @Tag(\"RM:CreateProduct/RM-02\")\n    @ParameterizedTest\n    @ValueSource(ints = {1, 2})\n    void rejectsAClosedCatalog(int n) {\n    }\n\n    @Test\n    void carriesNoTag() {\n    }\n}\nJEOF\npython3 $R/scripts/rules-coverage.py | tr '\\n' ' '\n",
+      "expect": {
+        "stdout": "rules: 2 | with test: 2 | with no test: 0 dead references: 0 | unbound tests: 1",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + jest: a describe tag covers its tests, a title tag its own",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"jest\"}}' > $R/.claude/kit.config.json\nF=$R/src/features/CreateProduct\nmkdir -p $F\ncat > $F/createProductHandler.ts <<'TSEOF'\nexport async function handleCreateProduct(command: CreateProduct) {}\nTSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/createProduct.test.ts <<'TSEOF'\ndescribe(\"[RM CreateProduct/RM-01] the name is unique\", () => {\n  it(\"rejects a name already used\", async () => {});\n  it(\"accepts a fresh name\", async () => {});\n});\n\ndescribe(\"CreateProduct\", () => {\n  it(\"[RM CreateProduct/RM-02] rejects a closed catalog\", () => {});\n  test(\"carries no tag\", () => {});\n});\nTSEOF\npython3 $R/scripts/rules-coverage.py | tr '\\n' ' '\n",
+      "expect": {
+        "stdout": "rules: 2 | with test: 2 | with no test: 0 dead references: 0 | unbound tests: 1",
+        "exit": 0
+      }
+    },
+    {
+      "name": "vertical-slices + jest: the untagged case is named by its describe path",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"jest\"}}' > $R/.claude/kit.config.json\nF=$R/src/features/CreateProduct\nmkdir -p $F\ncat > $F/createProductHandler.ts <<'TSEOF'\nexport async function handleCreateProduct(command: CreateProduct) {}\nTSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/createProduct.test.ts <<'TSEOF'\ndescribe(\"[RM CreateProduct/RM-01] the name is unique\", () => {\n  it(\"rejects a name already used\", async () => {});\n  it(\"accepts a fresh name\", async () => {});\n});\n\ndescribe(\"CreateProduct\", () => {\n  it(\"[RM CreateProduct/RM-02] rejects a closed catalog\", () => {});\n  test(\"carries no tag\", () => {});\n});\nTSEOF\npython3 $R/scripts/rules-coverage.py | grep UNBOUND\n",
+      "expect": {
+        "stdout": "UNBOUND TEST: createProduct.CreateProduct > carries no tag",
+        "exit": 0
+      }
+    },
+    {
+      "name": "no kit.config.json: clean-architecture defaults, {product} matched by glob",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules with no test: RM-02",
+        "exit": 0
+      }
+    },
+    {
+      "name": "explicit product narrows {product}: another product's Application is not read",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"product\": \"Other\"}' > $R/.claude/kit.config.json\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "no_context": true,
+        "exit": 0
+      }
+    },
+    {
+      "name": "a kit.config.json that is not JSON: silent, exit 0",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '{ broken' > $R/.claude/kit.config.json\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "no_context": true,
+        "exit": 0
+      }
+    },
+    {
+      "name": "an unknown preset: silent, exit 0",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"preset\": \"onion\"}' > $R/.claude/kit.config.json\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "no_context": true,
+        "exit": 0
+      }
+    },
+    {
+      "name": "an unknown testTag framework: silent, exit 0",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"testTag\": {\"framework\": \"nunit\"}}' > $R/.claude/kit.config.json\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "no_context": true,
+        "exit": 0
+      }
+    },
+    {
+      "name": "lib/ missing: silent, exit 0",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nrm -rf $R/.claude/lib\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "no_context": true,
+        "exit": 0
+      }
+    },
+    {
+      "name": "presets/ missing: silent, exit 0",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nrm -rf $R/.claude/presets\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "no_context": true,
+        "exit": 0
+      }
+    },
+    {
+      "name": "a script on a broken config stops with the cause, not a traceback",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"preset\": \"onion\"}' > $R/.claude/kit.config.json\npython3 $R/scripts/rules-coverage.py\n",
+      "expect": {
+        "stderr": "unknown preset 'onion'",
+        "exit": 1
+      }
+    },
+    {
+      "name": "rules-coverage --ids still works on a broken config",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '{ broken' > $R/.claude/kit.config.json\nmkdir -p $R/todo/x && printf '# F1\\n' > $R/todo/x/X-PLAN-F1.md\npython3 $R/scripts/rules-coverage.py --ids $R/todo/x/X-PLAN-F1.md\n",
+      "expect": {
+        "stdout": "unknown references : (none)",
+        "exit": 0
+      }
+    },
+    {
+      "name": "match aggregate: a clean-architecture value object matches",
+      "cmd": "python3 {{KIT}}/lib/kit_config.py match aggregate /r/src/Acme.Catalog.Domain/Products/ValueObjects/ProductId.cs && echo yes",
+      "expect": {
+        "stdout": "yes",
+        "exit": 0
+      }
+    },
+    {
+      "name": "match aggregate: a handler does not",
+      "cmd": "python3 {{KIT}}/lib/kit_config.py match aggregate /r/src/Acme.Application/Catalog/CreateProduct/CreateProductCommandHandler.cs || echo no",
+      "expect": {
+        "stdout": "no",
+        "exit": 0
+      }
+    },
+    {
+      "name": "diff-comments: the pytest prefix is # under a vertical-slices layout",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\nprintf '%s\\n' '+++ b/src/Features/CreateProduct/create_product_handler.py' '@@ -1,0 +1,2 @@' '+# why' '+x = \"#no\"' | python3 $R/.claude/lib/kit_config.py diff-comments $R\n",
+      "expect": {
+        "stdout": "src/Features/CreateProduct/create_product_handler.py:1: # why",
+        "exit": 0
+      }
+    },
+    {
+      "name": "diff-tags: the pytest carrier is read off the added lines",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\nprintf '%s\\n' '+++ b/src/Features/CreateProduct/test_create_product.py' '@@ -1,0 +1,1 @@' '+@pytest.mark.rm(\"CreateProduct/RM-03\")' | python3 $R/.claude/lib/kit_config.py diff-tags $R\n",
+      "expect": {
+        "stdout": "CreateProduct/RM-03",
+        "exit": 0
+      }
+    },
+    {
+      "name": "validate: a broken config is a FAIL line",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '{ broken' > $R/.claude/kit.config.json\npython3 $R/.claude/lib/kit_config.py validate $R\n",
+      "expect": {
+        "stdout": "FAIL\tkit.config.json\tkit.config.json is not valid JSON",
+        "exit": 0
+      }
+    },
+    {
+      "name": "validate: an unknown key is a WARN, the resolved layout is listed",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"product\": \"Acme\", \"layuot\": {}}' > $R/.claude/kit.config.json\npython3 $R/.claude/lib/kit_config.py validate $R | tr '\\n' ' '\n",
+      "expect": {
+        "stdout": "WARN\tkit.config.json\tunknown key 'layuot'",
+        "exit": 0
+      }
+    },
+    {
+      "name": "validate: a testTag regex without a capture group is a FAIL",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"testTag\": {\"framework\": \"pytest\", \"regex\": \"rm\"}}' > $R/.claude/kit.config.json\npython3 $R/.claude/lib/kit_config.py validate $R\n",
+      "expect": {
+        "stdout": "FAIL\ttestTag\ttestTag.regex needs exactly one capture group",
+        "exit": 0
+      }
+    },
+    {
+      "name": "validate: a use-case root matching nothing is a WARN",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py {{KIT}}/scripts/migrate-rm-traits.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\"}' > $R/.claude/kit.config.json\npython3 $R/.claude/lib/kit_config.py validate $R\n",
+      "expect": {
+        "stdout": "WARN\tlayout.useCase.roots",
+        "exit": 0
+      }
+    },
+    {
+      "name": "kit-diff: an untouched install is identical, exit 0",
+      "cmd": "B={{FIX}}/kd-{{SID}}; K=$B/kit; R=$B/repo\nmkdir -p $K/scripts $K/hooks $R/.claude/hooks $R/scripts\ncp {{KIT}}/hooks/clear-nudge.sh $K/hooks/ && cp {{KIT}}/scripts/kit-diff.sh $K/scripts/\ncp {{KIT}}/hooks/clear-nudge.sh $R/.claude/hooks/ && cp {{KIT}}/scripts/kit-diff.sh $R/scripts/\nprintf '%s' '{\"product\": \"Zeta\"}' > $R/.claude/kit.config.json\nbash $K/scripts/kit-diff.sh $R\n",
+      "expect": {
+        "stdout": "0 missing, 0 added, 0 drifted",
+        "exit": 0
+      }
+    },
+    {
+      "name": "kit-diff: a drift naming the product is flagged before it flows back",
+      "cmd": "B={{FIX}}/kd-{{SID}}; K=$B/kit; R=$B/repo\nmkdir -p $K/scripts $K/hooks $R/.claude/hooks $R/scripts\ncp {{KIT}}/hooks/clear-nudge.sh $K/hooks/ && cp {{KIT}}/scripts/kit-diff.sh $K/scripts/\ncp {{KIT}}/hooks/clear-nudge.sh $R/.claude/hooks/ && cp {{KIT}}/scripts/kit-diff.sh $R/scripts/\nprintf '%s' '{\"product\": \"Zeta\"}' > $R/.claude/kit.config.json\necho '# Zeta tweak' >> $R/.claude/hooks/clear-nudge.sh\nbash $K/scripts/kit-diff.sh $R\n",
+      "expect": {
+        "stdout": "ANONYMISATION  hooks/clear-nudge.sh: 'Zeta'",
+        "exit": 1
+      }
+    },
+    {
+      "name": "kit-diff: run from an installed copy, it refuses",
+      "cmd": "B={{FIX}}/kd-{{SID}}; K=$B/kit; R=$B/repo\nmkdir -p $K/scripts $K/hooks $R/.claude/hooks $R/scripts\ncp {{KIT}}/hooks/clear-nudge.sh $K/hooks/ && cp {{KIT}}/scripts/kit-diff.sh $K/scripts/\ncp {{KIT}}/hooks/clear-nudge.sh $R/.claude/hooks/ && cp {{KIT}}/scripts/kit-diff.sh $R/scripts/\nprintf '%s' '{\"product\": \"Zeta\"}' > $R/.claude/kit.config.json\nbash $R/scripts/kit-diff.sh $R\n",
+      "expect": {
+        "stderr": "run it from the toolkit checkout",
+        "exit": 2
+      }
+    }
+  ]
+}

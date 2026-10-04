@@ -39,7 +39,7 @@ if not heading:
     sys.exit(0)
 kind = heading.group(1)
 
-# Bullet labels of `.claude/agents/tdd-test-author.md` and `.claude/agents/tdd-implementer.md`,
+# Bullet labels of `agents/tdd-test-author.md` and `agents/tdd-implementer.md`,
 # Compared on the fold so casing and accents never decide whether a report is complete.
 REQUIRED = {
     "RED": ["Tests", "Command", "Production diff", "Expected failure"],

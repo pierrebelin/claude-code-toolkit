@@ -25,19 +25,19 @@ Measurements + reasons: `references/rationale.md`, same headings. **Never open d
 
 Skill stays in main agent: **no** `context: fork`. Subagent can't delegate in turn.
 
-Project agents:
+Kit agents — `subagent_type` namespaced by the plugin:
 
 | Phase | Agent | Authorisation |
 |---|---|---|
-| RED | `tdd-test-author` | Write only requested test |
-| GREEN + REFACTOR | `tdd-implementer` | Write production code; test files read-only |
+| RED | `cctoolkit:tdd-test-author` | Write only requested test |
+| GREEN + REFACTOR | `cctoolkit:tdd-implementer` | Write production code; test files read-only |
 | Final verification | forked `/verify-ddd-tdd` | Read + run validations, no modification |
 
 **One behaviour → phases strictly sequential**: RED → GREEN → REFACTOR → COST, no overlap. Test subagent result before touching any production file; global GREEN before launching verifier.
 
 **Across behaviours RED parallelises — GREEN never.** Two behaviours, **disjoint target test files** → both `tdd-test-author` in one message. Check disjointness on sheet first: shared fixture, shared `CoreTests/` builder, or one test class carrying both scenarios → sequential. GREEN serialised whatever happens.
 
-`tdd-test-author` or `tdd-implementer` missing → stop before coding, name missing file under `.claude/agents/`; never take its role.
+`cctoolkit:tdd-test-author` or `cctoolkit:tdd-implementer` unknown to the `Agent` tool → stop before coding, name the missing agent (plugin disabled or outdated: `cctoolkit doctor`); never take its role.
 
 You own **design**: split into behaviours, arbitrate unbounded cost, settle ambiguity, update plan + docs. Subagents produce and declare; you judge.
 
@@ -57,7 +57,7 @@ Runner, commands, test level, suite scope, integration-test filtering → **`ref
 
 ### 1. Analysis
 
-**Entry guard — one batch, one session. Check before any read.** Batch already closed this session (`/verify-ddd-tdd` verdict relayed, or `→ Batch FX complete` printed) → **stop**, read/delegate/write nothing; print `→ Batch FZ already closed in this session. Run /clear, then relaunch /implement-tdd batch FX.`, end turn. Relaunch without clear ≠ authorisation: say it, stop. `.claude/hooks/implement-tdd-guard.sh` enforces outside model; identical relaunch forces through — false positive only, never chaining.
+**Entry guard — one batch, one session. Check before any read.** Batch already closed this session (`/verify-ddd-tdd` verdict relayed, or `→ Batch FX complete` printed) → **stop**, read/delegate/write nothing; print `→ Batch FZ already closed in this session. Run /clear, then relaunch /implement-tdd batch FX.`, end turn. Relaunch without clear ≠ authorisation: say it, stop. `hooks/implement-tdd-guard.sh` enforces outside model; identical relaunch forces through — false positive only, never chaining.
 
 
 **Phase reads in one message**: global plan (located sections), batch sheet, `references/test-scope.md`, one `Read` each. Same for every diff/status capture and every group of independent `Bash` probes anywhere in batch.
@@ -150,7 +150,7 @@ Expected access cost: n reads + n writes to Infrastructure, independent of [inpu
 Snapshot (approval-testing suites only): approved-file path + literal seeded values expected
 ```
 
-**Contract carries only what agent can't know.** Never restate what `.claude/agents/tdd-implementer.md` binds: zero comments, test files read-only, validation commands, REFACTOR, orphan deletion, `## GREEN` / `## BLOCKED` format.
+**Contract carries only what agent can't know.** Never restate what `agents/tdd-implementer.md` binds: zero comments, test files read-only, validation commands, REFACTOR, orphan deletion, `## GREEN` / `## BLOCKED` format.
 
 **Signature = declaration** — name, parameters, return type. Dictating a body → you're doing GREEN yourself: do it, don't delegate.
 

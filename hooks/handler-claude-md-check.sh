@@ -1,55 +1,59 @@
 #!/usr/bin/env bash
 # PostToolUse hook (Edit|Write): checks the business-rule <-> test traceability.
 #
-# Every handler CLAUDE.md (src/{{PRODUCT}}.Application/**/<Handler>/CLAUDE.md) carries a
-# three-column "## Règles métier" table. The rule -> test link lives on the test, as
-# `[Trait("RM", "<HandlerFolder>/<RM|RL-xx>")]`. The hook builds two global indexes
-# (rules declared / traits placed under tests/) and reports the gaps. Every suite counts:
-# a response-shape rule is only provable by a contract snapshot, a persistence rule only
-# by an integration test.
+# Every use-case folder (kit.config.json `layout.useCase`; clean-architecture: a handler
+# folder under src/<Product>.Application/) carries a rule sheet (`layout.ruleSheet`,
+# CLAUDE.md) with a three-column rules table under the heading anchored
+# `<!-- kit:rules -->`. Sections are found by their anchor, never by their title: the
+# title is prose in the language of kit.config.json `language.docs`. The rule -> test
+# link lives on the test, as a tag whose value is `<SheetFolder>/<RM|RL-xx>` and whose
+# carrier is the `testTag` adapter (xUnit: `[Trait("RM", "…")]`). The hook builds two
+# global indexes (rules declared / tags placed under the test roots) and reports the
+# gaps. Every suite counts: a response-shape rule is only provable by a contract
+# snapshot, a persistence rule only by an integration test.
+#
+# Paths, markers and the tag carrier come from lib/kit_config.py and lib/kit_testtag.py.
+# A missing python3, lib module, preset or a broken kit.config.json: silent, exit 0
+# (tools/doctor names the cause).
 #
 # Warning only: exit 0 in every case, never blocking. Output goes through
 # hookSpecificOutput.additionalContext: on PostToolUse, plain stdout at exit 0 lands in the
 # transcript only and never reaches the model (231 emissions, 0 read, probe of 2026-09-13).
 
 INPUT=$(cat)
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 FILE_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',d).get('file_path',''))" 2>/dev/null || true)
 [ -z "$FILE_PATH" ] && exit 0
 
-REPO_ROOT="$REPO_ROOT" FILE_PATH="$FILE_PATH" python3 <<'PYEOF'
-import json, os, re, sys, unicodedata
+KIT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)"
+[ -n "$KIT_LIB" ] || exit 0
 
-ROOT = os.environ["REPO_ROOT"]
-APP = os.path.join(ROOT, "src", "{{PRODUCT}}.Application")
-TESTS = os.path.join(ROOT, "tests")
-# A trait is read from any suite. But only these two cover rule by rule: an integration or
-# E2E test proves persistence or a journey, never a single table row — demanding a trait
-# per test there produces nothing but noise.
-BOUND_SUITES = [
-    os.path.join(TESTS, "{{PRODUCT}}.UnitTests"),
-    os.path.join(TESTS, "{{PRODUCT}}.ContractTests"),
-]
-SKIP_DIRS = {"bin", "obj", "bin-linux", "obj-linux", "Properties"}
+FILE_PATH="$FILE_PATH" KIT_LIB="$KIT_LIB" python3 <<'PYEOF' 2>/dev/null
+import json, os, re, sys
+
+sys.path.insert(0, os.environ["KIT_LIB"])
+try:
+    import kit_config, kit_testtag
+    C = kit_config.load()
+    AD = kit_testtag.adapter(C)
+except Exception:
+    sys.exit(0)
+
+ROOT = C.root
+SHEET = C.rule_sheet
 
 raw = os.environ["FILE_PATH"]
 target = raw if os.path.isabs(raw) else os.path.join(ROOT, raw)
 target = os.path.normpath(target)
 
-in_app = target.startswith(APP + os.sep)
-in_tests = target.startswith(TESTS + os.sep)
+in_app = C.under(target, C.use_case_roots) is not None
+in_tests = C.under(target, C.test_roots) is not None
 if not (in_app or in_tests):
     sys.exit(0)
-if not (target.endswith(".cs") or os.path.basename(target) == "CLAUDE.md"):
+is_sheet = os.path.basename(target) == SHEET
+is_test = in_tests and AD.is_test_file(target)
+if not (is_sheet or is_test or (in_app and C.is_source(target))):
     sys.exit(0)
-
-
-def fold(s):
-    """Compare section titles without depending on accents: the repo mixes
-    "Regles metier" and "Règles métier"."""
-    return "".join(c for c in unicodedata.normalize("NFD", s.strip().lower())
-                   if unicodedata.category(c) != "Mn")
 
 
 def read(path):
@@ -57,57 +61,60 @@ def read(path):
         return fh.read()
 
 
-HANDLER_CLASS = re.compile(r"^\s*(?:public|internal)\s+(?:sealed\s+|abstract\s+|partial\s+)*class\s+\w*Handler\b", re.M)
-
-
-def is_handler_file(path):
-    """A class, not an interface. Testing `not f.startswith("I")` would take
-    `IFooCommandHandler.cs` for an interface, but would also exclude
-    `ImportGraphsCommandHandler.cs` — any handler whose name starts with I."""
-    try:
-        return bool(HANDLER_CLASS.search(read(path)))
-    except OSError:
-        return False
-
-
-def is_handler_dir(d):
-    """A handler folder carries its handler. The Application tree mixes depths
-    (Studio/X/Y/, Catalog/X/Y/Z/): depth does not discriminate."""
-    try:
-        names = os.listdir(d)
-    except OSError:
-        return False
-    return any(f.endswith("Handler.cs") and is_handler_file(os.path.join(d, f)) for f in names)
+is_handler_dir = C.is_use_case_dir
 
 
 # --- Index 1: rules declared in the handler CLAUDE.md files -------------------
 # rules[claude_md] = [(rule_id, label), ...]  ;  prefix_of[claude_md] = folder name
-RULE_ROW = re.compile(r"^\|\s*(R[ML]-\d+)\s*\|(.*)$")
-SECTION = re.compile(r"^##\s+R[eè]gles?\s+m[eé]tier", re.I)
+# `## <any title> <!-- kit:rules -->`; the table under it is read by position, or by
+# the schema anchor `<!-- kit:cols id,rule,outcome -->` when one precedes it.
+ANCHOR = re.compile(r"<!--\s*kit:([a-z][a-z0-9-]*)")
+COLS = re.compile(r"<!--\s*kit:cols\s+([\w,-]+)\s*-->")
+RULE_ID = re.compile(r"R[ML]-\d+")
 
-rules, prefix_of = {}, {}
-all_md = set()
-for base, dirs, files in os.walk(APP):
-    dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-    if "CLAUDE.md" not in files:
-        continue
-    md = os.path.join(base, "CLAUDE.md")
-    rows, in_section, empty_ok = [], False, False
-    for line in read(md).splitlines():
+
+def anchor_of(line):
+    m = ANCHOR.search(line)
+    return m.group(1) if m else None
+
+
+def rule_rows(text):
+    """(rows, explicitly empty) of the section anchored kit:rules."""
+    rows, in_section, empty_ok, cols = [], False, False, ["id", "rule"]
+    for line in text.splitlines():
         if line.startswith("## "):
-            in_section = bool(SECTION.match(line))
+            in_section = anchor_of(line) == "rules"
             continue
         if not in_section:
             continue
-        # An explicitly empty section reads "None"; "Aucun" is tolerated for
-        # the handler sheets written before the kit switched to English.
-        if line.strip().lower().startswith(("none", "aucun")):
+        # An explicitly empty section carries `<!-- kit:none -->` ("None (pure query)").
+        if anchor_of(line) == "none":
             empty_ok = True
-        m = RULE_ROW.match(line.strip())
-        if not m:
+        c = COLS.search(line)
+        if c:
+            cols = c.group(1).split(",")
             continue
-        cells = [c.strip() for c in m.group(2).split("|")]
-        rows.append((m.group(1), cells[0] if cells else ""))
+        s = line.strip()
+        if not s.startswith("|"):
+            continue
+        cells = [x.strip() for x in s.strip("|").split("|")]
+        i = cols.index("id") if "id" in cols else 0
+        j = cols.index("rule") if "rule" in cols else 1
+        if i < len(cells) and RULE_ID.fullmatch(cells[i]):
+            rows.append((cells[i], cells[j] if j < len(cells) else ""))
+    return rows, empty_ok
+
+
+SHAPE = "sections anchored <!-- kit:rules -->, <!-- kit:flow -->, <!-- kit:events -->, in that order"
+
+
+rules, prefix_of = {}, {}
+all_md = set()
+for base, files in C.walk(C.use_case_roots):
+    if SHEET not in files:
+        continue
+    md = os.path.join(base, SHEET)
+    rows, empty_ok = rule_rows(read(md))
     if rows or empty_ok:
         rules[md] = rows
         prefix_of[md] = os.path.basename(base)
@@ -120,58 +127,28 @@ for base, dirs, files in os.walk(APP):
 
 declared = {f"{prefix_of[md]}/{rid}" for md, rows in rules.items() for rid, _ in rows}
 
-# --- Index 2: traits placed on the tests -------------------------------------
+# --- Index 2: tags placed on the tests --------------------------------------
 # methods[Class.Method] = (path, class, [values], binding required)
 # traits[value] = [Class.Method, ...]
-CLASS = re.compile(r"^\s*(?:public|internal)\s+(?:sealed\s+|abstract\s+|partial\s+)*class\s+(\w+)")
-ATTR = re.compile(r"^\s*\[(?:Fact|Theory)[\](]")
-TRAIT = re.compile(r'^\s*\[Trait\("RM",\s*"([^"]+)"\)\]')
-METHOD = re.compile(r"^\s*(?:public|internal)\s+(?:async\s+)?(?:Task|void|ValueTask)\s+(\w+)\s*\(")
-
 methods, traits = {}, {}
-for base, dirs, files in os.walk(TESTS):
-    dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-    bound = any(base.startswith(s + os.sep) for s in BOUND_SUITES)
-    for f in files:
-        if not f.endswith(".cs"):
-            continue
-        path = os.path.join(base, f)
-        cls, armed, carried = None, False, []
-        for line in read(path).splitlines():
-            cm = CLASS.match(line)
-            if cm:
-                cls, armed, carried = cm.group(1), False, []
-                continue
-            if ATTR.match(line):
-                armed, carried = True, []
-                continue
-            if not armed:
-                continue
-            tm = TRAIT.match(line)
-            if tm:
-                carried.append(tm.group(1))
-                continue
-            mm = METHOD.match(line)
-            if mm and cls:
-                key = f"{cls}.{mm.group(1)}"
-                methods[key] = (path, cls, carried, bound)
-                for v in carried:
-                    traits.setdefault(v, []).append(key)
-                armed = False
+for t, bound in kit_testtag.scan_tree(C, AD):
+    methods[t.key] = (t.path, t.cls, t.tags, bound)
+    for v in t.tags:
+        traits.setdefault(v, []).append(t.key)
 
 # --- Report scope ------------------------------------------------------------
 focus = set()
-if os.path.basename(target) == "CLAUDE.md":
+if is_sheet:
     if target in all_md:
         focus.add(target)
-elif in_app:
+elif not is_test:
     d = os.path.dirname(target)
-    md = os.path.join(d, "CLAUDE.md")
+    md = os.path.join(d, SHEET)
     if md in all_md:
         focus.add(md)
     elif is_handler_dir(d):
-        rel = os.path.relpath(d, APP)
-        print(f"Reminder: no CLAUDE.md in {rel} — create one (Règles métier table, Flux, Événements émis).")
+        rel = os.path.relpath(d, C.root_of(d, C.use_case_roots))
+        print(f"Reminder: no {SHEET} in {rel} — create one ({SHAPE}).")
         sys.exit(0)
     else:
         sys.exit(0)
@@ -192,23 +169,23 @@ if not focus:
     sys.exit(0)
 
 # --- Fixed shape -------------------------------------------------------------
-ALLOWED = ["Règles métier", "Flux", "Événements émis"]
-ALLOWED_FOLDED = {fold(s): s for s in ALLOWED}
+ALLOWED = ["rules", "flow", "events"]
 
 
 def shape_issues(md):
-    secs = [l[3:].strip() for l in read(md).splitlines() if l.startswith("## ")]
+    heads = [l for l in read(md).splitlines() if l.startswith("## ")]
     issues = []
-    extra = [s for s in secs if fold(s) not in ALLOWED_FOLDED]
+    extra = [l[3:].split("<!--")[0].strip() for l in heads if anchor_of(l) not in ALLOWED]
     if extra:
         issues.append("forbidden sections: " + ", ".join(f"'{s}'" for s in extra))
-    seen = {fold(s) for s in secs}
-    missing = [s for s in ALLOWED if fold(s) not in seen]
+    kept = [anchor_of(l) for l in heads if anchor_of(l) in ALLOWED]
+    missing = [f"kit:{a}" for a in ALLOWED if a not in kept]
     if missing:
         issues.append("missing sections: " + ", ".join(missing))
-    kept = [ALLOWED_FOLDED[fold(s)] for s in secs if fold(s) in ALLOWED_FOLDED]
-    if kept != [s for s in ALLOWED if s in kept]:
-        issues.append("expected order: Règles métier, Flux, Événements émis")
+    if kept != [a for a in ALLOWED if a in kept]:
+        issues.append("expected order: kit:rules, kit:flow, kit:events")
+    if heads and not kept:
+        issues.append("no kit anchor — sheet written before the anchors: cctoolkit migrate-anchors --apply")
     return issues
 
 
@@ -219,7 +196,7 @@ for md in sorted(focus):
     if md not in rules:
         issues = shape_issues(md)
         detail = (" — " + " ; ".join(issues)) if issues else ""
-        out.append(f"{rel_md}: no '## Règles métier' table — fixed shape: title + description, Règles métier, Flux, Événements émis{detail}.")
+        out.append(f"{rel_md}: no rules table — fixed shape: title + description, {SHAPE}{detail}.")
         continue
 
     prefix = prefix_of[md]
@@ -249,7 +226,7 @@ for md in sorted(focus):
         lines.append(f"  test shared by several rules: {'; '.join(shared[:3])}")
     if lines:
         out.append(f"{rel_md}\n" + "\n".join(lines))
-    elif os.path.basename(target) != "CLAUDE.md":
+    elif not is_sheet:
         out.append(f"{rel_md}: rules/tests traceability up to date.")
 
 if out:
@@ -257,7 +234,7 @@ if out:
     total_untested = sum(1 for md, rows in rules.items() for rid, _ in rows
                          if f"{prefix_of[md]}/{rid}" not in traits)
     if total_untested:
-        msg.append(f"({total_untested} rules with no test across Application/)")
+        msg.append(f"({total_untested} rules with no test across {C.use_case_label})")
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
                                              "additionalContext": "\n".join(msg)}},
                      ensure_ascii=False))
