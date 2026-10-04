@@ -1,0 +1,6 @@
+{
+  "name": "tdd-batch",
+  "version": "0.1.0",
+  "description": "Pane d'avancement d'un lot /implement-tdd : étapes RED/GREEN/COUT, corrections Cn, vague, BLOQUÉ, lus depuis la fiche de lot",
+  "types": "./types/index.d.ts"
+}

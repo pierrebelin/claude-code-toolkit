@@ -25,19 +25,22 @@ instruction family, and never the frozen literals below.
 
 | Frozen literal | Parsed by |
 |---|---|
-| `## Règles métier`, `## Flux`, `## Événements émis` | `.claude/hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py` |
-| Columns `ID` / `Règle` / `Exception / Résultat` | same |
-| `[Trait("RM", "{HandlerFolder}/{RM\|RL-xx}")]` on the tests | same, plus `scripts/untagged-tests.py` and `scripts/migrate-rm-traits.py` |
-| `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Comments`/`Test`/`Plan`/`Scope` | `/verify-ddd-tdd` verdict format |
+| `## Règles métier`, `## Flux`, `## Événements émis` and the columns `ID` / `Règle` / `Exception / Résultat` | `.claude/hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`, `scripts/migrate-rm-traits.py` |
+| `[Trait("RM", "{HandlerFolder}/{RM\|RL-xx}")]` — the attribute name `RM` and the `folder/id` shape of its value | idem, plus `scripts/untagged-tests.py` and `scripts/migrate-rm-traits.py` |
+| `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Comments`/`Test`/`Plan`/`Scope` | `/verify-ddd-tdd` verdict format, `scripts/learn-candidates.py` |
 | `## RED`, `## GREEN`, `## BLOCKED` and their fields | `/implement-tdd` orchestrator |
-| `TDD: RED ✅ · GREEN ✅ · COST ✅`, `✅ DONE`, `## Assumptions`, `Correction Cn` | batch sheets |
-| `DEAD REFERENCE`, `UNBOUND TEST` — report labels | `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py` |
-| `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names | quality-report history |
+| `TDD: RED ✅ · GREEN ✅ · COST ✅`, `✅ DONE`, `## Assumptions`, `Correction Cn` | batch sheets; the first one also by `scripts/pre-audit.sh` |
+| `→ Batch FX complete — manual validation required` — the closing line | `.claude/hooks/implement-tdd-guard.sh` |
+| Sheet row `\| Applied rules \|`, global plan line `**Non-applicable rules**`; output lines `not cited : `, `unknown references : `, `(none)` | `scripts/rules-coverage.py --ids`, then `scripts/pre-audit.sh` |
+| Spec `## 12. Open questions` column `Severity`, values `Blocking`/`Major` | `/plan-implementation` gate (awk on the section) |
+| `## Review — GAPS`, `## Review — CLEAR` | `adversarial-reviewer` output, read by the three callers |
+| `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names and the JSON's first-level keys | `scripts/quality-report-check.py`, the whole report history and any viewer built on it |
+| `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/migrate-rm-traits.py`, `scripts/pre-audit.sh` and `.claude/skills/implement-tdd/references/closing.md` |
 
 Identifier prefixes are language-neutral and stay as they are: `RM-xx`, `RL-xx`, `CU-xx`,
 `DDD-nn`, `APP-nn`, `PERF-nn`.
 
-**Accents in the handler sections are load-bearing.** `handler-claude-md-check.sh` compares
-section names with `s not in ALLOWED` — exact strings, no accent folding — and
-`scripts/rules-coverage.py` uses `line.startswith("## Règles métier")`. `## Evenements emis` is
-rejected as both a forbidden and a missing section.
+**Write the handler sections with their accents.** The parsers fold accents and case —
+`handler-claude-md-check.sh` compares `fold(s)`, `scripts/rules-coverage.py` matches
+`R[eè]gles? m[eé]tier` — so `## Evenements emis` still passes. The accented form stays the
+written one: the parsers tolerate the other, they do not produce it.

@@ -19,7 +19,7 @@
       "name": "a root without a settings file is a FAIL, not a crash",
       "cmd": "bash .claude/tools/doctor --quiet",
       "env": {"CLAUDE_DOCTOR_ROOT": "{{FIX}}"},
-      "expect": {"exit": 1, "stdout": "settings.local.json"}
+      "expect": {"exit": 1, "stdout": "no hook registered"}
     }
   ]
 }

@@ -37,9 +37,9 @@ The spec is a produced artefact, proofread by a business expert.
 - **Empty section → delete it** (heading included). No `_Not applicable._`.
 - Table over prose. No intro paragraph: straight to content.
 - Every rule names its origin (regulation, standard, practice, product choice), briefly.
-- **Authority of a rule**: rule owned by external system (product/key service, delegation between organisations, organisation catalogue) → spec names **the authority** and what the product merely consumes. Never replay or restate a rule owned elsewhere — cite it, name its owner.
-- **Target of a share, transfer or delegation**: a target organisation is validated by an **existing delegation**, never by its mere existence. Phrase the business rule in those terms.
-- **What must not break**: an existing behaviour the feature must preserve is stated as a business rule with `Origine` = existing product behaviour, not as a passing remark. Left unnamed, it will not be tested.
+- **Authority of a rule**: rule owned by external system (identity provider, external catalogue, organisation directory) → spec names **the authority** and what the product merely consumes. Never replay or restate a rule owned elsewhere — cite it, name its owner.
+- **Target of a share or transfer**: a target organisation is validated by the **relationship that authorises it**, never by its mere existence. Phrase the business rule in those terms.
+- **What must not break**: an existing behaviour the feature must preserve is stated as a business rule with `Origin` = existing product behaviour, not as a passing remark. Left unnamed, it will not be tested.
 - Unsettled → `TBD`, listed in section 12.
 
 ## Verbosity budget (produced document)
@@ -108,8 +108,8 @@ One line per dependency, in business language.
 What you assumed for lack of an answer — distinct from an open question.
 
 ## 12. Open questions
-| # | Question | Impact | Options |
-Every TBD in the document.
+| # | Severity | Question | Impact | Options |
+Every TBD in the document. Severity `Blocking` or `Major`.
 ```
 
 ## Self-validation (mandatory, after writing)
@@ -136,6 +136,15 @@ Re-read produced spec. Check and fix directly:
 - Every rule owned by external system names its authority; no external rule rewritten as product rule.
 
 Deviation → fix spec. Doubt about business intent → ask user.
+
+## Adversarial review (mandatory, after self-validation)
+
+You wrote the spec, so you read what you meant. Delegate one fresh reading: `Agent` with `subagent_type: adversarial-reviewer`, a `description`, prompt starting `mode: spec <path>`.
+
+- `## Review — CLEAR` → next step.
+- `## Review — GAPS` → each row into section 12 with its severity (`Blocking` / `Major`), merged with a row already asking the same thing.
+- Then every `Blocking` of section 12, one at a time, via **AskUserQuestion** (recommended answer first). Answered → write the answer into the body (rule, use case, data, scope) and remove the row. Unanswered stays: `/plan-implementation` refuses to start while one `Blocking` remains.
+- `Major` rows stay for the user to settle or for `/plan-implementation` to carry as assumptions.
 
 ## Next step
 

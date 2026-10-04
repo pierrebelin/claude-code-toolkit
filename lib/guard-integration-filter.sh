@@ -27,5 +27,5 @@ case "$cmd" in
   *--filter-class*|*--filter-method*) exit 0 ;;
 esac
 
-jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "IntegrationTests suite entière refusée : plus de 4 minutes là où le contexte impacté tient en une (test-scope.md §2-3, mesuré 602 s le 2026-09-10). Ajouter au moins un --filter-class construit sur les dossiers de production touchés, par exemple --filter-class \"*.Studio.Templates.Save.*\" ; les options sont répétables. Un doute de portée se règle en élargissant d un niveau, jamais en lançant toute la suite."}}'
+jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "Whole IntegrationTests suite refused: over 4 minutes where the impacted context fits in one (test-scope.md §2-3, measured 602 s on 2026-09-10). Add at least one --filter-class built on the production folders touched, for example --filter-class \"*.Studio.Templates.Save.*\"; the option is repeatable. A doubt about scope is settled by widening one level, never by running the whole suite."}}'
 exit 0

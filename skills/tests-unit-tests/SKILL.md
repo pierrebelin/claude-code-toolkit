@@ -19,7 +19,7 @@ Behaviour through real handler/service. Mock Infrastructure only. Batch supplied
 ## Non-negotiable rules
 
 - Test/class naming → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
-- **Every test covering a documented rule carries it**, under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its `## Règles métier` table. Two rules → two attributes. This attribute **is** traceability: table has no test column, rule with no trait counts untested (`scripts/rules-coverage.py`).
+- **Every test carries its rule** — `UnitTests` bind every test (`.claude/rules/tests.md`) — under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its `## Règles métier` table. Two rules → two attributes. This attribute **is** traceability: table has no test column, rule with no trait counts untested (`scripts/rules-coverage.py`).
 - Aggregate factory/method tested only through its handler/service. No orphan aggregate test.
 - Query: data in double, assert output. Command: assert `SavedEvents` type + content.
 - Never observe interaction: no spy, counter, `CallCount`, `Called`, `Received`, `Verify`, call count — not even for cost.
@@ -33,13 +33,13 @@ Behaviour through real handler/service. Mock Infrastructure only. Batch supplied
 
 ```text
 tests/{{PRODUCT}}.CoreTests/
-├── Doubles/Mock[Repository].cs      (doubles partages, references par UnitTests)
-└── DataBuilder/[Entity]Builder.cs   (builders partages)
+├── Doubles/Mock[Repository].cs      (shared doubles, referenced by UnitTests)
+└── DataBuilder/[Entity]Builder.cs   (shared builders)
 
 tests/{{PRODUCT}}.UnitTests/
-└── [BoundedContext]/[Feature]/[Handler]/
-    ├── [Handler]Tests.cs
-    └── [Handler]Fixture.cs
+└── [BoundedContext]/[Feature]/[Action][Entity]/
+    ├── [Action][Entity]Tests.cs
+    └── [Action][Entity]Fixture.cs
 ```
 
 `CoreTests` = shared test infrastructure (doubles, builders, assets) referenced by `UnitTests`, not a suite. Double exists for nearly every repository — extend it, never create local `Doubles/` inside `UnitTests`. Follow local names where they exist: template never justifies a parallel file or fixture.
@@ -61,6 +61,7 @@ public sealed class Create[Entity]Tests
     }
 
     [Fact]
+    [Trait("RM", "Create[Entity]/RL-01")]
     public async Task ShouldThrowEmptyNameException_WhenNameIsEmpty()
     {
         await Assert.ThrowsAsync<EmptyNameException>(() =>
@@ -68,6 +69,7 @@ public sealed class Create[Entity]Tests
     }
 
     [Fact]
+    [Trait("RM", "Create[Entity]/RM-03")]
     public async Task ShouldEmit[Entity]CreatedEvent_WhenSuccessful()
     {
         await _fixture.WithValidName().Execute();
@@ -129,7 +131,7 @@ public sealed class Mock[Entity]Repository : I[Entity]Repository
 
 ## Verification
 
-- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore --filter-class "*[Handler]Tests"` green
+- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore --filter-class "*[Action][Entity]Tests"` green
 - [ ] Real handler under test; Infrastructure mocks only
 - [ ] Query by result, command by `SavedEvents`
 - [ ] No direct aggregate test, no spy, no counter, no interaction assertion; no comment added

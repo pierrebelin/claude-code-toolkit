@@ -14,6 +14,10 @@
 # Usage:
 #   bash .claude/evals/run.sh                    # every cases/*.json
 #   bash .claude/evals/run.sh -v cases/guard-git.json
+#   LATENCY_MAX_MS=200 bash .claude/evals/run.sh   # looser latency budget
+#
+# Every hook case is also timed: a hook whose median exceeds its budget fails the
+# run like a wrong decision would (budgets below LATENCY_MAX_MS).
 #
 # Case file shape:
 #   { "fixtures": [ {"path": "big.cs", "lines": 300, "kind": "sparse|flat|md|transcript|stub|stub-error|stub-slow|cs-flat|cs-loop|cs-filter|text", "ctx": N, "content": "..." } ],
@@ -48,6 +52,13 @@ CLAUDE_DIR="$ROOT/.claude"
 FIX="$HERE/.fixtures"
 RUN="eval-$$-$(date +%s)"
 ERRF="/tmp/claude-evalerr-$RUN"
+LATF="/tmp/claude-evallat-$RUN"
+# Median latency budget per hook, in ms. Measured 2026-10-02 on macOS arm64: every
+# hook 18-38 ms except handler-claude-md-check (145 ms, indexes every trait under
+# tests/ on each Edit|Write). Budget = about twice the measure, so a regression
+# that doubles a hot-path hook fails the run. Slower machine: LATENCY_MAX_MS=200.
+LATENCY_MAX_MS="${LATENCY_MAX_MS:-80}"
+LATENCY_SLOW_HOOKS="hooks/handler-claude-md-check.sh:300"
 VERBOSE=0
 files=()
 for a in "$@"; do
@@ -169,6 +180,9 @@ jc() { printf '%s' "$1" | jq -c "$2"; }
 
 ENVARGS=()
 
+# /bin/bash is 3.2 on macOS: no $EPOCHREALTIME, and BSD date has no %N.
+now_ms() { perl -MTime::HiRes=time -e 'printf "%d\n", time * 1000'; }
+
 run_payload() {
   (cd "$ROOT" && printf '%s' "$2" | env ${ENVARGS[@]+"${ENVARGS[@]}"} bash "$CLAUDE_DIR/$1" 2>"$ERRF")
 }
@@ -261,7 +275,10 @@ EOF
         run_payload "$hook" "$(expand "$(jc "$c" ".pre[$p]")" "$sid")" >/dev/null 2>&1
         p=$((p + 1))
       done
-      out=$(run_payload "$hook" "$(expand "$(jc "$c" '.input')" "$sid")"); rc=$?
+      payload=$(expand "$(jc "$c" '.input')" "$sid")
+      t0=$(now_ms)
+      out=$(run_payload "$hook" "$payload"); rc=$?
+      printf '%s\t%s\n' "$hook" "$(( $(now_ms) - t0 ))" >> "$LATF"
     else
       out=$(cd "$ROOT" && env ${ENVARGS[@]+"${ENVARGS[@]}"} bash -c "$(expand "$cmd" "$sid")" 2>"$ERRF"); rc=$?
     fi
@@ -285,4 +302,23 @@ EOF
 done
 
 printf '\n%d passed, %d failed\n' "$PASSED" "$FAILED"
-[ "$FAILED" -eq 0 ]
+
+if [ -s "$LATF" ]; then
+  printf '\nlatency (ms)                         cases  median    max\n'
+  sort -t$'\t' -k1,1 -k2,2n "$LATF" | awk -F'\t' -v dflt="$LATENCY_MAX_MS" -v slow="$LATENCY_SLOW_HOOKS" '
+    BEGIN { k = split(slow, kv, " "); for (j = 1; j <= k; j++) { split(kv[j], p, ":"); own[p[1]] = p[2] } }
+    function flush() {
+      if (n == 0) return
+      med = v[int((n + 1) / 2)]
+      cap = (h in own) ? own[h] : dflt
+      printf "  %-34s %5d %7d %6d%s\n", h, n, med, v[n], (med > cap ? "  OVER BUDGET" : "")
+    }
+    $1 != h { flush(); h = $1; n = 0 }
+    { v[++n] = $2 }
+    END { flush() }' > "$LATF.table"
+  cat "$LATF.table"
+  SLOW=$(grep -c 'OVER BUDGET' "$LATF.table")
+  [ "$SLOW" -eq 0 ] || printf '%d hook(s) over their median latency budget\n' "$SLOW"
+fi
+
+[ "$FAILED" -eq 0 ] && [ "${SLOW:-0}" -eq 0 ]

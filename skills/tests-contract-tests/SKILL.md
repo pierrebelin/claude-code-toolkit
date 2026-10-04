@@ -11,14 +11,14 @@ Freeze nominal HTTP contract: method, route, status, headers, body. Batch suppli
 
 ## Rules
 
-- Test covering rule of handler's `## Règles métier` table carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]`. Trait read in every suite — rule proven only here stops counting untested. No documented rule → no trait.
+- Every test carries the rule of the route's handler `## Règles métier` table it proves: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]` — `ContractTests` bind every test (`.claude/rules/tests.md`). Trait read in every suite — rule proven only here stops counting untested.
 - One `{HTTP} {route}` = one happy-path contract test. Error test only when public HTTP representation of error changes (status, headers, body).
-- GET: 200/204; POST: 201; PUT: 200; DELETE: 204.
+- Status per verb → `.claude/rules/webapi-endpoints.md`, `Responses` table.
 - Validation, business rules → handler unit tests. `GlobalExceptionHandler` or public error contract changes → freeze affected HTTP mapping once, never duplicate every business case per endpoint.
 - Reuse local fixture, `WebApplicationFactory`. Mock repositories only; handlers, Domain real.
 - Deterministic IDs. Scrub ULIDs, GUIDs, dates, paths before snapshotting.
 - List explicitly public headers route returns (`Location`, `ETag`, `Cache-Control`, `Content-Type`); never snapshot internal or volatile headers.
-- Never add comment. Delete yours, and useless ones **within lines you touch** — elsewhere report, don't delete. Keep those explaining decision, constraint, exception not deducible from naming. No status code in name: `ShouldCreateEntity()`.
+- Never add comment. Delete yours, and useless ones **within lines you touch** — elsewhere report, don't delete. Keep those explaining decision, constraint, exception not deducible from naming. Method naming → `.claude/rules/tests.md` (`Should{Result}_When{Condition}`); no status code in name: `ShouldCreateEntity_WhenRequestIsValid`.
 - Route unchanged, or lifecycle ≥2 operations: no test here; stay in plan or `/tests-e2e-tests`.
 
 ## Workflow
@@ -33,9 +33,10 @@ Freeze nominal HTTP contract: method, route, status, headers, body. Batch suppli
 public sealed class Create[Entity]Tests : BaseEndpointTests
 {
     [Fact]
-    public async Task ShouldCreate[Entity]()
+    [Trait("RM", "Create[Entity]/RM-01")]
+    public async Task ShouldCreate[Entity]_WhenRequestIsValid()
     {
-        var request = [Entity]Fixture.CreateRequest();
+        var request = Create[Entity]Fixture.CreateRequest();
 
         var response = await Client.PostAsJsonAsync("entities", request);
 

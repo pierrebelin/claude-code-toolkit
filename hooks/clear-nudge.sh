@@ -42,7 +42,7 @@ case "$last" in ''|*[!0-9]*) last=0 ;; esac
 printf '%s' "$step" > "$marker"
 
 k=$(( ctx / 1000 ))
-msg="Contexte : ~${k}k tokens rejoués à chaque tour (usage du dernier message assistant). Si la phase en cours est terminée, le dire à l'utilisateur en fin de réponse : \`/clear\` avec un brief de dix lignes coûte moins que de continuer, et \`/compact\` n'est jamais une option (~60k tokens injectés). Si la phase continue, continuer : ce n'est qu'un nombre."
+msg="Context: ~${k}k tokens replayed on every turn (usage of the last assistant message). If the current phase is finished, tell the user at the end of the answer: \`/clear\` with a ten-line brief costs less than carrying on, and \`/compact\` is never an option (~60k tokens injected). If the phase goes on, go on: this is only a number."
 
 jq -cn --arg c "$msg" \
   '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $c}}'

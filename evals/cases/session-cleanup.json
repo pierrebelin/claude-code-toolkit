@@ -2,7 +2,7 @@
   "cases": [
     {
       "name": "every family this session left in /tmp is dropped, not just the two that were listed",
-      "cmd": "for p in graphify-seen readbounds-seen catbounds-seen affected-seen batching-nudge batching-tick delegation clearnudge; do : > /tmp/claude-$p-{{SID}}; done; printf '{\"session_id\":\"{{SID}}\"}' | CLAUDE_CONFIG_DIR={{FIX}}/cfg-{{SID}} bash .claude/hooks/session-cleanup.sh; printf 'left=%s' \"$(ls /tmp/claude-*-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"",
+      "cmd": "for p in graphify-seen readbounds-seen catbounds-seen diffbounds-seen affected-seen batching-nudge batching-tick delegation clearnudge; do : > /tmp/claude-$p-{{SID}}; done; printf '{\"session_id\":\"{{SID}}\"}' | CLAUDE_CONFIG_DIR={{FIX}}/cfg-{{SID}} bash .claude/hooks/session-cleanup.sh; printf 'left=%s' \"$(ls /tmp/claude-*-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"",
       "expect": {
         "stdout": "left=0",
         "exit": 0

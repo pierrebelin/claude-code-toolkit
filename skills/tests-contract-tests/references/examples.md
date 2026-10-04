@@ -10,7 +10,8 @@ namespace {{PRODUCT}}.ContractTests.[Feature];
 public class Create[Entity]Tests : BaseEndpointTests
 {
     [Fact]
-    public async Task ShouldCreate[Entity]()
+    [Trait("RM", "Create[Entity]/RM-01")]
+    public async Task ShouldCreate[Entity]_WhenRequestIsValid()
     {
         var request = new Create[Entity]Request { Name = "Test" };
 
@@ -21,7 +22,7 @@ public class Create[Entity]Tests : BaseEndpointTests
 }
 ```
 
-## Snapshot stable
+## Stable snapshot
 
 ```csharp
 protected async Task VerifyResponse(HttpResponseMessage response, params string[] expectedHeaderNames)

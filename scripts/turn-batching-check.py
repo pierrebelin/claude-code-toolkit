@@ -29,11 +29,11 @@ DEFAULT_PROJECT = re.sub(r"[^A-Za-z0-9]+", "-", os.path.basename(REPO_ROOT)).str
 READ_TOOLS = {"Read", "Grep", "Glob"}
 # Emitted verbatim by .claude/hooks/read-bounds.sh — frozen literal.
 DENIAL_MARK = "Unbounded Read on"
-# Emitted verbatim by .claude/lib/guard-cat-bounds.sh — frozen literals.
-BASH_DENIAL_MARKS = ("Unbounded cat on", "Unbounded head on", "Unbounded tail on")
+# Emitted verbatim by .claude/lib/guard-cat-bounds.sh and guard-diff-bounds.sh — frozen literals.
+BASH_DENIAL_MARKS = ("Unbounded cat on", "Unbounded head on", "Unbounded tail on", "Unbounded patch")
 # Count line that .claude/tools/bulk-read writes on stderr.
 BULK_READ_RE = re.compile(r"\[bulk-read: (\d+) file\(s\), (\d+) bytes, (\d+) tokens in")
-FUNNEL_HEADER = "=== appel suivant un refus de garde (chaine principale) ==="
+FUNNEL_HEADER = "=== call following a guard denial (main chain) ==="
 BULK_LABEL = "bulk-read : "
 
 LB = {
@@ -86,11 +86,11 @@ def is_read_only(name, command):
 
 
 def after_denial(name, command, payload, refused):
-    """Classe l'appel qui suit un refus de garde : la seule mesure du chemin pris.
+    """Classify the call that follows a guard denial: the only measure of the path taken.
 
-    Le ratio forces/refuses dit si la garde tient ; ceci dit ce que le modele fait
-    a la place — Read borne, forcage, bulk-read, sous-agent, ou un cat qui deplace
-    le volume vers Bash (mesure 2026-09-09, d'ou guard-cat-bounds).
+    The forced/denied ratio says whether the guard holds; this says what the model
+    does instead — bounded Read, forcing, bulk-read, subagent, or a cat that moves
+    the volume to Bash (measured 2026-09-09, hence guard-cat-bounds).
     """
     if name == "Read":
         if "offset" in payload or "limit" in payload:
@@ -301,7 +301,7 @@ def main():
         print(f"\n{FUNNEL_HEADER}")
         for kind, count in funnel.most_common():
             print(f"  x{count:<3d} {kind}")
-    print(f"\n{BULK_LABEL}{bulk_calls} appel(s) · {bulk_bytes_total // 1000} ko tenus hors contexte")
+    print(f"\n{BULK_LABEL}{bulk_calls} call(s) · {bulk_bytes_total // 1000} kB kept out of context")
 
     snapshot = {
         "turns": turns,

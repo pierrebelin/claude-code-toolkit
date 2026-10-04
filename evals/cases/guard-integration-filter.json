@@ -5,7 +5,7 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
         "tool_input": {"command": "APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore"}},
-      "expect": {"decision": "deny", "reason": "IntegrationTests suite entière refusée"}
+      "expect": {"decision": "deny", "reason": "Whole IntegrationTests suite refused"}
     },
     {
       "name": "IntegrationTests redirected to a file, still whole, still denied",
@@ -47,7 +47,7 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "agent-abc", "transcript_path": "",
         "tool_input": {"command": "APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore"}},
-      "expect": {"decision": "deny", "reason": "suite entière"}
+      "expect": {"decision": "deny", "reason": "Whole IntegrationTests suite"}
     }
   ]
 }

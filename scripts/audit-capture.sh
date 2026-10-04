@@ -77,12 +77,20 @@ git diff --check >>"$OUT" 2>&1 || true
 
 # The diff drives everything below: the auditor walks it hunk by hunk, and the
 # mandatory suites are read off the paths it touches.
+# `git diff` alone ignores untracked files, and a batch's new handler and new tests
+# are exactly that: each one is appended as a /dev/null → file patch.
+batch_diff() {
+    git diff 2>/dev/null
+    git ls-files --others --exclude-standard -- src tests 2>/dev/null | while IFS= read -r f; do
+        git diff --no-index -- /dev/null "$f" 2>/dev/null
+    done
+}
 DIFF_FILE="$(mktemp)"
-git diff >"$DIFF_FILE" 2>/dev/null
+batch_diff >"$DIFF_FILE"
 DIFF_LINES=$(wc -l <"$DIFF_FILE" | tr -d ' ')
 
 section "changed files"
-git diff --name-only >>"$OUT" 2>&1
+{ git diff --name-only; git ls-files --others --exclude-standard -- src tests; } >>"$OUT" 2>&1
 
 section "batch diff ($DIFF_LINES lines)"
 if [[ "$DIFF_LINES" -gt "$DIFF_MAX" ]]; then

@@ -4,14 +4,14 @@ Read **after the global green loop** (`/implement-tdd` §3), never before — no
 
 ## 1. Plan update
 
-Implementation references a plan (`PLAN-*.md`, `SPEC-*-PLAN.md` under `todo/` or `docs/`) → **always** update it on completion:
+Implementation references a plan (`todo/<code>/[CODE]-PLAN.md` + its `[CODE]-PLAN-FX.md` sheet) → **always** update it on completion:
 - Batch/step → **✅ DONE** + date
 - Short summary of files created/modified
 - Deviations (extra files, different decisions) → document them
 - Assumptions made mid-batch → the sheet's `## Assumptions` section: `Hn — [what you assume] — to be validated by [who]`. An assumption later confirmed becomes a decision: move it to `## Decisions`.
 - **A correction that changes an RM/CU** → update the source spec too. Traceability runs both ways: the spec is the business source of truth.
 - A correction coming from manual validation → add `Correction Cn` under the affected behaviour; keep the original TDD history and the correction evidence.
-- For each finished behaviour: `TDD: RED ✅ · GREEN ✅ · COST ✅`.
+- For each finished behaviour: its sheet step's `TDD:` line reads `TDD: RED ✅ · GREEN ✅ · COST ✅` — flipped per behaviour during the loop (`/implement-tdd` §3); no ⬜ left, `pre-audit.sh` fails on one.
 
 ## 2. Handler documentation update
 
@@ -37,6 +37,11 @@ Capture carries status, diff, RM/CU + DDD/APP/PERF coverage, `build` / `Architec
 - Verdict `GAPS`: fix in main agent, re-run affected validations, re-delegate `/verify-ddd-tdd batch FX resume`, quoting previous verdict's deviation table. Audit then re-examines those deviations + diff since, not whole batch.
 - Two correction/audit rounds still in deviation → stop, return blocking deviations; work around neither plan nor audit.
 
+**Next-sheet review — after `VALID` only.** Next ⬜ batch FY in global plan → `Agent` with `subagent_type: adversarial-reviewer`, a `description`, prompt starting `mode: next-batch <sheet FY> <sheet FX>`. Last batch → skip. Launch it before assembling the summary (§4), in the same message as the first independent call.
+
+- `Major` (name, path, signature FX changed) → update FY sheet now, one `Edit`: you just delivered the value.
+- `Blocking` (design FX contradicts) → never settle: table under `Next batch:` in summary, user decides before `/implement-tdd batch FY`.
+
 ## 4. Closing
 
 Sheet + handler docs already done (§1-2). Remaining after verdict: summary + test recap table, assembled from `## RED` rows relayed during batch. No diff re-read; fix what verdict names, nothing else.
@@ -52,6 +57,8 @@ Summary: files created/modified, layers touched, **access cost per delivered beh
 | `[Class]Tests.[Method]` | RM-XX | Short description of the use case / business rule verified |
 
 One test per row, exact method name, the rule id it is tied to, concise description of the verified behaviour. Every row of every relayed `## RED` table appears here; a test deleted mid-batch does not. Assemble from those rows — don't rebuild from the diff.
+
+**`/learn` reminder** — after the table, run `python3 scripts/learn-candidates.py --count`. Non-empty output → print it verbatim as the line before the end-of-batch line. Never launch `/learn` yourself: next session, after `/clear`.
 
 **The handler half was cross-checked by `scripts/pre-audit.sh`** before the audit, through `python3 scripts/rules-coverage.py --untested` — do not run it again here. It reads the `## Règles métier` tables, confronts them with the `[Trait("RM", …)]` posed across **all** of `tests/`, and reports two things the recap cannot: a trait citing a rule absent from the tables (`DEAD REFERENCE` — a renamed or deleted rule), and a test with no trait in a class that carries some (`UNBOUND TEST`). That second signal is raised on `UnitTests` and `ContractTests` only: the other suites bind the tests that cover a documented rule, not all of theirs.
 

@@ -41,10 +41,10 @@ PY
 
 # Bound guards: denied vs forced. A guard whose every denial is forced saves no
 # context and costs one turn each time -- it needs a better refusal, not a lower
-# threshold. Counts are per (session, agent) files left in /tmp by the two hooks.
+# threshold. Counts are per (session, agent) files left in /tmp by the three guards.
 echo
 echo "bound guards (denied / forced):"
-for kind in readbounds catbounds; do
+for kind in readbounds catbounds diffbounds; do
   denied=0; forced=0
   for f in /tmp/claude-${kind}-seen-*; do
     [ -f "$f" ] || continue
