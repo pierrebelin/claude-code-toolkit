@@ -10,7 +10,7 @@
 #
 # Usage:
 #   bash .claude/tools/doctor            # every check, one line each
-#   bash .claude/tools/doctor --quiet    # only WARN and FAIL lines (SessionStart hook)
+#   bash .claude/tools/doctor --quiet    # only WARN, FAIL and NOTE lines (SessionStart hook)
 #   bash .claude/tools/doctor --evals    # also run .claude/evals/run.sh and report its summary
 #
 # Exit 1 when any check FAILs, 0 otherwise. The SessionStart registration appends
@@ -40,6 +40,8 @@ report() { # level name detail
     FAIL) FAILS=$((FAILS + 1)) ;;
     WARN) WARNS=$((WARNS + 1)) ;;
     ok) [ "$QUIET" -eq 1 ] && return ;;
+    # A reminder, not a defect: printed even with --quiet, counted nowhere.
+    NOTE) ;;
   esac
   if [ -n "$detail" ]; then
     printf '%-4s %-28s %s\n' "$level" "$name" "$detail"
@@ -68,16 +70,29 @@ command -v claude >/dev/null 2>&1 && report ok "binary claude" "$(claude --versi
 command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report ok "binary ast-grep" || report WARN "binary ast-grep" "scripts/access-cost.py exits 3, COUT stated by hand; structural search unavailable (brew install ast-grep)"
 
 # --- settings and hook registrations --------------------------------------------
+# The kit registers its hooks in settings.json (shared, README step 2); a team
+# that keeps them to itself moves the `hooks` key to settings.local.json. Both
+# files are read: the registrations are their union.
 SETTINGS="$CL/settings.local.json"
-if [ ! -e "$SETTINGS" ]; then
-  report FAIL "settings.local.json" "absent — not one project hook fires here (worktree? see TOOLING.md, post-checkout hook)"
-elif [ -L "$SETTINGS" ] && [ ! -f "$SETTINGS" ]; then
-  report FAIL "settings.local.json" "dead symlink → $(readlink "$SETTINGS")"
-elif ! jq -e . "$SETTINGS" >/dev/null 2>&1; then
-  report FAIL "settings.local.json" "invalid JSON — every hook registration is lost"
+commands=""
+local_hooks=0
+for f in "$CL/settings.json" "$SETTINGS"; do
+  name=$(basename "$f")
+  [ -e "$f" ] || continue
+  if [ -L "$f" ] && [ ! -f "$f" ]; then
+    report FAIL "$name" "dead symlink → $(readlink "$f")"; continue
+  fi
+  if ! jq -e . "$f" >/dev/null 2>&1; then
+    report FAIL "$name" "invalid JSON — every setting it carries is lost"; continue
+  fi
+  [ -L "$f" ] && report ok "$name" "symlink → $(readlink "$f")" || report ok "$name" "valid"
+  c=$(jq -r '.hooks // {} | to_entries[] | .value[] | .hooks[]? | .command // empty' "$f" 2>/dev/null)
+  [ "$f" = "$SETTINGS" ] && [ -n "$c" ] && local_hooks=1
+  [ -n "$c" ] && commands="$commands$c"$'\n'
+done
+if [ -z "$commands" ]; then
+  report FAIL "hook registrations" "no hook registered in settings.json nor settings.local.json — not one project hook fires here (worktree? see TOOLING.md)"
 else
-  [ -L "$SETTINGS" ] && report ok "settings.local.json" "symlink → $(readlink "$SETTINGS")" || report ok "settings.local.json" "valid"
-  commands=$(jq -r '.hooks // {} | to_entries[] | .value[] | .hooks[]? | .command // empty' "$SETTINGS" 2>/dev/null)
   missing=0
   while IFS= read -r c; do
     [ -n "$c" ] || continue
@@ -92,10 +107,10 @@ else
   done <<EOF
 $commands
 EOF
-  [ "$missing" -eq 0 ] && report ok "hook registrations" "$(printf '%s\n' "$commands" | grep -c . ) commands, every script present"
+  [ "$missing" -eq 0 ] && report ok "hook registrations" "$(printf '%s' "$commands" | grep -c . ) commands, every script present"
   for s in "$CL"/hooks/*.sh; do
     b=$(basename "$s")
-    printf '%s' "$commands" | grep -q "$b" || report WARN "hook script not registered" "$b — never fires (dead hook, or add it to settings.local.json)"
+    printf '%s' "$commands" | grep -q "$b" || report WARN "hook script not registered" "$b — never fires (dead hook, or add it to settings.json)"
   done
   case "$commands" in
     *CLAUDE_PROJECT_DIR*) report ok "hook paths" "relative to \$CLAUDE_PROJECT_DIR" ;;
@@ -118,7 +133,9 @@ if git -C "$ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
   common=$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null)
   case "$common" in /*) ;; *) common="$ROOT/$common" ;; esac
   pc="$common/hooks/post-checkout"
-  if [ -f "$pc" ] && grep -q 'settings.local.json' "$pc" 2>/dev/null; then
+  if [ "$local_hooks" -eq 0 ]; then
+    report ok "git post-checkout hook" "not needed — hooks registered in the committed settings.json reach every worktree"
+  elif [ -f "$pc" ] && grep -q 'settings.local.json' "$pc" 2>/dev/null; then
     report ok "git post-checkout hook" "links settings.local.json into new worktrees"
   else
     report FAIL "git post-checkout hook" "absent — a new worktree runs unguarded (bash scripts/install-git-hooks.sh)"
@@ -126,7 +143,7 @@ if git -C "$ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
   main=$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
   here=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)
   if [ -n "$main" ] && [ "$here" != "$main" ]; then
-    [ -L "$SETTINGS" ] && report ok "worktree" "$here, settings linked from $main" \
+    { [ "$local_hooks" -eq 0 ] || [ -L "$SETTINGS" ]; } && report ok "worktree" "$here, hooks reach it from $main" \
       || report WARN "worktree" "$here has its own settings.local.json — edits here never reach $main"
   fi
 else
@@ -145,8 +162,8 @@ if [ -f "$GRAPH" ]; then
     esac
   fi
   log=/tmp/graphify-hook.log
-  if [ -f "$log" ] && tail -5 "$log" 2>/dev/null | grep -q 'Refusing'; then
-    report WARN "graphify autosync" "last run refused to overwrite a smaller graph — graphify update . --force after a deleting refactor"
+  if [ -f "$log" ] && tail -5 "$log" 2>/dev/null | grep -q 'ALERT update refused'; then
+    report WARN "graphify autosync" "last run refused to overwrite a shrunken graph — graphify update . --force after a deleting refactor"
   fi
 else
   report FAIL "graphify graph" "graphify-out/graph.json absent — graphify update . (or GRAPHIFY-SETUP.md)"
@@ -185,6 +202,15 @@ done
 orphans=$(find -H /tmp -maxdepth 1 -name 'claude-*' -mtime +3 2>/dev/null | wc -l | tr -d ' ')
 [ "${orphans:-0}" -eq 0 ] && report ok "/tmp state" "nothing older than 3 days" \
   || report WARN "/tmp state" "$orphans claude-* file(s) older than 3 days survived session-cleanup.sh — check its PREFIXES list"
+
+# --- /learn backlog -------------------------------------------------------------
+# Verdict deviations nobody turned into a rule yet. The script only refreshes its
+# own transcript cache (.claude/learn-state.json, ignored by git): nothing in the
+# repo changes. Silent below two lots, so a single bad batch does not nag.
+if [ -f "$ROOT/scripts/learn-candidates.py" ]; then
+  backlog=$(python3 "$ROOT/scripts/learn-candidates.py" --count 2>/dev/null)
+  [ -n "$backlog" ] && report NOTE "learn" "$backlog"
+fi
 
 # --- evals on demand -----------------------------------------------------------
 if [ "$EVALS" -eq 1 ] && [ -f "$CL/evals/run.sh" ]; then

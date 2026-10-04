@@ -5,10 +5,10 @@ Only when the selected lifecycle needs more than the minimal template.
 ## Stable reference data
 
 ```csharp
-var blueprints = await fixture.Client.GetBlueprints(CancellationToken.None);
-Assert.True(blueprints.IsSuccess);
-Assert.NotEmpty(blueprints.Value!.Blueprints);
-var blueprintId = blueprints.Value.Blueprints[0].Id;
+var categories = await fixture.Client.GetProductCategories(CancellationToken.None);
+Assert.True(categories.IsSuccess);
+Assert.NotEmpty(categories.Value!.Categories);
+var categoryId = categories.Value.Categories[0].Id;
 ```
 
 Read reference data, never modify it. Mutable data the test creates is deleted at the end of the journey.

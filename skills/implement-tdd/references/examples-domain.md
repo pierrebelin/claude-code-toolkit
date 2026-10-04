@@ -154,9 +154,9 @@ Aggregate-centred. Includes the `Save` method for domain events:
 ```csharp
 public interface IProductRepository
 {
-    Task<Product?> GetProduct(ProductId id, OrganizationId organizationId, CancellationToken ct);
-    Task<Product?> GetProductByName(string name, OrganizationId organizationId, CancellationToken ct);
-    Task<Paging<Product>> GetProducts(OrganizationId organizationId, PaginateQuery? query, CancellationToken ct);
+    Task<Product> GetProduct(ProductId id, OrganizationId organizationId, CancellationToken ct); // throws ProductNotFoundException
+    Task<bool> ExistsProductWithName(string name, OrganizationId organizationId, CancellationToken ct);
+    Task<Paging<Product>> GetProducts(OrganizationId organizationId, PaginateQuery query, CancellationToken ct);
     Task Save(List<IDomainEvent<ProductId>> events, CancellationToken ct);
 }
 ```

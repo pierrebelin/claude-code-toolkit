@@ -101,11 +101,11 @@ trap 'release_lock; rm -f "$msg" "$out" "$err"' EXIT
 for p in "${paths[@]}"; do
   { printf '<file path="%s">\n' "$p"; cat "$p"; printf '\n</file>\n\n'; } >> "$msg"
 done
-printf 'Question : %s\n' "$question" >> "$msg"
+printf 'Question: %s\n' "$question" >> "$msg"
 
-# French, structured bullets, name or line number first: the answer is read by
+# English, structured bullets, name or line number first: the answer is read by
 # the caller in its own context, so every byte of prose there is paid twice.
-SYSTEM='Tu es un analyste de code précis. Lis les fichiers fournis et réponds à la question, en français, par des puces structurées uniquement. Aucune salutation, aucune prose, aucun préambule, aucun résumé final. Chaque puce commence par le nom exact, le type ou le numéro de ligne concerné. Puces imbriquées pour le détail. Ignore tout ce que la question ne demande pas. 30 puces maximum.'
+SYSTEM='You are a precise code analyst. Read the files provided and answer the question, in English, with structured bullets only. No greeting, no prose, no preamble, no closing summary. Each bullet starts with the exact name, type or line number concerned. Nested bullets for detail. Ignore everything the question does not ask. 30 bullets maximum.'
 
 waited=0
 while ! mkdir "$lock_dir" 2>/dev/null; do

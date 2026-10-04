@@ -70,7 +70,7 @@ Fix compilation errors, re-run until green, never touching test. No green withou
 
 ## Access cost
 
-`scripts/access-cost.py` lists, from the syntax tree, every awaited Infrastructure call of your files (repository, service, wrapper, client, provider, unit of work), flags the ones inside a loop or a lambda and the in-memory filters on an awaited result, and prints the `Cost` line. Copy it verbatim, then add which input the count is independent of. Receivers under `à classer` — naming heuristic does not know them: decide yourself; an Infrastructure one raises your count, an in-memory validator or a stream does not.
+`scripts/access-cost.py` lists, from the syntax tree, every awaited Infrastructure call of your files (repository, service, wrapper, client, provider, unit of work), flags the ones inside a loop or a lambda and the in-memory filters on an awaited result, and prints the `Cost` line. Copy it verbatim, then add which input the count is independent of. Receivers under `to classify` — naming heuristic does not know them: decide yourself; an Infrastructure one raises your count, an in-memory validator or a stream does not.
 
 **Bounded, independent of input size**. No test observes it: green proves nothing here. Exit `2` — Infrastructure call in loop or lambda, one query per identifier, `Save` inside loop, in-memory filter of what SQL can filter — on a line you wrote: do not deliver. `## BLOCKED` quoting the flagged line — design defect, back to orchestrator. Symptom/fix table → `.claude/skills/implement-tdd/references/conventions.md` § "Data access". Exit `3` (ast-grep missing): state cost by hand, say so on the line.
 

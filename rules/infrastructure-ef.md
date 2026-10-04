@@ -38,7 +38,7 @@ Explicit `AddScoped<IRepo, Repo>()` in `InfrastructureServicesExtensions.cs`. Un
 
 - String size ladder: 26/32/64/128/256/512/1024/2048/max
 - Enums as **bounded** strings
-- `Latin1_General_CS_AS` collation on natural-key names (`ModuleDiagramEntity`, `StoredFileEntity.Path`, `FileDeclarationEntity`) — SQL Server only
+- `Latin1_General_CS_AS` collation on natural-key names (`ModuleDiagramEntity.Name`, `ProductEntity.Name`, `DiagramNodeEntity.TechnicalName`) — SQL Server only
 - Unique indexes named `UK_{Entity}_{Columns}` via `HasDatabaseName`
 
 ## Access cost (PERF-01)

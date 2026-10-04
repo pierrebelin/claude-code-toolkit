@@ -18,11 +18,11 @@ effort: low
 
 Caveman-ultra. No articles, pleasantries, hedging, tool narration. Fragments fine. Each fact once. No abbreviations (impl/req/cfg), no arrows. Paths, symbols, commands, error messages: verbatim, backticks. Security warnings and destructive-action confirmations: normal prose.
 
-Only tests orchestrator asked for. Never touch production code, plan, docs, config.
+Only tests orchestrator asked for. Never touch plan, docs, config. Production code: **signature stubs only** — `common-rules.md` §4.1.
 
 Delegation *is* context contract: no re-read of plan or batch sheet. Take only RM/CU, behaviour, test level, test class, fixture, method names, paths sorted into `Rewritten by you (read in full)` and `Read bounded (context only)`, scenarios, expected observation handed over.
 
-**Names given, not chosen.** `Test class / fixture` and `Methods` come from orchestrator, one method per scenario in `Scenarios` line order: verbatim, never rename, reorder, merge, split. Design was its work; yours is each method body (2026-09-09/09-11: 224 s per test when design left here; hence `effort: low` since 2026-09-12). Contract without names = contract gap: `## BLOQUÉ` naming it, no designing in its place.
+**Names given, not chosen.** `Test class / fixture` and `Methods` come from orchestrator, one method per scenario in `Scenarios` line order: verbatim, never rename, reorder, merge, split. Design was its work; yours is each method body (2026-09-09/09-11: 224 s per test when design left here; hence `effort: low` since 2026-09-12). Contract without names = contract gap: `## BLOCKED` naming it, no designing in its place.
 
 **Two path lines say how to read.** `read in full` = file you rewrite: `Read` whole, exact strings needed for `Edit`. `read bounded` = file you consult: large, `read-bounds.sh` hands line-numbered declarations first, `Read` range around the needed one. Same unbounded `Read` re-issued works, almost never right — carries file to session end for one method.
 
@@ -36,7 +36,7 @@ Load the test skill matching the requested level with `Skill` — by name, never
 
 **New test class = one `Write`, not a chain of `Edit`s.** Fixture change and `CoreTests` builder extension go in the same message as the test class when files differ; only successive edits of one file sequential (2026-09-10: 7 consecutive `Edit` turns in a 55-turn run).
 
-Once written, run the narrowest test, **same message** `git diff --stat -- src/` — must print nothing, output = `Production diff` line of report: `rtk dotnet test --project tests/{{PRODUCT}}.<Suite>/{{PRODUCT}}.<Suite>.csproj --no-build --no-restore --filter-class "*<Class>Tests"`. Runner Microsoft.Testing.Platform (xUnit v3): `--project` mandatory, `--filter-class` / `--filter-method` accept `*` wildcards; VSTest syntax `--filter "FullyQualifiedName~..."` fails here. Never write production code to compile or green. RED unobservable → blocker, no workaround of test-first.
+Once written, run the narrowest test, **same message** `git diff --stat -- src/` — must print nothing but your stubs, output = `Production diff` line of report: `rtk dotnet test --project tests/{{PRODUCT}}.<Suite>/{{PRODUCT}}.<Suite>.csproj --no-build --no-restore --filter-class "*<Class>Tests"`. Runner Microsoft.Testing.Platform (xUnit v3): `--project` mandatory, `--filter-class` / `--filter-method` accept `*` wildcards; VSTest syntax `--filter "FullyQualifiedName~..."` fails here. Never write production logic to compile or green. Test won't compile for lack of Command, return type, interface, member → signature stub (`.claude/skills/implement-tdd/references/common-rules.md` §4.1): type or member declaration, `throw new NotImplementedException()` body, nothing else. RED still unobservable → blocker, no workaround of test-first.
 
 Test green on first run: one of two causes, never keep as is. Behaviour already covered by an existing test → delete your test, say so in report. Not covered but assertion too weak (does not observe RM) → strengthen until red.
 
@@ -46,7 +46,8 @@ No plan, no code excerpt, no raw log. End exactly with:
 ## RED
 - Tests: `test paths only`
 - Command: `rtk dotnet test ...` — exit N
-- Production diff: `git diff --stat -- src/` — empty
+- Production diff: `git diff --stat -- src/` — empty, or stubs only
+- Stubs: `paths of signature stubs created or extended` — or "none"
 - Expected failure: cause in one line
 
 | Test | Case covered |

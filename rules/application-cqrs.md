@@ -57,7 +57,7 @@ Required dependency never optional: no `IFooService? service = null`. Can be abs
     └── {Action}{Entity}CommandHandler.cs
 ```
 
-`{Context}` = bounded context root (`Catalog/`, `Studio/`, `AuditTrails/`, `Import/`, `Peers/`).
+`{Context}` = bounded context root (`Catalog/`, `Studio/`, `Core/`).
 
 ## Naming
 

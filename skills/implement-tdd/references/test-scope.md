@@ -69,12 +69,12 @@ APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/
   --no-build --no-restore \
   --filter-class "*.Studio.Diagrams.*" \
   --filter-class "*.Studio.ModuleDiagrams.Save.*" \
-  --filter-class "*.Studio.Templates.Save.*"
+  --filter-class "*.Catalog.Products.Save.*"
 ```
 
-Namespace roots under `{{PRODUCT}}.IntegrationTests`: `Licensing`, `Catalog`, `Database`, `Dsl`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
+Namespace roots under `{{PRODUCT}}.IntegrationTests`: `Catalog`, `Database`, `Dsl`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
 
-**Selection rule**: modified repository → its aggregate's namespace **and** that of any aggregate whose persistence test builds it. One level deeper (`*.Keyrings.ProvisionKey.*` rather than `*.Keyrings.*`) as soon as the touched method is identified; one level up only when a shared signature changes. Doubt about scope → widen one level, never run everything.
+**Selection rule**: modified repository → its aggregate's namespace **and** that of any aggregate whose persistence test builds it. One level deeper (`*.Catalog.Products.Save.*` rather than `*.Catalog.Products.*`) as soon as the touched method is identified; one level up only when a shared signature changes. Doubt about scope → widen one level, never run everything.
 
 ## 4. Reporting scope
 

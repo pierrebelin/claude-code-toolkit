@@ -9,8 +9,8 @@
     {
       "name": "VAR=value dotnet test is prefixed behind the assignment",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "STID_TEST_MODE=true dotnet test --project tests/X/X.csproj --no-build"}},
-      "expect": {"decision": "allow", "command": "STID_TEST_MODE=true rtk dotnet test"}
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "APP_TEST_MODE=true dotnet test --project tests/X/X.csproj --no-build"}},
+      "expect": {"decision": "allow", "command": "APP_TEST_MODE=true rtk dotnet test"}
     },
     {
       "name": "an already prefixed rtk dotnet test is not prefixed twice",

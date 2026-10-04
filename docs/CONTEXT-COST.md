@@ -83,7 +83,7 @@ without reading their table.
 
 ## Where the bill goes (30 days to 2026-09-12)
 
-`cc-usage.py --days 30 --project Configurator.Back --models`, list price, 157 sessions,
+`cc-usage.py --days 30 --project {{PRODUCT}}.Back --models`, list price, 157 sessions,
 $1 333. Cache reads priced at 10 % of input, writes at 125 %.
 
 | Term | Tokens | Share |
@@ -113,7 +113,7 @@ is not in dollars (Haiku was $5.60 of the 30 days) but in what never enters the 
 `context-log.tsv`, 2026-09-09 to 2026-09-12 (three days): ~573k tokens of instruction files
 loaded — 276k by `nested_traversal`, 189k by `path_glob_match`, 108k at `session_start`.
 `Configurations/CLAUDE.md` (17.7 kB, 4.4k tokens) loaded 33 times, 146k tokens, more than the
-root `CLAUDE.md` (2.9k × 38 = 111k); `Keyrings/CLAUDE.md` (25.9 kB) 9 times, 59k. Before
+root `CLAUDE.md` (2.9k × 38 = 111k); `ModuleDiagrams/CLAUDE.md` (25.9 kB) 9 times, 59k. Before
 cutting anything, `context-log.sh` logs `agent_id` since 2026-09-12 so `context-report.sh` can
 split the main chain (Opus) from the subagents (30× cheaper per kB). Decide on the split, not
 on the total.
@@ -134,8 +134,8 @@ incremental inside the agents.
 | `tdd-implementer` | 19 | 187 s | 23.6 | 38 s | 6.3 s |
 | `ddd-tdd-auditor` | 13 | 309 s | 10.3 | 46 s | 25.5 s |
 
-Per batch: 2.2 audits (first pass + `reprise`), 10 to 28 min. Of 30 verdicts, 27 ECARTS, and
-the recurring first-round causes were mechanical: "N identifiants jamais classés" (8, Bloquant),
+Per batch: 2.2 audits (first pass + `resume`), 10 to 28 min. Of 30 verdicts, 27 GAPS, and
+the recurring first-round causes were mechanical: "N ids never classified" (8, Blocking),
 `///` rewritten in production (5), `.claude/` hunks outside the batch (4), a trait citing a rule
 absent from the handler table, an unclosed sheet, a stale feature index — every one of them
 decidable by a script, and every one produced *after* the audit by `closing.md`, which then ran
@@ -149,18 +149,18 @@ Changes made on 2026-09-12, to be measured against the table above after five ba
 4. `## RED` carries `Diff production`, `## GREEN` carries `Diff tests`: the orchestrator no
    longer opens the diff to check test-first integrity.
 5. The RED contract names the test class, the fixture and the methods; `tdd-test-author` runs at
-   `effort: low`. Watch its round trips and its share of `## BLOQUÉ`; back to `medium` if the
+   `effort: low`. Watch its round trips and its share of `## BLOCKED`; back to `medium` if the
    RED-on-assertion rate drops.
 6. RED(n+1) is launched in the same message as GREEN(n) when test files are disjoint and no stub
    is shared. Watch for `CS2012` / `file in use` build collisions in the agent reports.
 7. `guard-integration-filter.sh` denies a whole `IntegrationTests` run.
 
 8. Every feature index `CLAUDE.md` under `Application/` (33 files) reduced to its intro plus
-   one pointer line to `DESIGN.md`; use-case tables, `N règles, M testées` counters, services
+   one pointer line to `DESIGN.md`; use-case tables, `N rules, M tested` counters, services
    and aggregate lists dropped — `ls` and `graphify explain` carry that. Chapters moved to
    `DESIGN.md` beside the index, never auto-loaded. `rules-coverage.py --fix-index`, the
    closing step and the checklist item that maintained the counters are gone with them (2
-   "index périmé" deviations on 30 verdicts). Check after five batches: `context-report.sh`
+   "stale index" deviations on 30 verdicts). Check after five batches: `context-report.sh`
    should show `DESIGN.md` as a few bounded `Read`s and the indexes' `nested_traversal` tokens
    divided by ~10; if the reads compensate the loads, move the chapters back — nothing left
    the folder.
@@ -207,14 +207,14 @@ turns, $26.8), `123817d9` and `eb3b18a4` (plans) and the subagent runs of 2026-0
     inside loops in Application, 6 handlers with a genuine N+1 (`TransferConfiguration` also
     saves inside its loop) — pre-existing debt the script labels, never a batch's deviation.
     Check after five batches: `Read` under `src/` between a `## GREEN` and the next `Agent`
-    call should be zero, and the `Coût` axis should stop appearing in `reprise` verdicts.
+    call should be zero, and the `Cost` axis should stop appearing in `resume` verdicts.
 
 Seen, not acted on: the `skill_listing` attachment is 12.3 kB per session (≈ 3 k tokens on every
 turn of every session), every plugin skill description included; a plan and a batch run in one
 session (`18756f1b`: 85 turns, `Read` 44.7 k tokens carried through the batch) — a guard was
 proposed and not decided.
 
-Not done: a lighter `reprise` auditor (Sonnet or `effort: medium`); `/effort medium` for the
+Not done: a lighter `resume` auditor (Sonnet or `effort: medium`); `/effort medium` for the
 orchestrator; a rewrite module forcing suite output to a file; the RED contract's test design
 (method names, scenarios) produced by `/plan-implementation`. Declined on 2026-09-12. The
 `## Ancrages` table of item 13 is not that: paths only, the design stays with the orchestrator.

@@ -1,0 +1,222 @@
+{
+  "fixtures": [
+    {
+      "path": "tr/aaaaaaaa-1/subagents/agent-1.jsonl",
+      "kind": "text",
+      "content": "{\"type\": \"assistant\", \"timestamp\": \"2026-09-30T10:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"## Verdict — GAPS\\n\\n| Severity | Axis | Gap | Evidence | Expected fix |\\n|---|---|---|---|---|\\n| Major | Stale plan | Sheet not updated | `x.cs:1` | fix |\\n| Minor | Simplification | ignored | `x.cs:1` | fix |\\n\"}]}}\n"
+    },
+    {
+      "path": "tr/aaaaaaaa-1/subagents/agent-1.meta.json",
+      "kind": "text",
+      "content": "{\"agentType\": \"ddd-tdd-auditor\", \"description\": \"Audit batch F1\"}"
+    },
+    {
+      "path": "tr/bbbbbbbb-2/subagents/agent-2.jsonl",
+      "kind": "text",
+      "content": "{\"type\": \"assistant\", \"timestamp\": \"2026-09-30T10:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"## Verdict — GAPS\\n\\n| Severity | Axis | Gap | Evidence | Expected fix |\\n|---|---|---|---|---|\\n| Blocking | Scope | Hunk with no RM | `x.cs:1` | fix |\\n\"}]}}\n"
+    },
+    {
+      "path": "tr/bbbbbbbb-2/subagents/agent-2.meta.json",
+      "kind": "text",
+      "content": "{\"agentType\": \"ddd-tdd-auditor\", \"description\": \"Audit batch F1\"}"
+    },
+    {
+      "path": "tr/cccccccc-3/subagents/agent-3.jsonl",
+      "kind": "text",
+      "content": "{\"type\": \"assistant\", \"timestamp\": \"2026-09-30T10:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"## Verdict — GAPS\\n\\n| Severity | Axis | Gap | Evidence | Expected fix |\\n|---|---|---|---|---|\\n| Major | Plan | quoted by a docs agent | `x.cs:1` | fix |\\n\"}]}}\n"
+    },
+    {
+      "path": "tr/cccccccc-3/subagents/agent-3.meta.json",
+      "kind": "text",
+      "content": "{\"agentType\": \"general-purpose\", \"description\": \"Docs\"}"
+    },
+    {
+      "path": "tr1/aaaaaaaa-1/subagents/agent-1.jsonl",
+      "kind": "text",
+      "content": "{\"type\": \"assistant\", \"timestamp\": \"2026-09-30T10:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"## Verdict — GAPS\\n\\n| Severity | Axis | Gap | Evidence | Expected fix |\\n|---|---|---|---|---|\\n| Major | Plan | single batch | `x.cs:1` | fix |\\n\"}]}}\n"
+    },
+    {
+      "path": "tr1/aaaaaaaa-1/subagents/agent-1.meta.json",
+      "kind": "text",
+      "content": "{\"agentType\": \"ddd-tdd-auditor\", \"description\": \"Audit batch F1\"}"
+    },
+    {
+      "path": "mem/MEMORY.md",
+      "kind": "text",
+      "content": "# Memory Index\n\n- [A](a.md) — first summary\n- [A bis](a.md) — contrary summary\n- [C](c.md) — no type\n- [D](d.md) — file gone\n"
+    },
+    {
+      "path": "mem/a.md",
+      "kind": "text",
+      "content": "---\nname: a\ndescription: \"desc\"\nmetadata:\n  type: project\n---\n\nSee `scripts/learn-candidates.py`, `evals/run.sh`, branch `feature/x`, and `src/Nope/Gone.cs:12`.\n"
+    },
+    {
+      "path": "mem/b.md",
+      "kind": "text",
+      "content": "---\nname: b\ndescription: \"desc\"\nmetadata:\n  type: project\n---\n\nNever indexed.\n"
+    },
+    {
+      "path": "mem/c.md",
+      "kind": "text",
+      "content": "---\nname: c\ndescription: \"desc\"\nmetadata:\n---\n\nNo type.\n"
+    }
+  ],
+  "cases": [
+    {
+      "name": "two audited batches with Blocking/Major rows raise the nudge; Minor and non-auditor agents are ignored",
+      "cmd": "python3 scripts/learn-candidates.py --count",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "2 untreated verdict gap(s) across 2 batches"
+      }
+    },
+    {
+      "name": "a single batch stays silent",
+      "cmd": "python3 scripts/learn-candidates.py --count | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/tr1",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "bytes=0"
+      }
+    },
+    {
+      "name": "'Stale plan' folds into the frozen axis Plan",
+      "cmd": "python3 scripts/learn-candidates.py --axis plan",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "Sheet not updated"
+      }
+    },
+    {
+      "name": "an axis marked treated leaves the backlog and the nudge goes silent",
+      "cmd": "python3 scripts/learn-candidates.py --treat-axis Plan >/dev/null && python3 scripts/learn-candidates.py --count | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "bytes=0"
+      }
+    },
+    {
+      "name": "a refused motif is handed back in the summary",
+      "cmd": "python3 scripts/learn-candidates.py --refuse 'motif test' >/dev/null && python3 scripts/learn-candidates.py",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "- motif test"
+      }
+    },
+    {
+      "name": "doctor --quiet prints the backlog as a NOTE, not a WARN",
+      "cmd": "bash .claude/tools/doctor --quiet",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/tr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "stdout": "NOTE learn"
+      }
+    },
+    {
+      "name": "--memory flags a memory file indexed twice",
+      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "env": {
+        "LEARN_MEMORY": "{{FIX}}/mem",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "indexed 2 times: a.md"
+      }
+    },
+    {
+      "name": "--memory flags a memory file missing from the index",
+      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "env": {
+        "LEARN_MEMORY": "{{FIX}}/mem",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "not indexed: b.md"
+      }
+    },
+    {
+      "name": "--memory flags an index line whose file is gone",
+      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "env": {
+        "LEARN_MEMORY": "{{FIX}}/mem",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "indexed, file gone: d.md"
+      }
+    },
+    {
+      "name": "--memory flags a frontmatter without type",
+      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "env": {
+        "LEARN_MEMORY": "{{FIX}}/mem",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "frontmatter without type: c.md"
+      }
+    },
+    {
+      "name": "--memory flags a cited repo path that no longer exists",
+      "cmd": "python3 scripts/learn-candidates.py --memory",
+      "env": {
+        "LEARN_MEMORY": "{{FIX}}/mem",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "cited path missing from repo: a.md → `src/Nope/Gone.cs`"
+      }
+    },
+    {
+      "name": "--memory keeps existing paths, paths relative to a repo folder and branch names out of the report",
+      "cmd": "python3 scripts/learn-candidates.py --memory | grep -c 'learn-candidates.py\\|evals/run.sh\\|feature/x' | sed 's/^/count=/'",
+      "env": {
+        "LEARN_MEMORY": "{{FIX}}/mem",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "count=0"
+      }
+    },
+    {
+      "name": "--memory hands back entries kept after a refusal",
+      "cmd": "python3 scripts/learn-candidates.py --refuse 'keep: a.md' >/dev/null && python3 scripts/learn-candidates.py --memory",
+      "env": {
+        "LEARN_MEMORY": "{{FIX}}/mem",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json",
+        "LEARN_TRANSCRIPTS": "{{FIX}}/tr"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "- keep: a.md"
+      }
+    }
+  ]
+}

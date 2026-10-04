@@ -12,7 +12,7 @@ xUnit v3 / Microsoft Testing Platform. Assertions: **xUnit built-in only** — n
 | Suite | Scope |
 |-------|-------|
 | `CoreTests` | Shared library, not a suite: hand-written mocks (`Doubles/`, no Moq/NSubstitute) + fluent builders (`DataBuilder/`), fixtures, assets |
-| `UnitTests` | Domain logic + handlers on in-memory mocks, fixture builder pattern |
+| `UnitTests` | Handlers (Domain exercised through them) on in-memory mocks, fixture builder pattern |
 | `IntegrationTests` | SQL Server Testcontainers — needs Docker |
 | `ContractTests` | `WebApplicationFactory` + Verify snapshots |
 | `DslTests` | DSL parser, templates, presets |
@@ -23,7 +23,7 @@ xUnit v3 / Microsoft Testing Platform. Assertions: **xUnit built-in only** — n
 
 Target = **observable business behaviour** via public API, tied to a business rule. Never private helper or internal detail.
 
-Domain class never tested directly (`PortConstraintTests`) — always via use case or service (`ValidateDiagramTests`). Aggregate method exercised via its handler.
+Domain class, value object included, never tested directly (`PortConstraintTests`) — always via use case or service (`ValidateDiagramTests`). Aggregate method exercised via its handler.
 
 ## Traceability
 
@@ -39,7 +39,7 @@ Value: `{HandlerFolder}/{RM|RL-xx}` — handler folder name under `src/{{PRODUCT
 
 `handler-claude-md-check.sh` reports, on every edit of handler or handler test: rules with no trait, traits citing rule absent from table, tests with no trait in a class carrying some. Warning only, never blocking. Only `UnitTests`, `ContractTests` expected to bind every test — other suites bind those covering a documented rule.
 
-Tests outside handler folders (`Aggregates/`, `ValueObjects/`, `Core/`, `DslTests`) out of scope — no rule to bind.
+Tests outside handler folders (`Core/`, `DslTests`) out of scope — no rule to bind. No `Aggregates/` or `ValueObjects/` test folder: domain classes are covered through handlers.
 
 ## Naming
 

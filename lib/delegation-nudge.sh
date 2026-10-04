@@ -15,7 +15,7 @@
 # It does not deny. Any single read is legitimate; only the accumulation is not,
 # and a hook cannot tell which read is the wasteful one. So it states the count
 # and gets out of the way — the shape that works in batching-nudge.sh, which
-# nudges with "6 tours à un seul appel" rather than "pense à grouper". A number
+# nudges with "6 single-call turns" rather than "remember to batch". A number
 # the reader recognises is what makes a nudge land.
 #
 # Fires at the threshold, then at each doubling (6, 12, 24 files). Once per

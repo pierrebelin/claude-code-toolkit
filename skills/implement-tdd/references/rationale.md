@@ -28,10 +28,10 @@ Measurements and reasons behind `SKILL.md`, keyed by its headings. **Never load 
 - **`Diff production` / `Diff tests` lines.** Before 2026-09-12 the orchestrator opened the diff after every RED and GREEN for test-first integrity — one Opus turn per phase, 10 to 12 per batch, for a fact `git diff --stat` states in one line.
 - **Contract carries only what the agent can't know.** Each restatement of the agent's charter is paid on every delegation and becomes a second source that drifts.
 - **Signature means declaration.** A dictated body makes the orchestrator's own mistake read as the spec, and no review catches it: the code matches the contract.
-- **Name the ripple.** 2026-09-10: one `tdd-implementer` run opened `ConfigurationMapper.cs`, `ConfigurationRepository.cs` (550 lines), `MockConfigurationRepository.cs` and `SaveFixture.cs` (700 lines) unbounded, none named by the contract.
+- **Name the ripple.** 2026-09-10: one `tdd-implementer` run opened `ProductMapper.cs`, `ProductRepository.cs` (550 lines), `MockProductRepository.cs` and `SaveFixture.cs` (700 lines) unbounded, none named by the contract.
 - **Two stub lists.** A file `tdd-test-author` already created, announced "to create", sends the implementer looking for work that is done.
 - **GREEN contract carries current behaviour only.** 2026-09-09: two guards written ahead in behaviour 1's GREEN cost the removal, re-observation and restoration of the same code, plus a user interruption.
-- **COUT validated on a line, not a file.** 12 batch sessions (2026-09-07 to 09-12): 36 `## GREEN`, 34 orchestrator `Read` under `src/` right after them, 117 kB (~29 k tokens) carried to the end of each batch, each attaching the folder `CLAUDE.md` and the layer rules — to check a number the agent had stated from memory. `scripts/access-cost.py` states it from the syntax tree in 40 ms; the orchestrator reads its last line.
+- **COST validated on a line, not a file.** 12 batch sessions (2026-09-07 to 09-12): 36 `## GREEN`, 34 orchestrator `Read` under `src/` right after them, 117 kB (~29 k tokens) carried to the end of each batch, each attaching the folder `CLAUDE.md` and the layer rules — to check a number the agent had stated from memory. `scripts/access-cost.py` states it from the syntax tree in 40 ms; the orchestrator reads its last line.
 - **`SendMessage` under 3 turns, fresh `Agent` beyond.** `SendMessage` resumes the agent with its whole transcript, re-sent every further turn: an agent stopped at 49 turns carries ~80 k of context, every correction turn pays it. A fresh `Agent` restarts at ~17 k preamble + ~11 k reloaded rules and files. 2026-09-09: a 10-turn correction costs ~850 k in continuation against ~350 k fresh.
 
 ## 3. Global green loop
@@ -40,11 +40,11 @@ Measurements and reasons behind `SKILL.md`, keyed by its headings. **Never load 
 
 - **Whole suites once per batch.** A whole unit, contract or architecture suite run mid-loop proves nothing the filtered test didn't, and pays minutes per behaviour. Fewer cycles = fewer solution builds — what §2's regrouping buys.
 - **Suite output to a file.** 2026-09-08: `Bash` alone weighs $22.76 across the day, on 21 to 33 `rtk` calls per orchestrator session — a green suite's log carried to the end.
-- **One `Edit` per behaviour for the ticks.** 7 sessions (2026-09-09 to 09-11): 301 `Edit` in the orchestrator, 43 per batch, each an Opus round trip. Ticking RED, GREEN, COUT separately was ~10 of those per batch.
+- **One `Edit` per behaviour for the ticks.** 7 sessions (2026-09-09 to 09-11): 301 `Edit` in the orchestrator, 43 per batch, each an Opus round trip. Ticking RED, GREEN, COST separately was ~10 of those per batch.
 
 ## 4. Documentation, gate, audit
 
-- **Documentation before the audit.** 30 verdicts (2026-09-09 to 09-11): 27 ECARTS, 2.2 audits per batch at 5 min of Opus each. Recurring first-round causes — "N identifiants jamais classés" (8, Bloquant), `///` rewritten in production (5), `.claude/` hunks outside the batch (4), a trait citing a rule absent from the handler table, an unclosed sheet, a stale index — were all produced *after* the audit by the old closing order.
+- **Documentation before the audit.** 30 verdicts (2026-09-09 to 09-11): 27 GAPS, 2.2 audits per batch at 5 min of Opus each. Recurring first-round causes — "N ids never classified" (8, Blocking), `///` rewritten in production (5), `.claude/` hunks outside the batch (4), a trait citing a rule absent from the handler table, an unclosed sheet, a stale index — were all produced *after* the audit by the old closing order.
 - **The capture.** Handing it over keeps the audit from spending thirty turns collecting what one script produces in five seconds — 2026-09-08: five audits, 259 turns, not one carrying two tool calls.
 - **No hunk-by-hunk re-read at closing.** The auditor walks the diff with the same rules from an isolated context; doing it again in the orchestrator, which carries the whole batch, was the skill's most expensive duplicate.
 

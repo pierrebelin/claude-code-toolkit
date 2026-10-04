@@ -11,3 +11,5 @@ settings.local.json
 __pycache__/
 *.pyc
 evals/.fixtures/
+learn-state.json
+learn-state.json.tmp

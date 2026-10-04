@@ -17,7 +17,7 @@ sid=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unk
 # All six families, not two. Measured 2026-09-11, /tmp held 37 orphaned
 # claude-batching-nudge-*, 6 claude-catbounds-seen-*, plus delegation and affected
 # leftovers that nothing ever removed: only graphify and readbounds were listed.
-PREFIXES="graphify-seen readbounds-seen catbounds-seen affected-seen batching-nudge batching-tick delegation clearnudge implement-tdd-guard implement-tdd-effort effort"
+PREFIXES="graphify-seen readbounds-seen catbounds-seen diffbounds-seen affected-seen batching-nudge batching-tick delegation clearnudge implement-tdd-guard implement-tdd-effort effort"
 
 # Two directories, not one: implement-tdd-guard.sh and the effort state write to
 # ${TMPDIR:-/tmp}, which on macOS is /var/folders/... and never /tmp. Deduplicated

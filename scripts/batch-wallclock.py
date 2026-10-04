@@ -18,6 +18,11 @@ interval is attributed to what caused it.
   - agents: waiting on a subagent notification (background work)
   - human: waiting on a prompt, AskUserQuestion counted separately
 
+Tokens (--subagents, since 2026-10-02). Time per phase already came out through
+the agent type (RED = tdd-test-author, GREEN = tdd-implementer, audit =
+ddd-tdd-auditor); what each phase reads and writes was missing. A "main chain"
+row gives the orchestrator's share: 56 % of the tokens read over 26 batches.
+
 Usage:
   python3 scripts/batch-wallclock.py                        # batches found over 14 days
   python3 scripts/batch-wallclock.py --days 30
@@ -112,7 +117,7 @@ def analyse(entries):
                 g = groups[-1]
                 g["t_last"] = t
             else:
-                g = {"kind": "a", "mid": mid, "t_first": t, "t_last": t, "tools": [], "usage": None}
+                g = {"kind": "a", "mid": mid, "t_first": t, "t_last": t, "tools": [], "usage": None, "out": 0}
                 groups.append(g)
             usage = (o.get("message") or {}).get("usage") or {}
             if usage:
@@ -121,6 +126,7 @@ def analyse(entries):
                     + usage.get("cache_creation_input_tokens", 0)
                     + usage.get("cache_read_input_tokens", 0)
                 )
+                g["out"] = usage.get("output_tokens", 0)
             for b in blocks(o):
                 if b.get("type") != "tool_use":
                     continue
@@ -152,6 +158,7 @@ def analyse(entries):
     longest = (0.0, "", "")
     rounds = rounds_after = 0
     first_ctx = last_ctx = None
+    tok_in = tok_out = 0
     seen_audit = False
 
     for i, g in enumerate(groups):
@@ -162,6 +169,8 @@ def analyse(entries):
             if g["usage"]:
                 first_ctx = g["usage"] if first_ctx is None else first_ctx
                 last_ctx = g["usage"]
+                tok_in += g["usage"]
+            tok_out += g["out"]
             if i > 0:
                 cat["model"] += (g["t_last"] - groups[i - 1]["t_last"]).total_seconds()
             for tid, name, desc, t, inp in g["tools"]:
@@ -205,6 +214,7 @@ def analyse(entries):
         wall=wall, cat=cat, counts=counts, rounds=rounds, rounds_after=rounds_after,
         audits=audits, long_bash=long_bash, agent_calls=agent_calls, longest=longest,
         per_tool=per_tool, n_tool=n_tool, first=first_ctx, last=last_ctx,
+        tok_in=tok_in, tok_out=tok_out,
         start=groups[0]["t_first"] if groups else None,
     )
 
@@ -331,16 +341,24 @@ def main():
         by_kind = collections.defaultdict(list)
         for kind, r in all_runs:
             by_kind[kind].append(r)
-        print("\ntype                    runs | mean wall | mean turns | model/turn | tools | longest call")
-        for kind, runs in sorted(by_kind.items(), key=lambda kv: -len(kv[1])):
+        # Tokens read = context billed on every turn (input + cache created + cache read),
+        # summed over the turns; it is what grows when a phase re-reads too much. The
+        # main chain is the orchestrator: what it pays outside delegation.
+        main = [r for _, r in rows]
+        tok_all = sum(r["tok_in"] for r in main) + sum(r["tok_in"] for _, r in all_runs)
+        print("\ntype                    runs | mean wall | mean turns | model/turn | tools | longest call | Mtok read/run | ktok written/run | read share")
+        for kind, runs in [("main chain", main)] + sorted(by_kind.items(), key=lambda kv: -len(kv[1])):
             walls = [r["wall"] for r in runs]
             turns = [r["rounds"] for r in runs]
             per_turn = [r["cat"].get("model", 0) / r["rounds"] for r in runs if r["rounds"]]
             tools = [r["cat"].get("tool", 0) for r in runs]
             longest = max(runs, key=lambda r: r["longest"][0])["longest"]
-            print("%-22s %5d | %8.0fs | %10.1f | %9.1fs | %5.0fs | %.0fs"
+            tin = sum(r["tok_in"] for r in runs)
+            print("%-22s %5d | %8.0fs | %10.1f | %9.1fs | %5.0fs | %11.0fs | %13.2f | %16.1f | %8.0f %%"
                   % (kind[:22], len(runs), statistics.mean(walls), statistics.mean(turns),
-                     statistics.mean(per_turn) if per_turn else 0, statistics.mean(tools), longest[0]))
+                     statistics.mean(per_turn) if per_turn else 0, statistics.mean(tools), longest[0],
+                     tin / len(runs) / 1e6, statistics.mean(r["tok_out"] for r in runs) / 1e3,
+                     100 * tin / tok_all if tok_all else 0))
     return 0
 
 

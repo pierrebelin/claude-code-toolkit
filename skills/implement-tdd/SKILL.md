@@ -16,7 +16,7 @@ Measurements + reasons: `references/rationale.md`, same headings. **Never open d
 
 `references/common-rules.md` (Iron Law, cycle, Red Flags, exceptions) binds the two coding agents, which read it. **You don't code → don't open it.** Your own two rules:
 
-- **Declarative artefacts yours, no red before them** (§4.5): EF entity + its `IEntityTypeConfiguration`, `DbSet` registration, `Abstractions.Models` request/response DTO — pure declaration/mapping, covered by integration or contract test of behaviour they serve. One carrying branch, validation or mapping decision → back through RED.
+- **Declarative artefacts yours, no red before them** — list + limits in `common-rules.md` §4.5, single source — only part of that file you read, bounded, when sheet names a declarative artefact. Covered by integration or contract test of behaviour they serve. One carrying branch, validation or mapping decision → back through RED.
 - **Test green on first run never kept**: covered elsewhere → delete; assertion too weak → strengthen until red. `tdd-test-author` decides, says which in its `## RED`.
 
 **Never commit.** Test rules → `/tests-*` skills. `rtk dotnet` for build/test; RTK compacts logs, never replaces exit code.
@@ -65,13 +65,13 @@ Runner, commands, test level, suite scope, integration-test filtering → **`ref
 - **Argument = `batch FX <global plan path>`** (e.g. `implement-tdd batch F1 todo/<feature>/<CODE>-PLAN.md`) — **path as text, never an `@` mention**, which attaches the whole plan to every turn. Attached anyway → don't re-read, use the located sections from the attachment. No path → `ls todo/*/*-PLAN.md`; several candidates → ask.
   1. Global plan (`*-PLAN.md`) **by section, never whole**: summary + batch-execution index, then `### Batch FX` only — locate with `grep -n "^## \|^### "`, `Read` those ranges.
   2. Batch sheet (`*-PLAN-FX.md`) — technical detail, batch-scoped, read whole
-  3. **Steps already ticked ✅** in global plan → skip, resume at first ⬜ step
+  3. **Steps already closed** — sheet step's `TDD:` line reads `RED ✅ · GREEN ✅ · COST ✅` → skip; resume at first step whose `TDD:` line still carries a ⬜
   4. Follow sheet's remaining elements + steps
   5. Check global plan's DDD/APP/PERF coverage, collect applied ids from sheet. In `/plan-implementation`, read `references/ddd-rules.md` + `architecture-rules.md` **only** on those ids' lines; open `ddd-examples.md` only if pattern still unknown.
 - **Argument = `batch FX — correction: [manual finding]`** → read `references/correction-mode.md`, follow it. Never open on plain `batch FX`.
 - **Otherwise**: don't code. DDD design must be explicit in plan → route to `/plan-implementation`.
 
-**Invariants → what they REMOVE.** Sheet states invariants ("a copy has a single referent", "every key comes from the same keyring"). Write **what they take out of code** — loop, `GroupBy`, dictionary, defensive branch, second read.
+**Invariants → what they REMOVE.** Sheet states invariants ("a copy has a single referent", "every node comes from the same ModuleDiagram"). Write **what they take out of code** — loop, `GroupBy`, dictionary, defensive branch, second read.
 
 **Mid-batch ambiguity → traced assumption, never silent decision.** Question changing scope, RM/CU or design decision stops batch (back to `/business-spec` or `/plan-implementation`). Question changing none: settle, but write down — batch sheet, under `## Assumptions`, line `Hn — [what you assume] — to be validated by [who]`; carry into final summary.
 
@@ -116,7 +116,7 @@ Forbidden: any file search. A missing path comes back as ## BLOCKED.
 
 Agent writes test files only, runs filtered test, returns compact `## RED`. Don't ask it to re-explain plan or copy logs.
 
-Its `## RED` carries `Production diff` — `git diff --stat -- src/`, expected empty — plus filtered command + exit code. Empty line + red assertion = enough, don't open diff. Non-empty → back to agent: production code ahead of red test deleted, never kept.
+Its `## RED` carries `Production diff` — `git diff --stat -- src/`, expected empty — plus filtered command + exit code. Empty line, or signature stubs listed on its `Stubs` line (`common-rules.md` §4.1) + red assertion = enough, don't open diff. Anything beyond stubs → back to agent: production code ahead of red test deleted, never kept.
 
 **Relay its `## RED` table to user immediately, before GREEN.** Subagent returns method names + cases; **you** add `RM/CU` from the contract you handed it. Print under behaviour name, with observed exit code:
 
@@ -130,7 +130,7 @@ Its `## RED` carries `Production diff` — `git diff --stat -- src/`, expected e
 
 Check table against diff before relaying: test method in diff but absent from table → back to subagent. Keep rows — material of final recap (`references/closing.md` §4).
 
-**Relay cap — one RED table, one `## GREEN` line, nothing else.** Never reprint the batch state, the remaining cycles, the plan mapping or a table already relayed: measured 2026-09-17, your own replies resent as input are 16 % of the bill, and they grow with the number of turns, not with their length. A recap belongs to the end of the batch (`references/closing.md`), never to a cycle boundary. Progress between cycles = one line, `→ Cycle n/N clos — [comportement]`.
+**Relay cap — one RED table, one `## GREEN` line, nothing else.** Never reprint the batch state, the remaining cycles, the plan mapping or a table already relayed: measured 2026-09-17, your own replies resent as input are 16 % of the bill, and they grow with the number of turns, not with their length. A recap belongs to the end of the batch (`references/closing.md`), never to a cycle boundary. Progress between cycles = one line, `→ Cycle n/N closed — [behaviour]`.
 
 **GREEN + REFACTOR = delegate to `tdd-implementer`.** It writes production code, deletes what its code orphaned, runs filtered test, states cost. Test files read-only to it: test that can't go green without modification comes back `## BLOCKED`, never weakened. Contract, no plan attached, no re-read asked:
 
@@ -156,7 +156,7 @@ Snapshot (approval-testing suites only): approved-file path + literal seeded val
 
 **Name the ripple.** Signature moved (parameter dropped from aggregate method, member leaving repository interface) → changes land in files neither stubbed nor created: mappers, repository implementations, hand-written doubles, integration fixtures. One clause per file — "loses the `hasBeenTransferred` parameter", "stops hydrating from the repository".
 
-**Two stub lists not optional.** `tdd-test-author` writes signature stubs to make RED observable (`references/common-rules.md` §1); read its diff → file it created never announced "to create".
+**Two stub lists not optional.** `tdd-test-author` writes signature stubs to make RED observable (`references/common-rules.md` §4.1), listed on its `Stubs` line → each goes under "Already stubbed", never announced "to create".
 
 **Expected access cost = Infrastructure calls**, not files to read.
 
@@ -176,7 +176,7 @@ Fix until fully green (every behaviour). **Each suite's scope decided, not endur
 
 **Every suite run from here writes to file, not context**: `> "$SCRATCH/test-<Suite>.txt" 2>&1; echo "exit=$?"; tail -15 …` — form in `references/test-scope.md`, "Runner". Independent suites in **one message**.
 
-**Tick sheet once per behaviour, after COST**: one `Edit` sets `RED ✅ · GREEN ✅ · COST ✅` together, each observed first — RED on filtered test's expected failure, GREEN on its success, COST on its `Cost` line checked against the sheet. Locate step line with `grep -n`, edit that line; sheet read once in §1, never re-read whole for a tick. Never tick unobserved evidence.
+**Tick sheet once per behaviour, after COST**: one `Edit` flips the step's `TDD: RED ⬜ · GREEN ⬜ · COST ⬜` line to `TDD: RED ✅ · GREEN ✅ · COST ✅`, each observed first — RED on filtered test's expected failure, GREEN on its success, COST on its `Cost` line checked against the sheet. Locate that line with `grep -n`, edit it; sheet read once in §1, never re-read whole for a tick. Never tick unobserved evidence.
 
 ### 4. Close the batch
 

@@ -32,8 +32,7 @@ public sealed class CreateProductCommandHandler(
         var userContext = userContextWrapper.GetUserContext();
         var organizationId = OrganizationId.From(userContext.OrganizationId);
 
-        var existing = await productRepository.GetProductByName(command.Name, organizationId, cancellationToken);
-        if (existing is not null)
+        if (await productRepository.ExistsProductWithName(command.Name, organizationId, cancellationToken))
             throw new ProductNameAlreadyExistsException(command.Name);
 
         var product = Product.Create(organizationId, command.Name, command.Description, userContext);
@@ -45,7 +44,7 @@ public sealed class CreateProductCommandHandler(
 
 **Uniqueness: who owns the rule.** Authority = the **persistence constraint** (`UK_Product_OrganizationId_Name`), translated by the repository. It alone checks and writes atomically.
 
-The handler's `GetProductByName` is not the rule: it is an **early failure**, avoiding the rest of the transaction — a clone, an upstream call — before knowing it will fail. No protection against concurrency: two simultaneous commands both pass, wherever the check sits. The second `SaveChanges` waits on the index lock, then fails when the first commits.
+The handler's `ExistsProductWithName` is not the rule: it is an **early failure**, avoiding the rest of the transaction — a clone, an upstream call — before knowing it will fail. No protection against concurrency: two simultaneous commands both pass, wherever the check sits. The second `SaveChanges` waits on the index lock, then fails when the first commits.
 
 Consequences to respect:
 - Without the repository translating the violation, that race surfaces as **500** instead of 409. That is the defect, not the pre-check.
@@ -60,8 +59,9 @@ Queries implement `IHandler` directly (no base class, no transaction). They retu
 
 ```csharp
 // GetProductsQuery.cs
-public sealed record GetProductsQuery(PaginateQuery? Query) : ICommand
+public sealed record GetProductsQuery(PaginateQuery Query) : ICommand
 {
+    // Transport nullable stops here: Normalize turns an absent query into the default page.
     public static GetProductsQuery Create(PaginateQuery? query) => new(PaginationBounds.Normalize(query));
 }
 
@@ -86,7 +86,7 @@ public sealed class GetProductsQueryHandler(
 - Filtering and sorting: Gridify in the repository (`GridifyAsync` + `IGridifyMapper`), pushed to SQL.
 - Unpaginated branch: capped by `QueryLimits.MAX_UNPAGINATED_RESULTS` repository-side. A list read with neither pagination **nor** a cap is a deviation.
 
-Full model: `AuditTrailRepository.GetAuditTrails` + `GetAuditTrailsQuery.Create`.
+Full model: `ProductRepository.GetProducts` + `GetProductsQuery.Create`.
 
 **Which return type to pick**:
 
@@ -94,6 +94,6 @@ Full model: `AuditTrailRepository.GetAuditTrails` + `GetAuditTrailsQuery.Create`
 |---------|------------------------------------|
 | List exposed by an endpoint, paginable or filterable | `Paging<T>` |
 | List bounded by nature (children of an aggregate, short reference data) | `IReadOnlyList<T>` |
-| Single read | the aggregate or the response; `null` repository-side, `NotFound` exception thrown by the handler |
+| Single read | the aggregate or the response, never `null`: the repository `Get` throws `{Entity}NotFoundException` (DDD-11) |
 
 ---

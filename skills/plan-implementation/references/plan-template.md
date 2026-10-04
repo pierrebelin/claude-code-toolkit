@@ -47,7 +47,7 @@ Structure expected by `/implement-tdd`. Two levels:
 - **Reuse**: [existing elements identified during codebase analysis]
 - **Out of scope**: [what the plan does not do, and where that gets decided]
 - **Assumptions**: [points settled with the user, with the date] / [points still to validate, and why they do not block]
-- **Non-applicable rules**: [DDD-XX — reason; APP-XX — reason] — no list of applied ids here: every batch sheet carries them in its `## Design`
+- **Non-applicable rules**: [DDD-XX: N/A — reason; APP-XX: N/A — reason] — no list of applied ids here: every batch sheet carries them in its `## Design` `Applied rules` row
 
 ## 2. Traceability
 
@@ -58,9 +58,9 @@ Structure expected by `/implement-tdd`. Two levels:
 
 ## 3. DDD and Architecture design
 
-| RM/CU | Applied rules | Owning aggregate | Invariant / code consequence | Consistency | Batch |
-|-------|---------------|------------------|------------------------------|-------------|-------|
-| RM-01 / CU-01 | DDD-02, DDD-03, DDD-08, APP-01 | `[Aggregate]` | [invariant] → [branch/read removed] | synchronous, 1 aggregate | F1 |
+| RM/CU | Owning aggregate | Invariant / code consequence | Consistency | Batch |
+|-------|------------------|------------------------------|-------------|-------|
+| RM-01 / CU-01 | `[Aggregate]` | [invariant] → [branch/read removed] | synchronous, 1 aggregate | F1 |
 
 ## 4. Cross-cutting elements (if applicable)
 
@@ -103,7 +103,7 @@ Section order is fixed: why (`Intent`, `Design`, `Decisions`), then what gets wr
 
 One step = one RED → GREEN → COST cycle. The tests below are **written and red before a single production line** of the step. Order inside a step: success first (it fixes the signatures), refusals next, integration then contract last[, E2E at the very end].
 
-Declarative artefacts with no prior RED (`/implement-tdd` rule §4.5): [`Abstractions.Models` DTO, `[Entity]` EF and its configuration, `DbSet`, DI] / none. They are covered by the integration or contract test of the behaviour they serve.
+Declarative artefacts with no prior RED (list: `/implement-tdd` `common-rules.md` §4.5): [those of this batch, e.g. `Abstractions.Models` DTO, `[Entity]` EF and its configuration] / none. They are covered by the integration or contract test of the behaviour they serve.
 
 ### Step 1 — [Exact title of the step in the global plan]
 
@@ -111,15 +111,19 @@ Declarative artefacts with no prior RED (`/implement-tdd` rule §4.5): [`Abstrac
 |---|------|-------|---------|-----|
 | 1 | `ShouldCreate[Entity]_WhenCommandIsValid` | UT | `UnitTests` | RM-01 |
 | 2 | `ShouldEmit[Entity]CreatedEvent_WhenSuccessful` | UT | `UnitTests` | RM-03 |
-| 3 | `ShouldThrowEmptyNameException_When[Prop]IsEmpty` | UT | `UnitTests` | — (exception of the `Name` VO) |
+| 3 | `ShouldThrowEmptyNameException_When[Prop]IsEmpty` | UT | `UnitTests` | RL-01 (exception of the `Name` VO, local to the handler) |
 | 4 | `ShouldPersist[Entity]_WhenSaved` | IT | `IntegrationTests` | RM-01 |
-| 5 | `ShouldCreate[Entity]()` | contract | `ContractTests` | CU-01 |
+| 5 | `ShouldCreate[Entity]_WhenRequestIsValid` | contract | `ContractTests` | RM-01 |
+
+`RM` = id of the test's `[Trait("RM", …)]` (`RM-xx` / `RL-xx` of the handler table). `UnitTests` and `ContractTests` bind every test; `—` (no trait) only for an integration or E2E test covering no documented rule (`.claude/rules/tests.md`).
 
 [At most two lines: what merges into a single cycle, and from which test Docker is required.]
 
+TDD: RED ⬜ · GREEN ⬜ · COST ⬜
+
 ### Step N — Handler documentation
 
-No test: update of the handler `CLAUDE.md` files and of the feature index.
+No test: update of the handler `CLAUDE.md` files; feature index only if its bounded-context sentences no longer hold.
 
 ### Step N+1 — Build + test verification
 
@@ -129,7 +133,7 @@ No new test: replay of the scopes named in `## Test policy and scopes`.
 
 **Handler policy**: query = mock fed with data then result asserted; command = `SavedEvents` asserted by type and payload. Never a spy, a counter, nor a call assertion. Never a direct test on the aggregate: its behaviour is proven through the handler.
 
-**IT regression scope**: `--filter-class "*.[Context].[Feature].*"` [+ other impacted namespaces]. The whole `IntegrationTests` suite is never run: naming the namespaces to replay here avoids having to derive them from the diff on every validation. Available roots: `Licensing`, `Catalog`, `Database`, `Dsl`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
+**IT regression scope**: `--filter-class "*.[Context].[Feature].*"` [+ other impacted namespaces]. The whole `IntegrationTests` suite is never run: naming the namespaces to replay here avoids having to derive them from the diff on every validation. Available roots: `Catalog`, `Database`, `Dsl`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
 
 **Verification step scope**: [whole suites]; IT filtered above; [suites not run and why].
 
@@ -182,9 +186,9 @@ Signature and pseudo-code detail of every artefact anchored in `## Ancrages`. Re
 
 | Step | Test class / fixture | `CoreTests` builders and doubles | Production filled or created |
 |-------|--------------------------|----------------------------------|-----------------------------|
-| 1 — [Title] | `tests/{{PRODUCT}}.UnitTests/[Context]/[Feature]/[Action]/[Handler]Tests.cs` — _to create_ ; `[...]TestsFixture.cs` — _existing_ | `tests/{{PRODUCT}}.CoreTests/DataBuilder/[Feature]/[Aggregate]Builder.cs` (`With[Prop]` to add) ; `Doubles/Mock[Repo].cs` | `src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs` — _to create_ ; `src/{{PRODUCT}}.Domain/.../Aggregates/[Aggregate].cs` — `[Method]` |
-| 1 — [Title] (IT) | `tests/{{PRODUCT}}.IntegrationTests/[Context]/[Feature]/[Repo]Tests.cs` | `tests/{{PRODUCT}}.IntegrationTests/Core/DataBuilder/[Entity]Builder.cs` | `src/{{PRODUCT}}.Infrastructure/.../[Repo].cs` ; `Mappers/[Entity]Mapper.cs` |
-| 1 — [Title] (contract) | `tests/{{PRODUCT}}.ContractTests/[Context]/[Feature]Tests.cs` ; `Fixtures/[Feature]/[X]Fixture.cs` ; snapshot `Verified/[Feature]Tests.[Test].verified.txt` | `tests/{{PRODUCT}}.ContractTests/Core/WebApplicationFactory.cs` — repository substituted by its double | `src/{{PRODUCT}}.WebAPI/Endpoints/[Feature]/[Endpoint].cs` ; `Endpoints/Endpoints.cs` |
+| 1 — [Title] | `tests/{{PRODUCT}}.UnitTests/[Context]/[Feature]/[Action][Entity]/[Action][Entity]Tests.cs` — _to create_ ; `[Action][Entity]Fixture.cs` — _existing_ | `tests/{{PRODUCT}}.CoreTests/DataBuilder/[Feature]/[Aggregate]Builder.cs` (`With[Prop]` to add) ; `Doubles/Mock[Repo].cs` | `src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs` — _to create_ ; `src/{{PRODUCT}}.Domain/.../Aggregates/[Aggregate].cs` — `[Method]` |
+| 1 — [Title] (IT) | `tests/{{PRODUCT}}.IntegrationTests/[Context]/[Repo]/[MethodName]/[MethodName]Tests.cs` ; `[MethodName]Fixture.cs` | `tests/{{PRODUCT}}.CoreTests/DataBuilder/[Feature]/[Entity]EntityBuilder.cs` | `src/{{PRODUCT}}.Infrastructure/.../[Repo].cs` ; `Mappers/[Entity]Mapper.cs` |
+| 1 — [Title] (contract) | `tests/{{PRODUCT}}.ContractTests/[Context]/[Action][Entity]Tests.cs` ; `Fixtures/[Feature]/[Action][Entity]Fixture.cs` ; snapshot `Verified/[Feature]Tests.[Test].verified.txt` | `tests/{{PRODUCT}}.ContractTests/Core/WebApplicationFactory.cs` — repository substituted by its double | `src/{{PRODUCT}}.WebAPI/Endpoints/[Feature]/[Endpoint].cs` ; `Endpoints/Endpoints.cs` |
 | N — Documentation | — | — | `src/{{PRODUCT}}.Application/[Context]/[Feature]/CLAUDE.md` ; `…/[Action]/CLAUDE.md` |
 | N+1 — Verification | — | — | — |
 

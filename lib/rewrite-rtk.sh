@@ -35,7 +35,7 @@ cmd="${HOOK_CMD:-}"
 
 # The `dotnet` expression only fires in command position — start of line, or after
 # one of `; & | (` — optionally behind a run of VAR=value assignments, so
-# `STID_TEST_MODE=true dotnet test` is covered. `dotnet` reached through a path
+# `APP_TEST_MODE=true dotnet test` is covered. `dotnet` reached through a path
 # (~/.dotnet/tools/...) is left alone — no command boundary before it. An
 # already-prefixed `rtk dotnet` / `proxy dotnet` is parked behind a placeholder
 # so the expression cannot prefix it twice, `proxy` included since that spelling is

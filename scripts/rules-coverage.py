@@ -9,7 +9,7 @@ contract snapshot, a persistence rule by an integration test.
 
     python3 scripts/rules-coverage.py               # report
     python3 scripts/rules-coverage.py --untested    # only the rules with no test
-    python3 scripts/rules-coverage.py --ids <fiche>  # DDD/APP/PERF ids the sheet never cites
+    python3 scripts/rules-coverage.py --ids <sheet>  # DDD/APP/PERF ids the plan never classifies
 """
 import os
 import re
@@ -40,16 +40,19 @@ SECTION = re.compile(r"^##\s+R[eè]gles?\s+m[eé]tier", re.I)
 REFS = [os.path.join(ROOT, ".claude", "skills", "plan-implementation", "references", f)
         for f in ("ddd-rules.md", "architecture-rules.md")]
 REF_ROW = re.compile(r"^\|\s*((?:DDD|APP|PERF)-\d+)\s*\|")
-# A sheet declares its ids on `| Applied rules | … |`, and on the
-# deviation variant when it carries one.
+# A sheet declares the ids it applies on `| Applied rules | … |`, and on the
+# deviation variant when it carries one. The global plan lists the others once,
+# on its `**Non-applicable rules**` line: an id is classified when either says so.
 APPLIED_ROW = re.compile(r"^\|([^|]+)\|(.*)$")
+NA_LINE = re.compile(r"^\s*[-*]\s*\*\*Non-applicable rules\*\*\s*:(.*)$", re.I)
+SHEET = re.compile(r"-PLAN(?:-F\d+)?\.md$")
 ID = re.compile(r"(DDD|APP|PERF)-(\d+)")
 # `DDD-05 → DDD-08` stands for the four ids: the sheets write ranges.
 RANGE = re.compile(r"(DDD|APP|PERF)-(\d+)\s*(?:→|->)\s*(DDD|APP|PERF)-(\d+)")
 
 L_IDS, L_CITED, L_UNCITED = "ids", "cited", "not cited"
 L_UNKNOWN, L_NONE_M, L_NONE_F = "unknown references", "(none)", "(none)"
-L_USAGE = "--ids expects the path of a sheet"
+L_USAGE = "--ids expects the path of a batch sheet"
 
 
 def fold(s):
@@ -165,8 +168,18 @@ def referential_ids():
     return ids
 
 
+def ids_in(cell):
+    """Ids of one cell, `DDD-05 → DDD-08` ranges expanded."""
+    found = set()
+    for prefix, low, _, high in RANGE.findall(cell):
+        found.update(f"{prefix}-{n:02d}" for n in range(int(low), int(high) + 1))
+    found.update(f"{prefix}-{num}" for prefix, num in ID.findall(cell))
+    return found
+
+
 def cited_ids(fiche):
-    """Ids cited by the sheet's `Applied rules` rows, ranges expanded.
+    """Ids cited by the sheet's `Applied rules` rows and the global plan's
+    `Non-applicable rules` line, ranges expanded.
 
     Only the absence of a citation is decided here. Whether an id is applied or
     `N/A` is left to the audit: those cells are free prose — `**N/A**`,
@@ -175,19 +188,30 @@ def cited_ids(fiche):
     cited = set()
     for line in open(fiche, encoding="utf-8").read().splitlines():
         m = APPLIED_ROW.match(line)
-        if not m or not fold(m.group(1)).startswith("regles appliquees"):
+        if m and fold(m.group(1)).startswith(("applied rules", "regles appliquees")):
+            cited |= ids_in(m.group(2))
             continue
-        cell = m.group(2)
-        for prefix, low, _, high in RANGE.findall(cell):
-            cited.update(f"{prefix}-{n:02d}" for n in range(int(low), int(high) + 1))
-        cited.update(f"{prefix}-{num}" for prefix, num in ID.findall(cell))
+        m = NA_LINE.match(line)
+        if m:
+            cited |= ids_in(m.group(1))
     return cited
 
 
+def plan_ids(fiche):
+    """Ids classified anywhere in the sheet's plan folder: the global plan and
+    every batch sheet. An id applied in F2 is not missing from F1."""
+    folder = os.path.dirname(os.path.abspath(fiche))
+    cited = set()
+    for name in sorted(os.listdir(folder)):
+        if SHEET.search(name):
+            cited |= cited_ids(os.path.join(folder, name))
+    return cited | cited_ids(fiche)
+
+
 def ids_coverage(fiche):
-    """Report line for the audit bundle: what the sheet forgot to classify."""
+    """Report line for the audit bundle: what the plan forgot to classify."""
     known = referential_ids()
-    cited = cited_ids(fiche)
+    cited = plan_ids(fiche)
     missing = [i for i in known if i not in cited]
     unknown = sorted(cited - set(known))
     print(f"{L_IDS} : {len(known)} | {L_CITED} : {len(known) - len(missing)} | "

@@ -26,6 +26,13 @@ No final code: no method bodies, assertions, SQL. Plan = what, why, where, order
 
 ### 1. Understand
 
+0. **Gate — open blocking questions.** Before any read:
+
+   ```bash
+   awk '/^## 12\./{p=1;next} /^## /{p=0} p && /\| *Blocking *\|/' <spec>
+   ```
+
+   Any line → **stop**: list them, end with `→ Open blocking questions: /business-spec to settle them.` No plan while a `Blocking` is open — same contract as `## BLOCKED` in a batch, moved before design.
 1. Read spec fully.
 2. Read `references/ddd-rules.md` + `references/architecture-rules.md`. Each id → applied in the owning batch sheet (`## Design`), or listed once in global plan `1. Scope` as `N/A — reason`. Global plan never lists applied ids. `references/ddd-examples.md` only if id ambiguous.
 3. Inventory bounded context: delegate, never walk here (`Read`/`cat`/`sed`/`grep` under `src/` or `tests/` attaches layer rules to every later turn). `graphify explain "<Aggregate>"` first, then one `Explore` subagent (`model: haiku`, a `description`, prompt naming `graphify explain|path|query` before grep), contract:
@@ -62,15 +69,16 @@ Status per batch: `sequential` default, or `parallelisable with F?` (two worktre
    - `todo/[code-kebab-case]/` — where `/business-spec` wrote `SPEC-[code-kebab-case].md`. Reuse; create only if absent.
    - Global plan (`[CODE]-PLAN.md`): compact — one batch row + its step list, <2 min read whole.
    - Batch sheets (`[CODE]-PLAN-F1.md`, `-F2.md`…): detail per batch. `/implement-tdd batch F1` loads global plan by section + F1 sheet alone.
-2. Handler doc — per handler created/modified: sheet step updating handler folder `CLAUDE.md` (business rules, flow + access cost, events). New handler or changed intent → also parent feature index `CLAUDE.md` (link, intent). Format: `/implement-tdd` `references/claude-md-handler.md`.
+2. Handler doc — per handler created/modified: sheet step updating handler folder `CLAUDE.md` (business rules, flow + access cost, events). Parent feature index `CLAUDE.md` only when its two or three sentences on the bounded context no longer hold — no handler list, no link, no table. Format: `/implement-tdd` `references/claude-md-handler.md`.
 3. Self-validation: re-read plan vs checklist. Deviation → fix plan. Doubt on business intent → ask user.
-4. Summary: batch count, RM/CU traced, files produced, folder path.
+4. **Adversarial review.** `Agent` with `subagent_type: adversarial-reviewer`, a `description`, prompt starting `mode: plan todo/<code>/`. `Blocking` → fix plan, or AskUserQuestion when the answer is the user's; `Major` → fix, or keep with one line in the sheet's `## Decisions` saying why. Never re-run it on the corrected plan.
+5. Summary: batch count, RM/CU traced, files produced, folder path, review rows settled and how.
 
 ## Execution-plan rules (`0. Summary` > `### Batch FX`)
 
 - Step = end-to-end business behaviour, not layer, not file
 - One step = one production artifact: Command/Query+Handler, endpoint, repository. Two steps on same handler + same aggregate method = one step. Guard, refusal, uniqueness/visibility check on method already in a step = not a step — one more row in that step's table under `## TDD sequence`.
-- Every step → ≥1 test named per target skill convention + RM + target test project: unit/integration/E2E `Should{result}_When{condition}`, contract `Should{Action}()`. Unnameable behaviour = internal mechanism ("scan", "detect", "map", "convert") → recast as behaviour. Test names → sheet `## TDD sequence`; paths → sheet `## Ancrages`; assertions → `/tests-*` skills.
+- Every step → ≥1 test named per target skill convention + RM + target test project: `Should{Result}_When{Condition}` at every level (`.claude/rules/tests.md`). Unnameable behaviour = internal mechanism ("scan", "detect", "map", "convert") → recast as behaviour. Test names → sheet `## TDD sequence`; paths → sheet `## Ancrages`; assertions → `/tests-*` skills.
 - 2-5 behaviour steps per batch + documentation step + verification step. Past 6: split hit rule level → regroup by target method. Legitimately >8 → split batch in two.
 - Last step = `dotnet build` + `dotnet test`, named scope: whole suites, filtered project + filter root, suites skipped + why. Bare "`dotnet test`" = weak criterion
 - No meta-step, pure-layer step, file-only step
@@ -95,7 +103,7 @@ Section order, fixed — why, then what to write, then where: `## Intent`, `## D
 
 MUST: exact element names (`/implement-tdd` conventions), public signatures, pseudo-code bullets. Design section: applied DDD/APP/PERF ids, owning aggregate, invariants + RM, consistency, internal events + payload, induced simplifications, access cost. Empty Assumptions section, filled by `/implement-tdd` mid-batch (`Hn — [assumption] — to be validated by [who]`). Test scenarios + RM + target project: unit test per handler behaviour; integration test as soon as element lives in `src/{{PRODUCT}}.Infrastructure/` (repository, EF mapper, entity configuration, persistence-exception translation); contract test if route changes; E2E only for multi-operation lifecycle. Sole integration waiver: element without persistence effect — DI registration, adapter of already-doubled external service — written in sheet with reason.
 
-`## TDD sequence` — one `### Step N — [title]` per step of the global plan, same titles, same order, including the documentation and verification steps (these two say "no test" and why). Each carries a table `# | Test | Level | Project | RM`, ordered as it gets written: success first (it fixes the signatures), refusals next, integration then contract last, E2E at the very end. Numbering makes the RED phase countable before a line of production exists. Under the table, at most two lines: what merges into a single cycle, and which test needs Docker. Section header states the RED-before-production rule and lists the declarative artefacts exempt from a prior RED (`Abstractions.Models` DTO, EF entity + configuration, `DbSet`, DI) — the reader must never wonder why a production file has no test facing it.
+`## TDD sequence` — one `### Step N — [title]` per step of the global plan, same titles, same order, including the documentation and verification steps (these two say "no test" and why). Each carries a table `# | Test | Level | Project | RM`, ordered as it gets written: success first (it fixes the signatures), refusals next, integration then contract last, E2E at the very end. Numbering makes the RED phase countable before a line of production exists. Under the table, at most two lines: what merges into a single cycle, and which test needs Docker. Each behaviour step carries, under its table, the line `TDD: RED ⬜ · GREEN ⬜ · COST ⬜` that `/implement-tdd` flips to ✅ — documentation and verification steps carry none. Section header states the RED-before-production rule and names which declarative artefacts of the batch are exempt from a prior RED (list: `/implement-tdd` `references/common-rules.md` §4.5) — the reader must never wonder why a production file has no test facing it.
 
 `## Test policy and scopes` — what holds for the whole batch and nothing named per step: handler test policy, IT non-regression filter, scope of the final verification step, E2E present or absent with the reason.
 

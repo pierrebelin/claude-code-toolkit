@@ -23,7 +23,7 @@ them — `rtk gain [--history]`.
 - `rtk hook claude` rewrites `dotnet build` but **not** `dotnet test|restore|format`, although the
   `rtk dotnet` filter accepts all four. `rewrite-rtk.sh` closes that gap itself, in command
   position only (start of line or after `; & | (`, behind any `VAR=value` prefixes), so
-  `STID_TEST_MODE=true dotnet test ...` is covered. The expression is skipped entirely on a
+  `APP_TEST_MODE=true dotnet test ...` is covered. The expression is skipped entirely on a
   command carrying `<<`: sed matches `^` on every line, so a heredoc body was being rewritten
   until `evals/cases/rewrite-rtk.json` caught it on 2026-09-12. Since the rewrite is ours,
   `rtk hook claude` sees an already-prefixed command and answers nothing — the module emits the
@@ -268,3 +268,12 @@ cases in `evals/cases/*.json`, ~6 s, fixtures generated in `evals/.fixtures/` (i
 a case; the first run found two more — the heredoc rewrite above, and a byte-limit message in
 `bulk-read`. Shape borrowed from `plugins/shunt/evals/run.sh`. A hook change without a case is
 not finished.
+
+## Mods — `context-band`, `tdd-batch`
+
+Function-hook plugins versioned under `skills/`: the engine adopts any `skills/<name>/` holding `.claude-plugin/plugin.json` as a plugin (`<name>@skills-dir`, no `SKILL.md` needed), in a trusted workspace only, and watches it for hot reload. Project-scoped on purpose: `CLAUDE_CODE_PLUGIN_DIRS` is read from the process or `~/.claude/settings.json` only, never from project settings, so it would load every repo's copy in every session.
+
+- `context-band` — band above the prompt: context trend, 150k step and 250k ceiling, cache expiry, single-call turns, top contributions over 5 turns, graphify rebuild.
+- `tdd-batch` — pane following the `/implement-tdd` batch sheet (`*-PLAN-FX.md`) through `$.fs`, so it survives `/clear`: steps with their `TDD` line, `Correction Cn`, wave and `## BLOQUÉ`/`## BLOCKED` read off the `tdd-*` `Agent` calls. Opens on `/tdd-batch [sheet]` and on the `implement-tdd` Skill call; refreshes on Write/Edit under `todo/` and every 10 s. Parses French and English sheets alike: one file for every repo.
+
+Identical in Configurator, SES and the toolkit. Check: `claude plugin validate <mod>` and `claude plugin test <mod>`. `.claude-plugin/types/` is laid by the engine and ignored.

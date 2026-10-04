@@ -18,7 +18,7 @@ Examples: `.claude/skills/implement-tdd/references/examples-domain.md`.
 | Value Object | `ValueObject` | `DisplaySettings : ValueObject` |
 | EntityId | `EntityId<TEntityId>` | `ProductId : EntityId<ProductId>` |
 | Domain Event | `DomainEvent<TEntityId>` | `ProductCreated : DomainEvent<ProductId>` |
-| Exception | `DomainException` | `ProductNotFoundException : DomainException` |
+| Exception | `DomainException`, or `NotFoundException` / `ConflictException` deriving from it | `ProductNotFoundException : NotFoundException` |
 
 ## Rules
 
@@ -26,7 +26,7 @@ Examples: `.claude/skills/implement-tdd/references/examples-domain.md`.
 - **`Create()` vs `Restore()`**: `Create()` builds, validates, emits; `Restore()` rehydrates from DB, no validation, no event. Repository **always** reads via `Restore()` (DDD-06).
 - **Collections**: `private readonly List<T> _items` exposed as `public IReadOnlyList<T> Items => _items.AsReadOnly()`.
 - **Value Objects**: reuse existing (`TechnicalName`, `DiagramName`, …). Never raw `string` when VO exists. Records rebuilt from DB go through VO's `Restore()`.
-- **Typed IDs**: never raw `Ulid` for identifier (`TemplateId`, `DiagramNodeId`, …). `Ulid` → typed ID conversion at endpoint boundary; Domain, Application, Infrastructure handle typed IDs only.
+- **Typed IDs**: never raw `Ulid` for identifier (`ProductItemId`, `DiagramNodeId`, …). `Ulid` → typed ID conversion at endpoint boundary; Domain, Application, Infrastructure handle typed IDs only.
 - **Mutation via business methods** (DDD-03): no public setter, no handler-driven mutation.
 - **Inter-aggregate reference by ID** (DDD-05), never object navigation.
 - **Logic belongs to object owning data** (DDD-09): `exportDiagramsContext.Serialize()`, not `DiagramExportSerializer.Serialize(context)`; `ParsedImportFile.Create(json)`, not `IParser.Parse(json)`. Domain Service only when no business object owns operation naturally — stateless, no Infrastructure dependency, never repository wrapper.

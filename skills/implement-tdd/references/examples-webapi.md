@@ -14,7 +14,7 @@ Request DTOs define the API endpoints' contract. They live in `Abstractions.Mode
 namespace {{PRODUCT}}.Abstractions.Models.Requests.Studio.Diagram.ExportDiagrams;
 
 public sealed record ExportDiagramsRequest(
-    Ulid[] TemplateIds,
+    Ulid[] ModuleDiagramIds,
     Ulid[] DiagramNodeIds,
     bool IncludeAssociatedElements = false);
 ```
@@ -73,25 +73,8 @@ public static class CreateProduct
 
 Errors handled globally by `GlobalExceptionHandler`. No `try/catch` in the endpoint: let them bubble up.
 
-The mapping is an **ordered** `switch` — first matching branch wins. A more specialised exception must be declared before its base (`PartnerApiException` before `UpstreamServiceException`), otherwise it gets absorbed.
+Status mapping → `.claude/rules/webapi-endpoints.md` § GlobalExceptionHandler (single source). The mapping is an **ordered** `switch` — first matching branch wins: a more specialised exception is declared before its base, otherwise it gets absorbed. Payloads: `ValidationException` and `AggregateValidationException` add `errors`; `ValidationFailedException` adds `workflow` + `violations`; anything unmapped → 500, detail hidden outside Development.
 
-| Exception | Status | Payload |
-|-----------|--------|--------------|
-| `PartnerApiException` | upstream status if 4xx, otherwise **502** | detail hidden outside Development |
-| `SecurityContextUnavailableException` | **503** | — |
-| `NotFoundException` | **404** | — |
-| `FluentValidation.ValidationException` | **400** | `errors` |
-| `ForbiddenException` | **403** | — |
-| `ConflictException` | **409** | — |
-| `ValidationFailedException` | **422** | `workflow` + `violations` |
-| `DomainException` (family default) | **400** | `AggregateValidationException` adds `errors` |
-| `GridifyMapperException`, `GridifyFilteringException`, `GridifyOrderingException` | **400** | invalid filter or sort sent by the client |
-| `BadHttpRequestException { InnerException: InvalidDataException }` | **413** | request body beyond the limit |
-| `ArgumentException` | **400** | — |
-| `IInternalException` | **400** | catches `Core.Exceptions.Base.ValidationException` and any marked exception |
-| `UpstreamServiceException` (other than PartnerApi) | **503** | — |
-| everything else | **500** | detail hidden outside Development |
-
-Real hierarchy of the base exceptions, to know before creating one: `NotFoundException` and `ConflictException` inherit from `DomainException`. `ValidationException` and `ForbiddenException` do **not** — they derive from `Exception` and carry `IInternalException`. `UpstreamServiceException` deliberately doesn't carry `IInternalException`: an upstream outage is not the client's fault, it must surface as 503 and not as 400.
+Real hierarchy of the base exceptions, to know before creating one: `NotFoundException` and `ConflictException` inherit from `DomainException`. `ValidationException` and `ForbiddenException` do **not** — they derive from `Exception` and carry `IInternalException`. `UpstreamServiceException` deliberately doesn't carry `IInternalException`: an upstream outage is not the client's fault, it must surface as 502 (or the upstream 4xx), not as 400.
 
 `.ProducesProblem(...)` declares only the statuses **this** route can produce — from the exceptions its handler throws, not from the whole table. `500` always declared; `413` only on a route receiving a large body; `422` only on a route triggering a workflow validation.

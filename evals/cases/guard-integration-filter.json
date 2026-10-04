@@ -4,21 +4,21 @@
       "name": "IntegrationTests whole suite is denied",
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
-        "tool_input": {"command": "STID_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore"}},
-      "expect": {"decision": "deny", "reason": "IntegrationTests suite entière refusée"}
+        "tool_input": {"command": "APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore"}},
+      "expect": {"decision": "deny", "reason": "Whole IntegrationTests suite refused"}
     },
     {
       "name": "IntegrationTests redirected to a file, still whole, still denied",
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
-        "tool_input": {"command": "export SCRATCH=/tmp/x; STID_TEST_MODE=true dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore > \"$SCRATCH/test-IntegrationTests.txt\" 2>&1; echo \"exit=$?\"; tail -15 \"$SCRATCH/test-IntegrationTests.txt\""}},
+        "tool_input": {"command": "export SCRATCH=/tmp/x; APP_TEST_MODE=true dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore > \"$SCRATCH/test-IntegrationTests.txt\" 2>&1; echo \"exit=$?\"; tail -15 \"$SCRATCH/test-IntegrationTests.txt\""}},
       "expect": {"decision": "deny", "reason": "filter-class"}
     },
     {
       "name": "IntegrationTests with --filter-class passes (rtk rewrite applies)",
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
-        "tool_input": {"command": "STID_TEST_MODE=true dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore --filter-class \"*.Editor.Templates.Save.*\""}},
+        "tool_input": {"command": "APP_TEST_MODE=true dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore --filter-class \"*.Studio.Templates.Save.*\""}},
       "expect": {"decision": "not_deny"}
     },
     {
@@ -46,8 +46,8 @@
       "name": "subagent is denied too",
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "agent-abc", "transcript_path": "",
-        "tool_input": {"command": "STID_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore"}},
-      "expect": {"decision": "deny", "reason": "suite entière"}
+        "tool_input": {"command": "APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore"}},
+      "expect": {"decision": "deny", "reason": "Whole IntegrationTests suite"}
     }
   ]
 }

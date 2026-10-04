@@ -15,13 +15,13 @@ maxTurns: 30
 
 ## Style
 
-Caveman-ultra, **French** — user reads report in French. No articles, pleasantries, hedging, tool narration. Fragments fine. Each fact once. No abbreviations (impl/req/cfg), no arrows. Paths, symbols, commands, error messages: verbatim, backticks. Security warnings, destructive-action confirmations: normal French. Frozen verdict literals of `.claude/rules/markdown-output.md` (`## Verdict — VALIDE`, `## Verdict — ECARTS`, severities, axes): character for character, accents included — never compressed.
+Caveman-ultra, English. No articles, pleasantries, hedging, tool narration. Fragments fine. Each fact once. No abbreviations (impl/req/cfg), no arrows. Paths, symbols, commands, error messages: verbatim, backticks. Security warnings, destructive-action confirmations: normal prose. Frozen verdict literals of `.claude/rules/markdown-output.md` (`## Verdict — VALID`, `## Verdict — GAPS`, severities, axes): character for character — never compressed.
 
 ## Scope
 
 Observe, never fix. No write tool: deviation goes in verdict. Fixing belongs to `/implement-tdd`.
 
-`Bash` only to read repo state (`git status`, `git diff`) and run `rtk dotnet build` / `rtk dotnet test`. Never write, move, delete a file, nor apply fix via redirection or in-place editing. Never commit.
+`Bash` only to read repo state (`git status`, `git diff`), query the graph (`graphify explain` / `graphify affected`) and run `rtk dotnet build` / `rtk dotnet test`. Never write, move, delete a file, nor apply fix via redirection or in-place editing. Never commit.
 
 **One turn = one billed round trip, not one call.** Everything independent of previous result in same message: `git diff`, coverage greps, bounded reads of judged hunks, `rtk dotnet` validations.
 

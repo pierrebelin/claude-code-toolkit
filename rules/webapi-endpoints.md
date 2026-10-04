@@ -18,7 +18,7 @@ WebAPI translates HTTP. No business rule (APP-04).
 
 Static class `{Action}{Entity}` holding static `HandlerAsync` and nested `Endpoint : IEndpoint` with `MapEndpoints`. Discovered by reflection. `HandlerAsync` co-located with its only caller — satisfies Sonar S3398.
 
-Endpoint = pass-through: no conversion, no service calls, no enrichment. Project handler payload straight to HTTP. Rest belongs in Command/Query and handler.
+Endpoint = pass-through: no service calls, no enrichment, no conversion beyond boundary ones below. Project handler payload straight to HTTP. Rest belongs in Command/Query and handler.
 
 Routes = constants in `Endpoints/Endpoints.cs`.
 

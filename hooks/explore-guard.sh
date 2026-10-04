@@ -102,7 +102,7 @@ esac
 contract=$(printf '%s\n' \
   '' \
   '--- Report contract (explore-guard) ---' \
-  'Style: caveman-ultra, in French — the report is read by the user, who works in French. Drop articles, pleasantries, hedging, tool narration. Fragments are fine. State each fact once. No prose abbreviations (impl/req/cfg), no arrows. Paths, symbols, commands and error messages: verbatim, in backticks.' \
+  'Style: caveman-ultra, in English (CLAUDE.md: English everywhere; the main chain answers the user in their language). Drop articles, pleasantries, hedging, tool narration. Fragments are fine. State each fact once. No prose abbreviations (impl/req/cfg), no arrows. Paths, symbols, commands and error messages: verbatim, in backticks.' \
   "$bound" \
   'Locate with `graphify explain|path|query` before reaching for grep; grep is for text, the graph is for symbols and relations.' \
   'Your final report is re-injected whole into the main conversation. Everything it carries is paid for there.')

@@ -1,0 +1,6 @@
+{
+  "name": "context-band",
+  "version": "0.1.0",
+  "description": "Bandeau au-dessus du prompt : tendance du contexte, paliers 150k/250k, expiration du cache, tours à un appel, reconstruction graphify",
+  "types": "./types/index.d.ts"
+}

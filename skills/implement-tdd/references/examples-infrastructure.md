@@ -14,14 +14,14 @@ public class ProductRepository(
     IUnitOfWork<AppDbContext> unitOfWork,
     IAuditTrailWriter auditTrailWriter) : IProductRepository
 {
-    public async Task<Product?> GetProduct(ProductId id, OrganizationId organizationId, CancellationToken ct)
+    public async Task<Product> GetProduct(ProductId id, OrganizationId organizationId, CancellationToken ct)
     {
         var entity = await unitOfWork.DbContext.Products
             .AsNoTracking()
             .Include(k => k.ProductItems)
             .FirstOrDefaultAsync(k => k.Id == id.Value && k.OrganizationId == organizationId.Value, ct);
 
-        return entity is null ? null : ProductMapper.MapToDomain(entity);
+        return entity is null ? throw new ProductNotFoundException(id) : ProductMapper.MapToDomain(entity);
     }
 
     public async Task Save(List<IDomainEvent<ProductId>> events, CancellationToken ct)

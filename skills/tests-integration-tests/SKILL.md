@@ -23,7 +23,7 @@ Batch supplied → read only its Tests and DDD Design sections: they decide whet
 - **Extend existing files** in same folder. New file only when no test exists for the feature.
 - **Independent**: no shared state. Each fixture gets isolated SQL Server database from pool, releases it after the test.
 - **Naming** of tests, classes → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
-- No comment restating code. Keep those explaining decision, constraint, exception; touch them only **within lines you touch**, never elsewhere.
+- Never add comment. Delete yours, and useless ones (restating code, stale) **within lines you touch** — elsewhere report, don't delete. Keep those explaining decision, constraint, exception not deducible from naming.
 - **Scope**: only when plan touches repository, EF mapping, SQL query, persistence constraint. Business rules stay in handler unit tests.
 
 ## Structure
@@ -32,9 +32,7 @@ Batch supplied → read only its Tests and DDD Design sections: they decide whet
 tests/{{PRODUCT}}.IntegrationTests/
 ├── Core/
 │   ├── BaseIntegrationFixture.cs   (IAsyncLifetime, pool-isolated database)
-│   ├── BaseTestFixture.cs          (AppDbContext, UnitOfWork, services)
-│   └── DataBuilder/
-│       └── [Entity]EntityBuilder.cs (one per aggregate)
+│   └── BaseTestFixture.cs          (AppDbContext, UnitOfWork, services)
 ├── [BoundedContext]/
 │   └── [Repository]/
 │       └── [MethodName]/
@@ -42,7 +40,7 @@ tests/{{PRODUCT}}.IntegrationTests/
 │           └── [MethodName]Tests.cs
 ```
 
-Class naming → `.claude/rules/tests.md`, `Naming` table.
+Builders shared under `tests/{{PRODUCT}}.CoreTests/DataBuilder/` (`.claude/rules/tests.md`) — `[Entity]EntityBuilder.cs`, one per aggregate; extend, never a local copy. Class naming → `.claude/rules/tests.md`, `Naming` table.
 
 ## Templates
 
@@ -125,6 +123,6 @@ public class [MethodName]Tests : IAsyncLifetime
 - [ ] Direct DbContext seeding, never through repository under test
 - [ ] `BaseTestFixture` / `MsSqlContainerPool` fixture, never SQLite in-memory nor shared database
 - [ ] Persisted state verified after detaching or re-reading where needed
-- [ ] Useful comments kept or improved
+- [ ] No comment added
 - [ ] `Should..._When...` naming
 - [ ] Business rules, orchestration stay in handler unit tests; this test really covers persistence

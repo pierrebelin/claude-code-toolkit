@@ -1,6 +1,6 @@
 # Conventions — data access
 
-**Opened by `/implement-tdd` on demand only** — a stated cost it can't validate against the code, a `## BLOQUÉ` on cost — and by `tdd-implementer` before returning `## BLOQUÉ` on a cost symptom. Never at the start of a batch.
+**Opened by `/implement-tdd` on demand only** — a stated cost it can't validate against the code, a `## BLOCKED` on cost — and by `tdd-implementer` before returning `## BLOCKED` on a cost symptom. Never at the start of a batch.
 
 ## Per-layer conventions — no longer here
 
@@ -40,7 +40,7 @@ The table below stays here: inseparable from the **COST** step of the cycle (`co
 
 **Before adding a repository method**: check that no existing one already answers in a single query. A dedicated method is justified when it **changes the shape** of the read (SQL filter, projection, join), not when it renames an existing one.
 
-**Exploit invariants before writing the loop.** An invariant stated by the sheet or the spec ("a copy has a single owner", "every key of a transferred Configuration comes from the same product") **removes code**: it turns a `GroupBy` + traversal into a single read. Reading the sheet to document it is not enough — deduce what disappears.
+**Exploit invariants before writing the loop.** An invariant stated by the sheet or the spec ("a copy has a single owner", "every node of a duplicated ModuleDiagram comes from the same Product") **removes code**: it turns a `GroupBy` + traversal into a single read. Reading the sheet to document it is not enough — deduce what disappears.
 
 **Not premature optimisation**: not about shaving milliseconds but about removing a dependency on input size. `N` queries where `1` suffices is a design defect, not a performance setting.
 
