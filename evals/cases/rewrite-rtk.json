@@ -43,10 +43,10 @@
       "expect": {"decision": "not_deny", "command": "rtk grep"}
     },
     {
-      "name": "dotnet build is rewritten by rtk itself",
+      "name": "dotnet build is rewritten by rtk itself (upstream emits updatedInput without a decision, the permission flow decides)",
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "dotnet build --no-restore"}},
-      "expect": {"decision": "allow", "command": "rtk dotnet build"}
+      "expect": {"decision": "not_deny", "command": "rtk dotnet build"}
     }
   ]
 }

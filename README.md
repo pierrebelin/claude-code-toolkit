@@ -98,7 +98,7 @@ A repo set up before the plugin holds the kit in `.claude/{agents,hooks,lib,pres
 
 1. **Save local edits**: `cctoolkit kit-diff .` — `DRIFT` lines are local edits to the core: bring them into the toolkit repo (it flags any line naming the repo's product) or drop them knowingly. `ADDED` files are the repo's own and stay.
 2. **Install the plugin** — [Installation](#installation) step 1.
-3. **Remove the copy**: `/cctoolkit:kit-init` detects it, runs step 1, and on confirmation deletes the kit's files under `.claude/`, the kit's scripts under `scripts/`, the `hooks` key of the settings and the former mods marketplace, then offers `cctoolkit migrate-anchors --apply`. Keep `kit.config.json`, `.claude/rules/*.md`, `statusLine`, `permissions`, `env`.
+3. **Remove the copy**: `/cctoolkit:kit-init` detects it, runs step 1, and on confirmation deletes the kit's files under `.claude/` and the kit's scripts under `scripts/` (`cctoolkit remove-copy --apply` — the repo's own skills and scripts stay, a file added inside a kit skill is flagged `MOVE`), the `hooks` key of the settings and the former mods marketplace, then offers `cctoolkit migrate-anchors --apply`. Keep `kit.config.json`, `.claude/rules/*.md`, `statusLine`, `permissions`, `env`.
 4. **Check**: `cctoolkit doctor` — no `legacy …` line, `plugin enabled` ok.
 
 Commit the deletions and the settings change together: a clone getting one without the other runs no guard, or two.

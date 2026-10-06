@@ -9,10 +9,11 @@ export type Band = {
   turn: number
   contributions: Contribution[]
   cost: number | null
+  fiveHour: { percent: number; resetsAt: number | null } | null
 }
 
 declare module 'claude-code' {
   interface PluginState {
-    'context-band': { band: Band; now: number; isRebuilding: boolean }
+    'context-band': { band: Band; now: number; isRebuilding: boolean; isExpanded: boolean }
   }
 }

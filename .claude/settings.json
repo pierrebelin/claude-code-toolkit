@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "context-band@cctoolkit": true,
+    "tdd-batch@cctoolkit": true
+  }
+}

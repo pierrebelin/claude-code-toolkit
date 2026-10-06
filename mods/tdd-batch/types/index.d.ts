@@ -24,8 +24,11 @@ export type Verdict = { isValid: boolean; blocking: number; major: number }
 
 export type Audit = { passes: number; verdict: Verdict | null }
 
+export type Awaited = { lot: string | null }
+
 export type Batch = {
   path: string | null
+  root: string | null
   sheet: Sheet | null
   error: string | null
   wave: number
@@ -38,6 +41,6 @@ export type Batch = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'tdd-batch': { batch: Batch; now: number }
+    'tdd-batch': { batch: Batch; now: number; isExpanded: boolean; awaited: Awaited | null }
   }
 }

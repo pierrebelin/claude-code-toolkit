@@ -68,13 +68,17 @@ def stacks(root, m):
         text = " ".join(read(root, p) for p in m["csproj"])
         fw = next((f for f, rx in (("xunit", r"xunit"), ("nunit", r"\bNUnit\b"), ("mstest", r"MSTest"))
                    if re.search(rx, text, re.I)), None)
-        names = [os.path.splitext(os.path.basename(p))[0] for p in m["sln"]]
+        # Shallowest solutions first: one at the top level is the product, a vendored
+        # `externals/Other.sln` below it is a candidate, never a tie.
+        slns = sorted(m["sln"], key=lambda p: (p.count(os.sep), p))
+        names = [os.path.splitext(os.path.basename(p))[0] for p in slns]
+        top = [n for p, n in zip(slns, names) if p.count(os.sep) == slns[0].count(os.sep)] if slns else []
         if not names:
             stems = {re.sub(r"\.(Domain|Application|Infrastructure|WebApi|Api|UnitTests|Tests)$", "",
                             os.path.splitext(os.path.basename(p))[0]) for p in m["csproj"]}
-            names = sorted(stems)
-        out.append({"stack": "dotnet", "language": "C#", "evidence": (m["sln"] or m["csproj"])[:5],
-                    "testFramework": fw, "product": names[0] if len(names) == 1 else None,
+            names = top = sorted(stems)
+        out.append({"stack": "dotnet", "language": "C#", "evidence": (slns or m["csproj"])[:5],
+                    "testFramework": fw, "product": top[0] if len(top) == 1 else None,
                     "productCandidates": names[:5]})
     if m["package.json"]:
         pkg = {}
@@ -176,6 +180,11 @@ def main(argv):
     presets.sort(key=lambda p: (-p["useCaseFolders"], p["preset"] != kit_config.DEFAULT_PRESET, p["preset"]))
     legacy = [d for d in ("hooks", "lib", "skills", "agents", "tools", "presets", "evals")
               if os.path.isdir(os.path.join(cl, d))]
+    # Copies that moved the kit's scripts under .claude/, and the mods' own marketplace.
+    if os.path.isfile(os.path.join(cl, "scripts", "pre-audit.sh")):
+        legacy.append("scripts")
+    if os.path.isfile(os.path.join(cl, "mods", ".claude-plugin", "marketplace.json")):
+        legacy.append("mods")
     if os.path.isfile(os.path.join(root, "scripts", "pre-audit.sh")):
         legacy.append("../scripts")
     print(json.dumps({

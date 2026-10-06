@@ -4,7 +4,7 @@
 
 A **Claude Code plugin**, `cctoolkit`, for a DDD/TDD clean-architecture repo — this checkout is both the plugin and its marketplace (`.claude-plugin/`). No application code: **nothing to build, nothing to test**. The work here is editing `.md`, `.sh` and JSON files.
 
-What each brick does, how to install it, what the kit imposes on the target repo: **[README.md](README.md)**. Do not duplicate those explanations here.
+Workflow and installation: **[README.md](README.md)**. What each brick does and how: the README of its folder (`skills/` — agents included —, `hooks/`, `lib/`, `scripts/`, `tools/`, `presets/` — `rules/` and `kit.config.json` included —, `templates/`, `evals/`, `mods/`). Do not duplicate those explanations here. `agents/` and `rules/` never get a README: the plugin loads every `agents/*.md` as an agent, `/cctoolkit:kit-init` copies every `rules/*.md` into the repo.
 
 ## Anonymisation — do not break it
 
@@ -12,7 +12,7 @@ The product name is the `{{PRODUCT}}` placeholder in the instruction files, rule
 
 ## Language
 
-**English everywhere in the kit** — instruction files (`skills/`, `agents/`, `rules/`), documentation (`README.md`, `CLAUDE.md`, `RESOURCES.md`), hook comments and messages, script output, and the contracts between agents. Template blocks ship in English too. What the skills write into the target repo follows its `kit.config.json` `language` (README § `kit.config.json`); a template change keeps every `<!-- kit:… -->` anchor.
+**English everywhere in the kit** — instruction files (`skills/`, `agents/`, `rules/`), documentation (`README.md`, `CLAUDE.md`, `RESOURCES.md`), hook comments and messages, script output, and the contracts between agents. Template blocks ship in English too. What the skills write into the target repo follows its `kit.config.json` `language` (`presets/README.md` § `kit.config.json`); a template change keeps every `<!-- kit:… -->` anchor.
 
 ## Frozen literals
 
@@ -64,7 +64,7 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 | wiring (event, matcher, hook order) | `hooks/hooks.json` — commands written `bash "${CLAUDE_PLUGIN_ROOT}/hooks/x.sh"` |
 | what the repo's own settings carry (permissions, env, statusline, plugin enablement) | `templates/` — merged into the repo by `/cctoolkit:kit-init`, never read from here |
 | a script or tool the skills call | `scripts/` or `tools/`, reached through `bin/cctoolkit <name>` — never a path in a skill, an agent or a reference |
-| description of the kit's behaviour | `README.md` |
+| description of the kit's behaviour | `README.md` for the workflow and installation, the folder's `README.md` for a brick |
 | measurement, protocol or procedure too long for `CLAUDE.md` | `docs/CONTEXT-COST.md`, `docs/TOOLING.md` — opened on demand, so the standing rule stays in `CLAUDE.md` and only points here |
 | repo-wide scanner or one-shot migration | `scripts/` — never a hook: a hook fires per edit, a scan reads the whole repo |
 
