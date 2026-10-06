@@ -4,7 +4,7 @@ What a plugin cannot set itself. `/cctoolkit:kit-init` merges these into the rep
 
 | File | Role |
 |------|------|
-| `settings.json` | permissions, env, statusline, the marketplace and plugin enablement — merged into the repo's |
+| `settings.json` | permissions, env, statusline — merged into the repo's. Its marketplace and plugin enablement are never merged: `claude plugin install --scope project` writes them |
 | `statusline-command.sh` | git branch, model, context %, effort, 5 h rate limit, caveman badge, graph lag; also drops the current effort in `$TMPDIR` for `implement-tdd-guard.sh` |
 | `claude.gitignore` | the runtime files the hooks write inside `.claude/` |
 | `settings.local.json` | startup trim, opt-in — see below |

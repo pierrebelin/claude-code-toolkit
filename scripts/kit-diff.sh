@@ -5,7 +5,7 @@
 # Since the plugin, the core never sits in a repo: what a repo needs of its own
 # lives in `.claude/kit.config.json`, `.claude/rules/` and the files merged from
 # `templates/`. A repo still holding a copy made before the plugin runs this
-# before deleting it (README § Migrating): every DRIFT and ADDED file is a local
+# before deleting it (`/cctoolkit:kit-init` § 2): every DRIFT and ADDED file is a local
 # change to bring back into the kit, or to lose knowingly.
 #
 #   MISSING  in the kit, not installed            ADDED   installed, not in the kit

@@ -13,16 +13,14 @@ A `tool.call` hook reads the tool's arguments flat on `e` (`e.skill`, `e.file_pa
 
 ## Install
 
-Optional, independent of `cctoolkit`. With the `cctoolkit` marketplace already known to the repo (README § Installation), add to `<repo>/.claude/settings.json` — write it yourself: the auto-mode classifier refuses an agent enabling plugins there:
-```json
-"enabledPlugins": {
-  "context-band@cctoolkit": true,
-  "tdd-batch@cctoolkit": true
-}
+Optional, independent of `cctoolkit`. With the `cctoolkit` marketplace already known to the repo (README § Installation), type it yourself — the auto-mode classifier refuses an agent enabling plugins:
+```bash
+claude plugin install context-band@cctoolkit --scope project
+claude plugin install tdd-batch@cctoolkit --scope project
 ```
-or `claude plugin install context-band@cctoolkit --scope project`. Restart Claude Code in the repo.
+Restart Claude Code in the repo.
 
-A repo that installed them from `.claude/mods/` (the former `pierrebelinmods` marketplace): delete `.claude/mods/`, the `pierrebelinmods` entry of `extraKnownMarketplaces` and the two `…@pierrebelinmods` lines of `enabledPlugins`.
+A repo that installed them from `.claude/mods/` (the former `pierrebelinmods` marketplace): `/cctoolkit:kit-init` removes that marketplace and tells which mods to reinstall.
 
 Check it loaded:
 ```bash
