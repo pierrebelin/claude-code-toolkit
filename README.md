@@ -4,6 +4,17 @@ A Claude Code plugin, `cctoolkit`: what I install in a DDD / clean-architecture 
 
 This checkout is both the plugin and its marketplace (`.claude-plugin/`). Nothing to build: only `.md`, `.sh`, Python and JSON.
 
+## Quick start
+
+Two commands, then one skill does the rest:
+
+```bash
+claude plugin marketplace add pierrebelin/claude-code-toolkit
+claude plugin install cctoolkit@cctoolkit --scope project
+```
+
+Restart Claude Code and run **`/cctoolkit:kit-init`**. A plugin cannot ship config, rules or settings — `kit-init` writes them into your repo: it reads your stack, asks one round of questions, and leaves the repo ready for `/cctoolkit:business-spec`. Details: [Installation](#installation).
+
 ## Workflow
 
 Four skills in a chain. Each step writes a file the next one reads — nothing travels through the conversation, and no step starts without the previous one's artefact.
@@ -52,7 +63,7 @@ Side skills: `/cctoolkit:quality-report` (monthly snapshot), `/cctoolkit:learn` 
 
 ## Not a template to install as-is
 
-This kit encodes **my** way of working. Among other things it imposes strict TDD, zero comments in production, surgical changes, no `git commit` by the agent, and one rule sheet per handler folder checked against the tests ([`skills/README.md`](skills/README.md#what-the-kit-imposes-on-the-repo)). On a project with other conventions, half of it is noise. The plugin comes whole; to take only part of it, read the source and copy what you want.
+This kit encodes **my** way of working. Among other things it imposes strict TDD, zero comments in production, surgical changes, no `git commit` by the agent, and one rule sheet per handler folder checked against the tests ([`skills/README.md`](skills/README.md#what-the-kit-imposes-on-the-repo)). On a project with other conventions, half of it is noise.
 
 ## Installation
 
@@ -65,11 +76,23 @@ Requires Claude Code with plugin support, `jq` and `python3`.
    ```
    Project scope writes the plugin into the committed `.claude/settings.json`: every clone and worktree gets it. `--scope local` keeps it to your checkout; a worktree then needs `cctoolkit install-git-hooks` (`docs/TOOLING.md`). A local checkout of this repo works as the marketplace too.
 
-2. **Restart Claude Code, then run `/cctoolkit:kit-init`.** It detects the stack, proposes a preset, asks the documents' language and the product name, writes `.claude/kit.config.json`, copies the rules into `.claude/rules/`, merges the settings, installs the statusline, then runs `cctoolkit doctor`. It never overwrites a file without asking. Re-run it to reconfigure. Configuration keys: [`presets/README.md`](presets/README.md).
+2. **Restart Claude Code, then run `/cctoolkit:kit-init`** from the repo root, after `/clear`. This is the step that matters: the plugin brings skills, agents and hooks, but without `kit-init` the repo has no `kit.config.json`, no rules and no permissions, and the hooks assume the `clean-architecture` layout, whatever yours is. Don't set the repo up by hand.
 
-3. **Optional** — the mods (`claude plugin install context-band@cctoolkit --scope project`, same for `tdd-batch`, see [`mods/README.md`](mods/README.md)) and the startup trim ([`templates/README.md`](templates/README.md#startup-trim)).
+3. **Optional** — the mods (`claude plugin install context-band@cctoolkit --scope project`, same for `tdd-batch`, see [`mods/README.md`](mods/README.md)) and the startup trim ([`templates/README.md`](templates/README.md#startup-trim)). Add `graphify-out/` to the repo's `.gitignore`.
 
-A repo holding handler `CLAUDE.md` files, specs or plans written before the `<!-- kit:… -->` anchors runs `cctoolkit migrate-anchors` (dry run), then `--apply`. Add `graphify-out/` to the repo's `.gitignore`.
+### What `/cctoolkit:kit-init` does
+
+| Step | What happens |
+|------|--------------|
+| Detect | `cctoolkit detect-stack` and `cctoolkit doctor`: manifests, test framework, product name guess, use-case folders each preset recognises in your tree |
+| Migrate | a manual copy of the kit found in `.claude/` → saves its local edits, then removes it on confirmation; the repo's own skills, scripts, config and rules stay. Commit the deletions and the settings change together |
+| Choose | one round of questions: the preset (ranked on your real folders), the documents' language, the code language, the product when ambiguous |
+| Config | writes `.claude/kit.config.json` — only what differs from the preset — validates it, offers `migrate-anchors` on specs, plans and handler sheets older than the `<!-- kit:… -->` anchors |
+| Rules | copies the universal rules and the preset's layer rules into `.claude/rules/`, `{{PRODUCT}}` substituted, dead `paths:` globs rewritten from your layout. **No preset fits?** It drafts one rule per layer from your most-changed files, each convention cited `file:line`, marked "review before trusting" |
+| Settings | merges permissions and env into `.claude/settings.json`, installs the statusline, completes `.claude/.gitignore` |
+| Report | applies the doctor's mechanical fixes, re-runs `cctoolkit doctor`, prints one summary table and the next step |
+
+It **never overwrites** a file that differs: it shows the difference and asks keep / replace / merge. It **never commits**. Re-run it whenever you want to change the preset or the language, or pull a rule changed by a release. Configuration keys: [`presets/README.md`](presets/README.md).
 
 ### Dependencies
 
@@ -90,18 +113,7 @@ claude plugin marketplace update cctoolkit
 claude plugin update cctoolkit@cctoolkit
 ```
 
-Restart Claude Code, then `cctoolkit doctor`. Nothing in the repo changes: `kit.config.json`, `.claude/rules/` and the settings stay as they are. A release changing a rule says so in its notes — pull it with `/cctoolkit:kit-init` (it shows each difference and asks). Never edit the plugin cache (`cctoolkit root`): the next update replaces it. A change to the kit itself goes into a checkout of this repo, then reaches every repo through the update.
-
-## Migrating from a manual copy
-
-A repo set up before the plugin holds the kit in `.claude/{agents,hooks,lib,presets,skills,tools,evals,docs}` and `scripts/`, with hooks registered in its settings. Left beside the plugin, every guard fires twice and the bare skill names shadow the plugin's.
-
-1. **Save local edits**: `cctoolkit kit-diff .` — `DRIFT` lines are local edits to the core: bring them into the toolkit repo (it flags any line naming the repo's product) or drop them knowingly. `ADDED` files are the repo's own and stay.
-2. **Install the plugin** — [Installation](#installation) step 1.
-3. **Remove the copy**: `/cctoolkit:kit-init` detects it, runs step 1, and on confirmation deletes the kit's files under `.claude/` and the kit's scripts under `scripts/` (`cctoolkit remove-copy --apply` — the repo's own skills and scripts stay, a file added inside a kit skill is flagged `MOVE`), the `hooks` key of the settings and the former mods marketplace, then offers `cctoolkit migrate-anchors --apply`. Keep `kit.config.json`, `.claude/rules/*.md`, `statusLine`, `permissions`, `env`.
-4. **Check**: `cctoolkit doctor` — no `legacy …` line, `plugin enabled` ok.
-
-Commit the deletions and the settings change together: a clone getting one without the other runs no guard, or two.
+Restart Claude Code, then `cctoolkit doctor`. Nothing in the repo changes: `kit.config.json`, `.claude/rules/` and the settings stay as they are. A release changing a rule says so in its notes — re-run `/cctoolkit:kit-init` to pull it: it shows each difference and asks. Never edit the plugin cache (`cctoolkit root`): the next update replaces it. A change to the kit itself goes into a checkout of this repo, then reaches every repo through the update.
 
 ## Repository map
 
@@ -118,7 +130,7 @@ Commit the deletions and the settings change together: a clone getting one witho
 | `mods/` | optional in-terminal panes | [`mods/README.md`](mods/README.md) |
 | `docs/` | context cost, tooling | `CONTEXT-COST.md`, `TOOLING.md` |
 
-`agents/` and `rules/` carry no README of their own: the plugin loads every `agents/*.md` as an agent, and `/kit-init` copies every `rules/*.md` into the repo.
+`agents/` and `rules/` carry no README of their own: the plugin loads every `agents/*.md` as an agent, and `/cctoolkit:kit-init` copies every `rules/*.md` into the repo.
 
 ## Elsewhere
 

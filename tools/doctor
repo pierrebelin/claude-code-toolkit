@@ -96,9 +96,9 @@ for f in "$CL/settings.json" "$CL/settings.local.json" "${CLAUDE_CONFIG_DIR:-$HO
     [ "$f" = "$CL/settings.local.json" ] && local_hooks=1
   fi
   # A copy installed before the plugin registered its hooks here, by path. Left in
-  # place next to the plugin, every guard fires twice — README § Migrating.
+  # place next to the plugin, every guard fires twice — /cctoolkit:kit-init removes it.
   legacy=$(jq -r '.hooks // {} | to_entries[] | .value[] | .hooks[]? | .command // empty' "$f" 2>/dev/null | grep -c '\.claude/hooks/')
-  [ "${legacy:-0}" -gt 0 ] && report WARN "legacy hook wiring" "$name registers $legacy command(s) under .claude/hooks/ — remove its \"hooks\" key (README § Migrating)"
+  [ "${legacy:-0}" -gt 0 ] && report WARN "legacy hook wiring" "$name registers $legacy command(s) under .claude/hooks/ — remove its \"hooks\" key (/cctoolkit:kit-init)"
 done
 if [ -n "$enabled_in" ]; then
   report ok "plugin enabled" "cctoolkit in${enabled_in}"
@@ -136,14 +136,14 @@ if [ "$ROOT" != "$KIT" ]; then
   # skills/implement-tdd/SKILL.md, not the folder: a repo file kept there (a reference its
   # own skill reads) is no skill, so no copy.
   for p in hooks/bash-dispatch.sh lib/guard-git.sh skills/implement-tdd/SKILL.md agents/tdd-implementer.md tools/doctor presets evals/run.sh scripts/pre-audit.sh; do
-    [ -e "$CL/$p" ] && report WARN "legacy copy" ".claude/${p%%/*}/ from a manual install — delete it once the plugin is enabled (README § Migrating)"
+    [ -e "$CL/$p" ] && report WARN "legacy copy" ".claude/${p%%/*}/ from a manual install — delete it once the plugin is enabled (/cctoolkit:kit-init)"
   done
   [ -f "$ROOT/scripts/pre-audit.sh" ] \
-    && report WARN "legacy copy" "scripts/ holds the kit's scripts from a manual install — delete them (README § Migrating)"
+    && report WARN "legacy copy" "scripts/ holds the kit's scripts from a manual install — delete them (/cctoolkit:kit-init)"
   # The mods once shipped as their own marketplace inside the copy; the plugin's
   # marketplace carries them now, and both enabled draw every band and pane twice.
   [ -f "$CL/mods/.claude-plugin/marketplace.json" ] \
-    && report WARN "legacy mods" ".claude/mods/ is a marketplace from a manual install — delete it, enable the mods as <mod>@cctoolkit (README § Migrating)"
+    && report WARN "legacy mods" ".claude/mods/ is a marketplace from a manual install — delete it, enable the mods as <mod>@cctoolkit (/cctoolkit:kit-init)"
 fi
 
 # --- repo-owned files ------------------------------------------------------------

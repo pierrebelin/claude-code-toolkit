@@ -10,7 +10,7 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 
 | Command | Role |
 |---------|------|
-| `detect-stack` | stack, test framework, product, and how many use-case folders each preset recognises — the model-free half of `/kit-init` |
+| `detect-stack` | stack, test framework, product, and how many use-case folders each preset recognises — the model-free half of `/cctoolkit:kit-init` |
 | `rules-coverage` | rules ↔ tags, repo-wide; `--ids <sheet>` lists the DDD/APP/PERF ids the sheet never cites |
 | `untagged-tests` | tests carrying no rule tag |
 | `migrate-rm-traits` | one-shot: `Tests` column → tags |

@@ -21,9 +21,9 @@ Only `clean-architecture` ships a layer pack today. A repo's own preset goes in 
 | `rules/` (kit root) | `.claude/rules/`, always | the 3 universal rules, whatever the stack: `cctoolkit` (how to read the kit's instructions: `{{PRODUCT}}`, `cctoolkit`, kit paths, namespacing), `markdown-output` (produced vs. instruction files, language, frozen literals) and `context-discipline` (turns, bounds, subagents, session hygiene — loaded in every session, no `paths:`) |
 | `presets/<preset>/rules/` | `.claude/rules/`, when the preset has a pack | the layer conventions, each loaded when a file matching its `paths:` is opened |
 
-A plugin cannot load rules: `/kit-init` copies them with `{{PRODUCT}}` substituted, rewrites a `paths:` glob that matches nothing from `layout` — or, when no preset fits, drafts one `.claude/rules/<layer>.md` per code folder from what the files actually share, to review. Once copied, `.claude/rules/` is the repo's own: rewritten freely, never parsed by the core. They are the single source of the layer conventions — naming tables live in the rule of the layer that owns the artefact, nowhere else.
+A plugin cannot load rules: `/cctoolkit:kit-init` copies them with `{{PRODUCT}}` substituted, rewrites a `paths:` glob that matches nothing from `layout` — or, when no preset fits, drafts one `.claude/rules/<layer>.md` per code folder from what the files actually share, to review. Once copied, `.claude/rules/` is the repo's own: rewritten freely, never parsed by the core. They are the single source of the layer conventions — naming tables live in the rule of the layer that owns the artefact, nowhere else.
 
-`rules/` holds no README: `/kit-init` copies every `rules/*.md` into the repo.
+`rules/` holds no README: `/cctoolkit:kit-init` copies every `rules/*.md` into the repo.
 
 ## `kit.config.json`
 
@@ -95,7 +95,7 @@ src/{{PRODUCT}}.Domain/          namespace {{PRODUCT}}.Application.Catalog.Produ
 tests/{{PRODUCT}}.UnitTests/     dotnet test --project tests/{{PRODUCT}}.UnitTests/…
 ```
 
-Hooks, `lib/` and `scripts/` read it from `kit.config.json` `product` and carry no placeholder. The skills, agents and references keep it — they live in the plugin cache, shared by every repo — and the universal rule `cctoolkit.md` tells the model to read `{{PRODUCT}}` as `product`. Only the rules copied into a repo by `/kit-init` have it substituted.
+Hooks, `lib/` and `scripts/` read it from `kit.config.json` `product` and carry no placeholder. The skills, agents and references keep it — they live in the plugin cache, shared by every repo — and the universal rule `cctoolkit.md` tells the model to read `{{PRODUCT}}` as `product`. Only the rules copied into a repo by `/cctoolkit:kit-init` have it substituted.
 
 `cctoolkit kit-diff` replays that substitution before comparing a manual copy, so it is not a drift. Before a change flows back from a repo into the kit, the same script flags any line naming the repo's product or vocabulary (use-case folders and their parents, aggregate and value-object names read through its `layout`).
 
