@@ -5,7 +5,7 @@ Read **after the global green loop** (`/implement-tdd` §3), never before — no
 ## 1. Plan update
 
 Implementation references a plan (`todo/<code>/[CODE]-PLAN.md` + its `[CODE]-PLAN-FX.md` sheet) → **always** update it on completion:
-- Batch/step → **✅ DONE** + date
+- Batch/step → **✅ DONE** + date: sheet title gets ` — ✅ DONE (date)`; every step without a `TDD :` line (documentation, verification) gets a body line starting with `✅ DONE (date)` — the `tdd-batch` pane closes a step only on that line, its heading or its ticks
 - Short summary of files created/modified
 - Deviations (extra files, different decisions) → document them
 - Assumptions made mid-batch → the sheet's `## Assumptions` section: `Hn — [what you assume] — to be validated by [who]`. An assumption later confirmed becomes a decision: move it to `## Decisions`.
@@ -57,6 +57,13 @@ Summary: files created/modified, layers touched, **access cost per delivered beh
 | `[Class]Tests.[Method]` | RM-XX | Short description of the use case / business rule verified |
 
 One test per row, exact method name, the rule id it is tied to, concise description of the verified behaviour. Every row of every relayed `## RED` table appears here; a test deleted mid-batch does not. Assemble from those rows — don't rebuild from the diff.
+
+**Width cap — the terminal turns a too-wide table into stacked `Test: / RM/CU: / Use case verified:` cards** (observed 2026-10-04: `Class.Method` cells over 120 characters). Keep each row under ~140 characters:
+- **One table per test class**, preceded by a line `**[Class]Tests**`; the `Test` cell carries the method name alone, in backticks, never the class prefix, never shortened with `…`.
+- `Use case verified` ≤ 50 characters; `RM/CU` ids only.
+- Row still over the cap because the method name alone is too long → keep the name whole and cut `Use case verified` to ≤ 25 characters.
+
+Same cap for every other table of the summary (files, cost, assumptions, validations): short cells, path relative to the layer prefix, never a sentence in a cell.
 
 **`/learn` reminder** — after the table, run `cctoolkit learn-candidates --count`. Non-empty output → print it verbatim as the line before the end-of-batch line. Never launch `/learn` yourself: next session, after `/clear`.
 

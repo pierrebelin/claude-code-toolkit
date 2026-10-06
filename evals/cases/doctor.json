@@ -24,6 +24,13 @@
       }
     },
     {
+      "name": "a README beside the tools is documentation, never an executable missing +x",
+      "cmd": "bash {{KIT}}/tools/doctor | grep -q 'executable README' && echo flagged || echo clean",
+      "expect": {
+        "stdout": "clean"
+      }
+    },
+    {
       "name": "a root where the plugin is not enabled is a FAIL, not a crash",
       "cmd": "bash {{KIT}}/tools/doctor --quiet",
       "env": {
@@ -74,6 +81,34 @@
       "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude\nprintf '%s' '{\"enabledPlugins\":{\"cctoolkit@cctoolkit\":true}}' > $R/.claude/settings.json\nbash {{KIT}}/tools/doctor",
       "expect": {
         "stdout": "ok   plugin enabled"
+      }
+    },
+    {
+      "name": "a copy predating kit_config.py, scripts under .claude/, mods marketplace: each flagged",
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude/lib $R/.claude/scripts $R/.claude/mods/.claude-plugin\n: > $R/.claude/lib/guard-git.sh\n: > $R/.claude/scripts/pre-audit.sh\nprintf '{}' > $R/.claude/mods/.claude-plugin/marketplace.json\nprintf '%s' '{\"enabledPlugins\":{\"cctoolkit@cctoolkit\":true}}' > $R/.claude/settings.json\ncd $R && CLAUDE_PROJECT_DIR=$R bash {{KIT}}/tools/doctor --quiet | grep -c 'legacy copy .*\\.claude/\\(lib\\|scripts\\)/\\|legacy mods'",
+      "expect": {
+        "stdout": "3"
+      }
+    },
+    {
+      "name": "after the copy is removed, its rules and CLAUDE.md still naming its paths are flagged, an outdated markdown-output.md too",
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude/rules\nprintf 'Run `python3 .claude/scripts/rules-coverage.py`.\\n' > $R/CLAUDE.md\nprintf 'Old literals, parsed by `.claude/hooks/implement-tdd-guard.sh`.\\n' > $R/.claude/rules/markdown-output.md\nprintf '%s' '{\"enabledPlugins\":{\"cctoolkit@cctoolkit\":true}}' > $R/.claude/settings.json\ncd $R && CLAUDE_PROJECT_DIR=$R bash {{KIT}}/tools/doctor --quiet | grep -E 'rules outdated|stale kit paths' | sed -E 's/^WARN +//; s/ {2,}.*//; s/ (\\.claude|CLAUDE).*//' | tr '\\n' ';'",
+      "expect": {
+        "stdout": "rules outdated;stale kit paths;"
+      }
+    },
+    {
+      "name": "a kit skill folder left holding only a repo file is not a legacy copy",
+      "cmd": "R={{FIX}}/doc-fresh-{{SID}}\nrm -rf $R\nmkdir -p $R/.claude/rules $R/.claude/skills/implement-tdd/references\n: > $R/.claude/skills/implement-tdd/references/autonomous-mode.md\nprintf '%s' '{\"enabledPlugins\":{\"cctoolkit@cctoolkit\":true}}' > $R/.claude/settings.json\ncd $R && CLAUDE_PROJECT_DIR=$R bash {{KIT}}/tools/doctor --quiet | grep -q 'legacy copy' && echo flagged || echo clean",
+      "expect": {
+        "stdout": "clean"
+      }
+    },
+    {
+      "name": "a removed copy's folder cited without a file name is a stale path, the repo's own script beside it is not",
+      "cmd": "R={{FIX}}/doc-fresh-{{SID}}\nrm -rf $R\nmkdir -p $R/.claude/rules $R/.claude/scripts\n: > $R/.claude/scripts/own.py\nprintf 'Evals after editing `.claude/hooks`, `.claude/lib`. Run `python3 .claude/scripts/own.py`.\\n' > $R/CLAUDE.md\nprintf '%s' '{\"enabledPlugins\":{\"cctoolkit@cctoolkit\":true}}' > $R/.claude/settings.json\ncd $R && CLAUDE_PROJECT_DIR=$R bash {{KIT}}/tools/doctor --quiet | grep -o 'stale kit paths *CLAUDE.md ([0-9]*)' | tr -s ' '",
+      "expect": {
+        "stdout": "stale kit paths CLAUDE.md (2)"
       }
     }
   ]

@@ -23,6 +23,7 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | `install-git-hooks` | links `settings.local.json` into new worktrees, for a plugin enabled at local scope |
 | `batch-wallclock` | wall clock of an `/implement-tdd` batch |
 | `kit-diff <repo>` | a manual copy against the kit: MISSING / ADDED / DRIFT / MERGED, plus anonymisation alerts — the migration's first step |
+| `remove-copy` | the migration's deletion: DELETE the files the kit ships, KEEP the repo's own skills and scripts, MOVE a file added inside a kit skill, ORPHAN the repo's eval cases — dry run, `--apply` deletes |
 | `learn-candidates` | the model-free half of `/learn` |
 
 ## Adapting

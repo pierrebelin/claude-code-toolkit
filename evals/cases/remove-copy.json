@@ -1,0 +1,39 @@
+{
+  "cases": [
+    {
+      "name": "a copy's files are DELETE, the repo's own skill and script KEEP, a file added inside a kit skill MOVE, the repo's eval case ORPHAN",
+      "cmd": "R={{FIX}}/rc-{{SID}}\nrm -rf $R\nmkdir -p $R/.claude/hooks $R/.claude/scripts $R/.claude/skills/implement-tdd/references $R/.claude/skills/own-skill $R/.claude/evals/cases\ncp {{KIT}}/hooks/bash-dispatch.sh $R/.claude/hooks/\ncp {{KIT}}/scripts/pre-audit.sh $R/.claude/scripts/\nprintf x > $R/.claude/scripts/own.sh\nprintf 'read references/extra.md\\n' > $R/.claude/skills/implement-tdd/SKILL.md\nprintf x > $R/.claude/skills/implement-tdd/references/extra.md\nprintf x > $R/.claude/skills/own-skill/SKILL.md\nprintf '{}' > $R/.claude/evals/cases/own.json\ncd $R && CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/remove-copy.py | sed -E 's/ +— .*//' | tr -s ' ' | LC_ALL=C sort | tr '\\n' ';'",
+      "expect": {
+        "stdout": "DELETE .claude/hooks/bash-dispatch.sh;DELETE .claude/scripts/pre-audit.sh;DELETE .claude/skills/implement-tdd/SKILL.md;KEEP .claude/scripts/own.sh;KEEP .claude/skills/own-skill/SKILL.md;MOVE .claude/skills/implement-tdd/references/extra.md;ORPHAN .claude/evals/cases/own.json;delete 3 · keep 2 · move 1 · orphan 1;"
+      }
+    },
+    {
+      "name": "a file added inside a kit skill and read by the copy's version of that skill is a local extension to port",
+      "cmd": "R={{FIX}}/rc-{{SID}}\nrm -rf $R\nmkdir -p $R/.claude/hooks $R/.claude/scripts $R/.claude/skills/implement-tdd/references $R/.claude/skills/own-skill $R/.claude/evals/cases\ncp {{KIT}}/hooks/bash-dispatch.sh $R/.claude/hooks/\ncp {{KIT}}/scripts/pre-audit.sh $R/.claude/scripts/\nprintf x > $R/.claude/scripts/own.sh\nprintf 'read references/extra.md\\n' > $R/.claude/skills/implement-tdd/SKILL.md\nprintf x > $R/.claude/skills/implement-tdd/references/extra.md\nprintf x > $R/.claude/skills/own-skill/SKILL.md\nprintf '{}' > $R/.claude/evals/cases/own.json\ncd $R && CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/remove-copy.py | grep '^MOVE'",
+      "expect": {
+        "stdout": "a local extension of the kit, port it to the toolkit"
+      }
+    },
+    {
+      "name": "--apply deletes the kit's files and the folders left empty, never the repo's",
+      "cmd": "R={{FIX}}/rc-{{SID}}\nrm -rf $R\nmkdir -p $R/.claude/hooks $R/.claude/scripts $R/.claude/skills/implement-tdd/references $R/.claude/skills/own-skill $R/.claude/evals/cases\ncp {{KIT}}/hooks/bash-dispatch.sh $R/.claude/hooks/\ncp {{KIT}}/scripts/pre-audit.sh $R/.claude/scripts/\nprintf x > $R/.claude/scripts/own.sh\nprintf 'read references/extra.md\\n' > $R/.claude/skills/implement-tdd/SKILL.md\nprintf x > $R/.claude/skills/implement-tdd/references/extra.md\nprintf x > $R/.claude/skills/own-skill/SKILL.md\nprintf '{}' > $R/.claude/evals/cases/own.json\ncd $R && CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/remove-copy.py --apply >/dev/null; cd $R/.claude && find . -type f | sort | tr '\\n' ';'; [ -d hooks ] && echo hooks-left || echo hooks-gone",
+      "expect": {
+        "stdout": "./evals/cases/own.json;./scripts/own.sh;./skills/implement-tdd/references/extra.md;./skills/own-skill/SKILL.md;hooks-gone"
+      }
+    },
+    {
+      "name": "the mods' former marketplace goes whole, untracked files included",
+      "cmd": "R={{FIX}}/rc2-{{SID}}\nrm -rf $R\nmkdir -p $R/.claude/mods/.claude-plugin $R/.claude/mods/x/node_modules\nprintf '{}' > $R/.claude/mods/.claude-plugin/marketplace.json\nprintf x > $R/.claude/mods/x/node_modules/a.js\ncd $R && CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/remove-copy.py --apply | tail -1; [ -e $R/.claude/mods ] && echo mods-left || echo mods-gone",
+      "expect": {
+        "stdout": "mods-gone"
+      }
+    },
+    {
+      "name": "an unknown argument is a usage error",
+      "cmd": "python3 {{KIT}}/scripts/remove-copy.py --nope 2>&1; echo exit=$?",
+      "expect": {
+        "stdout": "exit=2"
+      }
+    }
+  ]
+}

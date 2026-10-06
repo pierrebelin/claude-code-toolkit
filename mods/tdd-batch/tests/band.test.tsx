@@ -79,6 +79,22 @@ describe('fiche de lot', () => {
     expect(sheet.name).toBe('Verrous')
   })
 
+  test('ligne DONE en corps d’étape ferme l’étape, toutes étapes closes ferment le lot', () => {
+    const text = [
+      '# X-PLAN-F7 — Droits',
+      '## Deroulement TDD',
+      '### Etape 1 — Transférer',
+      'TDD : RED ✅ · GREEN ✅ · COUT ✅',
+      '### Etape 2 — Verification build + tests',
+      'Pas de nouveau test.',
+      '✅ DONE (2026-10-05) :',
+      '- build exit 0',
+    ].join('\n')
+    const sheet = parseSheet(text, 'todo/x/X-PLAN-F7.md')
+    expect(sheet.steps[1]?.isDone).toBe(true)
+    expect(sheet.isDone).toBe(true)
+  })
+
   test('arguments de la skill donnent le chemin de la fiche', () => {
     expect(sheetFromArgs('lot F2 todo/package-configuration/PKG-CONF-PLAN.md')).toEqual({ path: SHEET_PATH, lot: 'F2' })
     expect(sheetFromArgs('lot F2 — correction: applet vide accepté')).toEqual({ path: null, lot: 'F2' })
@@ -87,18 +103,22 @@ describe('fiche de lot', () => {
   })
 })
 
-const world = (on: On, exists = true, sheet = () => SHEET, answer?: Answer) => {
-  const store = new Map<string, unknown>()
+const world = (
+  on: On,
+  exists: boolean | (() => boolean) = true,
+  sheet = () => SHEET,
+  answer?: Answer,
+  cwd = () => '/repo',
+  reads: string[] = [],
+) => {
   const clock = mock.clock(on)
-  on('fs.exists', () => ({ value: exists }))
-  on('fs.read', () => ({ value: sheet() }))
-  on('session.cwd', () => ({ value: '/repo' }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('store.get', ($, e) => ({ value: store.get(e.key) }))
-  on('store.set', ($, e) => {
-    store.set(e.key, e.value)
-    return { value: undefined }
+  on('fs.exists', () => ({ value: typeof exists === 'function' ? exists() : exists }))
+  on('fs.read', ($, e) => {
+    reads.push(e.path)
+    return { value: sheet() }
   })
+  on('session.cwd', () => ({ value: cwd() }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('fs.list', ($, e) => ({
     value: e.path.replace(/\/$/, '').endsWith('todo')
       ? [{ name: 'package-configuration', kind: 'dir', size: 0, mtimeMs: 1, isLink: false }]
@@ -108,7 +128,8 @@ const world = (on: On, exists = true, sheet = () => SHEET, answer?: Answer) => {
         ],
   }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('command.run', () => ({ text: '' }))
+  on('ui.close', () => undefined)
   on('ui.render', ($, e) => {
     const { Box } = $.ui.resolve(e)
     return <Box key="engine" />
@@ -128,20 +149,19 @@ type Answer = (
   input: Record<string, unknown>,
 ) => { result: { type: 'text' }; text: string } | Promise<{ result: { type: 'text' }; text: string }> | undefined
 
-const PANE = {
-  component: 'Pane',
-  requestId: 'tdd-batch',
+const BAND = {
+  component: 'AbovePrompt',
   props: {
-    title: 'Lot TDD',
-    isFocused: false,
+    hasSurvey: false,
+    isWorking: true,
+    maxRows: 20,
     bodyColumns: 120,
-    placement: 'dock',
-    scroll: { offset: 0, bodyRows: 30 },
+    scroll: { offset: 0, bodyRows: 19 },
     view: {},
   },
 } as const
 
-test('pane suit la fiche dès le lancement de implement-tdd, sur chaque surface', async ($, on) => {
+test('bandeau suit la fiche dès le lancement de implement-tdd, sur chaque surface', async ($, on) => {
   world(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await $.tool.call({
@@ -161,61 +181,118 @@ test('pane suit la fiche dès le lancement de implement-tdd, sur chaque surface'
   })
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'tdd-batch', surface, ...PANE })
-    expect(await ui.find({ type: 'Text', text: /Lot F2/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /1\/3 étapes/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /vague 1/ })).toBeDefined()
+    const ui = await $.ui.mount({ plugin: 'tdd-batch', surface, ...BAND })
+    expect(await ui.find({ type: 'Text', text: /Batch F2/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /1\/3 steps/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /wave 1/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /C1 RED ✅ · GREEN ⬜ · COUT ⬜/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /▸ 1\. RED ✅ · GREEN ✅ · COUT ✅ Générer le bundle/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /BLOQUÉ \(GREEN\) GREEN applet vide/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /BLOCKED \(GREEN\) GREEN applet vide/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^ {2}2\./ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /PKG-CONF-PLAN-F2\.md/ })).toBeUndefined()
+    await ui.press({ key: 'steps-toggle' })
+    expect(await ui.find({ type: 'Text', text: /^ {2}2\./ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /PKG-CONF-PLAN-F2\.md/ })).toBeDefined()
+    await ui.press({ key: 'steps-toggle' })
     await ui.unmount()
   }
 })
 
-test('pane suit les noms namespacés du plugin cctoolkit', async ($, on) => {
+const run = ($: Parameters<Parameters<typeof test>[1]>[0], command: string, args: string) =>
+  $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 160 } })
+
+test('bandeau absent sans fiche suivie, et après /tdd-batch off', async ($, on) => {
   world(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await $.tool.call({
-    tool: 'Skill',
-    tool_use_id: 's1',
-    skill: 'cctoolkit:implement-tdd', args: 'lot F2 todo/package-configuration/PKG-CONF-PLAN.md',
-  })
+  const empty = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...BAND })
+  expect(await empty.find({ type: 'Text', text: /Batch/ })).toBeUndefined()
+  await empty.unmount()
+
+  await run($, 'tdd-batch', '')
+  expect((await run($, 'tdd-batch', 'off')).text).toBe('Band hidden.')
+  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...BAND })
+  expect(await ui.find({ type: 'Text', text: /Batch/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('bandeau suit les noms namespacés du plugin cctoolkit', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await run($, 'cctoolkit:implement-tdd', 'lot F2 todo/package-configuration/PKG-CONF-PLAN.md')
   await $.tool.call({
     tool: 'Agent',
     tool_use_id: 'a1',
     subagent_type: 'cctoolkit:tdd-test-author', description: 'RED applet vide', prompt: 'x',
   })
-  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /Lot F2/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /vague 1/ })).toBeDefined()
+  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...BAND })
+  expect(await ui.find({ type: 'Text', text: /Batch F2/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /wave 1/ })).toBeDefined()
   await ui.unmount()
 })
 
-test('pane sans fiche suivie invite à nommer la fiche', async ($, on) => {
-  world(on, false)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /Aucune fiche de lot suivie/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('/tdd-batch sans argument suit la fiche la plus récente', async ($, on) => {
+test('bandeau apparaît dès /implement-tdd tapé par la personne', async ($, on) => {
   world(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const answer = await $.command.run({
-    command: 'tdd-batch',
-    args: '',
-    origin: { kind: 'composer' },
-    presentation: { isFullscreen: false, columns: 160 },
-  })
-  expect(answer.text).toBe(`Pane ouvert sur ${SHEET_PATH}.`)
+  await run($, 'implement-tdd', `lot F2 ${SHEET_PATH}`)
+  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...BAND })
+  expect(await ui.find({ type: 'Text', text: /Batch F2/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('/tdd-batch sans /implement-tdd dans la session ne suit aucune fiche', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect((await run($, 'tdd-batch', '')).text).toBe('No batch followed: run /implement-tdd first.')
+  await $.tool.call({ tool: 'Edit', tool_use_id: 'e1', file_path: `/repo/${SHEET_PATH}`, old_string: 'a', new_string: 'b' })
+  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...BAND })
+  expect(await ui.find({ type: 'Text', text: /Batch/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('lot sans chemin : suit la première fiche du lot ouverte, ignore les autres', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await run($, 'implement-tdd', 'lot F2')
+  await $.tool.call({ tool: 'Read', tool_use_id: 'r1', file_path: '/repo/todo/package-configuration/PKG-CONF-PLAN-F1.md' })
+  expect((await run($, 'tdd-batch', '')).text).toBe('No batch followed: run /implement-tdd first.')
+  await $.tool.call({ tool: 'Read', tool_use_id: 'r2', file_path: `/repo/${SHEET_PATH}` })
+  expect((await run($, 'tdd-batch', '')).text).toBe(`Band following ${SHEET_PATH}.`)
+  await $.tool.call({ tool: 'Edit', tool_use_id: 'e1', file_path: '/repo/todo/other/OTHER-PLAN-F2.md', old_string: 'a', new_string: 'b' })
+  expect((await run($, 'tdd-batch', '')).text).toBe(`Band following ${SHEET_PATH}.`)
+})
+
+test('fiche suivie déplacée hors de todo/ : bandeau retiré, aucune erreur', async ($, on) => {
+  let exists = true
+  world(on, () => exists)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await run($, 'implement-tdd', `lot F2 ${SHEET_PATH}`)
+  exists = false
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...BAND })
+  expect(await ui.find({ type: 'Text', text: /unreadable sheet/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Batch/ })).toBeUndefined()
+  await ui.unmount()
+  expect((await run($, 'tdd-batch', '')).text).toBe('No batch followed: run /implement-tdd first.')
+})
+
+test('fiche suivie lue depuis le dossier du lancement, même après un changement de cwd', async ($, on) => {
+  let cwd = '/repo'
+  const reads: string[] = []
+  world(on, true, () => SHEET, undefined, () => cwd, reads)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await run($, 'implement-tdd', `lot F2 ${SHEET_PATH}`)
+  cwd = '/repo/.claude/mods/tdd-batch'
+  await $.tool.call({ tool: 'Edit', tool_use_id: 'e1', file_path: `/repo/${SHEET_PATH}`, old_string: 'a', new_string: 'b' })
+  expect(reads.length).toBeGreaterThan(1)
+  expect(reads.every(path => path === `/repo/${SHEET_PATH}`)).toBe(true)
+  expect((await run($, 'tdd-batch', '')).text).toBe(`Band following ${SHEET_PATH}.`)
 })
 
 test('une écriture sur la fiche la rafraîchit', async ($, on) => {
   let text = SHEET
   world(on, true, () => text)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await run($, 'implement-tdd', `lot F2 ${SHEET_PATH}`)
   await $.tool.call({ tool: 'Edit', tool_use_id: 'e1', file_path: `/repo/${SHEET_PATH}`, old_string: 'a', new_string: 'b' })
   text = SHEET.replace('TDD : RED ⬜ · GREEN ⬜ · COUT ⬜', 'TDD : RED ✅ · GREEN ✅ · COUT ✅').replace(
     'TDD : RED ✅ · GREEN ⬜ · COUT ⬜',
@@ -223,8 +300,9 @@ test('une écriture sur la fiche la rafraîchit', async ($, on) => {
   )
   await $.tool.call({ tool: 'Edit', tool_use_id: 'e2', file_path: `/repo/${SHEET_PATH}`, old_string: 'a', new_string: 'b' })
 
-  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /3\/3 étapes/ })).toBeDefined()
+  const ui = await $.ui.mount({ plugin: 'tdd-batch', surface: 'terminal', ...BAND })
+  expect(await ui.find({ type: 'Text', text: /\bdone\b/ })).toBeDefined()
+  await ui.press({ key: 'steps-toggle' })
   expect(await ui.find({ type: 'Text', text: new RegExp(SHEET_PATH.replace(/\./g, '\\.') + '$') })).toBeDefined()
   await ui.unmount()
 })
@@ -278,7 +356,7 @@ describe('audit', () => {
   test('verdict : issue et écarts par sévérité', () => {
     const verdict = parseVerdict(VERDICT_GAPS)
     expect(verdict).toEqual({ isValid: false, blocking: 1, major: 2 })
-    expect(verdict && verdictLabel(verdict)).toBe('ECARTS — 1 bloquant(s), 2 majeur(s)')
+    expect(verdict && verdictLabel(verdict)).toBe('DEVIATIONS — 1 blocking, 2 major')
     expect(parseVerdict('## Verdict — VALIDE\n\n| RM | a | b |')).toEqual({ isValid: true, blocking: 0, major: 0 })
     expect(parseVerdict('pas de verdict')).toBeNull()
   })
@@ -293,7 +371,7 @@ describe('audit', () => {
   })
 })
 
-test('pane montre la durée du lot, l agent qui patine, le pré-audit et le verdict', async ($, on) => {
+test('bandeau montre la durée du lot, l agent qui patine, le pré-audit et le verdict', async ($, on) => {
   let release = () => {}
   const clock = world(on, true, () => SHEET, (tool, input) => {
     if (tool === 'Bash') return { result: { type: 'text' }, text: GATE_RED }
@@ -317,13 +395,13 @@ test('pane montre la durée du lot, l agent qui patine, le pré-audit et le verd
   await clock.advance(500_000)
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'tdd-batch', surface, ...PANE })
+    const ui = await $.ui.mount({ plugin: 'tdd-batch', surface, ...BAND })
     expect(await ui.find({ type: 'Text', text: /8 min 20/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /RED lent — 8 min 20/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /habituel 3 min 44/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /pré-audit ROUGE \(2 contrôle\(s\)\)/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /passe 1/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /ECARTS — 1 bloquant\(s\), 2 majeur\(s\)/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /usual 3 min 44/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /pre-audit RED \(2 failed check\(s\)\)/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /pass 1/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /DEVIATIONS — 1 blocking, 2 major/ })).toBeDefined()
     await ui.unmount()
   }
   release()

@@ -1,0 +1,11 @@
+{
+  "cases": [
+    {
+      "name": "scripts moved under .claude/: compared there, not reported MISSING, a script the kit lacks is ADDED",
+      "cmd": "R={{FIX}}/kd-{{SID}}\nmkdir -p $R/.claude/scripts\ncp {{KIT}}/scripts/pre-audit.sh $R/.claude/scripts/\nprintf x > $R/.claude/scripts/local-tool.py\nbash {{KIT}}/scripts/kit-diff.sh $R | grep -E 'scripts/(pre-audit\\.sh|local-tool\\.py)' | sort | tr -s ' ' | tr '\\n' ';'",
+      "expect": {
+        "stdout": "ADDED scripts/local-tool.py;"
+      }
+    }
+  ]
+}

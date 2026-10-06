@@ -1,0 +1,12 @@
+{
+  "cases": [
+    {
+      "name": "older French batch-sheet and plan titles get their anchors; a free-form heading is reported, not guessed",
+      "cmd": "R={{FIX}}/ma-{{SID}}\nmkdir -p $R/.claude $R/todo/x $R/src/Acme.Application\nprintf '{\"product\":\"Acme\"}' > $R/.claude/kit.config.json\nprintf '## Deroulement TDD\\n\\n## Politique et portees de test\\n\\n## Constat\\n' > $R/todo/x/X-PLAN-F1.md\nprintf '## 3. Design DDD et Architecture\\n' > $R/todo/x/X-PLAN.md\ncd $R && CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/migrate-anchors.py --apply >/dev/null && cat todo/x/X-PLAN-F1.md todo/x/X-PLAN.md | grep -c 'kit:\\(tdd-sequence\\|test-policy\\|ddd-design\\)'",
+      "expect": {
+        "exit": 0,
+        "stdout": "3"
+      }
+    }
+  ]
+}

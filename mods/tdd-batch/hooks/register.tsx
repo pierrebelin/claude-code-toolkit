@@ -1,10 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { AgentKind, Batch, Correction, Gate, Phase, Sheet, Step, Verdict } from '../types'
+import type { AgentKind, Awaited, Batch, Correction, Gate, Phase, Sheet, Step, Verdict } from '../types'
 
-const PANE = 'tdd-batch'
-const TITLE = 'Lot TDD'
 const TICK_MS = 10_000
 const TODO = 'todo'
 const DONE = '✅'
@@ -14,16 +12,18 @@ const AGENT_KINDS: Record<string, 'RED' | 'GREEN'> = {
   'tdd-test-author': 'RED',
   'tdd-implementer': 'GREEN',
 }
+const TDD_SKILL = 'implement-tdd'
 const AUDIT_SKILL = 'verify-ddd-tdd'
 // `cctoolkit pre-audit` since the plugin, `scripts/pre-audit.sh` before it.
 const GATE_SCRIPT = 'pre-audit'
-// Skills and agents of the cctoolkit plugin arrive namespaced.
+// Skills, agents and commands of the cctoolkit plugin arrive namespaced.
 const bare = (name: unknown): string => (typeof name === 'string' ? name.replace(/^cctoolkit:/, '') : '')
 const TYPICAL_MS: Record<AgentKind, number> = { RED: 224_000, GREEN: 187_000, AUDIT: 309_000 }
 const SLOW_FACTOR = 2
 
 const EMPTY: Batch = {
   path: null,
+  root: null,
   sheet: null,
   error: null,
   wave: 0,
@@ -36,10 +36,13 @@ const EMPTY: Batch = {
 
 const batch = atom({ plugin: 'tdd-batch', key: 'batch' } as const, EMPTY)
 const now = atom({ plugin: 'tdd-batch', key: 'now' } as const, 0)
+const isExpanded = atom({ plugin: 'tdd-batch', key: 'isExpanded' } as const, false)
+const awaited = atom({ plugin: 'tdd-batch', key: 'awaited' } as const, null as Awaited | null)
 
 const complete = (stored: Batch): Batch => ({ ...EMPTY, ...stored })
 
-const storeKey = (cwd: string): string => `sheet:${cwd}`
+const fileOf = (state: Batch): string | null =>
+  state.path === null || state.root === null || state.path.startsWith('/') ? state.path : `${state.root}/${state.path}`
 
 export const isPhaseDone = (tdd: Phase | null): boolean =>
   tdd !== null && tdd.red === DONE && tdd.green === DONE && tdd.cost === DONE
@@ -83,6 +86,11 @@ export const parseSheet = (text: string, path: string): Sheet => {
     const current = steps[steps.length - 1]
     if (current === undefined) continue
 
+    if (line.startsWith('✅ DONE')) {
+      current.isDone = true
+      continue
+    }
+
     const correction = /^(?:#{3,4} )?Correction (C\d+) — (.+)$/.exec(line)
     if (correction) {
       current.corrections.push({ id: correction[1] ?? '', finding: correction[2] ?? '', tdd: null })
@@ -96,7 +104,8 @@ export const parseSheet = (text: string, path: string): Sheet => {
     }
   }
 
-  return { lot, name, isDone: title.includes('✅ DONE'), steps, hypotheses }
+  const isDone = title.includes('✅ DONE') || (steps.length > 0 && steps.every(isStepDone))
+  return { lot, name, isDone, steps, hypotheses }
 }
 
 export const parseGate = (text: string): Gate | null => {
@@ -129,12 +138,12 @@ export const duration = (ms: number): string => {
 export const isSlow = (kind: AgentKind, ms: number): boolean => ms > TYPICAL_MS[kind] * SLOW_FACTOR
 
 export const verdictLabel = (verdict: Verdict): string => {
-  if (verdict.isValid) return 'VALIDE'
+  if (verdict.isValid) return 'VALID'
   const counts = [
-    verdict.blocking > 0 ? `${verdict.blocking} bloquant(s)` : '',
-    verdict.major > 0 ? `${verdict.major} majeur(s)` : '',
+    verdict.blocking > 0 ? `${verdict.blocking} blocking` : '',
+    verdict.major > 0 ? `${verdict.major} major` : '',
   ].filter(one => one !== '')
-  return counts.length === 0 ? 'ECARTS' : `ECARTS — ${counts.join(', ')}`
+  return counts.length === 0 ? 'DEVIATIONS' : `DEVIATIONS — ${counts.join(', ')}`
 }
 
 export const sheetFromArgs = (args: string): { path: string | null; lot: string | null } => {
@@ -144,22 +153,6 @@ export const sheetFromArgs = (args: string): { path: string | null; lot: string 
   const plan = /(\S+-PLAN\.md)\b/.exec(args)?.[1]
   if (plan !== undefined && lot !== null) return { path: plan.replace(/-PLAN\.md$/, `-PLAN-${lot}.md`), lot }
   return { path: null, lot }
-}
-
-async function findSheet($: EngineInterface, lot: string | null): Promise<string | null> {
-  if (!(await $.fs.exists(TODO))) return null
-  let best: { path: string; mtimeMs: number } | null = null
-  for (const folder of await $.fs.list(TODO)) {
-    if (folder.kind !== 'dir') continue
-    for (const entry of await $.fs.list(`${TODO}/${folder.name}`)) {
-      const found = SHEET_PATTERN.exec(entry.name)
-      if (found === null || (lot !== null && found[1] !== lot)) continue
-      if (best === null || entry.mtimeMs > best.mtimeMs) {
-        best = { path: `${TODO}/${folder.name}/${entry.name}`, mtimeMs: entry.mtimeMs }
-      }
-    }
-  }
-  return best?.path ?? null
 }
 
 let seen: { path: string; mtimeMs: number } | null = null
@@ -177,29 +170,49 @@ async function hasChanged($: EngineInterface, path: string): Promise<boolean> {
 
 async function refresh($: EngineInterface, isForced = true): Promise<void> {
   const current = complete(await read($, batch))
-  if (current.path === null) return
-  if (!isForced && !(await hasChanged($, current.path))) return
+  const file = fileOf(current)
+  if (current.path === null || file === null) return
+  if (!(await $.fs.exists(file))) {
+    await update($, batch, () => EMPTY)
+    return
+  }
+  if (!isForced && !(await hasChanged($, file))) return
   let sheet: Sheet | null = null
   let error: string | null = null
   try {
-    sheet = parseSheet(await $.fs.read(current.path), current.path)
+    sheet = parseSheet(await $.fs.read(file), current.path)
   } catch {
-    error = `fiche illisible : ${current.path}`
+    error = `unreadable sheet: ${current.path}`
   }
   if (JSON.stringify(sheet) === JSON.stringify(current.sheet) && error === current.error) return
   await update($, batch, stored => ({ ...complete(stored), sheet, error }))
 }
 
 async function follow($: EngineInterface, path: string): Promise<void> {
-  const cwd = await $.session.cwd()
-  const relative = path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path
+  const root = await $.session.cwd()
+  const relative = path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path
   const at = await $.clock.now()
+  await update($, awaited, () => null)
   await update($, batch, stored => {
     const current = complete(stored)
-    return current.path === relative ? current : { ...EMPTY, path: relative, startedAt: at }
+    return current.path === relative && current.root === root ? current : { ...EMPTY, path: relative, root, startedAt: at }
   })
-  await $.store.set(storeKey(cwd), relative)
   await refresh($)
+}
+
+async function followArgs($: EngineInterface, args: string): Promise<void> {
+  const asked = sheetFromArgs(args)
+  if (asked.path !== null) return follow($, asked.path)
+  await update($, awaited, () => ({ lot: asked.lot }))
+}
+
+async function onSheetTouched($: EngineInterface, path: string): Promise<void> {
+  const found = SHEET_PATTERN.exec(path)
+  const pending = await read($, awaited)
+  if (found !== null && pending !== null && path.includes(`${TODO}/`) && (pending.lot === null || pending.lot === found[1])) {
+    return follow($, path)
+  }
+  if (path === fileOf(complete(await read($, batch)))) await refresh($)
 }
 
 async function trackAgent($: EngineInterface, id: string, kind: AgentKind, description: string): Promise<void> {
@@ -248,13 +261,6 @@ async function settleAgent($: EngineInterface, id: string, isBlocked: boolean): 
   })
 }
 
-async function restore($: EngineInterface, cwd: string): Promise<void> {
-  const current = complete(await read($, batch))
-  if (current.path !== null) return
-  const stored = await $.store.get(storeKey(cwd))
-  if (typeof stored === 'string') await update($, batch, () => ({ ...EMPTY, path: stored }))
-}
-
 const mark = (value: string): string => (value === '' ? '?' : value)
 
 export const phaseLabel = (tdd: Phase | null): string =>
@@ -264,9 +270,9 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'tdd-batch',
-      description: "Ouvre le pane d'avancement du lot /implement-tdd (argument : chemin de la fiche, sinon la plus récente)",
+      description: '/implement-tdd batch progress band, shown once /implement-tdd runs in this session (off hides it)',
     })
-    await restore($, e.cwd)
+    await $.ui.close({ id: 'tdd-batch' }).catch(() => undefined)
     $.clock.every(TICK_MS, () => void tick($))
     await tick($)
 
@@ -274,24 +280,27 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'tdd-batch' }, async ($, e) => {
-    const asked = e.args.trim()
-    const known = complete(await read($, batch)).path
-    const path = asked !== '' ? asked : (known ?? (await findSheet($, null)))
-    if (path !== null) await follow($, path)
-    await $.ui.open({ id: PANE, title: TITLE })
+    if (e.args.trim() === 'off') {
+      await update($, batch, () => EMPTY)
+      await update($, awaited, () => null)
+      return { text: 'Band hidden.' }
+    }
+    const path = complete(await read($, batch)).path
+    return { text: path === null ? 'No batch followed: run /implement-tdd first.' : `Band following ${path}.` }
+  })
 
-    return { text: path === null ? 'Pane ouvert, aucune fiche de lot trouvée sous todo/.' : `Pane ouvert sur ${path}.` }
+  on('command.run', async ($, e, next) => {
+    if (bare(e.command) !== TDD_SKILL) return next(e)
+    await followArgs($, e.args)
+    return next(e)
   })
 
   on('tool.call', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
     const input = e as unknown as Record<string, unknown>
 
-    if (e.tool === 'Skill' && bare(input.skill) === 'implement-tdd') {
-      const asked = sheetFromArgs(typeof input.args === 'string' ? input.args : '')
-      const path = asked.path ?? (await findSheet($, asked.lot))
-      if (path !== null) await follow($, path)
-      void $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
+    if (e.tool === 'Skill' && bare(input.skill) === TDD_SKILL) {
+      await followArgs($, typeof input.args === 'string' ? input.args : '')
       return next(e)
     }
 
@@ -324,24 +333,23 @@ export const register: Register = on => {
       const gate = parseGate(typeof result.deny === 'string' ? '' : (result.text ?? ''))
       if (gate !== null) await recordGate($, gate)
     }
-    if (e.tool === 'Write' || e.tool === 'Edit') {
-      const path = typeof input.file_path === 'string' ? input.file_path : ''
-      if (SHEET_PATTERN.test(path) && path.includes(`${TODO}/`)) await follow($, path)
-      else if (path.includes(`${TODO}/`)) await refresh($)
+    if ((e.tool === 'Read' || e.tool === 'Write' || e.tool === 'Edit') && typeof input.file_path === 'string') {
+      await onSheetTouched($, input.file_path)
     }
     return result
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const state = complete(await read($, batch))
     const sheet = state.sheet
+    if (e.props.hasSurvey || state.path === null) return next(e)
 
-    if (state.path === null || sheet === null) {
+    const { Box, Button, Text } = $.ui.resolve(e)
+
+    if (sheet === null) {
       return (
-        <Box flexDirection="column" width={e.props.bodyColumns}>
-          <Text dimColor>{state.error ?? 'Aucune fiche de lot suivie.'}</Text>
-          <Text dimColor>/tdd-batch todo/&lt;code&gt;/&lt;CODE&gt;-PLAN-FX.md</Text>
+        <Box flexDirection="column" width={e.props.bodyColumns} marginTop={1}>
+          <Text color="red" wrap="truncate-end">{state.error ?? `reading sheet: ${state.path}`}</Text>
         </Box>
       )
     }
@@ -349,25 +357,37 @@ export const register: Register = on => {
     const current = sheet.steps.find(step => !isStepDone(step))
     const done = sheet.steps.filter(isStepDone).length
     const at = await read($, now)
+    const expanded = await read($, isExpanded)
     const { gate, audit } = state
     const showsAudit = gate !== null || audit.passes > 0
+    const shown = expanded ? sheet.steps : sheet.steps.filter(step => step === current)
 
     return (
-      <Box flexDirection="column" width={e.props.bodyColumns}>
-        <Text wrap="truncate-end">
-          <Text bold>Lot {sheet.lot}</Text>
-          {sheet.name !== '' && <Text> — {sheet.name}</Text>}
-        </Text>
-        <Text wrap="truncate-end">
-          <Text color={sheet.isDone ? 'green' : undefined} dimColor={!sheet.isDone}>
-            {sheet.isDone ? 'terminé' : `${done}/${sheet.steps.length} étapes`}
-          </Text>
-          {state.startedAt !== null && at >= state.startedAt && (
-            <Text dimColor> · {duration(at - state.startedAt)}</Text>
-          )}
-          {state.wave > 0 && <Text dimColor> · vague {state.wave}</Text>}
-          {sheet.hypotheses > 0 && <Text dimColor> · {sheet.hypotheses} hypothèse(s)</Text>}
-        </Text>
+      <Box flexDirection="column" width={e.props.bodyColumns} marginTop={1}>
+        <Box height={1}>
+          <Box flexGrow={1} flexShrink={1}>
+            <Text wrap="truncate-end">
+              <Text bold>Batch {sheet.lot}</Text>
+              <Text color={sheet.isDone ? 'green' : undefined} dimColor={!sheet.isDone}>
+                {' '}
+                {sheet.isDone ? 'done' : `${done}/${sheet.steps.length} steps`}
+              </Text>
+              {state.startedAt !== null && at >= state.startedAt && (
+                <Text dimColor> · {duration(at - state.startedAt)}</Text>
+              )}
+              {state.wave > 0 && <Text dimColor> · wave {state.wave}</Text>}
+              {sheet.hypotheses > 0 && <Text dimColor> · {sheet.hypotheses} assumption(s)</Text>}
+              {sheet.name !== '' && <Text dimColor> — {sheet.name}</Text>}
+            </Text>
+          </Box>
+          <Button
+            key="steps-toggle"
+            label={expanded ? '[Collapse]' : `[All steps (${sheet.steps.length})]`}
+            plain
+            dimColor
+            onPress={() => update($, isExpanded, value => !value)}
+          />
+        </Box>
         {state.running.map(run => {
           const elapsed = Math.max(0, at - run.startedAt)
           const slow = isSlow(run.kind, elapsed)
@@ -375,27 +395,27 @@ export const register: Register = on => {
             <Text key={`run-${run.id}`} wrap="truncate-end" color={slow ? 'yellow' : undefined}>
               <Text color={run.kind === 'RED' ? 'red' : run.kind === 'GREEN' ? 'green' : 'cyan'}>{run.kind}</Text>
               <Text> {run.description} — {duration(elapsed)}</Text>
-              {slow && <Text> (habituel {duration(TYPICAL_MS[run.kind])})</Text>}
+              {slow && <Text> (usual {duration(TYPICAL_MS[run.kind])})</Text>}
             </Text>
           )
         })}
         {showsAudit && (
           <Text wrap="truncate-end">
-            <Text dimColor>Audit : </Text>
+            <Text dimColor>Audit: </Text>
             {gate !== null && (
               <Text color={gate.isGreen ? 'green' : 'red'}>
-                pré-audit {gate.isGreen ? 'VERT' : `ROUGE (${gate.failures} contrôle(s))`}
+                pre-audit {gate.isGreen ? 'GREEN' : `RED (${gate.failures} failed check(s))`}
               </Text>
             )}
             {audit.passes > 0 && gate !== null && <Text dimColor> · </Text>}
-            {audit.passes > 0 && <Text dimColor>passe {audit.passes}</Text>}
+            {audit.passes > 0 && <Text dimColor>pass {audit.passes}</Text>}
             {audit.verdict !== null && (
               <Text color={audit.verdict.isValid ? 'green' : 'red'}> · {verdictLabel(audit.verdict)}</Text>
             )}
           </Text>
         )}
         {state.error !== null && <Text color="red">{state.error}</Text>}
-        {sheet.steps.map(step => {
+        {shown.map(step => {
           const isDone = isStepDone(step)
           const isCurrent = step === current
           return (
@@ -419,12 +439,14 @@ export const register: Register = on => {
         })}
         {state.blocked.map((one, index) => (
           <Text key={`blocked-${index}`} color="red" wrap="truncate-end">
-            BLOQUÉ ({one.kind}) {one.description}
+            BLOCKED ({one.kind}) {one.description}
           </Text>
         ))}
-        <Text dimColor wrap="truncate-end">
-          {state.path}
-        </Text>
+        {expanded && (
+          <Text dimColor wrap="truncate-end">
+            {state.path}
+          </Text>
+        )}
       </Box>
     )
   })

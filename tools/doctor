@@ -132,11 +132,18 @@ fi
 # A copy predating the plugin: its skills and agents load beside the plugin's, under
 # their bare names, and they read the copy's hooks and scripts — two kits in one session.
 if [ "$ROOT" != "$KIT" ]; then
-  for p in hooks/bash-dispatch.sh lib/kit_config.py skills/implement-tdd agents/tdd-implementer.md tools/doctor presets evals/run.sh; do
+  # One probe per folder; lib/guard-git.sh predates kit_config.py, so older copies show too.
+  # skills/implement-tdd/SKILL.md, not the folder: a repo file kept there (a reference its
+  # own skill reads) is no skill, so no copy.
+  for p in hooks/bash-dispatch.sh lib/guard-git.sh skills/implement-tdd/SKILL.md agents/tdd-implementer.md tools/doctor presets evals/run.sh scripts/pre-audit.sh; do
     [ -e "$CL/$p" ] && report WARN "legacy copy" ".claude/${p%%/*}/ from a manual install — delete it once the plugin is enabled (README § Migrating)"
   done
   [ -f "$ROOT/scripts/pre-audit.sh" ] \
     && report WARN "legacy copy" "scripts/ holds the kit's scripts from a manual install — delete them (README § Migrating)"
+  # The mods once shipped as their own marketplace inside the copy; the plugin's
+  # marketplace carries them now, and both enabled draw every band and pane twice.
+  [ -f "$CL/mods/.claude-plugin/marketplace.json" ] \
+    && report WARN "legacy mods" ".claude/mods/ is a marketplace from a manual install — delete it, enable the mods as <mod>@cctoolkit (README § Migrating)"
 fi
 
 # --- repo-owned files ------------------------------------------------------------
@@ -144,8 +151,20 @@ fi
 # config. /cctoolkit:kit-init writes both.
 if [ -f "$CL/rules/markdown-output.md" ]; then
   report ok "rules" "$(ls "$CL"/rules/*.md 2>/dev/null | wc -l | tr -d ' ') file(s) in .claude/rules/"
+  # A copy's version predates the anchors: it teaches literals no parser reads any more.
+  grep -q 'kit:rules' "$CL/rules/markdown-output.md" \
+    || report WARN "rules outdated" ".claude/rules/markdown-output.md predates the <!-- kit:… --> anchors — its frozen literals are no longer the parsers' (replace it: /cctoolkit:kit-init)"
 else
   report FAIL "rules" ".claude/rules/markdown-output.md absent — the skills cite it on every document (/cctoolkit:kit-init)"
+fi
+# Instructions still pointing into a removed copy: the model runs a path that is gone.
+if [ "$ROOT" != "$KIT" ]; then
+  # The template statusline keeps .claude/lib/ as a fallback behind the plugin cache.
+  sl="$CL/statusline-command.sh"; grep -q 'plugins/cache' "$sl" 2>/dev/null && sl=
+  # A folder cited alone ("after editing .claude/hooks") is stale too once it is gone.
+  stale=$(grep -oE '\.claude/(hooks|lib|scripts|tools|evals)(/[A-Za-z0-9_.-]+)?' "$ROOT/CLAUDE.md" "$CL"/rules/*.md ${sl:+"$sl"} 2>/dev/null \
+    | while IFS=: read -r f ref; do [ -e "$ROOT/$ref" ] || echo "${f#"$ROOT"/}"; done | sort | uniq -c | awk '{printf "%s%s (%s)", sep, $2, $1; sep=", "}')
+  [ -n "$stale" ] && report WARN "stale kit paths" "$stale — paths of a removed copy: \`cctoolkit <name>\` replaces scripts and tools, the plugin the rest"
 fi
 
 # --- dispatcher modules --------------------------------------------------------
@@ -216,6 +235,7 @@ fi
 # --- tools, evals ---------------------------------------------------------------
 for t in "$KIT"/tools/* "$KIT"/bin/* "$KIT"/evals/run.sh; do
   [ -f "$t" ] || continue
+  case "$t" in *.md) continue ;; esac
   [ -x "$t" ] && report ok "executable $(basename "$t")" || report WARN "executable $(basename "$t")" "missing +x (chmod +x $t)"
 done
 

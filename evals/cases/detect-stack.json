@@ -31,6 +31,22 @@
         "exit": 0,
         "stdout": "hooks,../scripts"
       }
+    },
+    {
+      "name": "a vendored solution below the top-level one: the top-level one is the product",
+      "cmd": "R={{FIX}}/ds-{{SID}}\nmkdir -p $R/externals/Tool $R/tests/Acme.UnitTests\nprintf x > $R/Acme.sln\nprintf x > $R/externals/Tool/Acme.Tool.sln\nprintf '<PackageReference Include=\"xunit\"/>' > $R/tests/Acme.UnitTests/Acme.UnitTests.csproj\npython3 {{KIT}}/scripts/detect-stack.py $R | jq -r '[.product, (.stacks[0].productCandidates|join(\",\"))] | join(\"|\")'",
+      "expect": {
+        "exit": 0,
+        "stdout": "Acme|Acme,Acme.Tool"
+      }
+    },
+    {
+      "name": "a copy that moved its scripts under .claude/ and kept the mods marketplace: both reported",
+      "cmd": "R={{FIX}}/ds-{{SID}}\nmkdir -p $R/.claude/lib $R/.claude/scripts $R/.claude/mods/.claude-plugin\n: > $R/.claude/scripts/pre-audit.sh\nprintf '{}' > $R/.claude/mods/.claude-plugin/marketplace.json\npython3 {{KIT}}/scripts/detect-stack.py $R | jq -r '.existing.legacyCopy | join(\",\")'",
+      "expect": {
+        "exit": 0,
+        "stdout": "lib,scripts,mods"
+      }
     }
   ]
 }

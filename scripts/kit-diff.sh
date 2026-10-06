@@ -54,7 +54,11 @@ KIT, REPO = os.environ["KIT"], os.environ["REPO"]
 SHOW = os.environ["SHOW_DIFF"] == "--diff"
 CL = os.path.join(REPO, ".claude")
 
-# kit path -> installed path. scripts/ is the one folder installed outside .claude/.
+# kit path -> installed path. scripts/ is the one folder installed outside .claude/ —
+# or under it, in a copy that moved them to .claude/scripts/: there a file the kit lacks
+# is ADDED — the repo's own script or a local one, kit-init keeps it.
+LEGACY_SCRIPTS = os.path.isfile(os.path.join(CL, "scripts", "pre-audit.sh"))
+SCRIPTS_HOME = os.path.join(CL if LEGACY_SCRIPTS else REPO, "scripts")
 CORE = ["agents", "hooks", "lib", "presets", "skills", "tools", "docs", "evals/run.sh", "evals/cases"]
 # Optional bricks: compared only when the repo installed them.
 OPTIONAL = ["mods"]
@@ -71,7 +75,9 @@ GENERIC = {"Core", "Shared", "Common", "Features", "features", "Application", "a
 
 
 def installed(rel):
-    return os.path.join(REPO, rel) if rel.startswith("scripts/") else os.path.join(CL, rel)
+    if rel.startswith("scripts/"):
+        return os.path.join(SCRIPTS_HOME, rel[len("scripts/"):])
+    return os.path.join(CL, rel)
 
 
 def files_under(base, rel):
@@ -113,6 +119,8 @@ for rel in compared:
         repo_files |= files_under(CL, rel)
 # The kit's scripts only: the repo's scripts/ holds its own tooling too, never ADDED.
 kit_files |= files_under(KIT, "scripts")
+if LEGACY_SCRIPTS:
+    repo_files |= files_under(CL, "scripts")
 
 
 def normalised_kit(rel):

@@ -71,6 +71,8 @@ Runner, commands, test level, suite scope, integration-test filtering → **`ref
 - **Argument = `batch FX — correction: [manual finding]`** → read `references/correction-mode.md`, follow it. Never open on plain `batch FX`.
 - **Otherwise**: don't code. DDD design must be explicit in plan → route to `/plan-implementation`.
 
+**`TDD:` lines come from the plan** (`/plan-implementation` template). Sheet written before 2026-10-04 lacks them → add every step's `TDD: RED ⬜ · GREEN ⬜ · COST ⬜` in one `Edit` before the first RED: the `tdd-batch` pane reads progress from them only. Tick each after its COST (§3), never all at closing.
+
 **Invariants → what they REMOVE.** Sheet states invariants ("a copy has a single referent", "every node comes from the same ModuleDiagram"). Write **what they take out of code** — loop, `GroupBy`, dictionary, defensive branch, second read.
 
 **Mid-batch ambiguity → traced assumption, never silent decision.** Question changing scope, RM/CU or design decision stops batch (back to `/business-spec` or `/plan-implementation`). Question changing none: settle, but write down — batch sheet, under `## Assumptions`, line `Hn — [what you assume] — to be validated by [who]`; carry into final summary.
