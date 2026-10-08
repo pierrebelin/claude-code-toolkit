@@ -242,6 +242,30 @@ print(f'ESLint: {errors} errors, {warnings} warnings')
 " 2>/dev/null || echo "ESLint: not available"
 ```
 
+### Code size (src / tests, per layer)
+
+Feeds `codebase.size`. Snapshot at the report commit, `*.ts` / `*.tsx` minus `*.d.ts`, physical lines (`git grep -c ''`). Test files living under `src/` (`*.test.*`, `*.spec.*`) count in `tests`, so `size.src` stays production code only. Layer = first directory under `src/` (`app`, `entities`, `features`, `shared`, `pages`, `widgets`…) or under `tests/` (`unit`, `integration`…).
+
+```bash
+REF=$MAIN_BRANCH
+
+awk -F'\t' '
+  function bucket(path,   p, n) {
+    n = split(path, p, "/"); 
+    root = (path ~ /\.(test|spec)\.tsx?$/) ? "tests" : p[1]
+    layer = (n > 2) ? p[2] : "(root)"
+  }
+  FNR == NR { bucket($1); keep[$1] = root "\t" layer; files[root "\t" layer]++; files[root "\tTOTAL"]++; next }
+  ($1 in keep) { lines[keep[$1]] += $2; split(keep[$1], q, "\t"); lines[q[1] "\tTOTAL"] += $2 }
+  END { for (b in files) printf "%s\t%d\t%d\n", b, files[b], lines[b] }
+' \
+  <(git ls-tree -r --name-only "$REF" -- src tests | grep -E '^(src|tests)/.*\.tsx?$' | grep -vE '\.d\.ts$') \
+  <(git grep -I -c '' "$REF" -- src tests | sed "s/^$REF://" | awk -F: '{ c=$NF; sub(/:[^:]*$/, "", $0); print $0"\t"c }') |
+  sort -t$'\t' -k1,1 -k4,4rn
+```
+
+Output `root  layer  files  lines`. `src` layers map to `codebase.size.src_by_layer` (keys of `coverage.by_layer`), `tests` layers to `codebase.size.tests_by_project`.
+
 ### StrykerJS (background)
 
 **Check whether StrykerJS is configured:**

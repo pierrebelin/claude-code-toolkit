@@ -88,7 +88,14 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
     "source_files": 0,
     "total_files": 0,
     "todo_count": 0,
-    "skipped_tests": 0
+    "skipped_tests": 0,
+    "size": {
+      "scope": "*.cs excluding Migrations, .g.cs, .Designer.cs — physical lines",
+      "src":   { "files": 0, "lines": 0 },
+      "tests": { "files": 0, "lines": 0 },
+      "src_by_layer":     { "Domain": { "files": 0, "lines": 0 } },
+      "tests_by_project": { "UnitTests": { "files": 0, "lines": 0 } }
+    }
   },
   "activity": {
     "period_days": 30,
@@ -136,4 +143,5 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
 - `sonarqube.creedengo` (optional, .NET green-coding rules): `{ total_issues, effort_minutes, issues_by_severity{}, issues_by_rule[{key,name,severity,count,tags[]}], top_directories[{directory,count}] }` — **`resolved=false`** here too. `null` when the plugin is absent. `issues_by_rule[].key` may carry the engine prefix (`external_roslyn:GCI93`) when the Creedengo plugin is not installed and the rules come from the embedded Roslyn analysers; strip it before pairing rules across reports.
 - `stryker.domain`, `stryker.application`: .NET-specific (two separate runs). JS/TS → only `stryker.combined`, set `domain`/`application` to `null`.
 - `activity.cs_periods` (optional): src `.cs` change rate over 7 / 14 / 30 / 90 days. `lines_modified` = additions + deletions inside pre-existing files, `lines_added` = lines of newly added files. Numerator scope `src/**/*.cs` minus `Migrations/`, `*.g.cs`, `*.Designer.cs` — must match `cs_files_total` / `cs_lines_total`, stored alongside (physical lines, from `git grep -c ''` at the report commit). Never divide by `sonarqube.lines_of_code`: different scope (`tests/` included, blank/comment lines dropped) → ratios above 100%. Absent → the change-rate card is not rendered.
+- `codebase.size` (optional): code size snapshot at the report commit, `{ files, lines }` everywhere, physical lines. `src` / `tests` = totals; `src_by_layer` keys match `coverage.by_layer` (extra layers such as `SDK` allowed), `tests_by_project` keys = test project or first dir under `tests/`. Sums of `src_by_layer` and `tests_by_project` MUST equal `src` and `tests` (checked by script). .NET: `size.src` MUST equal `activity.cs_files_total` / `cs_lines_total` (same scope). Absent → the code size card is not rendered.
 - `activity.cs_periods[].by_layer` (optional): churn per layer for that window, `{ files, lines }` where `lines` = additions + deletions over every touched file (A, M and D). Keys must match `coverage.by_layer` / `sonarqube.issues_by_layer`. Absent → the per-layer churn card is not rendered.

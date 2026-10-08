@@ -167,6 +167,34 @@ def check_sonarqube(report):
             )
 
 
+def check_size(report):
+    size = (report.get("codebase") or {}).get("size")
+    if not isinstance(size, dict):
+        return
+    for root, breakdown in (("src", "src_by_layer"), ("tests", "tests_by_project")):
+        total = size.get(root) or {}
+        parts = size.get(breakdown)
+        if not isinstance(parts, dict):
+            warn(f"codebase.size.{breakdown} missing")
+            continue
+        for field in ("files", "lines"):
+            got = number(total.get(field))
+            expected = sum(number((v or {}).get(field)) or 0 for v in parts.values())
+            if got is None:
+                fail(f"codebase.size.{root}.{field} missing")
+            elif got != expected:
+                fail(f"codebase.size.{root}.{field} = {got}, sum of {breakdown} = {expected}")
+
+    stack = ((report.get("metadata") or {}).get("stack")) or "dotnet"
+    activity = report.get("activity") or {}
+    src = size.get("src") or {}
+    if stack == "dotnet":
+        for field, key in (("files", "cs_files_total"), ("lines", "cs_lines_total")):
+            got, expected = number(src.get(field)), number(activity.get(key))
+            if got is not None and expected is not None and got != expected:
+                fail(f"codebase.size.src.{field} = {got}, activity.{key} = {expected} — same scope expected")
+
+
 def main():
     if len(sys.argv) > 1:
         path = sys.argv[1]
@@ -189,6 +217,7 @@ def main():
     check_coverage(report)
     check_stryker(report)
     check_sonarqube(report)
+    check_size(report)
 
     print(f"Report: {path}")
     for message in warnings:

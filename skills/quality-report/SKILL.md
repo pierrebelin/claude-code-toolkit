@@ -81,7 +81,7 @@ Each step has the same structure:
 1. **Docker** — start it if needed (see the stack commands)
 2. **Build + tests** — measure the build time, run the tests with coverage (see the stack commands)
 3. **SonarQube + aggregated coverage** — in parallel, background sub-agents (see the stack commands)
-4. **Supplementary data + Stryker** — 4-5 parallel sub-agents for git, test inventory, page/endpoint coverage, codebase health, Stryker in the background (see the stack commands)
+4. **Supplementary data + Stryker** — 4-5 parallel sub-agents for git, test inventory, page/endpoint coverage, codebase health and code size (src/tests, per layer), Stryker in the background (see the stack commands)
 5. **Wait and collect** — wait for SonarQube + Stryker, collect the results
 
 > **Common rule for every stack:** launch Stryker **after** the tests finish (step 2). Never launch it alongside them — Stryker instruments the code and interferes with the test run.
@@ -150,7 +150,9 @@ Checks per-type sums against totals (passed, failed, skipped, durations), `activ
 
 **8.5 — Coverage, §1 ↔ §3 ↔ §6.** §1 reference figure = **SonarQube** coverage (every source file) for `JS/TS`, ReportGenerator (combined coverage) for `.NET`. Present both without contradiction.
 
-**8.6 — Status icons.** ✅ in §1 never described as problem in §7 or §9; ⚠️ in §9 has matching entry in §7. Correct in favour of most precise description.
+**8.6 — Code size, §2 ↔ JSON.** `Code size` tables = `codebase.size` exactly; shares recomputed from the lines, not estimated. Interpretation cross-reads the layer weights with `coverage.by_layer` and churn — a heavy layer with low coverage or a thin test project facing it is a §7 risk, not a footnote.
+
+**8.7 — Status icons.** ✅ in §1 never described as problem in §7 or §9; ⚠️ in §9 has matching entry in §7. Correct in favour of most precise description.
 
 ---
 
