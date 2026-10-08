@@ -8,7 +8,7 @@ Per-layer DDD conventions (naming, base classes, structure, pitfalls) → `.clau
 
 - **Never add a comment**, XML `///` doc included. Intent carried by naming.
 - Delete comments you wrote + useless ones (restating code, stale, ownerless TODO) **within lines your change touches**. Useless comment elsewhere in file: report, don't delete. Keep pre-existing ones explaining a decision, constraint or exception not deducible from code.
-- Naming must make flow and invariants readable without a comment. Durable business rule also documented in handler folder's `CLAUDE.md`.
+- Naming must make flow and invariants readable without a comment. Durable business rule also documented in handler folder's `CLAUDE.md`. Adding or changing one: grep its key term (exception, member, concept) in that `CLAUDE.md`, sibling handler `CLAUDE.md`s, `DESIGN.md` and the sheet; rewrite in the same step every line it contradicts.
 - **A predicate on Domain state is a business rule** — "does it change", "is it excluded", "is it eligible": call the aggregate or value object member that states it (add it there if missing), never re-code it in a handler `if` or an Infrastructure `Where`. A query filter needing it reads the boundary from the Domain (exposed set or constant), never a copied comparison.
 - **Surgical change**: every modified line ties to the behaviour at hand. No improving adjacent working code, no renaming/reformatting outside scope, no flexibility or configurability nobody asked for. File's local style beats personal preference. Delete orphans (`using`, variable, method, type) **your** change created; pre-existing dead code reported, not deleted.
 - **`var`** for local variables.

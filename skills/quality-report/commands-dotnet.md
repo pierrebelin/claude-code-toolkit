@@ -341,6 +341,32 @@ grep -rn "TODO\|HACK\|FIXME" src --include="*.cs" | wc -l
 grep -rn "Skip\s*=" tests --include="*.cs" | wc -l
 ```
 
+### Code size (src / tests, per layer)
+
+Feeds `codebase.size`. Snapshot at the report commit, `*.cs` only, same exclusions as `cs_periods` (`Migrations/`, `*.g.cs`, `*.Designer.cs`) — so `size.src` equals `activity.cs_files_total` / `cs_lines_total`. Physical lines (`git grep -c ''`), blank and comment lines included: never compare with `sonarqube.lines_of_code`. Verify snapshots (`*.verified.txt`) are not `.cs`, hence excluded.
+
+One row per bucket: `src` / `tests` × layer (first directory under `src/` or `tests/`, prefix stripped), plus a `TOTAL` row per root.
+
+```bash
+REF=$MAIN_BRANCH
+PREFIX="{{PRODUCT}}."
+
+awk -F'\t' -v prefix="$PREFIX" '
+  function bucket(path,   p, n) {
+    n = split(path, p, "/"); root = p[1]
+    layer = (n > 2) ? p[2] : "(root)"; sub("^" prefix, "", layer)
+  }
+  FNR == NR { bucket($1); keep[$1] = root "\t" layer; files[root "\t" layer]++; files[root "\tTOTAL"]++; next }
+  ($1 in keep) { lines[keep[$1]] += $2; split(keep[$1], q, "\t"); lines[q[1] "\tTOTAL"] += $2 }
+  END { for (b in files) printf "%s\t%d\t%d\n", b, files[b], lines[b] }
+' \
+  <(git ls-tree -r --name-only "$REF" -- src tests | grep -E '^(src|tests)/.*\.cs$' | grep -vE '/Migrations/|\.g\.cs$|\.Designer\.cs$') \
+  <(git grep -I -c '' "$REF" -- src tests | sed "s/^$REF://" | awk -F: '{ c=$NF; sub(/:[^:]*$/, "", $0); print $0"\t"c }') |
+  sort -t$'\t' -k1,1 -k4,4rn
+```
+
+Output `root  layer  files  lines`. Files come from `ls-tree` (an empty file counts as a file with 0 lines, `git grep -c` omits it). `src` layers map to `codebase.size.src_by_layer` with the same keys as `coverage.by_layer` (layers absent from coverage — `SDK`, `AppHost`… — kept as-is); `tests` layers map to `codebase.size.tests_by_project` (`UnitTests`, `IntegrationTests`, …).
+
 ### Stryker .NET (background)
 
 Only one instance is allowed — two instances corrupt the sources. Always through `nohup` (full runs take ~2h, beyond the bash timeout).

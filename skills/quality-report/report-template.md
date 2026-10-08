@@ -37,6 +37,35 @@
 
 [2-3 lines describing the month's main axes]
 
+### Code size (snapshot)
+
+`.cs` files excluding `Migrations/`, `*.g.cs`, `*.Designer.cs` — physical lines (blank and comment lines included).
+
+| Scope | Files | Lines | Share of lines |
+|---|---|---|---|
+| src | X | X | XX% |
+| tests | X | X | XX% |
+| **Total** | **X** | **X** | 100% |
+
+Tests / src line ratio: **X.X**.
+
+| Layer (src) | Files | Lines | Share of src |
+|---|---|---|---|
+| Domain | X | X | XX% |
+| Application | X | X | XX% |
+| Infrastructure | X | X | XX% |
+| WebAPI | X | X | XX% |
+| Abstractions.Models | X | X | XX% |
+| [other src projects, sorted by lines] | X | X | XX% |
+
+| Test project | Files | Lines | Share of tests |
+|---|---|---|---|
+| UnitTests | X | X | XX% |
+| IntegrationTests | X | X | XX% |
+| [other test projects, sorted by lines] | X | X | XX% |
+
+[1-2 lines of interpretation: layer whose weight departs from its coverage or churn weight, test project oversized or nearly empty against the layer it protects]
+
 ---
 
 ## 3. Tests — results and coverage
