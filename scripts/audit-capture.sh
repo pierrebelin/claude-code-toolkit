@@ -94,9 +94,15 @@ git diff --check >>"$OUT" 2>&1 || true
 # mandatory suites are read off the paths it touches.
 # `git diff` alone ignores untracked files, and a batch's new handler and new tests
 # are exactly that: each one is appended as a /dev/null → file patch.
+# Code only. Measured runs captured 65-110 kB, most of it outside the batch's
+# code: tooling work left in the tree, the sheet and plan, handler CLAUDE.md
+# tables (pre-audit already gates them), Verify snapshots. Each capture was read
+# 5-7 times in slices, every slice carried to the end of the audit. Those paths
+# stay named under "changed files", never inlined.
+DIFF_SCOPE=(-- "${CODE_DIRS[@]}" ':(exclude)*.md' ':(exclude)*.verified.*')
 batch_diff() {
-    git diff 2>/dev/null
-    git ls-files --others --exclude-standard -- "${CODE_DIRS[@]}" 2>/dev/null | while IFS= read -r f; do
+    git diff "${DIFF_SCOPE[@]}" 2>/dev/null
+    git ls-files --others --exclude-standard "${DIFF_SCOPE[@]}" 2>/dev/null | while IFS= read -r f; do
         git diff --no-index -- /dev/null "$f" 2>/dev/null
     done
 }
@@ -106,6 +112,7 @@ DIFF_LINES=$(wc -l <"$DIFF_FILE" | tr -d ' ')
 
 section "changed files"
 { git diff --name-only; git ls-files --others --exclude-standard -- "${CODE_DIRS[@]}"; } >>"$OUT" 2>&1
+printf '\n[diff below: code of the source and test folders only; .md, *.verified.* and anything outside them are listed here, read them targeted when an axis needs it]\n' >>"$OUT"
 
 section "batch diff ($DIFF_LINES lines)"
 if [[ "$DIFF_LINES" -gt "$DIFF_MAX" ]]; then

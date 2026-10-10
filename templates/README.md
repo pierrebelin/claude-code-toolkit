@@ -13,14 +13,14 @@ What a plugin cannot set itself. `/cctoolkit:kit-init` merges these into the rep
 
 ## Startup trim
 
-Merge the four keys of `settings.local.json` into `<repo>/.claude/settings.local.json` (create it if missing; it is gitignored). Use the `Edit` tool, never a script: the auto-mode classifier refuses a script on that file. The `syncClaudeAi*` keys are never read from `.claude/settings.json`, only from `settings.local.json` or the user settings.
+Merge the three keys of `settings.local.json` into `<repo>/.claude/settings.local.json` (create it if missing; it is gitignored). Use the `Edit` tool, never a script: the auto-mode classifier refuses a script on that file. The `syncClaudeAi*` keys are never read from `.claude/settings.json`, only from `settings.local.json` or the user settings.
 
 | Key | Drops | Keep it off when |
 |---|---|---|
 | `disableClaudeAiConnectors` | every claude.ai MCP connector — all or nothing | the repo relies on one of them |
 | `syncClaudeAiSkills: false` | the synced `anthropic-skills:*` (docx, pdf, xlsx, pptx, browser…) — `skillOverrides` does not reach them | a skill or spec flow produces or reads those formats |
 | `syncClaudeAiPlugins: false` | the synced plugins (`cowork-plugin-management`) | a workflow uses them |
-| `disableWorkflows` | the `Workflow` tool (~5k tokens), and with it `/cctoolkit:run-lot` and the `ultracode` keyword | the repo uses any of them |
+| `disableWorkflows: true` — not in the template | the `Workflow` tool (~5k tokens), and with it `/cctoolkit:run-lot` — the default batch path — and the `ultracode` keyword | always, unless the repo runs every batch through `/implement-tdd` by hand |
 
 Check usage before cutting: a key whose feature the repo depends on stays out. Measure from the repo root before and after, then validate the file with `python3 -m json.tool .claude/settings.local.json`:
 

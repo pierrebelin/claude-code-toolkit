@@ -4,7 +4,7 @@ Installed, each skill is typed with the plugin's prefix — `/cctoolkit:implemen
 
 ## Skills
 
-Main chain: `business-spec` → `plan-implementation` → `implement-tdd` → `verify-ddd-tdd`.
+Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-lot <sheet>` per batch (Workflow script, `docs/TOOLING.md`). `implement-tdd` → `verify-ddd-tdd` finish by hand a batch `run-lot` left short of `DONE`, or run it when the `Workflow` tool is unavailable.
 
 | Skill | When |
 |-------|------|

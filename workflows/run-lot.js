@@ -332,6 +332,7 @@ const design = await agent(
     '`<kit>/skills/implement-tdd/references/parallelism.md`: a wave = behaviours whose test files and production code are disjoint.',
     'Steps already `RED ✅ · GREEN ✅ · COST ✅` → excluded. Each cycle carries its RED and GREEN contract, paths, classes and methods copied from the sheet',
     '(`## Ancrages`, `## TDD sequence`), never searched: missing line → one Edit adding it to the sheet.',
+    'Exploration bounded to what the sheet names: open those files by range, never `git show` nor `git log`; a repo-wide search only for a ripple the sheet does not list, `grep -rln` on the member name, paths only.',
     '`refactor` = true only for a cycle the sheet carries as a refactor under an existing safety net (no test written): `methods` = the net methods, run unchanged at RED and kept green at GREEN.',
     '`steps` = exact titles of the sheet steps carried by the cycle. `full` / `bounded` = RED contract paths, `boundedGreen` = GREEN contract `Read bounded` paths.',
     '`nextSheet` = path of the sheet of the next ⬜ batch of the global plan after this one, empty string if none.',
@@ -424,8 +425,14 @@ function audit(retry) {
         'Mode `resume`. Gap table of the previous verdict:',
         retry.verdict.gaps.map(e => `| ${e.severity} | ${e.axis} | ${e.gap} | ${e.evidence} | ${e.fix} |`).join('\n'),
         `Files touched by the fix: ${list(retry.fix.files)} — diff from: \`git diff -- <these files>\`.`,
+        `Validations the fix reran: ${list(retry.fix.validations)}.`,
       ].join('\n')
     : ''
+  const alreadyRun = [
+    '',
+    'Suites the global green ran after the last production change, closing touched no code since: read these exit codes, never rerun them (verify-ddd-tdd §3); run only a suite missing here or scoped too narrowly for the diff.',
+    history.suites.suites.map(x => `- ${x.name} — exit ${x.exit}, scope ${x.scope}, ${x.count} tests`).join('\n'),
+  ].join('\n')
   return agent(
     [
       FRAME,
@@ -434,6 +441,7 @@ function audit(retry) {
       retry
         ? `Capture: \`${capture}\` (to read). Section ${batch} of the sheet: \`${sheet}\`.`
         : `First run \`cctoolkit audit-capture ${batch} ${sheet} ${capture}\`, then read the capture. Section ${batch} of the sheet: \`${sheet}\`.`,
+      alreadyRun,
       previous,
       '',
       'Structured output: `block` = the markdown verdict block verbatim (fixed format of the skill), `gaps` = its Blocking/Major rows,',
@@ -465,7 +473,7 @@ for (let round = 1; verdict.verdict === 'GAPS' && round <= 2; round++) {
       '',
       verdict.block,
     ].join('\n'),
-    { schema: FIX, phase: 'Audit', label: `fix ${round}` },
+    { schema: FIX, phase: 'Audit', label: `fix ${round}`, model: 'sonnet' },
   )
   if (!fix) return await finish(BLOCKED, `fix ${round} without result`, verdict)
   history.fixes.push(fix)
