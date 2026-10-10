@@ -24,7 +24,7 @@ A line under the prompt: context meter, 5h limit, prompt-cache expiry, session t
 
 ## Install
 
-From the repo root, type it yourself — the auto-mode classifier refuses an agent enabling plugins. The marketplace is the kit's own: skip the first line if `cctoolkit` is already installed (README § Installation).
+From the repo root, type it yourself — the auto-mode classifier refuses an agent enabling plugins. The marketplace is the kit's own: skip the first line if `cctoolkit` is already installed (`INSTALL.md`).
 
 ```bash
 claude plugin marketplace add pierrebelin/claude-code-toolkit --scope project

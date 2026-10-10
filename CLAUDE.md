@@ -4,7 +4,22 @@
 
 A **Claude Code plugin**, `cctoolkit`, for a DDD/TDD clean-architecture repo — this checkout is both the plugin and its marketplace (`.claude-plugin/`). No application code: **nothing to build, nothing to test**. The work here is editing `.md`, `.sh` and JSON files.
 
-Workflow and installation: **[README.md](README.md)**. What each brick does and how: the README of its folder (`skills/` — agents included —, `hooks/`, `lib/`, `scripts/`, `tools/`, `presets/` — `rules/` and `kit.config.json` included —, `templates/`, `evals/`, `mods/`). Do not duplicate those explanations here. `agents/` and `rules/` never get a README: the plugin loads every `agents/*.md` as an agent, `/cctoolkit:kit-init` copies every `rules/*.md` into the repo.
+Workflow and installation: **[README.md](README.md)** — the pitch, short and written for a newcomer — and **[INSTALL.md](INSTALL.md)** — everything installation requires. Nothing about the kit's internals goes in either. What each brick does and how: the README of its folder (`skills/` — agents included —, `hooks/`, `lib/`, `scripts/`, `tools/`, `presets/` — `rules/` and `kit.config.json` included —, `templates/`, `evals/`, `mods/`, `examples/`). Do not duplicate those explanations here. `agents/` and `rules/` never get a README: the plugin loads every `agents/*.md` as an agent, `/cctoolkit:kit-init` copies every `rules/*.md` into the repo.
+
+| Folder | What |
+|--------|------|
+| `skills/`, `agents/` | the skills and the subagents they delegate to |
+| `hooks/` | guards, bounds, traceability, context nudges, wired in `hooks.json` |
+| `lib/` | modules the hooks call, config and test-tag readers |
+| `scripts/`, `bin/` | repo-wide scanners and one-shots, run as `cctoolkit <name>` |
+| `tools/` | `doctor` |
+| `presets/`, `rules/` | layouts, `kit.config.json`, layer and universal rules |
+| `templates/` | settings, statusline, `.gitignore` merged into the repo |
+| `evals/` | recorded hook cases |
+| `workflows/` | `run-lot`, the autonomous batch as a Workflow script |
+| `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
+| `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
+| `docs/` | context cost, tooling |
 
 ## Anonymisation — do not break it
 
@@ -31,7 +46,7 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 | wiring (event, matcher, hook order) | `hooks/hooks.json` — commands written `bash "${CLAUDE_PLUGIN_ROOT}/hooks/x.sh"` |
 | what the repo's own settings carry (permissions, env, statusline, plugin enablement) | `templates/` — merged into the repo by `/cctoolkit:kit-init`, never read from here |
 | a script or tool the skills call | `scripts/` or `tools/`, reached through `bin/cctoolkit <name>` — never a path in a skill, an agent or a reference |
-| description of the kit's behaviour | `README.md` for the workflow and installation, the folder's `README.md` for a brick |
+| description of the kit's behaviour | `README.md` for the workflow, `INSTALL.md` for installation and update, the folder's `README.md` for a brick |
 | measurement, protocol or procedure too long for `CLAUDE.md` | `docs/CONTEXT-COST.md`, `docs/TOOLING.md` — opened on demand, so the standing rule stays in `CLAUDE.md` and only points here |
 | repo-wide scanner or one-shot migration | `scripts/` — never a hook: a hook fires per edit, a scan reads the whole repo |
 
