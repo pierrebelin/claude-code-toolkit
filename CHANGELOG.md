@@ -4,11 +4,12 @@ One section per release, newest first, headed `## <plugin> <version> — <date>`
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
-## cctoolkit 1.1.0 — unreleased
+## cctoolkit 1.1.0 — 2026-10-10
 
 - `examples/`: one fictional feature from spec to batch report, with a glossary.
 - `INSTALL.md` holds the installation; the README is a short introduction.
 - `/cctoolkit:run-lot` is the default path for a batch; `cctoolkit audit-capture` trims its capture.
+- Releases are versioned and listed here; `INSTALL.md` explains how to turn on auto-update for this marketplace.
 
 ## cctoolkit 1.0.0 — 2026-10-10
 
