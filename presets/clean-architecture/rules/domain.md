@@ -5,7 +5,7 @@ paths:
 
 # Domain rules
 
-Examples: `skills/implement-tdd/references/examples-domain.md`.
+Code pattern: an existing file of the same kind in this repo — `graphify query`, or a sibling folder. The repo is the example.
 
 **Domain depends on nothing** — no HTTP, EF, SQL, DTO, Infrastructure (DDD-10). Enforced by ArchitectureTests, which also checks API contracts live in `Abstractions`, leak no internals.
 
@@ -18,15 +18,18 @@ Examples: `skills/implement-tdd/references/examples-domain.md`.
 | Value Object | `ValueObject` | `DisplaySettings : ValueObject` |
 | EntityId | `EntityId<TEntityId>` | `ProductId : EntityId<ProductId>` |
 | Domain Event | `DomainEvent<TEntityId>` | `ProductCreated : DomainEvent<ProductId>` |
-| Exception | `DomainException`, or `NotFoundException` / `ConflictException` deriving from it | `ProductNotFoundException : NotFoundException` |
+| Exception | base under `Domain/Core/Exceptions/Base/`: `NotFoundException` (404), `ConflictException` (409) — both deriving from `DomainException` (400, default) —, `ForbiddenException` (403), `ValidationException` (400, error dictionary) — these two derive from `Exception` + `IInternalException` | `ProductNotFoundException : NotFoundException` |
 
 ## Rules
 
 - **Aggregate Root**: private constructor, `Create()` + event, `Restore()` without validation, mutations via business methods + event. `UserContext` parameter for audit.
 - **`Create()` vs `Restore()`**: `Create()` builds, validates, emits; `Restore()` rehydrates from DB, no validation, no event. Repository **always** reads via `Restore()` (DDD-06).
+- **Properties**: mutable `{ get; private set; }`, immutable `{ get; }` set in the constructor.
 - **Collections**: `private readonly List<T> _items` exposed as `public IReadOnlyList<T> Items => _items.AsReadOnly()`.
-- **Value Objects**: reuse existing (`TechnicalName`, `DiagramName`, …). Never raw `string` when VO exists. Records rebuilt from DB go through VO's `Restore()`.
-- **Typed IDs**: never raw `Ulid` for identifier (`ProductItemId`, `DiagramNodeId`, …). `Ulid` → typed ID conversion at endpoint boundary; Domain, Application, Infrastructure handle typed IDs only.
+- **Value Objects**: reuse existing (`Name`, `TechnicalName`, `DiagramName` under `Domain/Core/ValueObjects/`). Never raw `string` for a concept carrying a format rule (DDD-04). Implement `GetEqualityComponents()`. A VO with a format rule exposes `Create()` (validates — the aggregate calls it, never rewrites the check: empty name = `EmptyNameException`) and `Restore()` (from DB, no validation).
+- **Persistence event** carries the primitive form (`validatedName.Value`): it feeds the EF mapper.
+- **Domain event = positional record** passing its parameters to the base: `sealed record ProductDeleted(ProductId Id, string Name, UserContext UserContext) : DomainEvent<ProductId>(Id);`. Never an explicit constructor copying into `{ get; }` properties — existing ones are legacy, never a pattern to copy. Changing an event's base (e.g. making it audited) never changes its shape.
+- **Typed IDs**: `ProductId.Create()` new, `ProductId.From(ulid)` existing; never raw `Ulid` for identifier (`ProductItemId`, `DiagramNodeId`, …). `Ulid` → typed ID conversion at endpoint boundary; Domain, Application, Infrastructure handle typed IDs only.
 - **Mutation via business methods** (DDD-03): no public setter, no handler-driven mutation.
 - **Inter-aggregate reference by ID** (DDD-05), never object navigation.
 - **Logic belongs to object owning data** (DDD-09): `exportDiagramsContext.Serialize()`, not `DiagramExportSerializer.Serialize(context)`; `ParsedImportFile.Create(json)`, not `IParser.Parse(json)`. Domain Service only when no business object owns operation naturally — stateless, no Infrastructure dependency, never repository wrapper.

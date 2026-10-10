@@ -7,8 +7,7 @@ paths:
 
 # WebAPI rules
 
-Examples: `skills/implement-tdd/references/examples-webapi.md`.
-
+Code pattern: an existing file of the same kind in this repo — `graphify query`, or a sibling folder. The repo is the example.
 
 WebAPI translates HTTP. No business rule (APP-04).
 
@@ -34,12 +33,14 @@ Live in `Abstractions.Models`, **never** in WebAPI — no nested record, no inte
 
 ## Responses
 
-| Verb | Status |
+| Verb | Result |
 |------|--------|
-| POST | 201 |
-| GET | 200 |
-| PUT | 200 |
-| DELETE | 204 |
+| POST | `Results.Created($"/api/v1/{route}/{id.Value}", id.Value)` — 201 |
+| GET | `Results.Ok(Mapper.ToResponse(data))` — 200 |
+| PUT | `Results.Ok(id.Value)` — 200 |
+| DELETE | `Results.NoContent()` — 204 |
+
+No `try/catch` in an endpoint: exceptions bubble to `GlobalExceptionHandler`. `.ProducesProblem(...)` declares only the statuses **this** route can produce, from what its handler throws: `500` always, `413` only on a large-body route, `422` only on a route triggering workflow validation.
 
 ## GlobalExceptionHandler
 
@@ -56,6 +57,8 @@ Backstop — handlers throw, exception propagates here (`WebAPI/GlobalExceptionH
 | `SecurityContextUnavailableException` | 503 |
 | `UpstreamServiceException` | its own 4xx, else 502 |
 | `OperationCanceledException` / `TimeoutRejectedException` | 504 |
+
+Ordered `switch`, first match wins: a specialised exception goes before its base. `ValidationException` / `AggregateValidationException` add `errors`; `ValidationFailedException` adds `workflow` + `violations`; unmapped = 500, detail hidden outside Development. `UpstreamServiceException` carries no `IInternalException` on purpose: an upstream outage is not the client's fault.
 
 504 = server exceeded own budget. Client abort filtered upstream by `ExceptionHandlerMiddlewareImpl`, sets 499.
 

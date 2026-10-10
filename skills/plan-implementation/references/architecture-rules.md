@@ -1,6 +1,6 @@
 # Architecture rules
 
-The plan classifies **every id**: `applied` or `N/A — reason`. Implementation detail lives in `/implement-tdd` and the test skills; do not duplicate their examples here.
+The plan classifies every id: `applied` or `N/A — reason`. Implementation detail lives in `/implement-tdd` and the test skills.
 
 | ID | Rule | When | Plan decision and evidence | Exception |
 |----|-------|-------|----------------------------|-----------|

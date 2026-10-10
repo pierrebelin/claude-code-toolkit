@@ -5,7 +5,7 @@ paths:
 
 # Application layer rules
 
-Examples: `skills/implement-tdd/references/examples-application.md`.
+Code pattern: an existing file of the same kind in this repo — `graphify query`, or a sibling folder. The repo is the example.
 
 Layer technical conventions live here. Folder `CLAUDE.md` under `src/` = business rules, handler/feature intent — never technical convention: only sessions opening that folder see it.
 
@@ -13,7 +13,9 @@ Handler orchestrates: load, call Domain, save events, return result (APP-01). No
 
 ## Commands
 
-Inherit `CommandHandler<TCommand, TResult>` with `ITransactionManager`, implement `HandleCommand()`, return aggregate id. Failures = domain exceptions.
+Command inherits `ICommand`. Handler inherits `CommandHandler<TCommand, TResult>` (transaction via `ITransactionManager`), implements `HandleCommand()` — not `Handle()` —, returns aggregate id. Failures = domain exceptions.
+
+Uniqueness pre-check in handler (`ExistsProductWithName`) = early failure before expensive work, never the rule: the persistence constraint owns it (`infrastructure-ef.md`). Optional when nothing costly precedes `Save`.
 
 One command modifies, saves **single aggregate** (DDD-08). External read targeted, non-mutating.
 
@@ -25,7 +27,7 @@ One command modifies, saves **single aggregate** (DDD-08). External read targete
 |-------|--------|
 | Paginated list | `Paging<T>` |
 | Bounded list | `IReadOnlyList<T>` |
-| Single read | aggregate or its response |
+| Single read | aggregate or its response — never `null`: repository `Get` throws `{Entity}NotFoundException` |
 
 **Never `Result<T>`** — absent from codebase.
 

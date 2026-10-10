@@ -23,7 +23,7 @@ This file = common workflow, writing rules, report structure, JSON schema, coher
 
 ## Preliminary step — choosing the Stryker mode
 
-**Before any execution**, ask the user which Stryker mode through `AskUserQuestion`:
+Before any execution, ask the user which Stryker mode through `AskUserQuestion`:
 
 Question: "Which Stryker mode for this report?" with the options:
 
@@ -84,7 +84,7 @@ Each step has the same structure:
 4. **Supplementary data + Stryker** — 4-5 parallel sub-agents for git, test inventory, page/endpoint coverage, codebase health and code size (src/tests, per layer), Stryker in the background (see the stack commands)
 5. **Wait and collect** — wait for SonarQube + Stryker, collect the results
 
-> **Common rule for every stack:** launch Stryker **after** the tests finish (step 2). Never launch it alongside them — Stryker instruments the code and interferes with the test run.
+> **Common rule for every stack:** launch Stryker after the tests finish (step 2), not alongside them — it instruments the code and interferes with the test run.
 
 ---
 
@@ -103,30 +103,27 @@ File name: `docs/metrics/quality-report-YYYY-MM-DD.md` (today's date). Exists �
 
 ## Step 7 — Produce the JSON file
 
-After the Markdown, **mandatory**: JSON at same location, `docs/metrics/quality-report-YYYY-MM-DD.json`.
+After the Markdown, write the JSON at the same location, `docs/metrics/quality-report-YYYY-MM-DD.json`.
 
-**Schema (version `2.0`), field by field, and the traps → `references/json-schema.md`.** Read it before writing. Two rules cost a whole report when missed: every issue count comes from `api/issues/search` with `&resolved=false`; `coverage.lines`/`branches` are **whole-project** SonarQube numbers, never ReportGenerator or Jest ones.
+**Schema (version `2.0`), field by field, and the traps → `references/json-schema.md`.** Read it before writing. Two traps cost a whole report: issue counts come from `api/issues/search` with `&resolved=false`; `coverage.lines`/`branches` are whole-project SonarQube numbers, not ReportGenerator or Jest ones.
 
 ---
 
 ## Absolute rule — no trending in the report
 
-**A report is a snapshot at instant T.** Never a "Trend" column, deltas or comparisons with the previous report. Comparing reports is the job of whatever reads the JSON history; the Markdown holds today's raw values only.
+A report is a snapshot at instant T: no "Trend" column, deltas or comparisons with the previous report. Comparing reports is the job of whatever reads the JSON history; the Markdown holds today's raw values only.
 
 ---
 
 ## Writing tone — absolute rule
 
-**Partial, non-complacent.** Goal: an honest, precise view of how solid the codebase really is — not a celebration of the work done.
+Partial, non-complacent. Goal: an honest, precise view of how solid the codebase really is — not a celebration of the work done.
 
-
-- **Never celebrate good numbers.** "4,383 tests pass" is a fact, not an achievement.
-- **Emphasise what is wrong.** Fragile zones, blind spots and insufficient scores get more space than the positives.
-- **Name the risks without minimising them.** Stryker at 61% overall is not "correct" — it is insufficient. Branch coverage at 65% is not ✅.
-- **Avoid reassuring phrasing**: no "the base is healthy", "the infrastructure is mature", "the tests validate correctly" — confidence without information.
-- **✅ is reserved for zones with zero known problem.** Any doubt → ⚠️.
-- **The "What works well" section stays short.** "What must improve" is long and precise.
-- **Every metric needs a real interpretation**, not just a value. Example: "65.7% branches — one `if` in three is never tested both ways."
+- Good numbers are facts, not achievements: "4,383 tests pass".
+- Fragile zones, blind spots and insufficient scores get more space than the positives; "What works well" stays short, "What must improve" is long and precise. Stryker at 61% overall is insufficient, not "correct"; branch coverage at 65% is not ✅.
+- Avoid reassuring phrasing ("the base is healthy", "the infrastructure is mature") — confidence without information.
+- ✅ is for zones with zero known problem. Any doubt → ⚠️.
+- Every metric gets a real interpretation, not just a value. Example: "65.7% branches — one `if` in three is never tested both ways."
 
 ---
 
@@ -140,7 +137,7 @@ Before delivering: arithmetic first, then judgement.
 cctoolkit quality-report-check docs/metrics/quality-report-YYYY-MM-DD.json
 ```
 
-Checks per-type sums against totals (passed, failed, skipped, durations), `active + skip = total` on endpoints and pages, recomputed coverage and detection percentages, severity sum vs `issues_open_total`, duration thresholds per stack. 🔴 → fix the JSON **and** the Markdown section it comes from, re-run. ⚠️ → carry into the report as ⚠️, never silence.
+Checks per-type sums against totals (passed, failed, skipped, durations), `active + skip = total` on endpoints and pages, recomputed coverage and detection percentages, severity sum vs `issues_open_total`, duration thresholds per stack. 🔴 → fix the JSON **and** the Markdown section it comes from, re-run. ⚠️ → carry into the report as ⚠️.
 
 **8.2 — Markdown ↔ JSON.** Every figure of executive summary §1 matches its detailed section and the JSON exactly. `endpoints_skip > 0` is not uncovered: test exists, disabled.
 

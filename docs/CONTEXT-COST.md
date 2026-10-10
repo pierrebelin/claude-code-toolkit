@@ -20,13 +20,60 @@ bounded. Re-measure per repo with `turn-batching-check.py` before quoting those 
   genuinely want one. The pass belongs to the agent that asked for it — a subagent's forcing no
   longer exempts its siblings or the main chain.
 - Locate first (`graphify`, `grep -n`), then read the range.
-- 3 files or more to go through → haiku subagent: its reads stay in its own context, only the
+- 3 files or more to go through → subagent: its reads stay in its own context, only the
   conclusion comes back.
+
+### Subagent bar (2026-10-09)
+
+Two repos, 30 days, measured from the transcripts subagents included (`turn-batching-check`
+only read the main chain until that day):
+
+| | repo A | repo B |
+|---|---|---|
+| `read-bounds` denials in subagents | 663 / 740 (90 %) | 1 296 / 1 405 (92 %) |
+| denied files under 400 lines | 78 % | 79 % |
+| forcings followed by an `Edit`/`Write` of the same file | 7 / 15 | 133 / 222 (60 %) |
+| context at the denial turn, median | 9k tokens | 9k tokens |
+| `diff-bounds` denials | 0 | 0 |
+
+A subagent's context is small and dropped when it returns; a forcing that ends in an edit is
+the full read a `read in full` contract line asked for, one turn burnt to get it. Subagents
+now read against 400 lines / 24 kB, the main chain keeps 120 / 8 kB. Check after a month:
+`subagent_denials` should fall by ~¾ and `subagent_forced_then_edited` toward zero; if the
+subagents' `Read` bytes per call jump past the saving, lower the bar.
+
+`guard-diff-bounds` stays despite zero denials: it exits on any command without `git`, adds
+no instruction, and the patch it guards against was measured at 109 kB.
 
 ## Batching
 
 **Independent calls → a single message.** Two `Read`/`Bash`/`Grep` that do not wait on each
 other, in two turns, pay the accumulation twice. A turn = one billed round trip, not one call.
+Measured on one .NET batch: 110 of 124 tool-carrying turns held a single call, and the three
+heaviest cost lines of that session all scale with the turn count — hence the nudge of
+`lib/batching-nudge.sh` after 6 mono-call turns in a row.
+
+Since 2026-10-09 the generic line ("one turn = one billed round trip") is gone from
+`context-discipline.md` and the agents: the harness system prompt already asks for it. What
+stays is the nudge, which costs nothing until the failure shows, and the groupings tied to a
+step (`implement-tdd` phase reads, one `Write` per new file, diff + cost with the green run).
+Check after five batches with `turn-batching-check`: calls per tool-carrying turn back near
+1.2 means the line comes back.
+
+## Delegation
+
+- **An explicit model, `haiku` by default for read-only exploration.** Without the parameter
+  the agent inherits the parent model: 11× the cost per turn for the same locating work.
+  `sonnet` when the search takes judgment: a haiku miss costs a second spawn.
+- **Bounded report.** An unbounded `Explore` launch re-injected 27k characters into the main
+  conversation, against 3k for an agent with an imposed format.
+- **`SendMessage` under 3 turns, a fresh `Agent` beyond.** An agent stopped at 49 turns carries
+  ~80k of context and every correction turn pays it; a fresh agent restarts at ~17k of preamble
+  plus ~11k of reloaded rules. A 10-turn correction: ~850k in continuation against ~350k restarted.
+- **No delegated mechanical operation.** Two sessions: a `restore 19 files from HEAD` agent cost
+  11 turns, an `add an import to 11 files` agent 4 more — one Bash loop each.
+- **A `description` on every `Agent` call.** Anonymous launches were 42 % of the subagent bill
+  over those two sessions.
 
 ## Weekly check
 
@@ -37,8 +84,7 @@ cctoolkit turn-batching-check --compare .claude/context-baseline.json
 Fill per tool, share of bounded `Read`s, `read-bounds` denials and **forcings**. A high forcing
 rate means the threshold is mis-set, not that the rule is wrong. Since 2026-09-12 the script
 also prints the **call that follows a refusal** on the main chain — bounded Read, forcing,
-`bulk-read`, subagent, `cat`, other Bash — and the number of `bulk-read` calls with the bytes
-they kept out of the context. That is the production form of Spotify's behavioural evals
+subagent, `cat`, other Bash. That is the production form of Spotify's behavioural evals
 (`plugins/shunt/evals/evals.json`: "blocked by the hook, then invokes bulk-read"): it measures
 the path actually taken instead of asking a model whether it would take it. First reading over
 7 days: 17 follow-ups, 10 of them "Bash autre" — refine the classifier as patterns appear. Lowered 300 to 120 on
@@ -57,6 +103,9 @@ regression.
 
 ## Session hygiene
 
+- Hard cap of 250k context tokens. A `/clear` costs ~51k of startup plus ~40k of re-reading,
+  written to cache at 2×; dropping from ~250k to ~100k saves 150k re-read at 0.1× on every turn
+  — paid back in about ten turns, against 70 to 160 for a long session.
 - `/clear` on a phase change — the only mechanism that throws away the accumulated tail. Within
   the hour, the head (system prompt, tools, CLAUDE.md) is read back from cache instead of being
   rewritten.
@@ -105,8 +154,8 @@ Spotify's shunt plugin routes I/O to a tool-less worker model and reports 82-94 
 reads of 1 281 to 7 408 lines. Its 350-line gate would have caught none of the 42 unbounded
 Reads measured here on 2026-09-08 (23 to 303 lines), and 193 of the 3 463 `.cs` files past that
 size are almost all EF `.Designer.cs` migrations. The idea transfers, the threshold does not.
-`cctoolkit bulk-read` is the local worker; measured 2026-09-12 → `TOOLING.md`. The saving
-is not in dollars (Haiku was $5.60 of the 30 days) but in what never enters the main chain.
+`cctoolkit bulk-read` was the local worker (measured 2026-09-12, removed 2026-10-10): the saving
+was not in dollars (Haiku was $5.60 of the 30 days) but in what never entered the main chain.
 
 ## Instruction loads
 

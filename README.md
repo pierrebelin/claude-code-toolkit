@@ -9,7 +9,7 @@ This checkout is both the plugin and its marketplace (`.claude-plugin/`). Nothin
 Two commands, then one skill does the rest:
 
 ```bash
-claude plugin marketplace add pierrebelin/claude-code-toolkit
+claude plugin marketplace add pierrebelin/claude-code-toolkit --scope project
 claude plugin install cctoolkit@cctoolkit --scope project
 ```
 
@@ -59,11 +59,17 @@ flowchart LR
 
 The orchestrator writes neither tests nor code: it splits, reads the diffs, validates the cost and settles the design. How the delegation works: [`skills/README.md`](skills/README.md).
 
-Side skills: `/cctoolkit:quality-report` (monthly snapshot), `/cctoolkit:learn` (turns recurring audit gaps into rules), `/cctoolkit:bulk-read` (a question over named files without loading them).
+Side skills: `/cctoolkit:quality-report` (monthly snapshot) and `/cctoolkit:learn` (turns recurring audit gaps into rules).
+
+Autonomous batch: **`/cctoolkit:run-lot todo/<code>/<CODE>-PLAN-FX.md`** runs steps 3 and 4 as a Workflow script — design, RED/GREEN per behaviour, global green, closing, audit with two fix rounds, next-sheet review — and writes `run/FX/FX-report.md` beside the sheet. Needs the `Workflow` tool (not cut by `disableWorkflows`). Details: [`docs/TOOLING.md`](docs/TOOLING.md#workflow-run-lot--autonomous-batch-as-a-script).
+
+## Mods
+
+Three optional panes inside Claude Code, installed on their own: **`run-lot-pane`** follows a `run-lot` batch live (phases, agents, cost, outcome), **`spec-pane`** keeps a `/business-spec` in view as it is written, **`context-band`** tells you when to `/clear`. Screenshots and install: **[`mods/README.md`](mods/README.md)**.
 
 ## Not a template to install as-is
 
-This kit encodes **my** way of working. Among other things it imposes strict TDD, zero comments in production, surgical changes, no `git commit` by the agent, and one rule sheet per handler folder checked against the tests ([`skills/README.md`](skills/README.md#what-the-kit-imposes-on-the-repo)). On a project with other conventions, half of it is noise.
+This kit encodes **my** way of working. Among other things it imposes strict TDD, comments only for what the code cannot say, surgical changes, no `git commit` by the agent, and one rule sheet per handler folder checked against the tests ([`skills/README.md`](skills/README.md#what-the-kit-imposes-on-the-repo)). On a project with other conventions, half of it is noise.
 
 ## Installation
 
@@ -71,14 +77,14 @@ Requires Claude Code with plugin support, `jq` and `python3`.
 
 1. **Install the plugin at project scope**, from the repo root — type it yourself, the auto-mode classifier refuses an agent enabling plugins:
    ```bash
-   claude plugin marketplace add pierrebelin/claude-code-toolkit
+   claude plugin marketplace add pierrebelin/claude-code-toolkit --scope project
    claude plugin install cctoolkit@cctoolkit --scope project
    ```
-   Project scope writes the plugin into the committed `.claude/settings.json`: every clone and worktree gets it. `--scope local` keeps it to your checkout; a worktree then needs `cctoolkit install-git-hooks` (`docs/TOOLING.md`). A local checkout of this repo works as the marketplace too.
+   Project scope writes both the marketplace (`extraKnownMarketplaces`) and the plugin (`enabledPlugins`) into the committed `.claude/settings.json`: every clone and worktree gets it, and a teammate opening the repo is offered the install. Inside a session, `/plugin marketplace add pierrebelin/claude-code-toolkit` then `/plugin install cctoolkit@cctoolkit` do the same, scope picked in the dialog. `--scope local` keeps it to your checkout; a worktree then needs `cctoolkit install-git-hooks` (`docs/TOOLING.md`). A local checkout of this repo works as the marketplace too.
 
 2. **Restart Claude Code, then run `/cctoolkit:kit-init`** from the repo root, after `/clear`. This is the step that matters: the plugin brings skills, agents and hooks, but without `kit-init` the repo has no `kit.config.json`, no rules and no permissions, and the hooks assume the `clean-architecture` layout, whatever yours is. Don't set the repo up by hand.
 
-3. **Optional** — the mods (`claude plugin install context-band@cctoolkit --scope project`, same for `tdd-batch`, see [`mods/README.md`](mods/README.md)) and the startup trim ([`templates/README.md`](templates/README.md#startup-trim)). Add `graphify-out/` to the repo's `.gitignore`.
+3. **Optional** — the mods ([`mods/README.md`](mods/README.md): `claude plugin install <mod>@cctoolkit --scope project`) and the startup trim ([`templates/README.md`](templates/README.md#startup-trim)). Add `graphify-out/` to the repo's `.gitignore`.
 
 ### What `/cctoolkit:kit-init` does
 
@@ -100,11 +106,10 @@ It **never overwrites** a file that differs: it shows the difference and asks ke
 
 | Tool | Used for | If missing |
 |------|----------|------------|
-| `perl` | `evals/run.sh` timer, `tools/bulk-read`, `tools/doctor` | no latency budget in the evals |
-| `claude` CLI, logged in | `cctoolkit bulk-read` | falls back to a bounded read |
+| `perl` | `evals/run.sh` timer, `tools/doctor` | no latency budget in the evals |
 | `graphify` | blast radius on aggregate edits, graph autosync | silently skipped |
 | `rtk` | output compression of Bash commands | drop the `rtk ` prefix from `kit.config.json` `commands` |
-| `caveman` plugin | terse mode forced in some skills | no effect |
+| `caveman` plugin | terse output, per repo through `.caveman.json` when `/cctoolkit:kit-init` writes one; statusline badge | no effect |
 
 ## Updating
 
@@ -119,14 +124,15 @@ Restart Claude Code, then `cctoolkit doctor`. Nothing in the repo changes: `kit.
 
 | Folder | What | Details |
 |--------|------|---------|
-| `skills/`, `agents/` | the 12 skills and the 4 subagents they delegate to | [`skills/README.md`](skills/README.md) |
+| `skills/`, `agents/` | the 11 skills and the 4 subagents they delegate to | [`skills/README.md`](skills/README.md) |
 | `hooks/` | guards, bounds, traceability, context nudges, wired in `hooks.json` | [`hooks/README.md`](hooks/README.md) |
 | `lib/` | modules the hooks call, config and test-tag readers | [`lib/README.md`](lib/README.md) |
 | `scripts/`, `bin/` | repo-wide scanners and one-shots, run as `cctoolkit <name>` | [`scripts/README.md`](scripts/README.md) |
-| `tools/` | `bulk-read`, `doctor` | [`tools/README.md`](tools/README.md) |
+| `tools/` | `doctor` | [`tools/README.md`](tools/README.md) |
 | `presets/`, `rules/` | layouts, `kit.config.json`, layer and universal rules | [`presets/README.md`](presets/README.md) |
 | `templates/` | settings, statusline, `.gitignore` merged into the repo | [`templates/README.md`](templates/README.md) |
 | `evals/` | recorded hook cases | [`evals/README.md`](evals/README.md) |
+| `workflows/` | `run-lot`, the autonomous batch as a Workflow script | [`docs/TOOLING.md`](docs/TOOLING.md#workflow-run-lot--autonomous-batch-as-a-script) |
 | `mods/` | optional in-terminal panes | [`mods/README.md`](mods/README.md) |
 | `docs/` | context cost, tooling | `CONTEXT-COST.md`, `TOOLING.md` |
 

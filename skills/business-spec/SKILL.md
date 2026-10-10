@@ -6,7 +6,7 @@ argument-hint: "[feature to specify]"
 
 # Business specification (short)
 
-**Concise** business spec. Real world (users, rules, use cases). **Zero implementation** (class, aggregate, handler, type, file, pattern, framework). Business expert proofreads it.
+Concise business spec. Real world (users, rules, use cases). Zero implementation (class, aggregate, handler, type, file, pattern, framework). Business expert proofreads it.
 
 $ARGUMENTS
 
@@ -14,10 +14,10 @@ $ARGUMENTS
 
 1. Read sources; explore only code paths lighting vocabulary or existing behaviour. Stop once answered; no broad scan.
 2. **Clarify decisions** until shared understanding, **before** writing:
-   - **One at a time.** Branch by branch, dependencies one by one — no grouping (answer to Q1 changes Q2).
-   - **Answer in code → explore, don't ask.** Ask only what can't be deduced.
+   - One question at a time, branch by branch (answer to Q1 changes Q2).
+   - Answer in code → explore, don't ask. Ask only what can't be deduced.
    - Via **AskUserQuestion**: 1 question = 1 decision, **recommended answer as first option** (`(recommended)`).
-   - **Business constraint = decision too**: regulation, standard, SLA, contractual commitment, existing behaviour that must survive. Elicit here; lands as business rule carrying its origin, never its own section. Technical, temporal or resource constraint: out of scope, belongs to `/plan-implementation`.
+   - Business constraint = decision too: regulation, standard, SLA, contractual commitment, existing behaviour that must survive. Elicit here; lands as business rule carrying its origin, never its own section. Technical, temporal or resource constraint: out of scope, belongs to `/plan-implementation`.
    - Continue until no decision left that would change a use case, business rule, data, states or scope. Settled → spec; unsettled → section `kit:open-questions`.
 3. **Challenge the product owner** only when a decision cuts scope, complexity or risk — ≤3 questions via **AskUserQuestion**:
    - Minimal scope: ship less, still validate the need?
@@ -25,7 +25,7 @@ $ARGUMENTS
    - Complexity: worth the business value?
    Skip when obvious from the interview.
 4. Write following the structure. Concision before exhaustiveness.
-5. **Always write into `todo/` (never `docs/`)**: `todo/<code-kebab-case>/SPEC-<code-kebab-case>.md`. One folder per feature: `/plan-implementation` later drops `-PLAN.md` + batch sheets there. Slug = kebab-case of feature code/name.
+5. Write into `todo/` (not `docs/`): `todo/<code-kebab-case>/SPEC-<code-kebab-case>.md`. One folder per feature: `/plan-implementation` later drops `-PLAN.md` + batch sheets there. Slug = kebab-case of feature code/name.
 
 Document must make later DDD design possible without doing it: every business rule states subject, condition, observable outcome, use case concerned. Aggregate, technical invariant, event, consistency model → `/plan-implementation`.
 
@@ -33,23 +33,21 @@ Document must make later DDD design possible without doing it: every business ru
 
 The spec is a produced artefact, proofread by a business expert.
 
-- One sentence when one suffices. Zero repetition.
-- **Empty section → delete it** (heading included). No `_Not applicable._`.
+- Empty section → delete it (heading included). No `_Not applicable._`.
 - Table over prose. No intro paragraph: straight to content.
 - Every rule names its origin (regulation, standard, practice, product choice), briefly.
-- **Authority of a rule**: rule owned by external system (identity provider, external catalogue, organisation directory) → spec names **the authority** and what the product merely consumes. Never replay or restate a rule owned elsewhere — cite it, name its owner.
-- **Target of a share or transfer**: a target organisation is validated by the **relationship that authorises it**, never by its mere existence. Phrase the business rule in those terms.
-- **What must not break**: an existing behaviour the feature must preserve is stated as a business rule with `Origin` = existing product behaviour, not as a passing remark. Left unnamed, it will not be tested.
-- Unsettled → `TBD`, listed in section `kit:open-questions`.
+- Authority of a rule: rule owned by external system (identity provider, external catalogue, organisation directory) → spec names the authority and what the product merely consumes. Never replay or restate a rule owned elsewhere — cite it, name its owner.
+- Target of a share or transfer: a target organisation is validated by the relationship that authorises it, not by its mere existence. Phrase the business rule in those terms.
+- What must not break: an existing behaviour the feature must preserve is stated as a business rule with `Origin` = existing product behaviour, not as a passing remark. Left unnamed, it will not be tested.
 - Every `##` heading keeps its `<!-- kit:… -->` anchor; the title before it is written in `language.docs` (`.claude/rules/markdown-output.md`). Numbering stays as in the template.
 
 ## Verbosity budget (produced document)
 
-- **Target**: few minutes' read, ~1-3 pages. Half of exhaustive spec.
-- **Use cases**: nominal scenario ≤7 steps. **Expected outcome** only when not obvious from scenario.
-- **Business rules**: statement 1 line. No justification: origin is enough.
-- **Inline fields**: `Applies to`, severity, origin on one line, never exploded into bullets.
-- **Duplicate = deleted**: information lives in exactly one place (use case **or** business rule **or** cross-cutting, never all three).
+- Target: few minutes' read, ~1-3 pages. Half of exhaustive spec.
+- Use cases: nominal scenario ≤7 steps. Expected outcome only when not obvious from scenario.
+- Business rules: statement 1 line. No justification: origin is enough.
+- Inline fields: `Applies to`, severity, origin on one line, never exploded into bullets.
+- Duplicate = deleted: information lives in exactly one place (use case or business rule or cross-cutting, never all three).
 
 ## Writing style
 
@@ -118,24 +116,20 @@ Every TBD in the document. Severity `Blocking` or `Major` — values kept verbat
 
 Re-read produced spec. Check and fix directly:
 
-**Business purity**: zero technical leak (class, type, file, table, framework, pattern, HTTP status). Present → rephrase in business terms. Readable by non-developer expert.
+Business purity: zero technical leak (class, type, file, table, framework, pattern, HTTP status). Present → rephrase in business terms.
 
-**Internal consistency**:
-- Every use case: actor + intent + nominal scenario. Every business rule: testable (yes/no) + origin + severity.
+Internal consistency:
 - Zero contradiction between rules, nor use case vs rule. `RM-XX`/`CU-XX` cross-references valid (no orphans).
-- Vocabulary: every specific term defined, no dead definition.
 
-**Completeness**:
+Completeness:
 - Use cases cover lifecycle (creation, read, update, deletion/withdrawal as relevant).
 - Errors + edge cases where they matter. Non-trivial data listed.
 - Every `TBD` in body appears in section `kit:open-questions`.
-- Every business rule precise enough to decide its DDD owner later, without naming that owner.
 - Rules, variants, errors readable without inferring a condition from a telegraphic fragment.
 
-**Codebase alignment** (signal, not veto):
+Codebase alignment (signal, not veto):
 - Key business concepts → look for equivalent in `Domain/`, `Application/`. Cite file:line.
 - Functional duplicate where capability already exists → flag it.
-- Every rule owned by external system names its authority; no external rule rewritten as product rule.
 
 Deviation → fix spec. Doubt about business intent → ask user.
 

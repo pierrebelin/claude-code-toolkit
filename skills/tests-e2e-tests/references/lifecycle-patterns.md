@@ -11,7 +11,7 @@ Assert.NotEmpty(categories.Value!.Categories);
 var categoryId = categories.Value.Categories[0].Id;
 ```
 
-Read reference data, never modify it. Mutable data the test creates is deleted at the end of the journey.
+Read reference data, don't modify it. Mutable data the test creates is deleted at the end of the journey.
 
 ## API dependencies
 
@@ -25,7 +25,7 @@ var child = await fixture.Client.CreateChildAsync(
 Assert.True(child.IsSuccess);
 ```
 
-Create dependencies in business order, never through database access.
+Create dependencies in business order, through the API.
 
 ## Temporarily blocked test
 

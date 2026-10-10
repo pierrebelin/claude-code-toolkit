@@ -1,6 +1,7 @@
 {
   "fixtures": [
     {"path": "big.cs", "lines": 300},
+    {"path": "huge.cs", "lines": 500},
     {"path": "small.cs", "lines": 50},
     {"path": "heavy.md", "lines": 119, "kind": "md"},
     {"path": "rules/big-rule.md", "lines": 300, "kind": "md"}
@@ -120,6 +121,18 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "head -n 5000 {{FIX}}/big.cs | grep C1"}},
       "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "a subagent cats a 300-line file whole: under the subagent bar of 400, as for Read",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/big.cs"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "a subagent is still denied a cat past 400 lines",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/huge.cs"}},
+      "expect": {"decision": "deny", "reason": "> 400 lines"}
     }
   ]
 }

@@ -1,6 +1,7 @@
 {
   "fixtures": [
     {"path": "big.cs", "lines": 300},
+    {"path": "huge.cs", "lines": 500},
     {"path": "small.cs", "lines": 50},
     {"path": "flat.cs", "lines": 200, "kind": "flat"},
     {"path": "heavy.md", "lines": 119, "kind": "md"},
@@ -21,16 +22,10 @@
       "expect": {"decision": "none"}
     },
     {
-      "name": "unbounded read of a big file is denied with the frozen literal and the bulk-read way out",
+      "name": "unbounded read of a big file is denied with the frozen literal",
       "hook": "hooks/read-bounds.sh",
       "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
       "expect": {"decision": "deny", "reason": "Unbounded Read on"}
-    },
-    {
-      "name": "denial names bulk-read as the third way out",
-      "hook": "hooks/read-bounds.sh",
-      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
-      "expect": {"decision": "deny", "reason": "cctoolkit bulk-read"}
     },
     {
       "name": "re-issuing the identical read forces it through",
@@ -43,21 +38,39 @@
       "name": "a forcing by one agent does not exempt another agent of the same session",
       "hook": "hooks/read-bounds.sh",
       "pre": [
-        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
-        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}}
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/huge.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/huge.cs"}}
       ],
-      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-b", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-b", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/huge.cs"}},
       "expect": {"decision": "deny"}
     },
     {
       "name": "a forcing by a subagent does not exempt the main chain",
       "hook": "hooks/read-bounds.sh",
       "pre": [
-        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
-        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}}
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/huge.cs"}},
+        {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/huge.cs"}}
       ],
-      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/huge.cs"}},
       "expect": {"decision": "deny"}
+    },
+    {
+      "name": "a subagent reads a 300-line file whole: under the subagent bar of 400",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+      "expect": {"decision": "none"}
+    },
+    {
+      "name": "a subagent is still denied past 400 lines",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "agent-a", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/huge.cs"}},
+      "expect": {"decision": "deny", "reason": "> 400 lines"}
+    },
+    {
+      "name": "the main chain keeps the 120-line bar on the same 300-line file",
+      "hook": "hooks/read-bounds.sh",
+      "input": {"tool_name": "Read", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"file_path": "{{FIX}}/big.cs"}},
+      "expect": {"decision": "deny", "reason": "> 120 lines"}
     },
     {
       "name": "instruction file is read whole or not at all",

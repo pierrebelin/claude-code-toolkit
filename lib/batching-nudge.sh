@@ -48,9 +48,12 @@ tick=$(( (tick + 1) % SAMPLE ))
 printf '%s' "$tick" > "$tick_file"
 [ "$tick" -eq 0 ] || exit 0
 
+# One reminder per session. Measured 2026-10-09 over 609 reminders: 16 % of the
+# turns after one batched calls, 12 % without — a real but small effect that a
+# second reminder does not add to. The COOLDOWN path below only ever ran once.
 state="/tmp/claude-batching-nudge-${session}"
+[ -f "$state" ] && exit 0
 last_alert=0
-[ -f "$state" ] && last_alert=$(cat "$state" 2>/dev/null || echo 0)
 
 python3 - "$transcript" "$WINDOW" "$COOLDOWN" "$last_alert" "$state" <<'PY'
 import sys, json

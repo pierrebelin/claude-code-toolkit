@@ -1,6 +1,6 @@
 {
   "name": "cctoolkit",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "DDD/TDD kit for a clean-architecture repo: spec, plan, TDD batch and audit skills, their agents, the guard and traceability hooks, the layout presets and the cctoolkit command.",
   "author": { "name": "Pierre Belin" },
   "homepage": "https://github.com/pierrebelin/claude-code-toolkit",

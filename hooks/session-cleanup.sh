@@ -43,12 +43,14 @@ for dir in $DIRS; do
   find -H "$dir" -maxdepth 1 \( $find_args \) -mtime +2 -delete 2>/dev/null
 done
 
-# Third job: give the caveman flag back its pre-skill mode. caveman-skill-ultra.sh
-# writes `ultra` into the global ~/.claude/.caveman-active and saves what was
-# there beside it; this runs at the next session start — /clear included, which
-# is where a batch ends. Restored only while the flag still reads `ultra`: a mode
-# the user switched by hand in between is theirs. Empty saved value = no flag
-# before the skill, so the plugin's default comes back by removing the file.
+# Third job — migration: give the caveman flag back its pre-skill mode. The
+# removed caveman-skill-ultra.sh wrote `ultra` into the global
+# ~/.claude/.caveman-active and saved what was there beside it; a machine that
+# ran it may still hold that sidecar. Restored only while the flag still reads
+# `ultra`: a mode the user switched by hand in between is theirs. Empty saved
+# value = no flag before the skill, so the plugin's default comes back by
+# removing the file. A repo wanting ultra now says so in `.caveman.json`
+# (/cctoolkit:kit-init), never through the global flag.
 cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 flag="$cfg/.caveman-active"
 saved="$cfg/.caveman-active.before-skill"

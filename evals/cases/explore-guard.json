@@ -38,7 +38,7 @@
       }
     },
     {
-      "name": "Explore without model: haiku is denied",
+      "name": "Explore without a model is denied",
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
@@ -52,7 +52,26 @@
       },
       "expect": {
         "decision": "deny",
-        "reason": "haiku"
+        "reason": "Explore blocked: pass an explicit model"
+      }
+    },
+    {
+      "name": "Explore on sonnet is allowed since 2026-10-09: haiku is the default, not an obligation",
+      "hook": "hooks/explore-guard.sh",
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "Explore",
+          "description": "map the convention",
+          "prompt": "use graphify explain first",
+          "model": "sonnet"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "prompt": "Hard cap: 20 lines"
       }
     },
     {
@@ -264,6 +283,26 @@
       },
       "expect": {
         "decision": "none"
+      }
+    },
+    {
+      "name": "a prompt stating its own size keeps it: no 20-line cap appended on top",
+      "hook": "hooks/explore-guard.sh",
+      "input": {
+        "tool_name": "Agent",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "tool_input": {
+          "subagent_type": "Explore",
+          "description": "inventory",
+          "model": "haiku",
+          "prompt": "Return path:line tables, 60 lines max, no code excerpt."
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "prompt": "Size: the one stated above",
+        "prompt_absent": "Hard cap: 20 lines"
       }
     }
   ]

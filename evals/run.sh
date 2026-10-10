@@ -29,6 +29,7 @@
 #                  "expect": { "decision": "deny|allow|ask|none|not_deny",
 #                              "reason": "substring", "command": "substring",
 #                              "command_absent": "substring", "prompt": "substring",
+#                              "prompt_absent": "substring",
 #                              "context": "substring", "no_context": true,
 #                              "exit": N, "stdout": "substring", "stderr": "substring" } } ] }
 #
@@ -223,6 +224,8 @@ check() {
   if [ -n "$want" ]; then case "$command" in *"$want"*) fails="$fails command~[$want]" ;; esac; fi
   want=$(jf "$c" '.expect.prompt // empty')
   if [ -n "$want" ]; then case "$prompt" in *"$want"*) ;; *) fails="$fails prompt!~[$want]" ;; esac; fi
+  want=$(jf "$c" '.expect.prompt_absent // empty')
+  if [ -n "$want" ]; then case "$prompt" in *"$want"*) fails="$fails prompt~[$want]" ;; esac; fi
   want=$(jf "$c" '.expect.context // empty')
   if [ -n "$want" ]; then case "$context" in *"$want"*) ;; *) fails="$fails context!~[$want]" ;; esac; fi
   if [ "$(jf "$c" '.expect.no_context // false')" = "true" ]; then

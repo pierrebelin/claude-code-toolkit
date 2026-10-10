@@ -25,9 +25,8 @@
 #
 # One jq for the whole payload, as in bash-dispatch.sh. Until 2026-09-12 this
 # hook ran six jq spawns and a second hook on the same matcher, delegation-nudge,
-# ran four more: 31 ms per Read for the pair. The nudge is now lib/delegation-nudge.sh,
-# sourced here on the reads that go through — a denied read never entered the
-# context, so it is not counted.
+# ran four more: 31 ms per Read for the pair. The nudge was then sourced from here
+# until 2026-10-09, removed after 44 reminders for 1 delegation that followed.
 set -u
 
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
@@ -46,14 +45,7 @@ IFS=$'\x1f' read -r tool_name session_id agent_id file_path has_offset has_limit
 
 export HOOK_SESSION_ID="$session_id" HOOK_AGENT_ID="$agent_id" HOOK_FILE_PATH="$file_path"
 
-# The read goes through: hand it to the delegation module, which answers with an
-# additionalContext or with nothing. Sourced in the command substitution's own
-# subshell, so its `exit` and `set -u` stay there.
-pass() {
-  out=$(. "$LIB/delegation-nudge.sh")
-  [ -n "$out" ] && printf '%s\n' "$out"
-  exit 0
-}
+pass() { exit 0; }
 
 # Already bounded → nothing to guard.
 [ -n "$has_offset" ] && pass
@@ -67,7 +59,13 @@ bytes=$(wc -c < "$file_path" 2>/dev/null | tr -d ' ')
 # Both bounds, as in lib/guard-cat-bounds.sh. Until 2026-09-12 this hook tested
 # the line count alone, so an 18 kB plan wrapped at the paragraph (119 lines)
 # passed a Read and was denied a cat — the two guards were meant to be one.
-if [ "$lines" -le "$BOUNDS_THRESHOLD" ] 2>/dev/null && [ "${bytes:-0}" -le "$BOUNDS_BYTES" ] 2>/dev/null; then
+# A subagent reads against a higher bar (BOUNDS_SUBAGENT_* in bounds-common.sh):
+# the main chain has no agent_id.
+max_lines=$BOUNDS_THRESHOLD max_bytes=$BOUNDS_BYTES
+if [ -n "$agent_id" ]; then
+  max_lines=$BOUNDS_SUBAGENT_THRESHOLD max_bytes=$BOUNDS_SUBAGENT_BYTES
+fi
+if [ "$lines" -le "$max_lines" ] 2>/dev/null && [ "${bytes:-0}" -le "$max_bytes" ] 2>/dev/null; then
   pass
 fi
 
@@ -95,7 +93,7 @@ fi
 echo "$file_path" >> "$seen_file"
 
 reason=$(bounds_reason \
-  "Unbounded Read on $file_path ($lines lines, ${bytes:-0} bytes > $BOUNDS_THRESHOLD lines / $BOUNDS_BYTES bytes). The whole file stays in context until the session ends." \
+  "Unbounded Read on $file_path ($lines lines, ${bytes:-0} bytes > $max_lines lines / $max_bytes bytes). The whole file stays in context until the session ends." \
   "$file_path" \
   "Read the range you need around one of them" \
   "Locate the range first (graphify explain/query, grep -n), then Read with offset/limit." \

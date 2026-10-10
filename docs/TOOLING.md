@@ -145,33 +145,6 @@ presence of a filter are inspected; a `dotnet build` of that project passes. The
 (sessions `f3d96035`, `24978db7`): 602 s each, the longest tool call of both sessions. No escape
 hatch: a doubt about scope is settled by widening the filter one level, never by running everything.
 
-## bulk-read — the one-shot worker
-
-`cctoolkit bulk-read --question "..." --paths f1 [f2 ...] [--model haiku|sonnet]` sends the
-files and one question to `claude -p --tools "" --setting-sources "" --system-prompt ...` and
-prints the answer; the files never enter the calling context. The shape is Spotify's shunt
-plugin (`spotify/portal-ai-plugins`, `plugins/shunt`) on a local worker instead of an internal
-Gemini mode. Measured 2026-09-12:
-
-| Path | Fixed cost | Latency |
-|---|---|---|
-| `bulk-read`, `--system-prompt` replacing the default | ~500 tokens (1 585 in total with a 3.9 kB file) | 8 s |
-| same with `--append-system-prompt` | ~6.6k tokens (7 582 in total) | 8 s |
-| `Explore` spawn | ~55k tokens | minutes |
-| direct `Read` of the same file | ~1k tokens, carried to the end of the session | 0 |
-
-Real run on a handler and its `CLAUDE.md` (17 kB, 2 files): 7 210 tokens in, 5 415 out, $0.048 —
-the output dominates, so keep the question tight and the bullet cap in the system prompt.
-
-Refusals from `read-bounds.sh` and `guard-cat-bounds.sh`, the `delegation-nudge` text and the
-`explore-guard` refusal all name it as the third way out. `--bare` is not used: it skips the
-keychain and fails with `Not logged in`. Lives in `tools/`, not `.claude/bin/`: the
-permission rule `Read(./bin/**)` matches any `bin/` segment and blocks writes there.
-`CLAUDE_BULK_READ_BIN` points the evals at a stub. `CLAUDE_BULK_READ_TIMEOUT` (180 s) kills a
-hung worker — `timeout`, else `gtimeout`, else a perl `alarm` that survives the exec — because
-`--max-budget-usd` bounds the spend, not the wait. Not for editing (line numbers, no content),
-not for searching (no tools), not for debugging (a summary is a lead, never a proof).
-
 ## clear-nudge — the step on replayed context
 
 `UserPromptSubmit` hook (`hooks/clear-nudge.sh`). Reads the last assistant `usage` in the
@@ -194,7 +167,7 @@ skills,agents,tools,presets,evals}`, `scripts/` — that would run beside the pl
 `.claude/rules/markdown-output.md` present;
 the dispatcher's `MODULES` present in `lib/`; the git `post-checkout` hook that links the config
 into new worktrees; `graphify-out/graph.json` present, its lag through `graphify-freshness.sh`,
-the last autosync refusal in `/tmp/graphify-hook.log`; the keychain entry `bulk-read` needs;
+the last autosync refusal in `/tmp/graphify-hook.log`;
 `+x` on tools, `bin/` and evals; `kit.config.json` through `kit_config.py validate`; `/tmp` leftovers older than two days.
 `--evals` also runs the hook evals and reports their summary line.
 
@@ -217,7 +190,6 @@ update:
 | Mechanism | Probe | Expected |
 |---|---|---|
 | `handler-claude-md-check` (PostToolUse) | one `Write` on a file under `src/**.Application/**` | the traceability report appears in the session |
-| `delegation-nudge` via `read-bounds` (PreToolUse:Read) | six distinct `Read` on `.cs` files with no spawn in between | the delegation line appears at the sixth |
 | `batching-nudge` via `bash-dispatch` (PreToolUse:Bash) | three tool-carrying turns holding a single call | the batching line appears |
 | `clear-nudge` (UserPromptSubmit) | a session past 150 k tokens | the step line appears on the next prompt |
 | `explore-guard` (PreToolUse:Agent) | one spawn, then read the subagent transcript | the 20-line report contract sits in the received prompt |
@@ -261,18 +233,39 @@ still serving `/caveman <level>` and `/caveman-stats`). Lost with the plugin: `/
 ## Hook evals
 
 `cctoolkit evals [-v] [cases/x.json]` replays recorded payloads through the hooks and
-checks the decision, the rewritten command, the appended prompt or the injected context. 135
+checks the decision, the rewritten command, the appended prompt or the injected context. 255
 cases in `evals/cases/*.json`, ~6 s, fixtures generated in `evals/.fixtures/` (ignored) and
 `/tmp` state keyed by a run id and removed. Each defect found in production before 2026-09-12 is
 a case; the first run found two more — the heredoc rewrite above, and a byte-limit message in
-`bulk-read`. Shape borrowed from `plugins/shunt/evals/run.sh`. A hook change without a case is
+`bulk-read` (removed 2026-10-10). Shape borrowed from `plugins/shunt/evals/run.sh`. A hook change without a case is
 not finished.
 
-## Mods — `context-band`, `tdd-batch`
+## Mods — `context-band`, `run-lot-pane`, `spec-pane`
 
 Function-hook plugins live under `mods/` and nowhere else — never under `skills/`, even though the engine would adopt a plugin folder there. The toolkit's `.claude-plugin/marketplace.json` lists them beside `cctoolkit`; a repo enables them in its `.claude/settings.json` (`enabledPlugins` `<mod>@cctoolkit`), independently of the kit. `CLAUDE_CODE_PLUGIN_DIRS` is ruled out, read from the process or `~/.claude/settings.json` only, so it would load every repo's copy in every session.
 
 - `context-band` — band above the prompt: context trend, 150k step and 250k ceiling, cache expiry, single-call turns, top contributions over 5 turns, graphify rebuild.
-- `tdd-batch` — pane following the `/implement-tdd` batch sheet (`*-PLAN-FX.md`) through `$.fs`, so it survives `/clear`: steps with their `TDD` line, `Correction Cn`, wave and `## BLOQUÉ`/`## BLOCKED` read off the `tdd-*` `Agent` calls. Opens on `/tdd-batch [sheet]` and on the `implement-tdd` Skill call; refreshes on Write/Edit under `todo/` and every 10 s. Parses French and English sheets alike: one file for every repo.
+- `run-lot-pane` — side pane following a Workflow run: phases, agents running and done, label, model, effort, current tool, durations, context and cost per agent, run outcome. Replaces `tdd-batch` (removed 2026-10-10: it armed only on `/implement-tdd`, dead once batches run through `run-lot`).
+- `spec-pane` — side pane following a `/business-spec`: decisions and answers, open questions, use cases, business rules and sections of the spec, full content on click.
 
 One copy for every repo, served by the plugin cache. New mod: written in the session's dev-mods folder (`plugin-authoring` skill), then copied with `rsync --exclude .claude-plugin/types/` and added to the root `marketplace.json`. Check: `claude plugin validate .` and `claude plugin test mods/<mod>`. `.claude-plugin/types/` is laid by the engine and ignored.
+
+## Workflow `run-lot` — autonomous batch as a script
+
+`workflows/run-lot.js`, shipped by the plugin. The autonomous mode of `/implement-tdd` with the sequence held by the script, not by prose. Interactive `/implement-tdd` unchanged.
+
+```text
+/cctoolkit:run-lot todo/<code>/<CODE>-PLAN-F2.md
+```
+
+One argument, the batch sheet. The script derives the global plan (`…-PLAN.md`), the batch (`F2`) and the run folder (`<sheet folder>/run/F2`, overwritten on a rerun: `Date.now()` throws inside a workflow script, resume replays it). Kit files are reached through `cctoolkit root`, kit scripts through `cctoolkit <script>`.
+
+Phases: Design (one agent: reads the `## Audit gaps` of earlier batches' `FY-report.md` and the sheets' `user decision` lines, then behaviours, waves, RED/GREEN contracts, and writes every wave's §4.5 declarative artefacts itself, then builds) → RED (`tdd-test-author`, a wave in parallel; next wave's REDs start beside the first GREEN) → GREEN (`tdd-implementer`, serial; a haiku agent ticks a step's `TDD:` line once every cycle carrying it is past COST) → global green beside closing (one agent: closing §1-2 then `cctoolkit pre-audit`, no build, no production code) → audit (`ddd-tdd-auditor` runs `cctoolkit audit-capture` first, two fix rounds max), next-sheet review (`adversarial-reviewer`) beside it, its Major fixes applied once the audit ends → `<runDir>/FX-report.md`, written on every stop, with an `## Audit gaps` section the next batches' Design reads; on `DONE` the other run files (logs, audit capture) are deleted, on any other status they stay for diagnosis. Each agent returns a `schema`-validated object; the script checks RED (exit ≠ 0, production files the agent wrote ⊆ stubs ∪ declaratives ∪ earlier cycles, every contract method in the table) and GREEN (exit 0, no test file the agent wrote but one `.verified.txt`, `Cost` line clean), one retry with the reason (an agent ending without structured output counts as a failed try), then `BLOCKED`. Files are self-reported by each agent, never read from `git status`: nothing is committed and REDs run beside a GREEN, so the diff against HEAD proves nothing. Paths are compared from `src/`/`tests/` on, annotations dropped.
+
+Returns `{ status, reason, verdict, gaps, hypotheses, minors, review, report }`, `status` ∈ `DONE`, `BLOCKED`, `GAPS`, `REVIEW-BLOCKING`.
+
+Before launching: previous batch committed (else `cctoolkit pre-audit` fails on files modified outside the batch), `cctoolkit doctor` without FAIL, test containers reachable when the batch touches Infrastructure. Follow it in `/workflows` or the `run-lot-pane` mod. Flow check without agents: a Node harness feeding schema-shaped fakes to the body (strip `export`, wrap in an `AsyncFunction(args, agent, parallel, phase, log, …)`).
+
+Resume (`resumeFromRunId`) is tied to the session id: after a session fork the journal is not found, and auto mode refuses to copy it (session transcript tampering). Then finish the batch with `/cctoolkit:implement-tdd`, sheet ticks fixed by hand.
+
+Requires the `Workflow` tool: `disableWorkflows` absent or `false` in `.claude/settings.local.json`, `Workflow` out of its `deny` (+2k startup tokens, measured 2026-10-09). The startup-trim template cuts it: drop that key in a repo that runs `run-lot`.

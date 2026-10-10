@@ -4,7 +4,7 @@ What a plugin cannot set itself. `/cctoolkit:kit-init` merges these into the rep
 
 | File | Role |
 |------|------|
-| `settings.json` | permissions, env, statusline — merged into the repo's. Its marketplace and plugin enablement are never merged: `claude plugin install --scope project` writes them |
+| `settings.json` | permissions, env, statusline — merged into the repo's. Its marketplace and plugin enablement are never merged: `claude plugin marketplace add … --scope project` and `claude plugin install … --scope project` write them (README § Installation) |
 | `statusline-command.sh` | git branch, model, context %, effort, 5 h rate limit, caveman badge, graph lag; also drops the current effort in `$TMPDIR` for `implement-tdd-guard.sh` |
 | `claude.gitignore` | the runtime files the hooks write inside `.claude/` |
 | `settings.local.json` | startup trim, opt-in — see below |
@@ -20,7 +20,7 @@ Merge the four keys of `settings.local.json` into `<repo>/.claude/settings.local
 | `disableClaudeAiConnectors` | every claude.ai MCP connector — all or nothing | the repo relies on one of them |
 | `syncClaudeAiSkills: false` | the synced `anthropic-skills:*` (docx, pdf, xlsx, pptx, browser…) — `skillOverrides` does not reach them | a skill or spec flow produces or reads those formats |
 | `syncClaudeAiPlugins: false` | the synced plugins (`cowork-plugin-management`) | a workflow uses them |
-| `disableWorkflows` | the `Workflow` tool (~5k tokens), and with it the `ultracode` keyword | the repo uses either |
+| `disableWorkflows` | the `Workflow` tool (~5k tokens), and with it `/cctoolkit:run-lot` and the `ultracode` keyword | the repo uses any of them |
 
 Check usage before cutting: a key whose feature the repo depends on stays out. Measure from the repo root before and after, then validate the file with `python3 -m json.tool .claude/settings.local.json`:
 

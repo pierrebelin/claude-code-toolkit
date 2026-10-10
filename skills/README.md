@@ -17,7 +17,6 @@ Main chain: `business-spec` → `plan-implementation` → `implement-tdd` → `v
 | `tests-contract-tests` | public HTTP contract, Verify snapshots |
 | `tests-e2e-tests` | lifecycle of at least two operations, never an isolated endpoint |
 | `kit-init` | once per repo, after installing the plugin: stack detection, preset, language, `kit.config.json`, rules (copied or drafted from the code), settings, statusline, doctor; also removes a manual copy of the kit |
-| `bulk-read` | a question over files you can already name, answered by `cctoolkit bulk-read` without the files entering the calling context |
 | `quality-report` | monthly quality snapshot: tests, coverage, SonarQube, Stryker, git activity — .NET or JS/TS |
 | `learn` | when doctor prints `NOTE learn` (gaps untreated across at least two batches): groups the gaps recurring in past verdicts (≥ 3 batches, at most 3 motifs per axis) into motifs, writes each accepted one into a rule, an audit criterion or a mechanical check and retires the lines it makes useless; `/learn memory` audits the auto-memory for stale, duplicated or contradictory entries |
 
@@ -40,7 +39,7 @@ Main chain: `business-spec` → `plan-implementation` → `implement-tdd` → `v
 - **`COST` is a phase, not a review.** No test measures the number of Infrastructure calls: green proves nothing on that axis. An `await` on a repository inside a loop goes back to design.
 - **`/verify-ddd-tdd` runs before the next batch**, in a fork and with no write access. It audits the delivered code as it is first, and only then its conformance to the plan — the plan is not the ultimate reference, it gets corrected mid-batch. The orchestrator hands it a capture produced by `cctoolkit audit-capture` (status, diff, coverage, `build` and `ArchitectureTests` exit codes) and the sheet's FX section: the audit opens that once instead of rebuilding it over thirty turns. On a re-audit after correction, `resume` narrows the scope to the previous verdict's deviation table plus the diff produced since — what already carries a verdict is not re-established.
 
-**Progressive disclosure inside a skill** — what only one branch or one phase needs lives in its own reference file, read at that point and not before: `correction-mode.md` opens only on a `— correction:` argument, `closing.md` only after the audit verdict. A reference loaded at the top of a skill is carried by every turn of the batch.
+**Progressive disclosure inside a skill** — what only one branch or one phase needs lives in its own reference file, read at that point and not before: `correction-mode.md` opens only on a `— correction:` argument, `parallelism.md` only when the batch holds two behaviours or more, `closing.md` only after the audit verdict. A reference loaded at the top of a skill is carried by every turn of the batch.
 
 ## What the kit imposes on the repo
 
@@ -52,7 +51,7 @@ Main chain: `business-spec` → `plan-implementation` → `implement-tdd` → `v
 
 **Surgical change** — every modified line ties back to the behaviour at hand. No improvement of adjacent code that worked, no renaming or reformatting outside scope, no flexibility "for later". An adjacent bug outside scope is reported, not fixed. `verify-ddd-tdd` audits that axis hunk by hunk: a hunk with no owning RM/CU is a gap, even if it improves the code.
 
-**Zero comments in production**, XML `///` doc included — intent is carried by naming. Pre-existing comments explaining a decision, a constraint or an exception are kept; only touch them within the lines you touch.
+**Comments only for what the code cannot say** — a constraint, a decision, a workaround — at the file's own density; naming carries the rest. `pre-audit.sh` lists every added comment, the audit's `Comments` axis judges each. Useless comments are removed only within the lines you touch.
 
 **Rules ↔ tests traceability** — every use-case folder carries a rule sheet (`CLAUDE.md`) with a rules table (`kit:rules`), and every test declares the rule it covers on itself, value `{HandlerFolder}/{RM|RL-xx}` in the carrier of its framework (`testTag`; xUnit: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`). `hooks/handler-claude-md-check.sh` checks both directions; `cctoolkit rules-coverage` gives the repo-wide count.
 

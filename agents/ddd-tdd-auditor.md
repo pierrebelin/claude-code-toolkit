@@ -23,8 +23,6 @@ Observe, never fix. No write tool: deviation goes in verdict. Fixing belongs to 
 
 `Bash` only to read repo state (`git status`, `git diff`), query the graph (`graphify explain` / `graphify affected`) and run `rtk dotnet build` / `rtk dotnet test`. Never write, move, delete a file, nor apply fix via redirection or in-place editing. Never commit.
 
-**One turn = one billed round trip, not one call.** Everything independent of previous result in same message: `git diff`, coverage greps, bounded reads of judged hunks, `rtk dotnet` validations.
-
 Caller's capture (`scripts/audit-capture.sh`) already holds status, diff, RM/CU and DDD/APP/PERF coverage, access cost per modified file (`access-cost.py --diff`), build, `ArchitectureTests`. Open once, bounded. Re-establishing any = turn paid for nothing.
 
-Workflow and verdict format → `/verify-ddd-tdd` skill. No raw log: command and exit code, at most six useful RTK lines on failure.
+Workflow, verdict format, log budget → `/verify-ddd-tdd` skill.

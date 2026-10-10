@@ -113,9 +113,9 @@ Declarative artefacts with no prior RED (list: `/implement-tdd` `common-rules.md
 | 2 | `ShouldEmit[Entity]CreatedEvent_WhenSuccessful` | UT | `UnitTests` | RM-03 |
 | 3 | `ShouldThrowEmptyNameException_When[Prop]IsEmpty` | UT | `UnitTests` | RL-01 (exception of the `Name` VO, local to the handler) |
 | 4 | `ShouldPersist[Entity]_WhenSaved` | IT | `IntegrationTests` | RM-01 |
-| 5 | `ShouldCreate[Entity]_WhenRequestIsValid` | contract | `ContractTests` | RM-01 |
+| 5 | `ShouldCreate[Entity]_WhenRequestIsValid` | contract | `ContractTests` | — |
 
-`RM` = id of the test's `[Trait("RM", …)]` (`RM-xx` / `RL-xx` of the handler table). `UnitTests` and `ContractTests` bind every test; `—` (no trait) only for an integration or E2E test covering no documented rule (`.claude/rules/tests.md`).
+`RM` = id of the test's `[Trait("RM", …)]` (`RM-xx` / `RL-xx` of the handler table). `UnitTests` bind every test; `ContractTests` never carry one; `—` for an integration or E2E test covering no documented rule (`.claude/rules/tests.md`).
 
 [At most two lines: what merges into a single cycle, and from which test Docker is required.]
 

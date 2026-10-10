@@ -44,6 +44,14 @@ LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=bounds-common.sh
 . "$LIB/bounds-common.sh"
 
+# A subagent gets read-bounds' higher bar. Until 2026-10-09 only the Read guard
+# had it, so a subagent whose 300-line Read went through was denied the same file
+# through `cat` — the two guards were meant to be one.
+max_lines=$BOUNDS_THRESHOLD max_bytes=$BOUNDS_BYTES
+if [ -n "${HOOK_AGENT_ID:-}" ]; then
+  max_lines=$BOUNDS_SUBAGENT_THRESHOLD max_bytes=$BOUNDS_SUBAGENT_BYTES
+fi
+
 # Split on the separators that start a new simple command. A `cd x; cat big.md`
 # must be seen as a bare `cat`, not as a `cd`.
 oversized=""
@@ -131,7 +139,7 @@ while IFS= read -r segment; do
         fi ;;
     esac
 
-    if [ "$eff_lines" -le "$BOUNDS_THRESHOLD" ] 2>/dev/null && [ "$eff_bytes" -le "$BOUNDS_BYTES" ] 2>/dev/null; then
+    if [ "$eff_lines" -le "$max_lines" ] 2>/dev/null && [ "$eff_bytes" -le "$max_bytes" ] 2>/dev/null; then
       continue
     fi
     # The whole file, past the bounds but flat — see bounds_is_flat in bounds-common.sh.
@@ -159,7 +167,7 @@ fi
 echo "$oversized" >> "$seen_file"
 
 reason=$(bounds_reason \
-  "Unbounded $verb_of_hit on $oversized ($lines_of_hit lines, $bytes_of_hit bytes > $BOUNDS_THRESHOLD lines / $BOUNDS_BYTES bytes). Everything dumped stays in context until the session ends." \
+  "Unbounded $verb_of_hit on $oversized ($lines_of_hit lines, $bytes_of_hit bytes > $max_lines lines / $max_bytes bytes). Everything dumped stays in context until the session ends." \
   "$oversized" \
   "read the range you need with sed -n 'A,Bp' around one of them" \
   "Locate the range first (grep -n, graphify), then read it with sed -n 'A,Bp' or Read with offset/limit." \

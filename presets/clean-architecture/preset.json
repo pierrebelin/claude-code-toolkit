@@ -20,7 +20,7 @@
     "ruleSheet": "CLAUDE.md",
     "tests": {
       "roots": ["tests"],
-      "bound": ["tests/{product}.UnitTests", "tests/{product}.ContractTests"],
+      "bound": ["tests/{product}.UnitTests"],
       "interaction": ["tests/*.UnitTests", "tests/*.CoreTests"]
     },
     "skipDirs": ["bin", "obj", "bin-linux", "obj-linux", "Properties"]
