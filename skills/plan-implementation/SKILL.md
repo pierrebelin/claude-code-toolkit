@@ -113,4 +113,4 @@ In plan: every "new" element justifies why existing insufficient. Weak justifica
 
 ## Next step
 
-End with: `→ Manual plan validation required. Once validated: /implement-tdd batch F1`.
+End with: `→ Manual plan validation required. Once validated: /cctoolkit:run-lot todo/[code-kebab-case]/[CODE]-PLAN-F1.md`.

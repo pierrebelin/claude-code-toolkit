@@ -17,36 +17,37 @@ Restart Claude Code and run **`/cctoolkit:kit-init`**. A plugin cannot ship conf
 
 ## Workflow
 
-Four skills in a chain. Each step writes a file the next one reads — nothing travels through the conversation, and no step starts without the previous one's artefact.
+Three steps in a chain. Each step writes a file the next one reads — nothing travels through the conversation, and no step starts without the previous one's artefact.
 
 ```mermaid
 flowchart LR
     S["/business-spec<br/>one decision at a time"]
     P["/plan-implementation<br/>splits into batches"]
-    I["/implement-tdd batch FX<br/>orchestrates the TDD"]
-    V["/verify-ddd-tdd<br/>audits, read-only"]
-    N(["next batch"])
+    R["/run-lot sheet FX<br/>design, TDD, audit<br/>as a Workflow script"]
+    M["/implement-tdd + /verify-ddd-tdd<br/>by hand"]
+    N(["commit, next batch"])
 
     S -->|"SPEC-feature.md<br/>RM-XX, CU-XX<br/>zero technical detail"| P
-    P -->|"PLAN.md<br/>+ one sheet per batch"| I
-    I -->|"green batch<br/>TDD evidence ticked"| V
-    V -->|"VALID"| N
-    V -->|"gaps"| I
-    N -.->|"next sheet"| I
+    P -->|"PLAN.md<br/>+ one sheet per batch"| R
+    R -->|"DONE<br/>FX-report.md"| N
+    R -.->|"BLOCKED, GAPS,<br/>REVIEW-BLOCKING"| M
+    M -.-> N
+    N -.->|"next sheet"| R
 ```
 
 1. **`/cctoolkit:business-spec`** — a short, testable business spec (`RM-xx` rules, `CU-xx` use cases), no technical design. An adversarial reviewer reads it fresh; every `Blocking` open question goes to you.
 2. **`/cctoolkit:plan-implementation`** — turns the validated spec into a DDD plan split into batches, one sheet per batch.
-3. **`/cctoolkit:implement-tdd batch F1`** — implements one batch under strict TDD, behaviour by behaviour, Domain → Application → Infrastructure → WebAPI.
-4. **`/cctoolkit:verify-ddd-tdd`** — read-only audit of the batch before the next one. `VALID` moves on; gaps go back to `/implement-tdd` in correction mode.
+3. **`/cctoolkit:run-lot todo/<code>/<CODE>-PLAN-F1.md`** — runs one batch end to end as a Workflow script: design, RED/GREEN per behaviour under strict TDD (Domain → Application → Infrastructure → WebAPI), global green, closing, audit with two fix rounds, review of the next sheet. Writes `run/F1/F1-report.md` beside the sheet and returns `DONE`, `BLOCKED`, `GAPS` or `REVIEW-BLOCKING`. Before launching: previous batch committed, `cctoolkit doctor` without FAIL. Needs the `Workflow` tool (`disableWorkflows` absent or `false`). Details: [`docs/TOOLING.md`](docs/TOOLING.md#workflow-run-lot--autonomous-batch-as-a-script).
 
-Then `/clear` and the next batch.
+Then commit, `/clear` and the next sheet.
 
-Inside `/implement-tdd`, each behaviour is one loop:
+A batch that stops short of `DONE` is finished by hand: **`/cctoolkit:implement-tdd batch FX`** (same TDD loop, interactive) then **`/cctoolkit:verify-ddd-tdd`** (read-only audit; `VALID` moves on, gaps go back to `/implement-tdd` in correction mode). Same pair when the `Workflow` tool is unavailable.
+
+Inside a batch, each behaviour is one loop:
 
 ```mermaid
 flowchart LR
-    I["/implement-tdd"] --> R
+    I["run-lot / implement-tdd"] --> R
     R["RED"] -->|"compact contract:<br/>RM/CU, scenario, level"| A["tdd-test-author subagent<br/>writes the red test"]
     A -->|"red test<br/>no production code"| R
     R --> G["GREEN + REFACTOR"]
@@ -54,14 +55,12 @@ flowchart LR
     B -->|"green + cost stated<br/>or BLOCKED"| G
     G --> C["COST<br/>validated by the orchestrator"]
     C -.->|"next behaviour"| R
-    C ==>|"whole batch green"| V["/verify-ddd-tdd"]
+    C ==>|"whole batch green"| V["audit<br/>ddd-tdd-auditor"]
 ```
 
-The orchestrator writes neither tests nor code: it splits, reads the diffs, validates the cost and settles the design. How the delegation works: [`skills/README.md`](skills/README.md).
+The orchestrator — the `run-lot` script, or `/implement-tdd` by hand — writes neither tests nor code: it splits, checks the diffs, validates the cost and settles the design. How the delegation works: [`skills/README.md`](skills/README.md).
 
 Side skills: `/cctoolkit:quality-report` (monthly snapshot) and `/cctoolkit:learn` (turns recurring audit gaps into rules).
-
-Autonomous batch: **`/cctoolkit:run-lot todo/<code>/<CODE>-PLAN-FX.md`** runs steps 3 and 4 as a Workflow script — design, RED/GREEN per behaviour, global green, closing, audit with two fix rounds, next-sheet review — and writes `run/FX/FX-report.md` beside the sheet. Needs the `Workflow` tool (not cut by `disableWorkflows`). Details: [`docs/TOOLING.md`](docs/TOOLING.md#workflow-run-lot--autonomous-batch-as-a-script).
 
 ## Mods
 
