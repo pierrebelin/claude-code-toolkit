@@ -64,6 +64,8 @@ claude plugin marketplace update cctoolkit
 claude plugin update cctoolkit@cctoolkit
 ```
 
-Restart Claude Code, then `cctoolkit doctor`. Nothing in the repo changes: `kit.config.json`, `.claude/rules/` and the settings stay as they are. A release changing a rule says so in its notes — re-run `/cctoolkit:kit-init` to pull it: it shows each difference and asks.
+Restart Claude Code, then `cctoolkit doctor`. Nothing in the repo changes: `kit.config.json`, `.claude/rules/` and the settings stay as they are. What each release brings: [CHANGELOG.md](CHANGELOG.md). A release listing **Rules changed** → re-run `/cctoolkit:kit-init` to pull them: it shows each difference and asks.
+
+Updates are **not automatic** for this marketplace — Claude Code turns auto-update on only for Anthropic's own. To have them, toggle **Enable auto-update** on `cctoolkit` under `/plugin` → Marketplaces, or add `"autoUpdate": true` to its entry under `extraKnownMarketplaces` in `.claude/settings.json`, which turns it on for the whole team.
 
 Never edit the plugin cache (`cctoolkit root`): the next update replaces it. A change to the kit itself goes into a checkout of this repo, then reaches every repo through the update.

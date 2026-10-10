@@ -20,6 +20,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
 | `docs/` | context cost, tooling |
+| `dev/` | maintainer tools: `release-check.sh` |
 
 ## Anonymisation — do not break it
 
@@ -49,6 +50,7 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 | description of the kit's behaviour | `README.md` for the workflow, `INSTALL.md` for installation and update, the folder's `README.md` for a brick |
 | measurement, protocol or procedure too long for `CLAUDE.md` | `docs/CONTEXT-COST.md`, `docs/TOOLING.md` — opened on demand, so the standing rule stays in `CLAUDE.md` and only points here |
 | repo-wide scanner or one-shot migration | `scripts/` — never a hook: a hook fires per edit, a scan reads the whole repo |
+| a maintainer tool for this checkout only (release check) | `dev/` — never shipped as a `cctoolkit` command |
 
 Two sources that drift make the choice random: a fact lives in exactly one place.
 
@@ -59,3 +61,11 @@ Two sources that drift make the choice random: a fact lives in exactly one place
 - Must exit 0 on empty JSON input and when its dependency is missing. Intended exceptions: `lib/guard-git.sh`, blocking by design; `explore-guard.sh`, which denies an `Agent` call with no `description` or no explicit model; and `read-bounds.sh`, which denies an unbounded `Read` on a large file once per agent and file.
 - Test after editing: `echo '{}' | bash hooks/<name>.sh`. Recorded cases live in `evals/cases/*.json` and `bash evals/run.sh` replays them from this checkout (`{{KIT}}` in a case = the kit directory): a hook change without a case is not finished. A hook or script resolves the repo through `lib/project-root.sh` / `kit_config.project_root()`, never from its own location: installed, the kit sits in the plugin cache, outside the repo. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` / `HOOK_AGENT_ID` / `HOOK_TRANSCRIPT_PATH` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`. A module that decides prints hook JSON; `lib/batching-nudge.sh` prints plain text, which the dispatcher grafts onto the decision.
 - Do not run `graphify-autosync.sh` idly: it rebuilds the graph and blocks for several minutes.
+
+## Releasing
+
+Claude Code pins an installed plugin to the `version` of its `plugin.json`: a push changing shipped files under the same version never reaches the users who installed it. `cctoolkit` and each mod carry their own version.
+
+1. A change to shipped files → bump `version` in that plugin's `plugin.json` (patch: fix; minor: behaviour or rule change; major: a change that breaks an installed repo) and add its `## <plugin> <version> — <date>` section to `CHANGELOG.md`, user-facing. A change under `rules/` or `presets/*/rules/` is listed under **Rules changed**: the user pulls it by re-running `/cctoolkit:kit-init`.
+2. Before pushing: `bash dev/release-check.sh` — `FAIL` blocks the push, `TODO` names a release still to tag.
+3. After the commit: `claude plugin tag --push <plugin dir>` creates `<name>--v<version>`.
