@@ -26,6 +26,12 @@
 # misses trains the reader to skip it.
 set -u
 
+# Paused 2026-10-09 to 2026-10-23, for a comparison: 300 injections (210 kB) over
+# 30 days with no measurable effect, while graphify was called by choice 151 times
+# against 6 929 greps. CCTOOLKIT_BLAST_RADIUS=1 turns it back on; drop this block,
+# or the hook, once the two periods are compared.
+[ "${CCTOOLKIT_BLAST_RADIUS:-0}" = "1" ] || exit 0
+
 input=$(cat)
 tool_name=$(echo "$input" | jq -r '.tool_name // ""')
 case "$tool_name" in Edit|Write) ;; *) exit 0 ;; esac

@@ -55,5 +55,4 @@ English, verbatim, whatever `language`.
 | `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names and the JSON's first-level keys | `scripts/quality-report-check.py`, the whole report history and any viewer built on it |
 | `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/migrate-rm-traits.py`, `scripts/pre-audit.sh` and `skills/implement-tdd/references/closing.md` |
 
-Identifier prefixes are language-neutral and stay as they are: `RM-xx`, `RL-xx`, `CU-xx`,
-`DDD-nn`, `APP-nn`, `PERF-nn`.
+Identifier prefixes are language-neutral and stay as they are: `RM-xx` (business rule), `RL-xx` (rule local to a handler), `CU-xx` (use case), `DDD-nn`, `APP-nn`, `PERF-nn`.

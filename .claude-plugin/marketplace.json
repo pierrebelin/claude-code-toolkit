@@ -14,9 +14,14 @@
       "description": "Band above the prompt: context trend, 150k/250k steps, cache expiry, single-call turns, graph rebuild"
     },
     {
-      "name": "tdd-batch",
-      "source": "./mods/tdd-batch",
-      "description": "Live pane of an /implement-tdd batch, read from the batch sheet"
+      "name": "run-lot-pane",
+      "source": "./mods/run-lot-pane",
+      "description": "Side pane following a run-lot Workflow run: phases, agents running and done, model, current tool, durations, cost, run outcome"
+    },
+    {
+      "name": "spec-pane",
+      "source": "./mods/spec-pane",
+      "description": "Side pane following a /business-spec: decisions and answers, open questions, use cases, business rules, sections; full content on click"
     }
   ]
 }

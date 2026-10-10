@@ -1,8 +1,9 @@
 #!/bin/bash
-# SessionStart hook. Registered in .claude/settings.json, NOT settings.local.json:
-# the local file is gitignored (.claude/.gitignore), so a worktree checkout never
-# carries it and no project hook would fire there. Both this script and its
-# registration must be committed for the hook to exist in a worktree.
+# SessionStart hook, registered by the plugin (hooks/hooks.json). It fires in a
+# worktree only if the plugin is enabled there: `enabledPlugins` belongs in the
+# committed .claude/settings.json (templates/settings.json), never in
+# settings.local.json — gitignored, so absent from every linked worktree. A copy
+# predating the plugin registered it in settings.local.json and never fired there.
 #
 # graphify resolves its graph strictly at <cwd>/graphify-out/graph.json — no parent
 # lookup, no env var, only the per-command --graph flag. A linked worktree has no

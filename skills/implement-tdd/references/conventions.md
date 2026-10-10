@@ -14,19 +14,13 @@ Naming, base classes, folder structure, per-layer rules and pitfalls live in `.c
 | `.claude/rules/webapi-endpoints.md` | `WebAPI/`, `Abstractions.Models/`, `SDK/` |
 | `.claude/rules/tests.md` | `tests/` |
 
-Don't duplicate those rules here: two sources that drift make the choice arbitrary. A new layer convention goes into that layer's rule file.
-
-Full code examples → `examples-{domain,application,infrastructure,webapi}.md`, one per layer. The layer rule gives the exact path.
-
-The table below stays here: inseparable from the **COST** step of the cycle (`common-rules.md` §2).
+Code pattern → an existing file of the same kind in the repo (`graphify query`, sibling folder).
 
 ---
 
 ## Data access — cost of Infrastructure calls
 
-**No test locks down the call count**: a handler making 1 query and a handler making 2N+2 are equally green. The pressure has to come from here, not from the test suite.
-
-**Rule**: a behaviour's number of Infrastructure calls is **bounded and independent of input size**. Stating that cost is part of the cycle (`common-rules.md` §2, COST step). `cctoolkit access-cost <files>` reads the awaited Infrastructure calls off the syntax tree and flags the first five symptoms below; the last two stay a reading.
+`cctoolkit access-cost <files>` reads the awaited Infrastructure calls off the syntax tree and flags the first five symptoms below; the last two stay a reading.
 
 | Symptom | Fix |
 |---|---|
@@ -41,7 +35,5 @@ The table below stays here: inseparable from the **COST** step of the cycle (`co
 **Before adding a repository method**: check that no existing one already answers in a single query. A dedicated method is justified when it **changes the shape** of the read (SQL filter, projection, join), not when it renames an existing one.
 
 **Exploit invariants before writing the loop.** An invariant stated by the sheet or the spec ("a copy has a single owner", "every node of a duplicated ModuleDiagram comes from the same Product") **removes code**: it turns a `GroupBy` + traversal into a single read. Reading the sheet to document it is not enough — deduce what disappears.
-
-**Not premature optimisation**: not about shaving milliseconds but about removing a dependency on input size. `N` queries where `1` suffices is a design defect, not a performance setting.
 
 ---

@@ -10,7 +10,8 @@ set -uo pipefail
 # the batch (4), a trait citing a rule absent from the handler tables, a sheet
 # left unclosed. Each one cost a five-minute Opus audit
 # plus a correction round plus a `resume` audit. This script fails on every
-# one of them before the audit is forked.
+# one of them before the audit is forked — except comments, listed for the
+# audit to judge since 2026-10-09.
 #
 # What stays with the audit: correctness, reuse, placement, cost, a stale plan.
 # None of that is decidable by a grep.
@@ -81,14 +82,16 @@ else
     while IFS= read -r l; do note "$l"; done <<<"$IDS"
 fi
 
-# ── 2. No comment added to production code ───────────────────────────────────
+# ── 2. Comments added to production code — listed, never failed ──────────────
 # Added lines that *start* with the source comment prefix (`layout.sources.comment`,
 # `//` for C#): a URL inside a string does not match, a rewritten XML doc block does.
+# Whether a comment says what the code cannot is a judgment: the audit's `Comments`
+# axis makes it. Listed with `·`, not `✗`: only `✗` lines are failures.
 COMMENTS="$(python3 "$KIT_PY" diff-comments "$ROOT" <"$DIFF_FILE")"
 if [[ -z "$COMMENTS" ]]; then
     ok "production comments: none added"
 else
-    ko "comments added to production code (\`//\` or \`///\`) — remove them, naming carries intent"
+    printf '  · %s\n' "production comments added — each must say what the code cannot (constraint, decision, workaround); the audit judges them"
     while IFS= read -r l; do note "$l"; done <<<"$COMMENTS"
 fi
 

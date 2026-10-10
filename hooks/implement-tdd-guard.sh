@@ -3,7 +3,7 @@
 #
 # /implement-tdd relaunched without /clear makes the new batch pay the whole
 # accumulated context of the previous one on every turn. The skill already says so
-# (SKILL.md section 1 entry guard, "End of batch"), but a consigne addressed to the
+# (closing.md), but a consigne addressed to the
 # agent is not a barrier: the orchestrator reads it after the reads it was meant to
 # prevent.
 #
@@ -117,7 +117,7 @@ fi
 touch "$marker"
 
 reason="Batch ${closed} already closed in this session — /clear before batch ${lot:-next}.
-The next batch would pay the accumulated context of the previous one on every turn (measured: 1.9x the input at equal request count, see implement-tdd SKILL.md \"End of batch\").
+The next batch would pay the accumulated context of the previous one on every turn (measured: 1.9x the input at equal request count, see implement-tdd references/rationale.md \"One batch, one session\").
 Read nothing, delegate nothing, write nothing. Relaunch /cctoolkit:implement-tdd batch ${lot:-FX} after the /clear.
 Force: re-issue the identical launch a second time."
 

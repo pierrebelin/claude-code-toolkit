@@ -37,7 +37,7 @@ public async Task ShouldThrowNotFound_WhenProductBelongsToAnotherOrganization()
 
 Value: `{HandlerFolder}/{RM|RL-xx}` — handler folder name under `src/{{PRODUCT}}.Application/**/`, then row id in its rules table (`kit:rules`). Prefix = **handler folder**, not aggregate: `RM` numbering not unique across handlers of one feature. Test covering two rules carries two attributes. Trait read in any suite: integration or E2E test covers a rule as well as unit test.
 
-`handler-claude-md-check.sh` reports, on every edit of handler or handler test: rules with no trait, traits citing rule absent from table, tests with no trait in a class carrying some. Warning only, never blocking. Only `UnitTests`, `ContractTests` expected to bind every test — other suites bind those covering a documented rule.
+`handler-claude-md-check.sh` reports, on every edit of handler or handler test: rules with no trait, traits citing rule absent from table, tests with no trait in a class carrying some. Warning only, never blocking. Only `UnitTests` bind every test. `ContractTests` carry no trait: a contract test freezes the HTTP shape of a route, the rule behind it is proven by the handler test. Other suites bind those covering a documented rule.
 
 Tests outside handler folders (`Core/`, `DslTests`) out of scope — no rule to bind. No `Aggregates/` or `ValueObjects/` test folder: domain classes are covered through handlers.
 

@@ -9,8 +9,8 @@
 # link lives on the test, as a tag whose value is `<SheetFolder>/<RM|RL-xx>` and whose
 # carrier is the `testTag` adapter (xUnit: `[Trait("RM", "…")]`). The hook builds two
 # global indexes (rules declared / tags placed under the test roots) and reports the
-# gaps. Every suite counts: a response-shape rule is only provable by a contract
-# snapshot, a persistence rule only by an integration test.
+# gaps. A tag counts in every suite (a persistence rule is only provable by an
+# integration test); only the `layout.tests.bound` suites must tag every test.
 #
 # Paths, markers and the tag carrier come from lib/kit_config.py and lib/kit_testtag.py.
 # A missing python3, lib module, preset or a broken kit.config.json: silent, exit 0
@@ -22,14 +22,24 @@
 
 INPUT=$(cat)
 
-FILE_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',d).get('file_path',''))" 2>/dev/null || true)
-[ -z "$FILE_PATH" ] && exit 0
+# Cheap bail-out before any python: no file_path in the payload, nothing to check.
+case "$INPUT" in *'"file_path"'*) ;; *) exit 0 ;; esac
 
 KIT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)"
 [ -n "$KIT_LIB" ] || exit 0
 
-FILE_PATH="$FILE_PATH" KIT_LIB="$KIT_LIB" python3 <<'PYEOF' 2>/dev/null
+# One python for parse + check. Until 2026-10-09 a first python3 spawn parsed the
+# payload alone, on every Edit/Write: the hook was the slowest of the kit (157 ms).
+HOOK_INPUT="$INPUT" KIT_LIB="$KIT_LIB" python3 <<'PYEOF' 2>/dev/null
 import json, os, re, sys
+
+try:
+    _d = json.loads(os.environ.get("HOOK_INPUT") or "{}")
+    raw = (_d.get("tool_input") or _d).get("file_path", "") or ""
+except Exception:
+    sys.exit(0)
+if not raw:
+    sys.exit(0)
 
 sys.path.insert(0, os.environ["KIT_LIB"])
 try:
@@ -42,7 +52,6 @@ except Exception:
 ROOT = C.root
 SHEET = C.rule_sheet
 
-raw = os.environ["FILE_PATH"]
 target = raw if os.path.isabs(raw) else os.path.join(ROOT, raw)
 target = os.path.normpath(target)
 

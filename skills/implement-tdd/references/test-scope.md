@@ -1,6 +1,6 @@
 # Test scope — which level to write, which scope to run
 
-**Single source** for `/implement-tdd` and `/verify-ddd-tdd`. Never restate in a SKILL: two sources that drift make the choice random.
+Single source for `/implement-tdd` and `/verify-ddd-tdd`.
 
 ## Runner
 
@@ -47,8 +47,6 @@ Batch touching Infrastructure with no integration test and no written waiver = *
 
 ## 2. Which scope to run
 
-Always `--project <csproj> --no-build --no-restore`.
-
 | Suite | Scope | Condition |
 |---|---|---|
 | `UnitTests` | **whole** | always — fast, only suite covering handlers repo-wide |
@@ -56,7 +54,7 @@ Always `--project <csproj> --no-build --no-restore`.
 | `ContractTests` | **whole** | as soon as an endpoint, an HTTP contract or an `Abstractions.Models` type changes |
 | `IntegrationTests` | **filtered** | as soon as the diff touches `src/{{PRODUCT}}.Infrastructure/`. **Never the whole suite**, `full` mode included |
 
-**Scope is decided, not endured.** A suite run whole where a filter would have done proves nothing more and costs minutes. For `IntegrationTests` no longer advisory: `guard-integration-filter.sh` (`bash-dispatch`) denies a `dotnet test` on that project with no `--filter-class` / `--filter-method`, subagents included — measured 602 s per whole run.
+**Scope is decided, not endured.** A suite run whole where a filter would have done proves nothing more and costs minutes.
 
 ## 3. Filtering integration tests
 

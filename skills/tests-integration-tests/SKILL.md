@@ -7,24 +7,22 @@ model: sonnet
 
 # Integration tests — Builder pattern + direct DbContext
 
-Verify persistence against real SQL Server isolated by `MsSqlContainerPool`. Builder for data, seeding through `DbContext` directly, never through repository under test.
+Verify persistence against real SQL Server isolated by `MsSqlContainerPool`. Builder for data, seeding through `DbContext` directly, not through the repository under test.
 
 `references/examples.md` only when template below misses the persistence pattern at hand.
 
-Batch supplied → read only its Tests and DDD Design sections: they decide whether this level is required. No review of whole plan.
+Batch supplied → read only its Tests and DDD Design sections: they decide whether this level is required.
 
 ## Strict rules
 
 - Test covering rule of handler's rules table (`kit:rules`) carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]`. Trait read in every suite — rule proven only here stops counting untested. No documented rule → no trait.
-- **One builder per aggregate**: `With*()` for properties (chaining `this`), `As*()` for presets (`AsDraft`, `AsPublished`). `Build()` uses `Restore()`. Never `Create()` directly.
-- **Seed through DbContext directly**: never through repository under test (circular).
-- **SQL Server Testcontainers database**: reuse `BaseTestFixture` / `MsSqlContainerPool`, never SQLite in-memory nor shared database.
-- **Arrange-Act-Assert on persistence**: separate setup, repository action, re-read/verification. Fresh context instance or detached entities when checking persisted state needs it.
-- **Extend existing files** in same folder. New file only when no test exists for the feature.
-- **Independent**: no shared state. Each fixture gets isolated SQL Server database from pool, releases it after the test.
-- **Naming** of tests, classes → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
-- Never add comment. Delete yours, and useless ones (restating code, stale) **within lines you touch** — elsewhere report, don't delete. Keep those explaining decision, constraint, exception not deducible from naming.
-- **Scope**: only when plan touches repository, EF mapping, SQL query, persistence constraint. Business rules stay in handler unit tests.
+- One builder per aggregate: `With*()` for properties (chaining `this`), `As*()` for presets (`AsDraft`, `AsPublished`). `Build()` uses `Restore()`, not `Create()`.
+- Seed through `DbContext` directly, not through the repository under test (circular).
+- Real SQL Server Testcontainers database: reuse `BaseTestFixture` / `MsSqlContainerPool`; no SQLite in-memory, no shared database.
+- Persistence check: fresh context instance or detached entities when verifying persisted state needs it.
+- Independent: no shared state. Each fixture gets an isolated SQL Server database from the pool, releases it after the test.
+- Naming of tests, classes → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
+- Scope: only when plan touches repository, EF mapping, SQL query, persistence constraint. Business rules stay in handler unit tests.
 
 ## Structure
 
@@ -40,7 +38,7 @@ tests/{{PRODUCT}}.IntegrationTests/
 │           └── [MethodName]Tests.cs
 ```
 
-Builders shared under `tests/{{PRODUCT}}.CoreTests/DataBuilder/` (`.claude/rules/tests.md`) — `[Entity]EntityBuilder.cs`, one per aggregate; extend, never a local copy. Class naming → `.claude/rules/tests.md`, `Naming` table.
+Builders shared under `tests/{{PRODUCT}}.CoreTests/DataBuilder/` (`.claude/rules/tests.md`) — `[Entity]EntityBuilder.cs`, one per aggregate; extend rather than copy locally. Class naming → `.claude/rules/tests.md`, `Naming` table.
 
 ## Templates
 
@@ -119,10 +117,6 @@ public class [MethodName]Tests : IAsyncLifetime
 ## Final verification
 
 - [ ] Target test green: `APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore --filter-class "*[MethodName]Tests"`
-- [ ] Fluent builder per aggregate
-- [ ] Direct DbContext seeding, never through repository under test
-- [ ] `BaseTestFixture` / `MsSqlContainerPool` fixture, never SQLite in-memory nor shared database
+- [ ] Direct `DbContext` seeding, `BaseTestFixture` / `MsSqlContainerPool` fixture
 - [ ] Persisted state verified after detaching or re-reading where needed
-- [ ] No comment added
-- [ ] `Should..._When...` naming
-- [ ] Business rules, orchestration stay in handler unit tests; this test really covers persistence
+- [ ] This test really covers persistence, not business rules

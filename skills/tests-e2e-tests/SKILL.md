@@ -7,12 +7,12 @@ model: sonnet
 
 # E2E tests — lifecycle through Aspire
 
-Complete business story on real stack: Aspire, database, auth, API, SDK. Complements unit, integration, contract tests; never replaces their scenarios.
+Complete business story on real stack: Aspire, database, auth, API, SDK. Complements unit, integration, contract tests, doesn't replace their scenarios.
 
 ## Preconditions
 
 - Batch sheet explicitly selects lifecycle of ≥2 operations.
-- Reuse existing `ApiApplicationFixture`, SDK client already exposed. Never recreate fixture from template.
+- Reuse existing `ApiApplicationFixture`, SDK client already exposed; don't recreate the fixture from the template.
 - Credentials from secure local configuration, never from code, skill, snapshots.
 
 ## Non-negotiable rules
@@ -21,8 +21,8 @@ Complete business story on real stack: Aspire, database, auth, API, SDK. Complem
 - One test = complete journey: `create → update → delete`, `create → activate → deactivate`, `initialize → create → get → delete`.
 - Forbidden: `Create`, `Get`, `Compile`, `Delete` alone — those are contract/integration tests.
 - Zero mocks, zero direct database seeding, zero raw `HttpClient`: client SDK only.
-- Mutable test data created through API; reference data read only, never modified.
-- `[Collection("test")]`, shared fixture, `*LifecycleTests` file, under 20 tests per file. Never add comment; delete yours and useless ones **within lines you touch** — elsewhere report, don't delete — keep those explaining decision, constraint, exception.
+- Mutable test data created through API; reference data read only.
+- `[Collection("test")]`, shared fixture, `*LifecycleTests` file, under 20 tests per file.
 - Endpoint or SDK missing: `[Fact(Skip = "precise technical reason")]` with full signature and `throw new NotImplementedException()`.
 
 ## Workflow
@@ -62,4 +62,4 @@ public sealed class [Feature]LifecycleTests(ApiApplicationFixture fixture)
 - [ ] `rtk dotnet test --project tests/{{PRODUCT}}.E2ETests/{{PRODUCT}}.E2ETests.csproj --no-build --no-restore --filter-class "*[Feature]LifecycleTests"` green, or justified Skip
 - [ ] Lifecycle selected, ≥2 operations, API cleanup
 - [ ] Real SDK + Aspire; no mock, no database seeding, no secret, no isolated endpoint
-- [ ] Existing file extended, existing fixture reused; no comment added
+- [ ] Existing file extended, existing fixture reused

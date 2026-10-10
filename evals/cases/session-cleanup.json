@@ -54,6 +54,27 @@
       "expect": {
         "exit": 0
       }
+    },
+    {
+      "name": "a flag left at ultra by the removed caveman-skill-ultra.sh gets its saved mode back, sidecar dropped",
+      "cmd": "D={{FIX}}/cfg-{{SID}}; mkdir -p $D; printf ultra > $D/.caveman-active; printf lite > $D/.caveman-active.before-skill; printf '{\"session_id\":\"{{SID}}\"}' | CLAUDE_CONFIG_DIR=$D bash {{KIT}}/hooks/session-cleanup.sh; printf '%s|%s' \"$(cat $D/.caveman-active)\" \"$(ls $D/.caveman-active.before-skill 2>/dev/null)\"",
+      "expect": {
+        "stdout": "lite|"
+      }
+    },
+    {
+      "name": "a mode the user switched by hand since is left alone, sidecar dropped",
+      "cmd": "D={{FIX}}/cfg-{{SID}}; mkdir -p $D; printf full > $D/.caveman-active; printf lite > $D/.caveman-active.before-skill; printf '{\"session_id\":\"{{SID}}\"}' | CLAUDE_CONFIG_DIR=$D bash {{KIT}}/hooks/session-cleanup.sh; printf '%s|%s' \"$(cat $D/.caveman-active)\" \"$(ls $D/.caveman-active.before-skill 2>/dev/null)\"",
+      "expect": {
+        "stdout": "full|"
+      }
+    },
+    {
+      "name": "an empty sidecar removes the flag: the plugin default comes back",
+      "cmd": "D={{FIX}}/cfg-{{SID}}; mkdir -p $D; printf ultra > $D/.caveman-active; : > $D/.caveman-active.before-skill; printf '{\"session_id\":\"{{SID}}\"}' | CLAUDE_CONFIG_DIR=$D bash {{KIT}}/hooks/session-cleanup.sh; printf 'flag=<%s>' \"$(cat $D/.caveman-active 2>/dev/null)\"",
+      "expect": {
+        "stdout": "flag=<>"
+      }
     }
   ]
 }

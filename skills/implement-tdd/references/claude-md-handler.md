@@ -16,12 +16,9 @@ The three `##` headings are found by their anchor (`<!-- kit:rules -->`, `<!-- k
 
 Template, closed list of sections, `RM-xx` / `RL-xx` numbering, trait link and cost line → `.claude/rules/application-cqrs.md` § "Fixed shape of a handler `CLAUDE.md`" (single source, copied verbatim). Additions:
 
-- **The red test written during the TDD phase carries its trait from the start.**
 - _Pure query with no rule_: write "None (pure query) <!-- kit:none -->" under `kit:rules` — the anchor tells the parsers the section is empty on purpose — and state the partitioning applied (e.g. scope restricted to the current organisation through `IUserContextWrapper`). No event → "None (query)" under `kit:events`.
-- No ad-hoc section titled after some specific point (`## The value never leaves`, `## The resolver's nine checks`): neither rule, flow nor event → `docs/` or the plan.
-- Deliberately unbounded read (`Include` of a growing collection) → the cost line says so and why.
 
-**Current state only — never history.** A sheet describes what the handler does today, as if written in one go. A structural change **rewrites** the affected section; it doesn't append a new one.
+**Current state only — never history.** A sheet describes what the handler does today, as if written in one go. A structural change rewrites the affected section; it doesn't append a new one.
 
 Never write:
 
@@ -43,20 +40,18 @@ The *why* of a decision is kept while it stays true ("an unreachable `404` would
 Cross-cutting design: `DESIGN.md` — sections: [Title A]; [Title B].
 ```
 
-The pointer line exists only when a `DESIGN.md` exists. Handlers are found by `ls` and `graphify explain`, never by a hand-maintained table.
-
 ---
 
 ## Updating
 
 | Event | Action |
 |---|---|
-| Business rule added/modified/removed | Handler sheet: rules table. A removed rule **disappears**, it doesn't become a history note |
+| Business rule added/modified/removed | Handler sheet: rules table. A removed rule disappears, it doesn't become a history note |
 | Flow or access cost changed | Handler sheet: flow + cost line |
 | New event, changed payload | Handler sheet: emitted events |
 | New handler | Create the sheet |
 | Handler intent changed | Handler sheet |
-| Structural decision (security, persistence, contract) | **Rewrite** the affected `DESIGN.md` section in the present tense, no date, no batch number |
+| Structural decision (security, persistence, contract) | Rewrite the affected `DESIGN.md` section in the present tense, no date, no batch number |
 
 Real examples: `src/{{PRODUCT}}.Application/Studio/ModuleDiagrams/CLAUDE.md` (index), `ModuleDiagrams/DESIGN.md` (chapters) and
 `Catalog/Products/GetProduct/CLAUDE.md` (sheet).

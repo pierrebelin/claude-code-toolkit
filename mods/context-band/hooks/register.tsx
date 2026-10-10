@@ -353,6 +353,9 @@ export const register: Register = on => {
                 <Text color={color} bold={color !== undefined}>{kilo(tokens)}</Text>
                 {state.window > 0 && <Text dimColor>/{kilo(state.window)}</Text>}
                 {delta !== 0 && <Text dimColor> ({delta > 0 ? '+' : '−'}{kilo(Math.abs(delta))} this turn)</Text>}
+                {limit !== null && <Text dimColor>{GROUP}Lim 5h </Text>}
+                {limit !== null && <Text color={meterColor(limit.percent)}>{meter(limit.percent)}</Text>}
+                {limit !== null && <Text dimColor> {Math.round(limit.percent)}%{resetIn === null ? '' : ` ${resetIn}`}</Text>}
                 {[
                   cache !== null && <Text key="cache" color={cache.color} dimColor={cache.color === undefined}>{cache.label}</Text>,
                   grouping && <Text key="grouping" color="yellow">{state.streak} turns</Text>,
@@ -363,9 +366,6 @@ export const register: Register = on => {
                     {one}
                   </Text>
                 ))}
-                {limit !== null && <Text dimColor>{GROUP}Lim 5h </Text>}
-                {limit !== null && <Text color={meterColor(limit.percent)}>{meter(limit.percent)}</Text>}
-                {limit !== null && <Text dimColor> {Math.round(limit.percent)}%{resetIn === null ? '' : ` ${resetIn}`}</Text>}
                 <Text dimColor>{GROUP}Session {span(at - state.startedAt)} · {state.turn} turn{state.turn > 1 ? 's' : ''}</Text>
                 {state.cost !== null && <Text dimColor> · {dollars(state.cost)}</Text>}
                 {showsTop && !expanded && <Text dimColor>{GROUP}{header} : </Text>}

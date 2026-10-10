@@ -1,6 +1,20 @@
 {
   "name": "context-band",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Line under the prompt input: context meter, cache expiry, single-call streak, 5h limit, session time, turns and cost, top context contributors, graphify rebuild",
+  "author": {
+    "name": "Pierre Belin",
+    "email": "contact@pierrebelin.fr",
+    "url": "https://github.com/pierrebelin"
+  },
+  "homepage": "https://github.com/pierrebelin/claude-code-toolkit/tree/main/mods/context-band",
+  "repository": "https://github.com/pierrebelin/claude-code-toolkit",
+  "license": "MIT",
+  "keywords": [
+    "context",
+    "statusline",
+    "tokens",
+    "cache"
+  ],
   "types": "./types/index.d.ts"
 }

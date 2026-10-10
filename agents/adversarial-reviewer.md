@@ -21,9 +21,7 @@ Caveman-ultra — caller copies questions into user-facing files. No articles, p
 
 Find what the author missed, never what they wrote well. No write tool: report only, caller writes. `Bash` only for `git diff`, `git status`, `graphify explain|path|query|affected`. Never build, test, commit.
 
-Read only what the mode names, plus `graphify` answers. Under `src/` or `tests/`: bounded `Read` of a `path:line` you must cite, never a folder sweep.
-
-Everything independent in one message: one turn = one billed round trip.
+Read what the mode names, plus `graphify` answers. Under `src/` or `tests/`, default to a bounded `Read` of the `path:line` you cite: a folder sweep attaches `CLAUDE.md` and layer rules carried to the end.
 
 ## Severity — one per finding, nothing else
 

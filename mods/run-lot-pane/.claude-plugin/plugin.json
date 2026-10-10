@@ -1,0 +1,20 @@
+{
+  "name": "run-lot-pane",
+  "version": "1.0.0",
+  "description": "Side pane following a run-lot run: phases as columns, agents (model, duration, cost split per agent, slowness, stalls, retries, interruptions), estimated end, batch sheet, audit verdict, run outcome, end toast",
+  "author": {
+    "name": "Pierre Belin",
+    "email": "contact@pierrebelin.fr",
+    "url": "https://github.com/pierrebelin"
+  },
+  "homepage": "https://github.com/pierrebelin/claude-code-toolkit/tree/main/mods/run-lot-pane",
+  "repository": "https://github.com/pierrebelin/claude-code-toolkit",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "tdd",
+    "pane",
+    "agents"
+  ],
+  "types": "./types/index.d.ts"
+}

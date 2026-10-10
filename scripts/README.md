@@ -4,7 +4,7 @@ Repo-wide scanners and one-shots — never a hook: a hook fires per edit, a scan
 
 ## `bin/cctoolkit`
 
-On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs `scripts/<script>`, `cctoolkit doctor` / `bulk-read` the [tools](../tools/README.md), `cctoolkit evals` the [evals](../evals/README.md), `cctoolkit list` every command, `cctoolkit root` the plugin directory. Skills, agents and references call scripts only through it, never by path.
+On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs `scripts/<script>`, `cctoolkit doctor` the [tool](../tools/README.md), `cctoolkit evals` the [evals](../evals/README.md), `cctoolkit list` every command, `cctoolkit root` the plugin directory. Skills, agents and references call scripts only through it, never by path.
 
 ## Scripts
 
@@ -15,7 +15,7 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | `untagged-tests` | tests carrying no rule tag |
 | `migrate-rm-traits` | one-shot: `Tests` column → tags |
 | `migrate-anchors` | one-shot: appends the `<!-- kit:… -->` anchors to documents written before them — dry run by default, `--apply` writes |
-| `turn-batching-check` | tool-call batching, context fill per tool, `read-bounds` denials; `--save-baseline` / `--compare` |
+| `turn-batching-check` | tool-call batching, context fill per tool, `read-bounds` denials and forcings followed by an edit — main chain, then subagents (`<session>/subagents/`); `--save-baseline` / `--compare` |
 | `quality-report-check` | checks a `docs/metrics/quality-report-*` pair |
 | `audit-capture` | the deterministic audit material in one file, so `/verify-ddd-tdd` opens it once |
 | `pre-audit` | the mechanical gate before `/verify-ddd-tdd` — red means no fork |

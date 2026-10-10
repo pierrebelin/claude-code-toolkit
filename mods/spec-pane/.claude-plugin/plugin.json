@@ -1,0 +1,20 @@
+{
+  "name": "spec-pane",
+  "version": "1.0.0",
+  "description": "Side pane following a /business-spec: decisions and answers, open questions, use cases, business rules, sections; full content unfolded inline on click",
+  "author": {
+    "name": "Pierre Belin",
+    "email": "contact@pierrebelin.fr",
+    "url": "https://github.com/pierrebelin"
+  },
+  "homepage": "https://github.com/pierrebelin/claude-code-toolkit/tree/main/mods/spec-pane",
+  "repository": "https://github.com/pierrebelin/claude-code-toolkit",
+  "license": "MIT",
+  "keywords": [
+    "spec",
+    "business-spec",
+    "pane",
+    "ddd"
+  ],
+  "types": "./types/index.d.ts"
+}

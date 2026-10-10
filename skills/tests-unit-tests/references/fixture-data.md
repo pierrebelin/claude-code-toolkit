@@ -33,4 +33,4 @@ public static IEnumerable<object?[]> InvalidNames()
 }
 ```
 
-Expose `InvalidNames` from fixture (or dedicated test provider), then `MemberData`. `InlineData` only for a trivial technical value, never business data or payload.
+Expose `InvalidNames` from fixture (or dedicated test provider), then `MemberData`. `InlineData` only for a trivial technical value, not business data or payload.

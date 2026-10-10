@@ -18,7 +18,7 @@ Only `clean-architecture` ships a layer pack today. A repo's own preset goes in 
 
 | Source | Copied to | Content |
 |--------|-----------|---------|
-| `rules/` (kit root) | `.claude/rules/`, always | the 3 universal rules, whatever the stack: `cctoolkit` (how to read the kit's instructions: `{{PRODUCT}}`, `cctoolkit`, kit paths, namespacing), `markdown-output` (produced vs. instruction files, language, frozen literals) and `context-discipline` (turns, bounds, subagents, session hygiene — loaded in every session, no `paths:`) |
+| `rules/` (kit root) | `.claude/rules/`, always | the 3 universal rules, whatever the stack: `cctoolkit` (how to read the kit's instructions: `{{PRODUCT}}`, `cctoolkit`, kit paths, namespacing), `markdown-output` (produced vs. instruction files, language, frozen literals) and `context-discipline` (bounds, subagents, graphify against grep — loaded in every session, no `paths:`) |
 | `presets/<preset>/rules/` | `.claude/rules/`, when the preset has a pack | the layer conventions, each loaded when a file matching its `paths:` is opened |
 
 A plugin cannot load rules: `/cctoolkit:kit-init` copies them with `{{PRODUCT}}` substituted, rewrites a `paths:` glob that matches nothing from `layout` — or, when no preset fits, drafts one `.claude/rules/<layer>.md` per code folder from what the files actually share, to review. Once copied, `.claude/rules/` is the repo's own: rewritten freely, never parsed by the core. They are the single source of the layer conventions — naming tables live in the rule of the layer that owns the artefact, nowhere else.
@@ -58,7 +58,7 @@ A repo of another shape names its preset and overrides only what differs — obj
 | `layout.aggregate` | `*/*.Domain/*/Aggregates/*.cs`, `…/ValueObjects/*.cs` | where an aggregate and its value objects live — shell-`case` patterns on the full path, read by `affected-blast-radius.sh` | — |
 | `layout.useCase` | `src/{product}.Application`, `*Handler.cs` holding a `class …Handler` | `roots` where use cases live, `marker` (`file` glob + `contains` regex) recognising a use-case folder at any depth, `label` naming them in the reports | — |
 | `layout.ruleSheet` | `CLAUDE.md` | the rule sheet's file name, in the use-case folder | its `kit:rules` / `kit:flow` / `kit:events` anchors |
-| `layout.tests` | `tests`; bound `tests/{product}.UnitTests`, `…ContractTests`; interaction `tests/*.UnitTests`, `tests/*.CoreTests` | `roots` scanned for tests, `bound` suites where every test cites a rule (`UNBOUND TEST`), `interaction` suites checked for spy assertions by `pre-audit.sh` | — |
+| `layout.tests` | `tests`; bound `tests/{product}.UnitTests`; interaction `tests/*.UnitTests`, `tests/*.CoreTests` | `roots` scanned for tests, `bound` suites where every test cites a rule (`UNBOUND TEST`), `interaction` suites checked for spy assertions by `pre-audit.sh` | — |
 | `layout.skipDirs` | `bin`, `obj`, `Properties`… | folders never walked | — |
 | `testTag.framework` | `xunit` | the carrier of the rule tag: `xunit` `[Trait("RM", "F/RM-01")]`, `pytest` `@pytest.mark.rm("F/RM-01")`, `junit` `@Tag("RM:F/RM-01")`, `jest` `[RM F/RM-01]` in an `it`/`test`/`describe` title (a `describe` tag covers its tests) | the value `<SheetFolder>/<RM\|RL-xx>` |
 | `testTag.regex`, `testTag.files` | the adapter's | carrier regex (one capture group: the value), test file globs | — |

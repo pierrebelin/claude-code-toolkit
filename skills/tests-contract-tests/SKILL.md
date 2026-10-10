@@ -7,23 +7,23 @@ model: sonnet
 
 # API contract tests — Verify
 
-Freeze nominal HTTP contract: method, route, status, headers, body. Batch supplied → read only its selected contract test; never re-read or complete DDD plan.
+Freeze nominal HTTP contract: method, route, status, headers, body. Batch supplied → read only its selected contract test; don't re-read or complete the DDD plan.
 
 ## Rules
 
-- Every test carries the rule of the route's handler rules table (`kit:rules`) it proves: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]` — `ContractTests` bind every test (`.claude/rules/tests.md`). Trait read in every suite — rule proven only here stops counting untested.
+- No `[Trait("RM", …)]`: a contract test freezes the route's HTTP shape; the business rule behind it is proven, and traced, by the handler test (`.claude/rules/tests.md`).
 - One `{HTTP} {route}` = one happy-path contract test. Error test only when public HTTP representation of error changes (status, headers, body).
 - Status per verb → `.claude/rules/webapi-endpoints.md`, `Responses` table.
-- Validation, business rules → handler unit tests. `GlobalExceptionHandler` or public error contract changes → freeze affected HTTP mapping once, never duplicate every business case per endpoint.
+- Validation, business rules → handler unit tests. `GlobalExceptionHandler` or public error contract changes → freeze affected HTTP mapping once rather than duplicating every business case per endpoint.
 - Reuse local fixture, `WebApplicationFactory`. Mock repositories only; handlers, Domain real.
 - Deterministic IDs. Scrub ULIDs, GUIDs, dates, paths before snapshotting.
-- List explicitly public headers route returns (`Location`, `ETag`, `Cache-Control`, `Content-Type`); never snapshot internal or volatile headers.
-- Never add comment. Delete yours, and useless ones **within lines you touch** — elsewhere report, don't delete. Keep those explaining decision, constraint, exception not deducible from naming. Method naming → `.claude/rules/tests.md` (`Should{Result}_When{Condition}`); no status code in name: `ShouldCreateEntity_WhenRequestIsValid`.
+- List explicitly the public headers the route returns (`Location`, `ETag`, `Cache-Control`, `Content-Type`); don't snapshot internal or volatile headers.
+- Method naming → `.claude/rules/tests.md` (`Should{Result}_When{Condition}`); no status code in name: `ShouldCreateEntity_WhenRequestIsValid`.
 - Route unchanged, or lifecycle ≥2 operations: no test here; stay in plan or `/tests-e2e-tests`.
 
 ## Workflow
 
-1. Locate existing test for route. Extend, never second test for same route.
+1. Locate existing test for route and extend it.
 2. Prepare single nominal scenario, deterministic fixtures.
 3. Run, re-read `received` snapshot, promote to `verified` only if contract intended. Check it holds significant response headers.
 
@@ -52,4 +52,4 @@ public sealed class Create[Entity]Tests : BaseEndpointTests
 - [ ] `rtk dotnet test --project tests/{{PRODUCT}}.ContractTests/{{PRODUCT}}.ContractTests.csproj --no-build --no-restore --filter-class "*[Endpoint]Tests"` green
 - [ ] Single route, happy path, plus error only when its HTTP contract changes; snapshot re-read, public headers explicitly selected
 - [ ] No duplicated business rule; contractual error mapping centralised
-- [ ] Infrastructure mocks only, stable IDs; no comment added
+- [ ] Infrastructure mocks only, stable IDs

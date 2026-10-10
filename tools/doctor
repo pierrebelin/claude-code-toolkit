@@ -72,7 +72,6 @@ else
   report FAIL "rtk" "not on PATH — rewrite-rtk.sh has nothing to call"
 fi
 command -v graphify >/dev/null 2>&1 && report ok "binary graphify" "$(command -v graphify)" || report FAIL "binary graphify" "not on PATH — affected-blast-radius and the autosync are dead (docs/TOOLING.md of the kit)"
-command -v claude >/dev/null 2>&1 && report ok "binary claude" "$(claude --version 2>/dev/null | head -1)" || report WARN "binary claude" "not on PATH — bulk-read cannot run"
 command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report ok "binary ast-grep" || report WARN "binary ast-grep" "cctoolkit access-cost exits 3, COUT stated by hand; structural search unavailable (brew install ast-grep)"
 
 # --- plugin registration and hook wiring ----------------------------------------
@@ -216,20 +215,6 @@ if [ -f "$GRAPH" ]; then
   fi
 else
   report FAIL "graphify graph" "graphify-out/graph.json absent — graphify update . (docs/TOOLING.md of the kit)"
-fi
-
-# --- worker login --------------------------------------------------------------
-if command -v claude >/dev/null 2>&1; then
-  case "$(uname -s)" in
-    Darwin)
-      security find-generic-password -s 'Claude Code-credentials' >/dev/null 2>&1 \
-        && report ok "claude login" "keychain entry present (bulk-read can run)" \
-        || report WARN "claude login" "no keychain entry — bulk-read will answer 'Not logged in' (claude /login)" ;;
-    *)
-      [ -f "$HOME/.claude/.credentials.json" ] \
-        && report ok "claude login" "credentials file present" \
-        || report WARN "claude login" "no credentials file — bulk-read will answer 'Not logged in'" ;;
-  esac
 fi
 
 # --- tools, evals ---------------------------------------------------------------

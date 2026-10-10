@@ -22,11 +22,15 @@ BOUNDS_BYTES=${CLAUDE_CAT_BOUNDS_BYTES:-8000}
 BOUNDS_OUTLINE_MAX=${CLAUDE_READ_BOUNDS_OUTLINE:-40}
 BOUNDS_FLAT_PCT=${CLAUDE_BOUNDS_FLAT_PCT:-33}
 
-# Third way out, after the bounded read and the forcing: a question about the
-# file goes to the one-shot worker and the file never enters the context at all.
-# Added 2026-09-12 with .claude/tools/bulk-read; measured ~500 fixed tokens
-# against ~1k carried to the end of the session for a direct read of a 4 kB file.
-BOUNDS_BULK_READ="A question about the file rather than an edit (what it does, which rules, which dependencies): cctoolkit bulk-read --question \"...\" --paths <file> — one-shot haiku worker, ~500 fixed tokens, the file never enters this context."
+# Both guards: a subagent gets a higher bar. Measured 2026-10-09 over 30
+# days on two repos: 90 and 92 % of read-bounds denials fell in subagents, whose
+# context is small (median 9k tokens at the denial) and dropped when the agent
+# returns; on one repo 60 % of forcings ended in an Edit/Write of the same file —
+# the full read a `read in full` contract line asks for, one turn burnt to get
+# it. 78 % of denied files were under 400 lines. The main chain keeps 120: what
+# it reads whole is carried to the end of the session.
+BOUNDS_SUBAGENT_THRESHOLD=${CLAUDE_READ_BOUNDS_SUBAGENT_THRESHOLD:-400}
+BOUNDS_SUBAGENT_BYTES=${CLAUDE_READ_BOUNDS_SUBAGENT_BYTES:-24000}
 
 bounds_lower() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
@@ -118,9 +122,9 @@ bounds_reason() {
   local header=$1 file=$2 with_map=$3 without_map=$4 force=$5 outline
   outline=$(bounds_outline "$file")
   if [ -n "$outline" ]; then
-    printf '%s Its declarations, line-numbered — %s:\n\n%s\n\n%s\n%s\n' \
-      "$header" "$with_map" "$outline" "$force" "$BOUNDS_BULK_READ"
+    printf '%s Its declarations, line-numbered — %s:\n\n%s\n\n%s\n' \
+      "$header" "$with_map" "$outline" "$force"
   else
-    printf '%s %s\n\n%s\n%s\n' "$header" "$without_map" "$force" "$BOUNDS_BULK_READ"
+    printf '%s %s\n\n%s\n' "$header" "$without_map" "$force"
   fi
 }

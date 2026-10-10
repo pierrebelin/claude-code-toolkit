@@ -11,7 +11,9 @@ Usage:
 By default the project filter is derived from the repository folder name, which is
 how Claude Code names the transcript directory under ~/.claude/projects.
 
-Output: calls per turn, batchable read runs, files read whole more than once.
+Output: calls per turn, batchable read runs, files read whole more than once — main
+chain — then the read-bounds denials of the subagents, whose transcripts sit under
+<session>/subagents/ (90 % of all denials, measured 2026-10-09).
 """
 
 import argparse
@@ -36,12 +38,9 @@ DEFAULT_PROJECT = re.sub(r"[^A-Za-z0-9]+", "-", os.path.basename(REPO_ROOT)).str
 READ_TOOLS = {"Read", "Grep", "Glob"}
 # Emitted verbatim by .claude/hooks/read-bounds.sh — frozen literal.
 DENIAL_MARK = "Unbounded Read on"
-# Emitted verbatim by .claude/lib/guard-cat-bounds.sh and guard-diff-bounds.sh — frozen literals.
+# Emitted verbatim by lib/guard-cat-bounds.sh and lib/guard-diff-bounds.sh — frozen literals.
 BASH_DENIAL_MARKS = ("Unbounded cat on", "Unbounded head on", "Unbounded tail on", "Unbounded patch")
-# Count line that .claude/tools/bulk-read writes on stderr.
-BULK_READ_RE = re.compile(r"\[bulk-read: (\d+) file\(s\), (\d+) bytes, (\d+) tokens in")
 FUNNEL_HEADER = "=== call following a guard denial (main chain) ==="
-BULK_LABEL = "bulk-read : "
 
 LB = {
     "read_bounded": "Read with offset/limit: ",
@@ -55,6 +54,8 @@ LB = {
     "denials": "read-bounds denials: ",
     "forcings": "forcings (same Read re-issued): ",
     "forced": " · forced",
+    "forced_edited": "forcings followed by an Edit/Write of the same file: ",
+    "sub_header": "=== subagents ===",
     "written": "baseline written: ",
     "delta_header": "=== delta against baseline ===",
     "better": "better",
@@ -96,7 +97,7 @@ def after_denial(name, command, payload, refused):
     """Classify the call that follows a guard denial: the only measure of the path taken.
 
     The forced/denied ratio says whether the guard holds; this says what the model
-    does instead — bounded Read, forcing, bulk-read, subagent, or a cat that moves
+    does instead — bounded Read, forcing, subagent, or a cat that moves
     the volume to Bash (measured 2026-09-09, hence guard-cat-bounds).
     """
     if name == "Read":
@@ -107,8 +108,6 @@ def after_denial(name, command, payload, refused):
         return "Read entier d'un autre fichier"
     if name == "Bash":
         head = command.strip()
-        if "tools/bulk-read" in head:
-            return "bulk-read"
         if re.match(r"^(sed -n|head |tail |grep |rg |git grep|graphify |rtk )", head):
             return "Bash borne (sed -n, head, grep, graphify)"
         if head.startswith("cat "):
@@ -119,8 +118,12 @@ def after_denial(name, command, payload, refused):
     return name or "?"
 
 
-def turns_of(path, seen, cutoff=None, until=None):
-    """Yield (tool_name, command, input, result_size) for each main-chain tool call."""
+def turns_of(path, seen, cutoff=None, until=None, sidechain=False):
+    """Yield (tool_name, command, input, result_size) for each tool call of one chain.
+
+    A session transcript is read for its main chain; a file under subagents/ is all
+    sidechain, read with sidechain=True.
+    """
     order, results = [], {}
     with open(path, encoding="utf-8", errors="ignore") as handle:
         for line in handle:
@@ -128,7 +131,7 @@ def turns_of(path, seen, cutoff=None, until=None):
                 entry = json.loads(line)
             except ValueError:
                 continue
-            if entry.get("isSidechain"):
+            if bool(entry.get("isSidechain")) != sidechain:
                 continue
             if (cutoff or until) and not within(entry.get("timestamp"), cutoff, until):
                 continue
@@ -168,12 +171,10 @@ def turns_of(path, seen, cutoff=None, until=None):
                                 if isinstance(part, dict)
                             )
                         )
-                        bulk = BULK_READ_RE.search(text)
-                        results[block.get("tool_use_id")] = (
-                            size, text[:200], int(bulk.group(2)) if bulk else 0)
+                        results[block.get("tool_use_id")] = (size, text[:200])
     for turn_id, block in order:
         payload = block.get("input") or {}
-        size, text, bulk_bytes = results.get(block.get("id"), (0, "", 0))
+        size, text = results.get(block.get("id"), (0, ""))
         yield (
             turn_id,
             block.get("name"),
@@ -181,7 +182,6 @@ def turns_of(path, seen, cutoff=None, until=None):
             payload,
             size,
             DENIAL_MARK in text or any(mark in text for mark in BASH_DENIAL_MARKS),
-            bulk_bytes,
         )
 
 
@@ -201,10 +201,12 @@ def main():
     project = re.sub(r"[^A-Za-z0-9*]", "-", args.project)
     pattern = os.path.join(PROJECTS_DIR, f"*{project}*", "*.jsonl")
     files = glob.glob(pattern)
+    sub_files = glob.glob(os.path.join(PROJECTS_DIR, f"*{project}*", "*", "subagents", "*.jsonl"))
     cutoff = time.time() - args.days * 86400 if args.days else None
     until = datetime.datetime.fromisoformat(args.until).timestamp() if args.until else None
     if cutoff:
         files = [f for f in files if os.path.getmtime(f) >= cutoff]
+        sub_files = [f for f in sub_files if os.path.getmtime(f) >= cutoff]
     if not files:
         print(f"No transcript for the filter '{project}'.")
         return 1
@@ -218,15 +220,16 @@ def main():
     denials = collections.Counter()
     forcings = collections.Counter()
     funnel = collections.Counter()
+    forced_edited = 0
     total_calls = read_calls = 0
-    bulk_calls = bulk_bytes_total = 0
 
     for path in files:
         run = set()
         session_reads = collections.defaultdict(list)
         refused = set()
+        forced = set()
         pending = None
-        for turn_id, name, command, payload, size, denied, bulk_bytes in turns_of(path, seen, cutoff, until):
+        for turn_id, name, command, payload, size, denied in turns_of(path, seen, cutoff, until):
             total_calls += 1
             tool_bytes[name] += size
             tool_calls[name] += 1
@@ -235,9 +238,6 @@ def main():
                 pending = None
             if denied:
                 pending = payload.get("file_path") or command
-            if bulk_bytes:
-                bulk_calls += 1
-                bulk_bytes_total += bulk_bytes
             if name == "Read":
                 target = payload.get("file_path", "?")
                 if denied:
@@ -245,6 +245,10 @@ def main():
                     refused.add(target)
                 elif target in refused and not ("offset" in payload or "limit" in payload):
                     forcings[target] += 1
+                    forced.add(target)
+            elif name in ("Edit", "Write", "MultiEdit") and payload.get("file_path") in forced:
+                forced_edited += 1
+                forced.discard(payload.get("file_path"))
             calls_per_turn[turn_id] += 1
             if is_read_only(name, command):
                 read_calls += 1
@@ -260,6 +264,28 @@ def main():
             read_runs[len(run)] += 1
         for file_path, entries in session_reads.items():
             reads[file_path].append(entries)
+
+    # Subagents: their own counters, kept out of the main-chain figures above so that
+    # a baseline saved before 2026-10-09 still compares like for like.
+    sub_turns = collections.Counter()
+    sub_calls = sub_denials = sub_forcings = sub_forced_edited = 0
+    for path in sub_files:
+        refused, forced = set(), set()
+        for turn_id, name, command, payload, size, denied in turns_of(
+                path, seen, cutoff, until, sidechain=True):
+            sub_calls += 1
+            sub_turns[turn_id] += 1
+            if name == "Read":
+                target = payload.get("file_path", "?")
+                if denied:
+                    sub_denials += 1
+                    refused.add(target)
+                elif target in refused and not ("offset" in payload or "limit" in payload):
+                    sub_forcings += 1
+                    forced.add(target)
+            elif name in ("Edit", "Write", "MultiEdit") and payload.get("file_path") in forced:
+                sub_forced_edited += 1
+                forced.discard(payload.get("file_path"))
 
     turns = len(calls_per_turn)
     groupable = sum((n - 1) * c for n, c in read_runs.items() if n > 1)
@@ -304,11 +330,18 @@ def main():
         suffix = LB["forced"] if forcings.get(target) else ""
         print(f"  x{count}  {os.path.basename(target)}{suffix}")
 
+    print(f"{LB['forced_edited']}{forced_edited}/{forced_total}")
+
     if funnel:
         print(f"\n{FUNNEL_HEADER}")
         for kind, count in funnel.most_common():
             print(f"  x{count:<3d} {kind}")
-    print(f"\n{BULK_LABEL}{bulk_calls} call(s) · {bulk_bytes_total // 1000} kB kept out of context")
+
+    print(f"\n{LB['sub_header']}")
+    print(f"{len(sub_files)} transcript(s) · {len(sub_turns)} turns with a tool · {sub_calls} calls · "
+          f"calls per turn: {sub_calls / max(len(sub_turns), 1):.2f}")
+    print(f"{LB['denials']}{sub_denials} · {LB['forcings']}{sub_forcings}")
+    print(f"{LB['forced_edited']}{sub_forced_edited}/{sub_forcings}")
 
     snapshot = {
         "turns": turns,
@@ -323,9 +356,12 @@ def main():
         "reread_whole": len(full),
         "denials": denied_total,
         "forcings": forced_total,
+        "forced_then_edited": forced_edited,
+        "subagent_calls_per_turn": round(sub_calls / max(len(sub_turns), 1), 3),
+        "subagent_denials": sub_denials,
+        "subagent_forcings": sub_forcings,
+        "subagent_forced_then_edited": sub_forced_edited,
         "after_denial": dict(funnel.most_common()),
-        "bulk_read_calls": bulk_calls,
-        "bulk_read_bytes": bulk_bytes_total,
     }
     if args.save_baseline:
         with open(args.save_baseline, "w", encoding="utf-8") as handle:
@@ -337,7 +373,7 @@ def main():
         print(f"\n{LB['delta_header']}")
         for key, lower_is_better in (("calls_per_turn", False), ("read_bounded_pct", False),
                                      ("bytes_per_turn", True), ("reread_whole", True),
-                                     ("forcings", True)):
+                                     ("forcings", True), ("subagent_denials", True)):
             was, now = base.get(key), snapshot.get(key)
             if was is None or not isinstance(now, (int, float)):
                 continue

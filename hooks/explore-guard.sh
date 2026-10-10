@@ -42,12 +42,7 @@ deny() {
 description=$(echo "$input" | jq -r '.tool_input.description // ""')
 [ -z "$description" ] && deny "Agent spawn blocked: every Agent call carries a description (CLAUDE.md). A delegation with no name is a delegation that was never scoped."
 
-# A scoped spawn is a delegation: restart the window lib/delegation-nudge.sh
-# counts direct reads in. Every subagent type counts — the TDD agents delegate as
-# much as an Explore does — which is why this sits before the type filter below.
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
-IFS=$'\x1f' read -r session_id agent_id <<<"$(echo "$input" | jq -j '[(.session_id // "unknown"), (.agent_id // "")] | join("\u001f")')"
-HOOK_SESSION_ID="$session_id" HOOK_AGENT_ID="$agent_id" bash "$LIB/delegation-nudge.sh" reset
 
 subagent=$(echo "$input" | jq -r '.tool_input.subagent_type // ""')
 model=$(echo "$input" | jq -r '.tool_input.model // ""')
@@ -79,15 +74,13 @@ esac
 
 prompt=$(echo "$input" | jq -r '.tool_input.prompt // ""')
 
-# Explore is read-only by definition: haiku, always. `general-purpose` also writes
-# sometimes, so the model is not forced there — only made explicit, because an
-# omitted parameter silently inherits Opus. `Plan` is a design agent: left alone.
+# The model is made explicit, never forced: an omitted parameter silently
+# inherits Opus, which is the leak this guards. Until 2026-10-09 Explore had to
+# say `haiku`; a search that takes judgment now picks `sonnet` rather than paying
+# a haiku miss plus a second spawn. `Plan` is a design agent: left alone.
 case "$subagent" in
-  Explore)
-    [ "$model" = "haiku" ] || deny "Explore blocked: pass model: \"haiku\" (CLAUDE.md). Without the parameter the agent inherits Opus."
-    ;;
-  general-purpose)
-    [ -n "$model" ] || deny "general-purpose blocked: pass an explicit model — \"haiku\" for a read-only search (CLAUDE.md), the default model for writing. Without the parameter the agent inherits Opus."
+  Explore|general-purpose)
+    [ -n "$model" ] || deny "$subagent blocked: pass an explicit model — \"haiku\" by default for a read-only search, \"sonnet\" when it takes judgment or writes (context-discipline.md). Without the parameter the agent inherits Opus."
     ;;
 esac
 
@@ -100,6 +93,14 @@ case "$subagent" in
   Plan)  bound="Hard cap: 40 lines. No raw log, no pasted build output, no code excerpt that was not asked for." ;;
   *)     bound="Hard cap: 20 lines. Prefer a \`file:line — fact\` table. No code excerpt unless explicitly asked, no raw log, no restating of the prompt or of the plan." ;;
 esac
+
+# A caller that sized the report itself keeps its size. /plan-implementation asks
+# its inventory for 60 lines across five tables; until 2026-10-09 the appended
+# "Hard cap: 20 lines" contradicted it in the same prompt, and the agent had to
+# pick one. Only the number goes: the no-log, no-excerpt half still applies.
+if printf '%s' "$prompt" | grep -qiE '[0-9]+ lines? max|max(imum)? [0-9]+ lines|at most [0-9]+ lines'; then
+  bound="Size: the one stated above. No raw log, no pasted build output, no code excerpt that was not asked for."
+fi
 
 contract=$(printf '%s\n' \
   '' \

@@ -6,7 +6,7 @@ argument-hint: "[optional preset name]"
 
 # Set up cctoolkit in this repo
 
-A plugin ships skills, agents and hooks — never rules, settings or config. This skill writes the repo's side: `.claude/kit.config.json`, `.claude/rules/`, the merged `.claude/settings.json`, `.claude/statusline-command.sh`, `.claude/.gitignore`. Nothing else.
+A plugin ships skills, agents and hooks — never rules, settings or config. This skill writes the repo's side: `.claude/kit.config.json`, `.claude/rules/`, the merged `.claude/settings.json`, `.claude/statusline-command.sh`, `.claude/.gitignore`, and on request `.caveman.json`. Nothing else.
 
 $ARGUMENTS
 
@@ -73,7 +73,7 @@ Into `.claude/rules/`, `{{PRODUCT}}` replaced by `product` in every copied line 
 2. Chosen preset has `rulePack` → `$(cctoolkit root)/presets/<preset>/rules/*.md`. Check each `paths:` glob against the tree (`git ls-files ':(glob)<glob>' | head -1` — without the `:(glob)` magic, `<dir>/**/*.cs` misses the files sitting directly in `<dir>` and reports a live glob as dead): a glob matching nothing → rewrite it from `layout` (the layer's real folder, the stack's extension), list the rewrite in the summary.
 3. **No preset fits, or the chosen one ships no pack → draft.** One rule per layer of `detect-stack` `layers` — at most six, the biggest; a layer is a top folder of the code (`src/domain`, `src/billing`), never a single file.
    - Per layer pick three files: most changed in `git log --since=6.months --name-only -- <dir>`, one of them a test when the layer has some.
-   - Every layer in **one message**: `cctoolkit bulk-read --question "<Q>" --paths f1 f2 f3`, Q = "Conventions these files share: naming (types, files, methods), base classes or interfaces, what they import and what they never import, recurring patterns, error handling, test style. Cite file:line for each. Say 'none' rather than guess."
+   - Every layer in **one message**: one `Explore` agent per layer, `model: "haiku"`, its prompt naming the three files and Q = "Conventions these files share: naming (types, files, methods), base classes or interfaces, what they import and what they never import, recurring patterns, error handling, test style. Cite file:line for each. Say 'none' rather than guess."
    - Write `.claude/rules/<layer>.md`: frontmatter `paths:` = `<dir>/**/*<ext>`; first line `<!-- draft by /cctoolkit:kit-init <date> — review before trusting -->`; sections `Role`, `Naming`, `Dependencies`, `Patterns`, `Tests`, each line backed by a cited file. A convention seen in one file only is not written. English: rules are instruction files.
    - Use cases not recognised by any marker → AskUserQuestion: "Which folder is one use case (one handler, command or endpoint)?" with the two likeliest `layers` paths as options. Its handler file's name pattern and class/function signature become `layout.useCase.marker` (`file` glob, `contains` regex) and its parent `layout.useCase.roots` in `kit.config.json`; re-run `validate`: `layout.useCase.roots` must turn `ok`.
 
@@ -81,10 +81,11 @@ Into `.claude/rules/`, `{{PRODUCT}}` replaced by `product` in every copied line 
 
 Source: `$(cctoolkit root)/templates/`. Edit with the Edit tool, never a script: the auto-mode classifier refuses scripts on settings files.
 
-- `.claude/settings.json` — merge `templates/settings.json`: `permissions.allow` / `deny` as a union (drop `Bash(dotnet *)` off a .NET repo), `env` keys absent only, `statusLine` only when none is set. **Never write `enabledPlugins` or `extraKnownMarketplaces` yourself** — the classifier refuses an agent enabling plugins. Plugin enabled at user scope only (doctor `plugin enabled` line names `~/.claude/settings.json`) → tell the user to run `! claude plugin install cctoolkit@cctoolkit --scope project`, so clones and worktrees get it. Enabled at local scope → no such advice while the marketplace is a local path (it would commit an `enabledPlugins` key teammates cannot resolve): worktrees get it through `cctoolkit install-git-hooks`, project scope comes with a GitHub marketplace (README § Installation).
+- `.claude/settings.json` — merge `templates/settings.json`: `permissions.allow` / `deny` as a union (drop `Bash(dotnet *)` off a .NET repo), `env` keys absent only, `statusLine` only when none is set. Never write `enabledPlugins` or `extraKnownMarketplaces` yourself — the classifier refuses an agent enabling plugins. Plugin enabled at user scope only (doctor `plugin enabled` line names `~/.claude/settings.json`) → tell the user to run `! claude plugin marketplace add pierrebelin/claude-code-toolkit --scope project` then `! claude plugin install cctoolkit@cctoolkit --scope project`, so clones and worktrees get it. Enabled at local scope → no such advice while the marketplace is a local path (it would commit an `enabledPlugins` key teammates cannot resolve): worktrees get it through `cctoolkit install-git-hooks`, project scope comes with a GitHub marketplace (README § Installation).
 - `.claude/statusline-command.sh` — copy of `templates/statusline-command.sh` when absent.
 - `.claude/.gitignore` — append the lines of `templates/claude.gitignore` it lacks.
 - `templates/settings.local.json` — startup trim, opt-in: mention it in the summary, never apply it (`templates/README.md` § Startup trim).
+- `.caveman.json` — only when the caveman mode is in use (`${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.caveman-active` exists) and the repo holds neither `.caveman.json` nor `.caveman/config.json`. AskUserQuestion, in the same call as the file questions: terse output for this repo — keep each user's own default (Recommended) / `ultra` / `full`. A mode chosen → write `{"defaultMode": "<mode>"}` at the repo root: caveman reads it before the user's config, for this repo only, and it is committed — every teammate's sessions here start in that mode. Never write the global `.caveman-active` flag.
 
 ## 7. Doctor and report
 
@@ -99,5 +100,6 @@ Then `cctoolkit doctor`. Then one summary:
 | anchors | `migrate-anchors`: n written across m files / none needed / skipped |
 | copy removed | folders and settings keys deleted (§2), mods to re-enable |
 | `.claude/settings.json`, statusline, `.gitignore` | merged / created / kept |
+| `.caveman.json` | written with its mode / not asked (caveman unused) / declined |
 
 Then each doctor `FAIL` / `WARN` line verbatim with its fix, the §2.5 lines shown with their proposed replacement, the ADDED files to bring into the toolkit repo, drafted rules listed as "to review", and the next step: `/cctoolkit:business-spec <feature>`. `!` lines left to the user (§2.3 `remove-copy --apply`, §7 refusals) → the next step comes after them: `cctoolkit doctor` again, no `legacy copy` line left. Nothing committed.

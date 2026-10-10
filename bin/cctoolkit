@@ -10,7 +10,6 @@
 # Usage:
 #   cctoolkit <script> [args]   scripts/<script>.sh or scripts/<script>.py
 #   cctoolkit doctor [args]     tools/doctor
-#   cctoolkit bulk-read [args]  tools/bulk-read
 #   cctoolkit context-report    lib/context-report.sh
 #   cctoolkit evals [args]      evals/run.sh
 #   cctoolkit root              the kit directory (plugin cache or toolkit checkout)
@@ -23,7 +22,7 @@ set -u
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 list() {
-  printf '%s\n' doctor bulk-read context-report evals root
+  printf '%s\n' doctor context-report evals root
   for f in "$KIT"/scripts/*.sh "$KIT"/scripts/*.py; do
     [ -f "$f" ] || continue
     b=$(basename "$f"); printf '%s\n' "${b%.*}"
@@ -31,13 +30,13 @@ list() {
 }
 
 cmd="${1:-}"
-[ -n "$cmd" ] || { sed -n '2,23p' "$0" | sed -e 's/^# \{0,1\}//'; exit 2; }
+[ -n "$cmd" ] || { sed -n '2,20p' "$0" | sed -e 's/^# \{0,1\}//'; exit 2; }
 shift
 case "$cmd" in
-  -h|--help) sed -n '2,23p' "$0" | sed -e 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,20p' "$0" | sed -e 's/^# \{0,1\}//'; exit 0 ;;
   root) printf '%s\n' "$KIT"; exit 0 ;;
   list) list; exit 0 ;;
-  doctor|bulk-read) exec bash "$KIT/tools/$cmd" "$@" ;;
+  doctor) exec bash "$KIT/tools/$cmd" "$@" ;;
   context-report) exec bash "$KIT/lib/context-report.sh" "$@" ;;
   evals) exec bash "$KIT/evals/run.sh" "$@" ;;
 esac
