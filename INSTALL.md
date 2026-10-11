@@ -4,7 +4,7 @@
 
 - Claude Code with plugin support
 - `jq` and `python3`
-- for `/cctoolkit:run-lot`: the `Workflow` tool (`disableWorkflows` absent or `false`)
+- for `/cctoolkit:run-lot` and `/cctoolkit:run-plan`: the `Workflow` tool (`disableWorkflows` absent or `false`)
 
 ## 1. Install the plugin
 

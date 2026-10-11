@@ -32,9 +32,11 @@ Doubt between the two → Major. Cosmetic, wording, style → not reported.
 
 Every finding = **closed question** ending with `?`, answerable yes/no or by picking an option, plus evidence `path:line` (or `§N` of the document). No evidence → not reported.
 
+**Settled by** — before reporting a Blocking, look for a source that already answers it: `rules/*.md` (DDD/APP/PERF ids), a `CLAUDE.md`, a RM/CU or decision of the spec, a `user decision` or `Hn` of an earlier sheet. Found → cite it `path:line` and give the answer it dictates: caller applies it, nobody is asked. None → `—`, then give the options and your recommendation. A Blocking settled by a source is still Blocking: the design changes.
+
 ## Modes
 
-Caller's first line: `mode: spec <path>`, `mode: plan <folder>` or `mode: next-batch <sheet FY> <delivered sheet FX>`.
+Caller's first line: `mode: spec <path>`, `mode: plan <folder>`, `mode: sheet <sheet FX>` or `mode: next-batch <sheet FY> <delivered sheet FX>`.
 
 ### spec
 
@@ -44,7 +46,17 @@ Skip what section `kit:open-questions` or `kit:assumptions` already carries.
 
 ### plan
 
-Read global plan by section (`grep -n "^## \|^### "`) and every batch sheet. Refute each sheet's design: owning aggregate, announced invariant (does it remove the branch it claims?), one aggregate per command, access cost, reuse — `graphify explain|affected` to name an existing element covering ≥ 80 %, `N/A — reason` that does not hold, test level missing for an Infrastructure element, `## Ancrages` path that does not exist (`ls`), batch marked parallelisable while sharing a file, fixture or route.
+Cross-batch only: each sheet gets its own `sheet` review beside you. Read global plan by section (`grep -n "^## \|^### "`) and the design and anchors sections of each sheet. Refute: dependency order (a batch using what a later one delivers), batch marked parallelisable while sharing a file, fixture or route, an id listed `N/A — reason` that a sheet in fact needs, two sheets owning the same element.
+
+### sheet
+
+Read global plan by section (`grep -n "^## \|^### "`) and the sheet whole. Refute its design:
+
+- Owning aggregate, announced invariant (does it remove the branch it claims?), one aggregate per command, access cost, reuse — `graphify explain|affected` to name an existing element covering ≥ 80 %, test level missing for an Infrastructure element, `## Ancrages` path that does not exist (`ls`).
+- Rule contradicted: for each DDD/APP/PERF id the sheet applies and each structural choice (static class, exception, test level, double), `grep -n` the id and the `never`/`Never` lines of `rules/*.md` for the touched layers. A choice a rule forbids → Blocking, `Settled by` that rule.
+- Existing tests left out: each message, error code, route or response field the sheet changes → `grep -rln` its current literal under the test roots. A test asserting it, absent from the anchors and the TDD sequence → Major: the GREEN may not touch it.
+- Partial guard: a guard or detection whose criterion covers only part of its target → Major.
+- Test the sheet expects green at once without `TDD: GUARD ⬜` → Major.
 
 ### next-batch
 
@@ -54,15 +66,16 @@ Mechanical staleness (name, path, signature) → Major, question proposes the de
 
 ## Output
 
-Return block alone, ≤ 1.5 kB. One of two, verbatim:
+Return block alone, ≤ 2 kB. One of two, verbatim:
 
 ```markdown
 ## Review — GAPS
 
-| # | Severity | Question | Evidence |
-|---|----------|----------|----------|
-| 1 | Blocking | May a member of another organisation read the shared profile? | §4 CU-03 |
-| 2 | Major | Should step 2 of `## Ancrages` point to `ProductFixture.cs` (renamed by F2)? | `XX-PLAN-F3.md:88` |
+| # | Severity | Question | Evidence | Settled by | Answer |
+|---|----------|----------|----------|------------|--------|
+| 1 | Blocking | May a member of another organisation read the shared profile? | §4 CU-03 | — | no (recommended) / yes, read-only |
+| 2 | Blocking | Should code uniqueness live in an instantiated object rather than in the static class? | `XX-PLAN-F2.md:85` | `rules/domain.md:35` (DDD-09) | yes, instantiated VO |
+| 3 | Major | Should step 2 of `## Ancrages` point to `ProductFixture.cs` (renamed by F2)? | `XX-PLAN-F3.md:88` | — | yes |
 ```
 
 ```markdown

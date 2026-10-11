@@ -24,14 +24,29 @@ Three commands, one per step. Each one writes a file the next one reads.
 ```mermaid
 flowchart LR
     S["<b>1. Spec</b><br/>/business-spec"] -->|SPEC.md| P["<b>2. Plan</b><br/>/plan-implementation"]
-    P -->|"PLAN.md + one sheet per batch"| R["<b>3. Build</b><br/>/run-lot"]
+    P -->|"PLAN.md + one sheet per batch"| R["<b>3. Build</b><br/>/run-plan or /run-lot"]
     R -->|"code, tests, report"| C(["you review and commit"])
-    C -.->|next batch| R
 ```
 
 1. **`/cctoolkit:business-spec`** — Claude asks you one question at a time, then writes a short business spec: rules, use cases, no technical detail. A second agent tries to poke holes in it.
 2. **`/cctoolkit:plan-implementation`** — turns the spec into a technical plan, split into small batches.
-3. **`/cctoolkit:run-lot <sheet>`** — builds one batch on its own: tests first, then code, then an audit. Comes back `DONE`, or with what needs your eyes.
+3. **Build** — each batch on its own: tests first, then code, then an audit. Two ways to go through the plan: all at once, or one batch at a time.
+
+### The whole plan, or batch by batch
+
+| | Whole plan | Batch by batch |
+|---|---|---|
+| Command | `/cctoolkit:run-plan <plan>` | `/cctoolkit:run-lot <sheet>` |
+| Runs | every batch, in dependency order | one batch |
+| You step in | once, at the end | after each batch: review, commit, `/clear`, next |
+| Stops | at the first batch that does not pass | the batch comes back `DONE`, or with what needs your eyes |
+| Fits | a plan you trust, a run over lunch or overnight | a new plan, a tricky batch, a team that reviews every commit |
+
+**Whole plan** runs `run-lot` on each batch the plan's dependency table allows, then checks the result from disk before going on — report status, audit verdict, the plan's `✅ DONE`, the build and the always-run test suites, nothing written outside the batch. The first failure stops everything: nothing is relaunched, nothing is fixed behind your back. It never commits, so you review the batches together at the end, with a `REPORT.md` and one patch per batch. `--until F3` stops after a given batch, `--only F2` runs just one.
+
+**Batch by batch** keeps you in the loop: each batch ends on a report, you read the diff, commit and start the next one with a clean context.
+
+On a new plan, or a batch you are unsure of, go batch by batch until the first ones come back clean.
 
 Inside `run-lot`, each behaviour of the batch is one loop:
 
@@ -50,13 +65,17 @@ flowchart LR
 
 The orchestrator writes neither tests nor code: it splits the work, checks the diffs, validates the cost and settles the design. One agent writes the failing test, another makes it pass without touching it, a third audits.
 
-Commit, `/clear`, next batch. A batch that stops short is finished by hand with `/cctoolkit:implement-tdd` then `/cctoolkit:verify-ddd-tdd` ([`docs/TOOLING.md`](docs/TOOLING.md)).
+A batch that stops short, either way, is finished by hand with `/cctoolkit:implement-tdd` then `/cctoolkit:verify-ddd-tdd` ([`docs/TOOLING.md`](docs/TOOLING.md)).
 
 Want to see the files? **[`examples/`](examples/README.md)** walks one small feature from spec to report.
 
-## Watch a batch run
+## Watch it run
 
-A batch takes tens of minutes and a dozen agents. The **`run-lot-pane`** mod shows it live inside Claude Code: each phase, which agent is working, the tests going red then green, the cost, and the final verdict.
+A batch takes tens of minutes and a dozen agents, a whole plan several times that. The **`run-lot-pane`** mod shows it live inside Claude Code. On a plan, it opens on the plan: each batch with its state, time and cost, and the supervisor checking between batches.
+
+![run-lot-pane following a whole plan](mods/run-lot-pane/screenshots/demo-plan-running.png)
+
+`1`-`9` opens a batch, `p` comes back to the plan. A batch, opened from the plan or run on its own: each phase, which agent is working, the tests going red then green, the cost, and the final verdict.
 
 ![run-lot-pane during a batch](mods/run-lot-pane/screenshots/demo-running.png)
 

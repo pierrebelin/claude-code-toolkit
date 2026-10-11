@@ -97,15 +97,17 @@ fi
 
 # ── 3. Every modified file belongs to the batch ──────────────────────────────
 # The source and test roots, the sheet and its plan folder are the batch. Anything
-# else (.claude/, scripts/, packages, csproj outside src/tests) is a Scope
-# deviation unless the sheet names it — then the audit reads it as declared.
+# else (scripts/, packages, csproj outside src/tests) is a Scope deviation unless
+# the sheet names it — then the audit reads it as declared. .claude/ and todo/
+# are skipped since 1.3.1: on a real plan, the 3 run-plan stops they caused were
+# the user's own harness edits, never a batch agent's.
 PLAN_DIR="$(dirname "$SHEET")"
 OUTSIDE=""
 while IFS= read -r f; do
     [[ -z "$f" ]] && continue
     [[ "$f" =~ ^$KIT_CODE_RE ]] && continue
     case "$f" in
-        "$PLAN_DIR"/*|*/__pycache__/*) continue ;;
+        .claude/*|todo/*|"$PLAN_DIR"/*|*/__pycache__/*) continue ;;
     esac
     if grep -qF -- "$(basename "$f")" "$SHEET"; then
         continue
@@ -113,7 +115,7 @@ while IFS= read -r f; do
     OUTSIDE+="$f"$'\n'
 done < <(git diff --name-only 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)
 if [[ -z "$OUTSIDE" ]]; then
-    ok "scope: every modified file is under $KIT_SCOPE_LABEL or $PLAN_DIR/"
+    ok "scope: every modified file is under $KIT_SCOPE_LABEL, .claude/, todo/ or $PLAN_DIR/"
 else
     ko "files modified outside the batch and absent from the sheet — declare them under \`## Decisions\` (to isolate at commit) or restore them"
     while IFS= read -r l; do [[ -n "$l" ]] && note "$l"; done <<<"$OUTSIDE"
@@ -144,10 +146,10 @@ else
 fi
 
 # ── 5. Sheet closed: every behaviour carries its three ticks ─────────────────
-if grep -q 'RED ✅ · GREEN ✅ · COST ✅' "$SHEET" && ! grep -qE '(RED|GREEN|COST) ⬜' "$SHEET"; then
-    ok "sheet: every behaviour carries \`TDD: RED ✅ · GREEN ✅ · COST ✅\`"
+if grep -qE 'RED ✅ · GREEN ✅ · COST ✅|TDD: GUARD ✅' "$SHEET" && ! grep -qE '(RED|GREEN|COST|GUARD) ⬜' "$SHEET"; then
+    ok "sheet: every behaviour carries \`TDD: RED ✅ · GREEN ✅ · COST ✅\` (guard: \`TDD: GUARD ✅\`)"
 else
-    ko "sheet not closed — every delivered behaviour carries \`TDD: RED ✅ · GREEN ✅ · COST ✅\`, no ⬜ tick left"
+    ko "sheet not closed — every delivered behaviour carries \`TDD: RED ✅ · GREEN ✅ · COST ✅\` (guard: \`TDD: GUARD ✅\`), no ⬜ tick left"
 fi
 
 # ── 6. Whitespace ────────────────────────────────────────────────────────────

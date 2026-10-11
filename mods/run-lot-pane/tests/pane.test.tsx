@@ -1,13 +1,13 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput } from 'claude-code'
+import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput, TurnStepChunk, TurnStepInput } from 'claude-code'
 
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
-  alertOf, argumentOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
-  detailsOf, duration, editedPath, errorOf, figuresLine, firstLine, fit, isSlow, isStepDone, journalPathOf, lotOf, markOf, outcomeTone,
-  parseJournal, parseLotSection, parsePhases, parseSheet, phaseInsight, phaseLines, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
-  stallReasons, toolSummary, totalsOf, typicalMs, typicalTools, weightOf, withFile, withSamples,
+  alertOf, argumentOf, childWorkflowOf, lotRun, lotStateOf, mergeLots, parsePlanLots, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
+  detailsOf, duration, editedPath, errorOf, headlineOf, figuresLine, firstLine, fit, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
+  parseJournal, parseLotSection, parsePhases, parseSheet, phaseInsight, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
+  liveSignalOf, stallReasons, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, weightOf, withFile, withSamples,
 } from '../hooks/register'
 
 const SESSION = '/home/u/.claude/projects/p/s1'
@@ -30,6 +30,15 @@ const SCRIPT = `export const meta = {
   ],
 }
 const x = [{ title: 'pas une phase' }]
+const d = await agent(prompt, { schema: DESIGN, phase: 'Design', label: 'design' })
+const r = await agent(prompt, { agentType: 'tdd-test-author', phase: 'RED', label: \`RED \${i + 1} \${short(c)}\` })
+const a = await agent(prompt, { agentType: 'ddd-tdd-auditor', phase: 'Audit', label: retry ? \`audit retry \${retry.round}\` : 'audit' })
+const f = await agent(prompt, { schema: FIX, phase: 'Audit', label: \`fix \${round}\`, model: 'sonnet' })
+function reviewNext(label) {
+  return agent(prompt, { agentType: 'adversarial-reviewer', phase: 'Review', label })
+}
+if (next) reviewing = reviewNext('next batch review')
+const again = await reviewNext(\`next batch re-review \${n}\`)
 `
 
 const AUDIT_SCRIPT = `export const meta = {
@@ -150,8 +159,8 @@ const runOf = (agents: WorkflowAgent[], overrides: Partial<WorkflowRun> = {}): W
     durationMs: null, status: 'running', agents, ...overrides,
   } as WorkflowRun)
 
-describe('lecture du run', () => {
-  test('détail agent : outils triés, chemins modifiés, erreurs, première ligne', () => {
+describe('reading the run', () => {
+  test('agent detail: sorted tools, edited paths, errors, first line', () => {
     expect(toolSummary({ Read: 3, Bash: 5, Edit: 3 })).toBe('Bash 5 · Edit 3 · Read 3')
     expect(editedPath('Edit', { file_path: '/r/a.cs' })).toBe('/r/a.cs')
     expect(editedPath('Read', { file_path: '/r/a.cs' })).toBeNull()
@@ -162,7 +171,7 @@ describe('lecture du run', () => {
     expect(firstLine('\n  Workflow run-lot\nsuite')).toBe('Workflow run-lot')
   })
 
-  test('phases et leur detail lus depuis meta.phases seul, crochet dans un detail compris', () => {
+  test('phases and their detail read from meta.phases only, bracket inside a detail included', () => {
     expect(parsePhases(SCRIPT)).toEqual([
       { title: 'Design', detail: 'comportements' },
       { title: 'RED', detail: 'tdd-test-author' },
@@ -174,7 +183,7 @@ describe('lecture du run', () => {
     expect(detailsOf(bracketed)).toEqual({ A: 'liste [x] ici' })
   })
 
-  test('journal final : chemin, statut, durée, argument, issue complète, verdict, phase par agent', () => {
+  test('final journal: path, status, duration, argument, full outcome, verdict, phase per agent', () => {
     expect(journalPathOf(DIR, RUN)).toBe(`${SESSION}/workflows/${RUN}.json`)
     const journal = parseJournal(JOURNAL)
     expect(journal?.status).toBe('completed')
@@ -187,7 +196,7 @@ describe('lecture du run', () => {
     expect(parseJournal('{')).toBeNull()
   })
 
-  test('issue : clés françaises ou anglaises, tiret ignoré, texte seul, erreur du journal, teinte par statut', () => {
+  test('outcome: French or English keys, dash ignored, bare text, journal error, tone per status', () => {
     const french = parseJournal(JSON.stringify({ status: 'completed', result: { statut: 'TERMINÉ', raison: '—', rapport: 'r.md' } }))
     expect(french?.outcome).toEqual({ label: 'TERMINÉ', reason: null, report: 'r.md' })
     expect(parseJournal(JSON.stringify({ status: 'completed', result: 'fini\nsuite' }))?.outcome).toEqual({ label: 'fini', reason: null, report: null })
@@ -197,9 +206,10 @@ describe('lecture du run', () => {
       'success', 'warning', 'warning', 'error', 'error',
     ])
     expect([tone('DONE'), tone('GAPS'), tone('REVIEW-BLOCKING'), tone('BLOCKED')]).toEqual(['success', 'warning', 'warning', 'error'])
+    expect([tone('ATTENTE-RÉPONSE'), tone('AWAITING-ANSWER')]).toEqual(['cyan', 'cyan'])
   })
 
-  test('durées en minutes pleines et modèles abrégés', () => {
+  test('durations in whole minutes and short model names', () => {
     expect(duration(42_000)).toBe('0m42')
     expect(duration(252_000)).toBe('4m12')
     expect(duration(3_780_000)).toBe('1h03')
@@ -209,7 +219,7 @@ describe('lecture du run', () => {
     expect(shortModel('claude-x-1-20250101')).toBe('x-1')
   })
 
-  test('phase atteinte sans agent en cours : faite ; phase à venir : en attente, avec son detail', () => {
+  test('phase reached with no running agent: done; upcoming phase: pending, with its detail', () => {
     const rows = phaseRows(
       runOf([agentOf('a1', 'Design', 'done'), agentOf('a2', 'RED', 'running')], { details: { GREEN: 'serial' } }),
       30,
@@ -219,7 +229,24 @@ describe('lecture du run', () => {
     expect(rows[1]?.span).toBe(30)
   })
 
-  test('étape actuelle : dernière phase en cours, sinon première en attente, aucune une fois le run fini', () => {
+  test('stop report then resume: Report phase pending again, no agent, no duration', () => {
+    const stopped = agentOf('rep', 'Report', 'done', { startedAt: 5, endedAt: 10 })
+    const phases = ['Design', 'RED', 'GREEN', 'Report']
+    const resumed = phaseRows(runOf([agentOf('d', 'Design', 'done', { endedAt: 4 }), stopped, agentOf('g', 'GREEN', 'running', { startedAt: 20 })], { phases }), 30)
+    expect(resumed.map(row => [row.title, row.mark, row.agents.length, row.span])).toEqual([
+      ['Design', 'done', 1, 4], ['RED', 'pending', 0, 0], ['GREEN', 'running', 1, 10], ['Report', 'pending', 0, 0],
+    ])
+    expect(phaseRows(runOf([agentOf('d', 'Design', 'done', { endedAt: 4 }), stopped], { phases }), 30).at(-1)?.mark).toBe('done')
+  })
+
+  test('stop awaiting an answer: header reads waiting for user, not failed', () => {
+    const outcome = (label: string) => ({ label, reason: null, report: null })
+    expect(['BLOQUÉ', 'BLOCKED', 'ATTENTE-RÉPONSE', 'RELECTURE-BLOQUANTE'].map(label => headlineOf('failed', outcome(label)).text)).toEqual(Array(4).fill('waiting for user'))
+    expect(headlineOf('completed', outcome('ATTENTE-RÉPONSE'))).toEqual({ glyph: '?', text: 'waiting for user', tone: 'cyan' })
+    expect([headlineOf('failed', null).text, headlineOf('completed', outcome('TERMINÉ')).text, headlineOf('running', outcome('BLOQUÉ')).text]).toEqual(['failed', 'completed', 'running'])
+  })
+
+  test('current step: last running phase, else first pending, none once the run ends', () => {
     expect(figuresLine(totalsOf([{ ...agentOf('x', 'RED', 'done'), context: 1_500, tokens: 2_400_000, cost: 1.234 }]))).toBe('ctx 2k · 2.4M tok · $1.23')
     const red = [{ ...agentOf('r1', 'RED', 'done'), cost: 0.3 }, { ...agentOf('r2', 'RED', 'running'), cost: 0.1 }]
     const insight = phaseInsight(
@@ -236,16 +263,13 @@ describe('lecture du run', () => {
     expect(step(runOf([agentOf('a1', 'Design', 'done')], { status: 'completed' }))).toBeNull()
   })
 
-  test('colonnes : libellé tronqué par une ellipse, phases à venir repliées au-delà de deux', () => {
+  test('columns: label truncated with an ellipsis', () => {
     expect(fit('GREEN 2 verrou', 14)).toBe('GREEN 2 verrou')
     expect(fit('GREEN 2 verrou', 8)).toBe('GREEN 2…')
     expect(fit('abc', 0)).toBe('')
-    const rows = phaseRows(runOf([agentOf('a1', 'Design', 'done')], { phases: ['Design', 'A', 'B', 'C', 'D'] }), 30)
-    expect(phaseLines(rows, 2).map(line => line.map(row => row.title))).toEqual([['Design'], ['A'], ['B'], ['C', 'D']])
-    expect(phaseLines(rows.slice(0, 4), 2).map(line => line.length)).toEqual([1, 1, 1, 1])
   })
 
-  test('lot nommé depuis l’argument du workflow, chaîne ou objet', () => {
+  test('batch named from the workflow argument, string or object', () => {
     expect(lotOf(SHEET_PATH)).toEqual({ lot: 'F4', code: 'CAT-CYCLE' })
     expect(lotOf('todo/x/notes.md')).toBeNull()
     expect(lotOf(null)).toBeNull()
@@ -256,7 +280,7 @@ describe('lecture du run', () => {
     expect(sheetPathOf('todo/x/PLAN.md')).toBeNull()
   })
 
-  test('plan à lots : lot et dossier depuis `Fn todo/<slug>/PLAN.md`, chemin du plan suivi', () => {
+  test('batch plan: batch and folder from `Fn todo/<slug>/PLAN.md`, plan path followed', () => {
     expect(lotOf(PLAN_ARGUMENT)).toEqual({ lot: 'F2', code: 'catalog-lifecycle' })
     expect(lotOf(`F2 @${PLAN_PATH}`)).toEqual({ lot: 'F2', code: 'catalog-lifecycle' })
     expect(sheetPathOf(PLAN_ARGUMENT)).toBe(PLAN_PATH)
@@ -264,7 +288,7 @@ describe('lecture du run', () => {
     expect(lotOf('F2 todo/x/notes.md')).toBeNull()
   })
 
-  test('plan à lots : section `## Lot Fn` seule, étapes cochées par leur titre, hypothèses du lot', () => {
+  test('batch plan: `## Lot Fn` section only, steps ticked by title, batch assumptions', () => {
     const sheet = parseLotSection(PLAN, 'F2')
     expect(sheet).toEqual({
       lot: 'F2',
@@ -282,7 +306,7 @@ describe('lecture du run', () => {
     expect(parseLotSection(PLAN, 'F3')).toBeNull()
   })
 
-  test('fiche : étapes, marques TDD, corrections, hypothèses, étape close par son titre', () => {
+  test('sheet: steps, TDD marks, fixes, assumptions, step closed by its title', () => {
     const sheet = parseSheet(SHEET, SHEET_PATH)
     expect(sheet.lot).toBe('F4')
     expect(sheet.name).toBe('Cycle de vie du produit')
@@ -301,7 +325,7 @@ describe('lecture du run', () => {
     expect(english.steps[0]?.tdd).toEqual({ red: '✅', green: '✅', cost: '✅' })
   })
 
-  test('agent lent : au-delà de deux fois la moyenne des agents terminés de la phase, sans historique rien', () => {
+  test('slow agent: beyond twice the mean of the phase’s finished agents, nothing without history', () => {
     const done = (id: string, ms: number) => agentOf(id, 'GREEN', 'done', { startedAt: 0, endedAt: ms })
     const peers = [done('p1', 40_000), done('p2', 60_000), agentOf('failed', 'GREEN', 'error', { startedAt: 0, endedAt: 1 })]
     const slow = agentOf('s', 'GREEN', 'running', { startedAt: 0 })
@@ -318,7 +342,7 @@ describe('lecture du run', () => {
     expect(samplesOf('{')).toEqual([])
   })
 
-  test('verdict d’audit : sévérités comptées, mineurs ignorés, libellé et teinte', () => {
+  test('audit verdict: severities counted, minors ignored, label and tone', () => {
     const verdict = auditOf({ verdict: 'ECARTS', gaps: [{ severity: 'Bloquant' }, { severity: 'Majeur' }, { severity: 'Majeur' }, { severity: 'Mineur' }] })
     expect(verdict).toEqual({ verdict: 'ECARTS', blocking: 1, major: 2 })
     expect(verdict && auditLabel(verdict)).toBe('ECARTS · 1 blocking · 2 major')
@@ -338,7 +362,7 @@ describe('lecture du run', () => {
     expect(auditOf(null)).toBeNull()
   })
 
-  test('reprise : un agent relancé sous le même libellé porte son numéro de tentative', () => {
+  test('retry: an agent relaunched under the same label carries its attempt number', () => {
     const labelled = (id: string, label: string, startedAt: number) => agentOf(id, 'GREEN', 'done', { label, startedAt })
     expect(attemptsOf([labelled('c', 'GREEN 2', 300), labelled('a', 'GREEN 1', 100), labelled('b', 'GREEN 2', 200)])).toEqual({ a: 1, b: 1, c: 2 })
   })
@@ -346,8 +370,8 @@ describe('lecture du run', () => {
 
 const spanned = (ms: number) => ({ total: ms, count: 1, tools: 0, toolCount: 0, span: ms, spanCount: 1 })
 
-describe('historique, fin estimée, enlisement, coût et alerte', () => {
-  test('journal terminé : outils par agent et étendue de chaque phase, rien pour l’étendue d’un run arrêté', () => {
+describe('history, estimated end, stall, cost and alert', () => {
+  test('finished journal: tools per agent and span of each phase, no span for a stopped run', () => {
     const known = withSamples({}, samplesOf(SPAN_JOURNAL))
     expect(known.RED).toEqual({ total: 220_000, count: 2, tools: 50, toolCount: 2, span: 120_000, spanCount: 1 })
     expect(known.Design?.span).toBe(60_000)
@@ -358,7 +382,7 @@ describe('historique, fin estimée, enlisement, coût et alerte', () => {
     expect([twice.RED?.span, twice.RED?.spanCount]).toEqual([240_000, 2])
   })
 
-  test('enlisement : outils au-delà de 2 fois la moyenne de la phase (40 sans historique), contexte au-delà de 150k, inactivité au-delà de 3 min hors appel en cours', () => {
+  test('stall: tools beyond twice the phase mean (40 without history), context beyond 150k, idle beyond 1 min outside a running call', () => {
     const running = (extra: Partial<WorkflowAgent>) => agentOf('s', 'GREEN', 'running', { startedAt: 0, ...extra })
     expect(stallReasons(running({ tools: 40 }), null, 1_000)).toEqual([])
     expect(stallReasons(running({ tools: 41 }), null, 1_000)).toEqual(['⚠ 41 tools'])
@@ -366,14 +390,31 @@ describe('historique, fin estimée, enlisement, coût et alerte', () => {
     expect(stallReasons(running({ tools: 28 }), 14, 1_000)).toEqual([])
     expect(stallReasons(running({ context: 150_000 }), null, 1_000)).toEqual([])
     expect(stallReasons(running({ context: 160_000 }), null, 1_000)).toEqual(['⚠ ctx 160k'])
-    expect(stallReasons(running({}), null, 180_000)).toEqual([])
-    expect(stallReasons(running({}), null, 180_001)).toEqual(['⚠ idle 3m'])
+    expect(stallReasons(running({}), null, 60_000)).toEqual([])
+    expect(stallReasons(running({}), null, 60_001)).toEqual(['⚠ idle 1m'])
     expect(stallReasons(running({ openCalls: 1 }), null, 600_000)).toEqual([])
     expect(stallReasons(agentOf('d', 'GREEN', 'done', { tools: 99 }), null, 600_000)).toEqual([])
     expect(stallReasons(running({ tools: 50, context: 160_000 }), null, 200_000)).toEqual(['⚠ idle 3m', '⚠ 50 tools', '⚠ ctx 160k'])
   })
 
-  test('moyenne d’outils de la phase : historique puis agents terminés du run', () => {
+  test('exclusive live signal: long tool, waiting, idle, slow; throughput on the current request', () => {
+    const running = (extra: Partial<WorkflowAgent>) => agentOf('s', 'GREEN', 'running', { startedAt: 0, lastActiveAt: 0, ...extra })
+    const streaming = (chars: number, span: number) => running({ streamKind: 'output', streamChars: chars, firstChunkAt: 0, lastChunkAt: span })
+    expect(throughputOf(streaming(16_000, 100_000))).toBe(40)
+    expect(throughputOf(streaming(600, 999))).toBeNull()
+    expect(throughputOf(running({ streamChars: 600, firstChunkAt: 0, lastChunkAt: 5_000 }))).toBeNull()
+    expect(liveSignalOf(streaming(1_600, 61_000), 61_000)).toBe('lent')
+    expect(liveSignalOf(streaming(1_600, 60_000), 60_000)).toBeNull()
+    expect(liveSignalOf(streaming(36_600, 61_000), 61_000)).toBeNull()
+    expect(liveSignalOf(streaming(1_600, 61_000), 121_001)).toBe('idle 1m')
+    expect(liveSignalOf(running({ waitingSince: 0 }), 120_000)).toBeNull()
+    expect(liveSignalOf(running({ waitingSince: 0 }), 120_001)).toBe('attente')
+    expect(liveSignalOf(running({ openCalls: 1, toolSince: 0 }), 300_000)).toBeNull()
+    expect(liveSignalOf(running({ openCalls: 1, toolSince: 0, waitingSince: 0 }), 300_001)).toBe('outil long')
+    expect(liveSignalOf(agentOf('d', 'GREEN', 'done', { waitingSince: 0 }), 600_000)).toBeNull()
+  })
+
+  test('phase tool mean: history then the run’s finished agents', () => {
     const known = withSamples({}, samplesOf(SPAN_JOURNAL))
     const target = agentOf('r', 'RED', 'running')
     expect(typicalTools(known, [], target)).toBe(25)
@@ -381,7 +422,7 @@ describe('historique, fin estimée, enlisement, coût et alerte', () => {
     expect(typicalTools({}, [], target)).toBeNull()
   })
 
-  test('fin estimée : reste de la phase en cours et phases à venir, paire parallèle au maximum, rien sans historique', () => {
+  test('estimated end: rest of the current phase and upcoming phases, parallel pair at its max, nothing without history', () => {
     const at = 1_000_000
     const demo = demoRuns(at)[0]!
     const rows = phaseRows(demo, at)
@@ -402,7 +443,7 @@ describe('historique, fin estimée, enlisement, coût et alerte', () => {
     expect(remainingMs(serial, phaseRows(serial, 30), withSamples({}, samplesOf(OLD_JOURNAL)))).toBe(20_000)
   })
 
-  test('agent interrompu : ni tentative de reprise, ni en cours, ni phase atteinte', () => {
+  test('interrupted agent: no retry attempt, not running, phase not reached', () => {
     const stopped = agentOf('a', 'GREEN', 'interrupted', { label: 'GREEN 2', startedAt: 100 })
     const failed = agentOf('c', 'GREEN', 'error', { label: 'GREEN 2', startedAt: 150 })
     const again = agentOf('b', 'GREEN', 'running', { label: 'GREEN 2', startedAt: 200 })
@@ -413,7 +454,7 @@ describe('historique, fin estimée, enlisement, coût et alerte', () => {
     expect(totalsOf([agentOf('g', 'GREEN', 'interrupted', { context: 90_000 }), agentOf('d', 'Design', 'done', { context: 10_000 })]).context).toBe(90_000)
   })
 
-  test('coût réparti au prorata des tokens pondérés, cache lu compté faiblement, somme conservée', () => {
+  test('cost split by weighted tokens, cache reads weighted low, sum preserved', () => {
     const used = { input_tokens: 1_000, output_tokens: 500, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 2_000 }
     expect(weightOf(used)).toBe(7_500)
     const micros = (value: number | undefined) => Math.round((value ?? 0) * 1e6)
@@ -424,7 +465,7 @@ describe('historique, fin estimée, enlisement, coût et alerte', () => {
     expect([splitCost(0, { a: 1 }), splitCost(0.3, {}), splitCost(0.3, { a: 0 })]).toEqual([{}, {}, {}])
   })
 
-  test('alerte de fin : lot, issue, durée en minutes, raison tronquée hors succès', () => {
+  test('end alert: batch, outcome, duration in minutes, reason truncated unless success', () => {
     const finished = (outcome: WorkflowRun['outcome'], status: WorkflowRun['status'] = 'completed') =>
       alertOf(runOf([], { argument: SHEET_PATH, status, durationMs: 27 * 60_000 + 5_000, outcome }))
     expect(finished({ label: 'TERMINÉ', reason: 'ignorée', report: null })).toBe('run-lot F4 · TERMINÉ · 27m')
@@ -451,6 +492,8 @@ type Options = {
   price?: (agentId: string | undefined) => number
   usage?: (agentId: string | undefined) => Partial<ModelUsage> | undefined
   hold?: Promise<void>
+  workflowName?: string
+  stream?: (e: TurnStepInput) => AsyncIterable<TurnStepChunk>
 }
 
 const world = (on: On, files: Record<string, string>, options: Options = {}) => {
@@ -460,6 +503,7 @@ const world = (on: On, files: Record<string, string>, options: Options = {}) => 
   let spent = 1
   on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 84_000, window: 200_000, percent: 42 }, rateLimits: [], cost: { usd: spent } } }))
   on('turn.step', async function* ($, e) {
+    if (options.stream !== undefined) yield* options.stream(e)
     spent += options.price?.(e.agentId) ?? 0.25
     return {
       turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'tool_use',
@@ -506,7 +550,7 @@ const world = (on: On, files: Record<string, string>, options: Options = {}) => 
             status: 'async_launched',
             taskId: 't1',
             runId: RUN,
-            workflowName: 'run-lot',
+            workflowName: options.workflowName ?? 'run-lot',
             transcriptDir: DIR,
             scriptPath: `${SESSION}/workflows/scripts/run-lot-${RUN}.js`,
           },
@@ -543,9 +587,9 @@ const drain = async (stream: AsyncIterable<unknown>) => {
   for await (const _ of stream);
 }
 
-const spawn = (description: string, agentIndex: number) =>
+const spawn = (description: string, agentIndex: number, prompt = 'x') =>
   ({
-    tool_use_id: 'w1', prompt: 'x', description, subagentType: 'tdd-test-author', provider: { plugin: 'engine', tier: 'core' },
+    tool_use_id: 'w1', prompt, description, subagentType: 'tdd-test-author', provider: { plugin: 'engine', tier: 'core' },
     parentModel: 'claude-opus-5-5', background: true, fork: false, workflow: { runId: RUN, agentIndex },
   }) as AgentSpawnInput
 
@@ -555,7 +599,7 @@ const complete = (agentId: string, answer = 'fini') =>
 const launch = ($: Engine, args: string | null = SHEET_PATH) =>
   $.tool.call({ tool: 'Workflow', tool_use_id: 'w1', name: 'run-lot', ...(args === null ? {} : { args }) } as Parameters<typeof $.tool.call>[0])
 
-test('pane suit phases en colonnes, agents, fiche, lenteur puis l’issue du run', async ($, on) => {
+test('pane follows phases in columns, agents, sheet, slowness then the run outcome', async ($, on) => {
   const toasts: string[] = []
   const reads: string[] = []
   const stamps: Stamps = {}
@@ -650,15 +694,16 @@ test('pane suit phases en colonnes, agents, fiche, lenteur puis l’issue du run
   expect(await nav.find({ type: 'Text', text: /100% of run cost/ })).toBeDefined()
   expect(await nav.find({ type: 'Button', text: /RED 1 créer · 1m0\d · Edit \(1\) · ctx 43k · \$0\.50/ })).toBeDefined()
   await nav.press({ key: 'back' })
-  await nav.press({ key: 'toggle-Design' })
   expect(await nav.find({ type: 'Button', text: /✓ design/ })).toBeDefined()
+  await nav.press({ key: 'toggle-Design' })
+  expect(await nav.find({ type: 'Button', text: /✓ design/ })).toBeUndefined()
   await nav.unmount()
 
   files[`${SESSION}/workflows/${RUN}.json`] = JOURNAL
   await clock.advance(2_000)
 
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /✓ completed\s+4m26/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /\? waiting for user\s+4m26/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /━+─+\s+2\/3 phases/ })).toBeDefined()
   const outcome = await ui.find({ key: 'outcome' })
   expect(outcome?.props.borderStyle).toBe('round')
@@ -673,7 +718,7 @@ test('pane suit phases en colonnes, agents, fiche, lenteur puis l’issue du run
   expect(toasts).toEqual([`run-lot F4 · BLOQUÉ · 4m · ${REASON}`])
 })
 
-test('verdict d’audit lu dans la réponse structurée de l’agent d’audit, le dernier l’emporte', async ($, on) => {
+test('audit verdict read from the audit agent’s structured answer, the last one wins', async ($, on) => {
   const files: Record<string, string> = {
     [`${SESSION}/workflows/scripts/run-lot-${RUN}.js`]: AUDIT_SCRIPT,
     [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ description: 'audit', workflowPhase: 'Audit' }),
@@ -705,7 +750,7 @@ test('verdict d’audit lu dans la réponse structurée de l’agent d’audit, 
   expect(valid?.props.color).toBe('success')
 })
 
-test('plan à lots : fiche lue dans la section du lot, en-tête nommé par le dossier, sans phase Review', async ($, on) => {
+test('batch plan: sheet read from the batch section, header named by the folder, no Review phase', async ($, on) => {
   const reads: string[] = []
   const stamps: Stamps = {}
   const files: Record<string, string> = {
@@ -741,7 +786,7 @@ test('plan à lots : fiche lue dans la section du lot, en-tête nommé par le do
   await after.unmount()
 })
 
-test('pane vide sans run, appels hors workflow ignorés, bouton de fermeture présent', async ($, on) => {
+test('empty pane without a run, calls outside a workflow ignored, close button present', async ($, on) => {
   const closed: string[] = []
   world(on, {}, { closed })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -755,7 +800,7 @@ test('pane vide sans run, appels hors workflow ignorés, bouton de fermeture pr�
   expect(closed).toEqual(['run-lot-pane', 'run-lot-pane'])
 })
 
-test('demo en cours : colonnes, modèle, reprise, agent lent, enlisé, interrompu, fin estimée, phases repliées, fiche, largeur étroite', async ($, on) => {
+test('running demo: columns, model, retry, slow agent, stalled, interrupted, estimated end, all phases shown, sheet, narrow width', async ($, on) => {
   const toasts: string[] = []
   world(on, {}, { toasts })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -769,12 +814,13 @@ test('demo en cours : colonnes, modèle, reprise, agent lent, enlisé, interromp
     expect((await ui.find({ key: 'model-demo-g1' }))?.text).toBe('Sonnet · high')
     expect(await colorOf(ui, 'agent-demo-g2b-time')).toBe('warning')
     expect(await colorOf(ui, 'agent-demo-g1-time')).toBe('inactive')
-    expect(await ui.find({ type: 'Text', text: /^ {9}Edit \(48\) · ctx 36k · ⚠ 48 tools$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^ {9}● réflexion · 4,2k car\. · 160 tok\/s · Edit \(48\) · ctx 36k · ⚠ 48 tools$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /tdd-implementer, ser/ })).toBeDefined()
     expect(await ui.find({ type: 'Button', text: /○ Global green/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /whole or filtered suites/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /○ Audit · Review · Report/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', text: /○ Audit/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: /○ Audit/ })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: /○ Report/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /○ Audit · Review · Report/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /SHEET F4 · 2 hypotheses/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^2\/5 steps$/ })).toBeDefined()
     expect(await ui.find({ key: 'outcome' })).toBeUndefined()
@@ -788,9 +834,6 @@ test('demo en cours : colonnes, modèle, reprise, agent lent, enlisé, interromp
   await narrow.unmount()
 
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  await ui.press({ key: 'all' })
-  expect(await ui.find({ type: 'Button', text: /○ Audit/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /○ Audit · Review · Report/ })).toBeUndefined()
   expect(await ui.find({ type: 'Button', text: /⊘ RED 3 declaratives/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', text: /⊘ RED 3 declaratives ↻/ })).toBeUndefined()
   expect(await colorOf(ui, 'open-demo-r3')).toBe('inactive')
@@ -802,7 +845,7 @@ test('demo en cours : colonnes, modèle, reprise, agent lent, enlisé, interromp
   expect(toasts).toEqual([])
 })
 
-test('demo terminée : verdict sur la ligne Audit, issue en bloc coloré, agent lent terminé, fiche close', async ($, on) => {
+test('finished demo: verdict on the Audit row, outcome in a coloured box, slow agent finished, sheet closed', async ($, on) => {
   const toasts: string[] = []
   world(on, {}, { toasts })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -844,7 +887,7 @@ const step = (agentId?: string, index = 0) =>
 
 const call = (tool: string, agentId: string) => ({ tool, agentId, file_path: 'f' }) as unknown as Parameters<Engine['tool']['call']>[0]
 
-test('arrêt lu puis reprise : agent resté en cours interrompu, journal arrêté périmé ignoré jusqu’à sa réécriture, une alerte par fin', async ($, on) => {
+test('stop read then resume: agent left running is interrupted, stale stopped journal ignored until rewritten, one alert per end', async ($, on) => {
   const toasts: string[] = []
   const stamps: Stamps = {}
   const files: Record<string, string> = { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1', 'a2'], 'GREEN') }
@@ -858,7 +901,6 @@ test('arrêt lu puis reprise : agent resté en cours interrompu, journal arrêt�
   await clock.advance(4_000)
 
   const stopped = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  await stopped.press({ key: 'all' })
   expect(await stopped.find({ type: 'Text', text: /⏹ killed/ })).toBeDefined()
   expect(await stopped.find({ type: 'Button', text: /⊘ GREEN 2 verrou/ })).toBeDefined()
   expect(await stopped.find({ type: 'Button', text: /✓ GREEN 2 verrou/ })).toBeUndefined()
@@ -886,11 +928,11 @@ test('arrêt lu puis reprise : agent resté en cours interrompu, journal arrêt�
   await clock.advance(2_000)
   expect(toasts).toEqual(['run-lot F4 · STOPPED · 1m', `run-lot F4 · BLOQUÉ · 4m · ${REASON}`])
   const finished = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await finished.find({ type: 'Text', text: /✓ completed/ })).toBeDefined()
+  expect(await finished.find({ type: 'Text', text: /\? waiting for user/ })).toBeDefined()
   await finished.unmount()
 })
 
-test('relance avant que l’arrêt soit lu : agent en cours interrompu, journal plus ancien que la relance ignoré, nouvel agent suivi', async ($, on) => {
+test('relaunch before the stop is read: running agent interrupted, journal older than the relaunch ignored, new agent followed', async ($, on) => {
   const stamps: Stamps = {}
   const files: Record<string, string> = { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1', 'a2'], 'GREEN') }
   const clock = world(on, files, { stamps })
@@ -907,7 +949,6 @@ test('relance avant que l’arrêt soit lu : agent en cours interrompu, journal 
   await $.tool.call(call('Read', 'a2'))
 
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  await ui.press({ key: 'all' })
   expect(await ui.find({ type: 'Text', text: /[✢✳✶✻✽] running/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', text: /⊘ GREEN 2 verrou/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', text: /[✢✳✶✻✽] GREEN 2 verrou(?! ↻)/ })).toBeDefined()
@@ -919,7 +960,7 @@ test('relance avant que l’arrêt soit lu : agent en cours interrompu, journal 
   await ui.unmount()
 })
 
-test('coût par agent : delta de session réparti entre les demandeurs au prorata de leurs tokens pondérés, requête principale comprise', async ($, on) => {
+test('cost per agent: session delta split among requesters by weighted tokens, main request included', async ($, on) => {
   const prices: Record<string, number> = {}
   const usages: Record<string, Partial<ModelUsage>> = {}
   const only = (field: keyof ModelUsage, tokens: number): Partial<ModelUsage> => ({
@@ -962,7 +1003,7 @@ test('coût par agent : delta de session réparti entre les demandeurs au prorat
   await total.unmount()
 })
 
-test('fin estimée dans l’en-tête d’après les phases des runs précédents', async ($, on) => {
+test('estimated end in the header from the phases of earlier runs', async ($, on) => {
   const files: Record<string, string> = {
     [SCRIPT_PATH]: SCRIPT,
     ...phaseMeta(['a1'], 'Design'),
@@ -982,7 +1023,7 @@ test('fin estimée dans l’en-tête d’après les phases des runs précédents
   await ui.unmount()
 })
 
-test('agent qui s’enlise : motif jaune sous la ligne de l’agent et dans sa fiche, inactivité hors appel en cours', async ($, on) => {
+test('stalling agent: yellow reason under the agent row and in its card, idle outside a running call', async ($, on) => {
   let release = () => {}
   const hold = new Promise<void>(resolve => {
     release = resolve
@@ -1010,8 +1051,13 @@ test('agent qui s’enlise : motif jaune sous la ligne de l’agent et dans sa f
   const pending = $.tool.call({ tool: 'Bash', agentId: 'a3', command: 'dotnet test' } as unknown as Parameters<typeof $.tool.call>[0])
   await clock.advance(190_000)
   const waiting = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await waiting.find({ type: 'Text', text: /^ {9}Bash \(1\)$/ })).toBeDefined()
+  expect(await waiting.find({ type: 'Text', text: /^ {9}outil Bash 3 min · Bash \(1\)$/ })).toBeDefined()
   await waiting.unmount()
+  await clock.advance(120_000)
+  const long = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  expect(await long.find({ type: 'Text', text: /^ {9}outil Bash 5 min · Bash \(1\) · ⚠ outil long$/ })).toBeDefined()
+  expect((await long.find({ type: 'Text', text: /^ · ⚠ outil long$/ }))?.props.color).toBe('warning')
+  await long.unmount()
 
   release()
   await pending
@@ -1019,4 +1065,268 @@ test('agent qui s’enlise : motif jaune sous la ligne de l’agent et dans sa f
   const idle = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await idle.find({ type: 'Text', text: /^ {9}Bash \(1\) · ⚠ idle 3m$/ })).toBeDefined()
   await idle.unmount()
+})
+
+const thinking = (count: number): TurnStepChunk => ({ kind: 'thinking', index: 0, text: 'x'.repeat(count) })
+const output = (count: number): TurnStepChunk => ({ kind: 'text', index: 1, text: 'x'.repeat(count) })
+
+const activityLine = async ($: Engine): Promise<string | undefined> => {
+  const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  const found = await ui.find({ type: 'Text', text: /^ {9}\S/ })
+  await ui.unmount()
+  return found?.text.trim()
+}
+
+test('followed stream: waiting for the first chunk, thinking then output with characters and throughput, nothing once the request ends', async ($, on) => {
+  const seen: (string | undefined)[] = []
+  let clock: ReturnType<typeof world> | null = null
+  const stream = async function* (): AsyncGenerator<TurnStepChunk> {
+    await clock?.advance(40_000)
+    seen.push(await activityLine($))
+    yield thinking(0)
+    for (let index = 0; index < 6; index++) {
+      await clock?.advance(1_000)
+      yield thinking(640)
+    }
+    seen.push(await activityLine($))
+    await clock?.advance(1_000)
+    yield output(640)
+    seen.push(await activityLine($))
+  }
+  clock = world(on, { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1'], 'RED') }, { stream })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await launch($)
+  await $.agent.spawn(spawn('RED 1', 1))
+  await drain($.turn.step(step('a1')))
+  expect(seen).toEqual(['○ attente modèle 40 s', '● réflexion · 3,8k car. · 160 tok/s', '● sortie · 4,5k car. · 160 tok/s'])
+  expect(await activityLine($)).toBe('ctx 43k')
+})
+
+test('followed stream: one write per second at most, never per chunk', async ($, on) => {
+  const seen: (string | undefined)[] = []
+  let clock: ReturnType<typeof world> | null = null
+  const stream = async function* (): AsyncGenerator<TurnStepChunk> {
+    for (let index = 0; index < 7; index++) {
+      yield output(100)
+      seen.push(await activityLine($))
+      await clock?.advance(200)
+    }
+  }
+  clock = world(on, { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1'], 'RED') }, { stream })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await launch($)
+  await $.agent.spawn(spawn('RED 1', 1))
+  await drain($.turn.step(step('a1')))
+  expect(seen).toEqual([...Array(5).fill('○ attente modèle 0 s'), '● sortie · 600 car. · 150 tok/s', '● sortie · 600 car. · 150 tok/s'])
+})
+
+test('signals during a stream: slow at a sustained 4 tok/s, never idle nor slow at 150 tok/s, idle after 60 s without a chunk, waiting beyond 120 s', async ($, on) => {
+  const seen: (string | undefined)[] = []
+  let clock: ReturnType<typeof world> | null = null
+  const steady = async function* (size: number): AsyncGenerator<TurnStepChunk> {
+    yield output(0)
+    for (let second = 1; second <= 70; second++) {
+      await clock?.advance(1_000)
+      yield output(size)
+      if (second === 30 || second === 70) seen.push(await activityLine($))
+    }
+  }
+  const stream = async function* (e: TurnStepInput): AsyncGenerator<TurnStepChunk> {
+    if (e.index === 0) {
+      yield* steady(16)
+      await clock?.advance(62_000)
+      seen.push(await activityLine($))
+      return
+    }
+    if (e.index === 1) {
+      await clock?.advance(100_000)
+      seen.push(await activityLine($))
+      await clock?.advance(30_000)
+      seen.push(await activityLine($))
+      return
+    }
+    yield* steady(600)
+  }
+  clock = world(on, { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1'], 'RED') }, { stream })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await launch($)
+  await $.agent.spawn(spawn('RED 1', 1))
+  await drain($.turn.step(step('a1')))
+  await drain($.turn.step(step('a1', 1)))
+  await drain($.turn.step(step('a1', 2)))
+  expect(seen).toEqual([
+    '● sortie · 480 car. · 4 tok/s',
+    '● sortie · 1,1k car. · 4 tok/s · ⚠ lent',
+    '● sortie · 1,1k car. · 4 tok/s · ⚠ idle 1m',
+    '○ attente modèle 1 min · ctx 43k',
+    '○ attente modèle 2 min · ctx 43k · ⚠ attente',
+    '● sortie · 18k car. · 150 tok/s · ctx 43k',
+    '● sortie · 42k car. · 150 tok/s · ctx 43k',
+  ])
+})
+
+const RUN_PLAN_PATH = 'todo/cat/CAT-PLAN.md'
+const RUN_PLAN = `# CAT-PLAN
+
+### Execution des lots
+
+| Lot | Depend de | Dépôt |
+|---|---|---|
+| F1 | — | . |
+| F2 | F1 | . |
+| F3 | F1, F2 | . |
+
+### Lot F1 — Création — ⬜
+### Lot F2 — Refus — ⬜
+`
+const lotPrompt = (lot: string) =>
+  `Workflow run-lot, batch ${lot}. Global plan: /repo/todo/cat/CAT-PLAN.md. Batch sheet: /repo/todo/cat/CAT-PLAN-${lot}.md. Run folder: /repo/todo/cat/run/${lot}.\nAutonomous mode.`
+const LOT_SHEET = (lot: string) => `# CAT-PLAN-${lot} — Lot\n\n## Déroulement TDD\n\n### Étape 1 — Créer\n\nTDD : RED ✅ · GREEN ⬜ · COUT ⬜\n`
+
+describe('batch plan through run-plan', () => {
+  test('child call, plan as argument, batch read from the agent prompt', () => {
+    expect(childWorkflowOf("const r = await workflow('run-lot', b.sheet)")).toBe('run-lot')
+    expect(childWorkflowOf('await agent("x")')).toBeNull()
+    expect(childWorkflowOf("await workflow({ scriptPath: `${pre.kit}/workflows/run-lot.js` }, b.sheet)")).toBe('run-lot')
+    expect(childWorkflowOf("await workflow('cctoolkit:run-lot', s)")).toBe('run-lot')
+    expect(promptLotOf('mode: next-batch /r/X-PLAN-F3.md /r/X-PLAN-F2.md')).toEqual({ lot: 'F2', sheet: '/r/X-PLAN-F2.md' })
+    expect(planPathOf('todo/cat/CAT-PLAN.md --seul F2')).toBe('todo/cat/CAT-PLAN.md')
+    expect(planPathOf('todo/cat/CAT-PLAN-F2.md')).toBeNull()
+    expect(promptLotOf(lotPrompt('F2'))).toEqual({ lot: 'F2', sheet: '/repo/todo/cat/CAT-PLAN-F2.md' })
+    expect(promptLotOf('mode: lot-suivant /repo/todo/cat/CAT-PLAN-F3.md /repo/todo/cat/CAT-PLAN-F2.md\n\nReturn')).toEqual({ lot: 'F2', sheet: '/repo/todo/cat/CAT-PLAN-F2.md' })
+    expect(promptLotOf('Workflow run-plan, supervisor step. Gate of batch F2')).toBeNull()
+  })
+
+  test('execution table: batches, dependencies, DONE; merge keeps the known state', () => {
+    const lots = parsePlanLots(RUN_PLAN.replace('### Lot F1 — Création — ⬜', '### Lot F1 — Création — ✅ DONE'))
+    expect(lots.map(one => [one.lot, one.deps, one.isDone])).toEqual([['F1', [], true], ['F2', ['F1'], false], ['F3', ['F1', 'F2'], false]])
+    const known = [{ ...lots[1]!, sheet: '/s/F2.md' }, { lot: 'F9', sheet: null, deps: [], isDone: false, outcome: null, audit: null, view: null }]
+    const merged = mergeLots(known, parsePlanLots(RUN_PLAN))
+    expect(merged.map(one => one.lot)).toEqual(['F1', 'F2', 'F3', 'F9'])
+    expect(merged[1]?.sheet).toBe('/s/F2.md')
+    const english = '### Batch execution\n\n| Batch | Intent | Depends on |\n|---|---|---|\n| F1 | a | — |\n| F2 | b | F1 |\n\n### Batch F1 — A — ✅ DONE\n'
+    expect(parsePlanLots(english).map(one => [one.lot, one.deps, one.isDone])).toEqual([['F1', [], true], ['F2', ['F1'], false]])
+  })
+
+  test('batch report: status, reason, path next to the sheet', () => {
+    const [path = '', english] = reportPathsOf('/repo/todo/cat/CAT-PLAN-F2.md', 'F2')
+    expect([path, english]).toEqual(['/repo/todo/cat/run/F2/F2-rapport.md', '/repo/todo/cat/run/F2/F2-report.md'])
+    expect(reportOutcomeOf('## STATUS — GAPS\nReason: two fix rounds\n', path)?.reason).toBe('two fix rounds')
+    expect(reportOutcomeOf('## STATUT — BLOQUÉ\nRaison : GREEN refus — exit 1\n', path)).toEqual({ label: 'BLOQUÉ', reason: 'GREEN refus — exit 1', report: path })
+    expect(reportOutcomeOf('## STATUT — TERMINÉ\nRaison : —\n', path)?.reason).toBeNull()
+    expect(reportOutcomeOf('# autre chose', path)).toBeNull()
+  })
+
+  test('nested agent phase derived from its label in the child script', () => {
+    const child = { name: 'run-lot', phases: ['Design', 'RED', 'Audit'], details: {}, labels: labelPhasesOf(SCRIPT) }
+    expect(child.labels).toEqual({
+      design: 'Design', 'RED ': 'RED', 'audit retry ': 'Audit', audit: 'Audit', 'fix ': 'Audit', 'next batch review': 'Review', 'next batch re-review ': 'Review',
+    })
+    expect(['design', 'RED 2 refus', 'audit', 'audit retry 1', 'fix 1', 'next batch review', 'inconnu'].map(label => nestedPhaseOf(child, label, '▸ run-lot #2'))).toEqual([
+      'Design', 'RED', 'Audit', 'Audit', 'Audit', 'Review', '▸ run-lot #2',
+    ])
+    expect(nestedPhaseOf(child, 'design', 'Batch')).toBe('Batch')
+    expect(nestedPhaseOf(null, 'design', '▸ run-lot')).toBe('▸ run-lot')
+  })
+
+  test('batch state and view cut from the plan run', () => {
+    const agent = (id: string, index: number, lot: string | null, state: WorkflowAgent['state'], phase: string) => ({
+      ...blankAgent(id, index, id, 'Sonnet', 'x', 'p', index * 1000), lot, state, phase, endedAt: state === 'running' ? null : index * 1000 + 500,
+    })
+    const run = {
+      ...completeRun({ runId: 'wf_1', startedAt: 0 } as WorkflowRun),
+      name: 'run-plan', status: 'running' as const,
+      child: { name: 'run-lot', phases: ['Design', 'RED'], details: { Design: 'd' }, labels: {} },
+      lots: parsePlanLots(RUN_PLAN),
+      agents: [agent('s1', 1, null, 'done', 'Preflight'), agent('d1', 2, 'F1', 'done', 'Design'), agent('d2', 3, 'F2', 'running', 'Design')],
+    }
+    expect(run.lots.map(one => lotStateOf(run, one))).toEqual(['completed', 'running', 'pending'])
+    const view = lotRun(run, 'F1')
+    expect([view.name, view.status, view.phases, view.agents.map(one => one.id), view.durationMs]).toEqual(['run-lot', 'completed', ['Design', 'RED'], ['d1'], 500])
+    const nested = lotRun({ ...run, child: { ...run.child, labels: { d3: 'Design' } }, agents: [agent('d3', 4, 'F3', 'running', '▸ run-lot')] }, 'F3')
+    expect(nested.agents.map(one => one.phase)).toEqual(['Design'])
+    expect(lotStateOf({ ...run, status: 'failed', agents: run.agents.map(one => ({ ...one, state: 'done' as const })) }, run.lots[1]!)).toBe('failed')
+    const waiting = (lot: (typeof run.lots)[number]) => ({ ...lot, outcome: { label: 'ATTENTE-RÉPONSE', reason: null, report: null } })
+    expect([lotStateOf(run, waiting(run.lots[2]!)), lotStateOf(run, waiting(run.lots[1]!))]).toEqual(['waiting', 'running'])
+    const blocked = { ...run.lots[2]!, outcome: { label: 'BLOQUÉ', reason: null, report: null } }
+    expect([lotStateOf(run, blocked), lotRun({ ...run, lots: [run.lots[0]!, run.lots[1]!, blocked] }, 'F3').status]).toEqual(['waiting', 'completed'])
+  })
+})
+
+test('run-plan pane: plan view, batches, supervisor, navigation to a batch and back to the plan', async ($, on) => {
+  const files: Record<string, string> = {
+    [`${SESSION}/workflows/scripts/run-lot-${RUN}.js`]: `export const meta = {
+  name: 'run-plan',
+  description: 'Plan',
+  phases: [{ title: 'Preflight' }, { title: 'Batch' }, { title: 'Gate' }, { title: 'Report' }],
+}
+const result = await workflow('run-lot', b.sheet)
+`,
+    '/repo/.claude/workflows/run-lot.js': SCRIPT,
+    [RUN_PLAN_PATH]: RUN_PLAN,
+    '/repo/todo/cat/CAT-PLAN-F1.md': LOT_SHEET('F1'),
+    '/repo/todo/cat/CAT-PLAN-F2.md': LOT_SHEET('F2'),
+    '/repo/todo/cat/run/F1/F1-rapport.md': '## STATUT — TERMINÉ\nRaison : —\n',
+    [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ workflowPhase: 'Preflight' }),
+    [`${DIR}/agent-a2.meta.json`]: JSON.stringify({ workflowPhase: 'Design' }),
+    [`${DIR}/agent-a3.meta.json`]: JSON.stringify({ workflowPhase: 'Report' }),
+    [`${DIR}/agent-a4.meta.json`]: JSON.stringify({ workflowPhase: '▸ run-lot' }),
+  }
+  const clock = world(on, files, { workflowName: 'run-plan' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await launch($, `${RUN_PLAN_PATH} --jusqu-a F3`)
+  await $.agent.spawn(spawn('preflight', 1, 'Workflow run-plan, supervisor step.'))
+  await $.turn.complete(complete('a1'))
+  await $.agent.spawn(spawn('design', 2, lotPrompt('F1')))
+  await $.agent.spawn(spawn('report', 3, lotPrompt('F1')))
+  await $.turn.complete(complete('a2'))
+  await $.turn.complete(complete('a3'))
+  await $.agent.spawn(spawn('design', 4, lotPrompt('F2')))
+  await clock.advance(2_000)
+
+  const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  expect(await ui.find({ type: 'Text', text: /^run-plan$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /1\/3 lots/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / TERMINÉ$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / Design · design$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / after F1, F2$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Supervisor$/ })).toBeDefined()
+  expect(await ui.find({ key: 'open-lot-F3' })).toBeUndefined()
+
+  await ui.press({ key: 'open-lot-F2' })
+  expect(await ui.find({ type: 'Text', text: /^F2$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /▸ run-lot/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /0\/3 phases/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^run-lot$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /SHEET F2/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /LOTS/ })).toBeUndefined()
+
+  await ui.press({ key: 'open-lot-F1' })
+  expect(await ui.find({ type: 'Text', text: /completed/ })).toBeDefined()
+
+  await ui.press({ key: 'plan' })
+  expect(await ui.find({ type: 'Text', text: /LOTS/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
+  world(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'run-lot-pane', args: 'demo plan' } as Parameters<typeof $.command.run>[0])
+  const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  expect(await ui.find({ type: 'Text', text: /1\/4 lots/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / GREEN · GREEN 3 hide$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / after F2, F3$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Supervisor$/ })).toBeDefined()
+  await ui.press({ key: 'open-lot-F2' })
+  expect(await ui.find({ type: 'Text', text: /SHEET F2/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {9}outil Bash 2 min · Bash \(17\) · ctx \d+k$/ })).toBeDefined()
+  await ui.unmount()
+
+  await $.command.run({ command: 'run-lot-pane', args: 'demo plan end' } as Parameters<typeof $.command.run>[0])
+  const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  expect(await end.find({ type: 'Text', text: /3\/4 lots/ })).toBeDefined()
+  expect(await end.find({ key: 'outcome' })).toBeDefined()
+  expect(await end.find({ type: 'Text', text: /LOTS/ })).toBeDefined()
+  await end.unmount()
 })

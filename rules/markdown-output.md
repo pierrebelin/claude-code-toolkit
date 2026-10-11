@@ -37,6 +37,7 @@ The title is prose in `language.docs`; the anchor is the literal. A parser match
 | `<!-- kit:open-questions -->` heading, `<!-- kit:cols n,severity,question,impact,options -->` above its table; severity values `Blocking`/`Major` stay verbatim | spec | `/plan-implementation` gate (awk on the section) |
 | Every other heading anchor of the templates — spec `kit:context` … `kit:assumptions`, global plan `kit:summary` … `kit:cross-cutting`, sheet `kit:intent` … `kit:assumptions` | spec, global plan, batch sheet | the skills and agents locating a section in any language; `scripts/migrate-anchors.py` writes them into older documents |
 | Status tokens `TDD: RED ✅ · GREEN ✅ · COST ✅`, `✅ DONE`, `Correction Cn` — never translated | batch sheet | the first one by `scripts/pre-audit.sh` |
+| Status tokens `TDD: GUARD ⬜` / `TDD: GUARD ✅` — guard step green at once, never translated | batch sheet | `run-lot` design and tick, `scripts/pre-audit.sh` |
 
 An instruction naming a section by its English template title (`## TDD sequence`, `## Assumptions`) designates the section carrying that template heading's anchor, whatever its title.
 
@@ -52,6 +53,8 @@ English, verbatim, whatever `language`.
 | `→ Batch FX complete — manual validation required` — the closing line | `hooks/implement-tdd-guard.sh` |
 | Output lines `not cited : `, `unknown references : `, `(none)` | `scripts/rules-coverage.py --ids`, then `scripts/pre-audit.sh` |
 | `## Review — GAPS`, `## Review — CLEAR` | `adversarial-reviewer` output, read by the three callers |
+| `### Batch execution`, columns `Batch` / `Depends on` / `Repo`, `### Batch FX — … — ✅ DONE` | `cctoolkit plan-next-batch` |
+| `## STATUS — …` first line (`DONE`, `BLOCKED`, `GAPS`, `AWAITING-ANSWER`), `Reason:` of `run/FX/FX-report.md`; `Workflow run-lot, batch FX.` first line of every run-lot prompt | `run-plan` gate, `run-lot-pane` mod |
 | `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names and the JSON's first-level keys | `scripts/quality-report-check.py`, the whole report history and any viewer built on it |
 | `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/migrate-rm-traits.py`, `scripts/pre-audit.sh` and `skills/implement-tdd/references/closing.md` |
 

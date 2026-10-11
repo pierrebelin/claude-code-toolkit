@@ -1,0 +1,48 @@
+{
+  "fixtures": [
+    {
+      "path": "X-PLAN.md",
+      "kind": "text",
+      "content": "# X-PLAN\n\n### Batch execution\n\n| Batch | Intent | Depends on | Repo |\n|---|---|---|---|\n| F1 | x | — | . |\n| F2 | x | F1 | . |\n\n### Batch F1 — x — ✅ DONE\n\n### Batch F2 — x — ⬜\n"
+    },
+    {
+      "path": "X-PLAN-F2.md",
+      "kind": "text",
+      "content": "# X-PLAN-F2\n"
+    }
+  ],
+  "cases": [
+    {
+      "name": "text mode still prints the next batch",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; python3 {{KIT}}/scripts/plan-next-batch.py $d/todo/x/X-PLAN.md | cut -d' ' -f1",
+      "expect": {
+        "exit": 0,
+        "stdout": "F2"
+      }
+    },
+    {
+      "name": "--next returns the batch of the current repo as JSON and journals its launch",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --next $d/j.md | grep -o '\"outsideBatch\": \"F2\", \"outsidePaths\": \\[\\]' | tr '\\n' ';'; cut -d' ' -f1-2 $d/j.md",
+      "expect": {
+        "exit": 0,
+        "stdout": "\"outsideBatch\": \"F2\", \"outsidePaths\": [];F2 launched"
+      }
+    },
+    {
+      "name": "--next lists the out-of-batch paths and journals nothing",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/docs; echo y > $d/docs/y.md; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --next $d/j.md | grep -o '\"outsidePaths\": \\[\"docs/y.md\"\\]' | tr '\\n' ';'; test -e $d/j.md && echo journal || echo no-journal",
+      "expect": {
+        "exit": 0,
+        "stdout": "\"outsidePaths\": [\"docs/y.md\"];no-journal"
+      }
+    },
+    {
+      "name": "--context gathers earlier audit gaps, user decisions and absent cited paths",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/todo/x/run/F1 $d/src/A; printf '## STATUS — DONE\\n\\n## Audit gaps\\n\\n- Major — rejected choice X\\n\\n## End\\n' > $d/todo/x/run/F1/F1-report.md; printf '\\n| H1 | user decision: Y |\\n`src/A/B.cs` `src/A/C.cs` `src/**/*.cs`\\n' >> $d/todo/x/X-PLAN-F2.md; touch $d/src/A/C.cs; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --context F2 | grep -E '^- Major|user decision|^src/|^cycles' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "- Major — rejected choice X;X-PLAN-F2.md:2: | H1 | user decision: Y |;cycles: none;src/A/B.cs;"
+      }
+    }
+  ]
+}

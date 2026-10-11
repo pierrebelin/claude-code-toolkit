@@ -32,7 +32,7 @@ Code pattern: an existing file of the same kind in this repo — `graphify query
 - **Typed IDs**: `ProductId.Create()` new, `ProductId.From(ulid)` existing; never raw `Ulid` for identifier (`ProductItemId`, `DiagramNodeId`, …). `Ulid` → typed ID conversion at endpoint boundary; Domain, Application, Infrastructure handle typed IDs only.
 - **Mutation via business methods** (DDD-03): no public setter, no handler-driven mutation.
 - **Inter-aggregate reference by ID** (DDD-05), never object navigation.
-- **Logic belongs to object owning data** (DDD-09): `exportDiagramsContext.Serialize()`, not `DiagramExportSerializer.Serialize(context)`; `ParsedImportFile.Create(json)`, not `IParser.Parse(json)`. Domain Service only when no business object owns operation naturally — stateless, no Infrastructure dependency, never repository wrapper.
+- **Logic belongs to object owning data** (DDD-09): `exportDiagramsContext.Serialize()`, not `DiagramExportSerializer.Serialize(context)`; `ParsedImportFile.Create(json)`, not `IParser.Parse(json)`. Domain Service only when no business object owns operation naturally — stateless, no Infrastructure dependency, never repository wrapper. Never an invariant, a check or a throw in a `static class` (static constructor, static initializer, static method): a static catalogue only declares; an instantiated object built from it (`ErrorDefinitions.Create(…)`) owns uniqueness and every check.
 - **Repository interface**: one per aggregate root, centred on it, with `Save(List<IDomainEvent<TId>>, CancellationToken)`.
 - **Aggregate methods read own state**: aggregate never receives own sub-entities as parameters. `diagram.Activate(userContext)` consuming `_draftNodeIds`, not `diagram.Activate(draftNodeIds, userContext)`.
 

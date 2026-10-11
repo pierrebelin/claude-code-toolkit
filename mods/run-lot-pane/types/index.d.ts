@@ -1,5 +1,7 @@
 export type AgentState = 'running' | 'done' | 'error' | 'interrupted'
 
+export type StreamKind = 'thinking' | 'output' | 'tool'
+
 export type WorkflowAgent = {
   id: string
   index: number
@@ -12,6 +14,12 @@ export type WorkflowAgent = {
   endedAt: number | null
   lastActiveAt: number
   openCalls: number
+  toolSince: number | null
+  waitingSince: number | null
+  firstChunkAt: number | null
+  lastChunkAt: number | null
+  streamKind: StreamKind | null
+  streamChars: number
   state: AgentState
   lastTool: string | null
   tools: number
@@ -25,6 +33,7 @@ export type WorkflowAgent = {
   toolCounts: Record<string, number>
   files: string[]
   lastError: string | null
+  lot: string | null
 }
 
 export type RunStatus = 'running' | 'completed' | 'failed' | 'killed'
@@ -60,6 +69,18 @@ export type Step = {
 
 export type Sheet = { lot: string; name: string; isDone: boolean; steps: Step[]; hypotheses: number }
 
+export type ChildWorkflow = { name: string; phases: string[]; details: Record<string, string>; labels: Record<string, string> }
+
+export type PlanLot = {
+  lot: string
+  sheet: string | null
+  deps: string[]
+  isDone: boolean
+  outcome: Outcome | null
+  audit: AuditVerdict | null
+  view: Sheet | null
+}
+
 export type WorkflowRun = {
   runId: string
   name: string
@@ -75,6 +96,9 @@ export type WorkflowRun = {
   audit: AuditVerdict | null
   sheet: Sheet | null
   agents: WorkflowAgent[]
+  child: ChildWorkflow | null
+  plan: string | null
+  lots: PlanLot[]
 }
 
 export type Journal = {
@@ -106,7 +130,7 @@ export type Navigation = {
   agentId: string | null
   back: Screen
   toggled: string[]
-  isAllExpanded: boolean
+  lot: string | null
 }
 
 declare module 'claude-code' {

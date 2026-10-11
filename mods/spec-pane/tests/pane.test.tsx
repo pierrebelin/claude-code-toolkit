@@ -73,7 +73,7 @@ const QUESTIONS = [
   },
 ]
 
-test('parseSpec reprend titre, résumé, CU, RM avec sévérité, sections et questions ouvertes', () => {
+test('parseSpec reads title, summary, CU, RM with severity, sections and open questions', () => {
   const doc = parseSpec(SPEC)
   expect(doc.title).toBe('CAT — Produits par groupe')
   expect(doc.summary).toBe('Les produits viennent du Catalog, par groupe.')
@@ -88,19 +88,19 @@ test('parseSpec reprend titre, résumé, CU, RM avec sévérité, sections et qu
   expect(doc.openQuestions[0]?.options).toBe('a) héritage ; b) groupes propres')
 })
 
-test('parseSpec lit aussi la spec anglaise du toolkit, marqueurs kit compris', () => {
+test('parseSpec also reads the toolkit English spec, kit markers included', () => {
   const doc = parseSpec(KIT_SPEC)
   expect(doc.sections.map(one => one.title)).toEqual(['Use cases', 'Business rules', 'Open questions'])
   expect(doc.rules[0]?.tag).toBe('blocking')
   expect(doc.openQuestions.map(one => `${one.id} ${one.severity}`)).toEqual(['Q1 Major'])
 })
 
-test('fit coupe à la largeur sans retour à la ligne', () => {
+test('fit cuts to the width without wrapping', () => {
   expect(fit('Un profil lié\net un produit héritent-ils ?', 20)).toBe('Un profil lié et un…')
   expect(fit('court', 20)).toBe('court')
 })
 
-test('spec catalogue : SPEC.md, questions ouvertes en §10 sans sévérité', () => {
+test('catalogue spec: SPEC.md, open questions in §10 without severity', () => {
   expect(isSpecPath('/repo/todo/catalogue/SPEC.md')).toBe(true)
   const doc = parseSpec(`# Catalogue
 
@@ -118,7 +118,7 @@ test('spec catalogue : SPEC.md, questions ouvertes en §10 sans sévérité', ()
   expect(doc.openQuestions.map(one => `${one.id}|${one.severity}|${one.question}`)).toEqual(['Q1||Choix caché en solo ?'])
 })
 
-test('chemin de spec, commande tapée et commande développée', () => {
+test('spec path, typed command and expanded command', () => {
   expect(isSpecPath(PATH)).toBe(true)
   expect(isSpecPath('todo/x/SPEC-x.md')).toBe(true)
   expect(isSpecPath('/repo/todo/x/X-PLAN.md')).toBe(false)
@@ -128,7 +128,7 @@ test('chemin de spec, commande tapée et commande développée', () => {
   expect(promptTopic('relis la /business-spec')).toBeUndefined()
 })
 
-test('décision : option recommandée, réponse, écart à la recommandation', () => {
+test('decision: recommended option, answer, gap from the recommendation', () => {
   const asked = askedOf('t1', QUESTIONS)
   expect(asked.map(one => one.recommended)).toEqual(['Lecture seule (recommandé)', 'Catalog'])
   const done = withAnswers(asked, {
@@ -169,7 +169,7 @@ const world = (on: On, files: Record<string, string>, answers: Record<string, st
 
 const call = (input: Record<string, unknown>) => input as never
 
-test('pane suit les décisions puis la spec écrite, contenu complet au clic', async ($, on) => {
+test('pane follows decisions then the written spec, full content on click', async ($, on) => {
   const files: Record<string, string> = {}
   world(on, files, { 'Livrer moins ?': 'Tout', 'Quelle autorité ?': 'Catalog' })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -234,7 +234,7 @@ test('pane suit les décisions puis la spec écrite, contenu complet au clic', a
   }
 })
 
-test('questions hors /business-spec ignorées, écriture de spec suivie seule', async ($, on) => {
+test('questions outside /business-spec ignored, spec write followed alone', async ($, on) => {
   const files: Record<string, string> = { [PATH]: KIT_SPEC }
   const clock = world(on, files, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -255,7 +255,7 @@ test('questions hors /business-spec ignorées, écriture de spec suivie seule', 
   await later.unmount()
 })
 
-test('/spec-pane <chemin> suit une spec existante', async ($, on) => {
+test('/spec-pane <path> follows an existing spec', async ($, on) => {
   const files: Record<string, string> = { [PATH]: SPEC }
   world(on, files, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })

@@ -41,7 +41,8 @@ Capture carries status, diff, RM/CU + DDD/APP/PERF coverage, `build` / `Architec
 **Next-sheet review — after `VALID` only.** Next ⬜ batch FY in global plan → `Agent` with `subagent_type: cctoolkit:adversarial-reviewer`, a `description`, prompt starting `mode: next-batch <sheet FY> <sheet FX>`. Last batch → skip. Launch it before assembling the summary (§4), in the same message as the first independent call.
 
 - `Major` (name, path, signature FX changed) → update FY sheet now, one `Edit`: you just delivered the value.
-- `Blocking` (design FX contradicts) → never settle: table under `Next batch:` in summary, user decides before `/implement-tdd batch FY`.
+- `Blocking` with a `Settled by` source → settle now: rewrite FY design per the source, `Hn` in FY `## Assumptions` (question, answer, source, `to be validated by the user`).
+- `Blocking` without source (design FX contradicts, nothing settles it) → never settle: table under `Next batch:` in summary, user decides before `/implement-tdd batch FY`. Workflow `run-lot` → FY `AWAITING-ANSWER`.
 
 ## 4. Closing
 
