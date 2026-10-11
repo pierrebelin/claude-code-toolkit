@@ -16,7 +16,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `presets/`, `rules/` | layouts, `kit.config.json`, layer and universal rules |
 | `templates/` | settings, statusline, `.gitignore` merged into the repo |
 | `evals/` | recorded hook cases |
-| `workflows/` | `run-lot`, the autonomous batch as a Workflow script |
+| `workflows/` | `run-lot` (one batch) and `run-plan` (whole plan), as Workflow scripts |
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
 | `docs/` | context cost, tooling |
@@ -24,7 +24,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 
 ## Anonymisation — do not break it
 
-The product name is the `{{PRODUCT}}` placeholder in the instruction files, rules and docs — never substituted in the kit: `rules/cctoolkit.md` tells the model to read it from `kit.config.json`, and `/cctoolkit:kit-init` substitutes it only in the rules it copies into a repo. Hooks, `lib/` and `scripts/` carry none — they read `product` from `kit.config.json`. Examples rest on a fictional domain: aggregates `Product` / `ModuleDiagram`, sub-entities `ProductItem` / `DiagramNode`, bounded contexts `Catalog` / `Studio`. Never introduce a real project, namespace or aggregate name. A change coming back from an installed repo goes through `bash scripts/kit-diff.sh <repo>` first: it flags the repo's product and vocabulary in what would flow back.
+The product name is the `{{PRODUCT}}` placeholder, never substituted in the kit (mechanism: `presets/README.md` § Anonymisation); hooks, `lib/` and `scripts/` carry none. Examples rest on a fictional domain: aggregates `Product` / `ModuleDiagram`, sub-entities `ProductItem` / `DiagramNode`, bounded contexts `Catalog` / `Studio`. Never introduce a real project, namespace or aggregate name. A change coming back from an installed repo goes through `bash scripts/kit-diff.sh <repo>` first: it flags the repo's product and vocabulary in what would flow back.
 
 ## Language
 
@@ -58,7 +58,7 @@ Two sources that drift make the choice random: a fact lives in exactly one place
 
 - A hook or script needing a path, a marker or the test tag reads it through `lib/kit_config.py` / `lib/kit_testtag.py`. With the `clean-architecture` preset its output must stay byte-identical: replay the old and new copies on the same fixture repo and diff the outputs before calling the change done.
 
-- Must exit 0 on empty JSON input and when its dependency is missing. Intended exceptions: `lib/guard-git.sh`, blocking by design; `explore-guard.sh`, which denies an `Agent` call with no `description` or no explicit model; and `read-bounds.sh`, which denies an unbounded `Read` on a large file once per agent and file.
+- Must exit 0 on empty JSON input and when its dependency is missing, save the guards that block by design (`hooks/README.md` § Dependencies).
 - Test after editing: `echo '{}' | bash hooks/<name>.sh`. Recorded cases live in `evals/cases/*.json` and `bash evals/run.sh` replays them from this checkout (`{{KIT}}` in a case = the kit directory): a hook change without a case is not finished. A hook or script resolves the repo through `lib/project-root.sh` / `kit_config.project_root()`, never from its own location: installed, the kit sits in the plugin cache, outside the repo. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` / `HOOK_AGENT_ID` / `HOOK_TRANSCRIPT_PATH` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`. A module that decides prints hook JSON; `lib/batching-nudge.sh` prints plain text, which the dispatcher grafts onto the decision.
 - Do not run `graphify-autosync.sh` idly: it rebuilds the graph and blocks for several minutes.
 

@@ -25,7 +25,6 @@
 set -u
 
 WINDOW=${CLAUDE_BATCHING_WINDOW:-6}   # consecutive mono-call turns before nudging
-COOLDOWN=${CLAUDE_BATCHING_COOLDOWN:-6} # tool-carrying turns before nudging again
 
 [ -z "${HOOK_AGENT_ID:-}" ] || exit 0   # subagent → out of scope
 
@@ -50,16 +49,15 @@ printf '%s' "$tick" > "$tick_file"
 
 # One reminder per session. Measured 2026-10-09 over 609 reminders: 16 % of the
 # turns after one batched calls, 12 % without — a real but small effect that a
-# second reminder does not add to. The COOLDOWN path below only ever ran once.
+# second reminder does not add to. The state file marks it sent.
 state="/tmp/claude-batching-nudge-${session}"
 [ -f "$state" ] && exit 0
-last_alert=0
 
-python3 - "$transcript" "$WINDOW" "$COOLDOWN" "$last_alert" "$state" <<'PY'
+python3 - "$transcript" "$WINDOW" "$state" <<'PY'
 import sys, json
 
-transcript, window, cooldown, last_alert, state = sys.argv[1:6]
-window, cooldown, last_alert = int(window), int(cooldown), int(last_alert)
+transcript, window, state = sys.argv[1:4]
+window = int(window)
 
 # One entry per assistant message that carried at least one tool call.
 # Claude Code rewrites each assistant message several times (streaming deltas):
@@ -98,7 +96,7 @@ with open(transcript, encoding="utf-8", errors="replace") as fh:
 counts = [seen_msg[m] for m in turns]
 total = len(counts)
 
-if total < window or total - last_alert < cooldown:
+if total < window:
     sys.exit(0)
 if any(c != 1 for c in counts[-window:]):
     sys.exit(0)

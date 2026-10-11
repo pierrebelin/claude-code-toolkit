@@ -18,12 +18,12 @@
 #     it blocks `head -20` on a big file, which is exactly the read we want),
 #   - only files past the line threshold, or past the byte one. The second
 #     trigger exists because Markdown wraps at the paragraph, not at 80 columns:
-#     measured here, `02-product-injection.md` is 18.3 kB in 119 lines and a
+#     measured here, a spec of 18.3 kB in 119 lines and a
 #     line count alone waves it through. 8 kB is roughly 2.5k tokens, the point
 #     where one dump is worth locating first.
 #   - binary/rendered formats and instruction files are left alone.
 #
-# Escape hatch, same shape as read-bounds.sh (and lib/guard-graphify-grep.sh, removed 2026-09-13): the
+# Escape hatch, same shape as read-bounds.sh: the
 # denial is recorded per (agent, file), so re-issuing the identical `cat` passes
 # through. That is how you force a full dump when you genuinely want one, and it
 # is scoped to the agent that asked — never handed to its siblings.

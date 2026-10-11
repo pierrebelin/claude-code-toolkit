@@ -13,7 +13,6 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | `detect-stack` | stack, test framework, product, and how many use-case folders each preset recognises — the model-free half of `/cctoolkit:kit-init` |
 | `rules-coverage` | rules ↔ tags, repo-wide; `--ids <sheet>` lists the DDD/APP/PERF ids the sheet never cites |
 | `untagged-tests` | tests carrying no rule tag |
-| `migrate-rm-traits` | one-shot: `Tests` column → tags |
 | `migrate-anchors` | one-shot: appends the `<!-- kit:… -->` anchors to documents written before them — dry run by default, `--apply` writes |
 | `turn-batching-check` | tool-call batching, context fill per tool, `read-bounds` denials and forcings followed by an edit — main chain, then subagents (`<session>/subagents/`); `--save-baseline` / `--compare` |
 | `quality-report-check` | checks a `docs/metrics/quality-report-*` pair |
@@ -21,6 +20,7 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | `pre-audit` | the mechanical gate before `/verify-ddd-tdd` — red means no fork |
 | `access-cost` | awaited Infrastructure calls read off the syntax tree with ast-grep; C# only |
 | `install-git-hooks` | links `settings.local.json` into new worktrees, for a plugin enabled at local scope |
+| `plan-next-batch` | `run-plan`'s scheduler: next runnable batch of a plan's `### Batch execution` table, `--check`, `--next`, `--outside`, `--exclude`, `--context` |
 | `batch-wallclock` | wall clock of an `/implement-tdd` batch |
 | `kit-diff <repo>` | a manual copy against the kit: MISSING / ADDED / DRIFT / MERGED, plus anonymisation alerts — the migration's first step |
 | `remove-copy` | the migration's deletion: DELETE the files the kit ships, KEEP the repo's own skills and scripts, MOVE a file added inside a kit skill, ORPHAN the repo's eval cases — dry run, `--apply` deletes |

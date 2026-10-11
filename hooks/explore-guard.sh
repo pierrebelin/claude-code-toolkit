@@ -1,29 +1,15 @@
 #!/bin/bash
 # PreToolUse Agent hook — delegation guard for every subagent spawn.
 #
-# Split out of graphify-enforce.sh on 2026-09-09. It used to share a file with the
-# grep substitution, which forced the same script to be registered on two matchers
-# and to re-dispatch on tool_name internally. Different tool, different saving: an
-# Explore spawn costs ~55k startup tokens, a grep costs ~300.
+# Every Agent call goes through two checks, in cost order:
 #
-# Widened on 2026-09-11. It only ever matched `subagent_type == "Explore"`, so
-# `general-purpose` and `Plan` — the two other spawns that read the repo and hand
-# back a free-form report — walked past the graphify requirement, past the model
-# choice and past any bound on the report. Two checks now, in cost order:
-#
-#   1. every Agent call carries a `description`     (CLAUDE.md, delegation rule)
+#   1. every Agent call carries a `description` — a delegation with no name was never scoped
 #   2. the model is chosen, never inherited         (no parameter == Opus)
 #
-# Widened again on 2026-09-17, to every type and to the typeless spawn: check 2
-# now covers a custom agent whose file pins no `model:`, and a call with no
-# subagent_type at all, which is where the Opus leak actually sat.
+# Check 2 covers every type, a custom agent whose file pins no `model:`, and a call
+# with no subagent_type at all, which is where the Opus leak actually sat. When both
+# pass, the report contract is appended to the prompt itself.
 #
-# and, when both pass, the report contract is appended to the prompt itself.
-#
-# A third check — "the prompt mentions graphify" — sat between them until
-# 2026-09-13. A keyword test: 12 denials over 60 sessions, each a lost round trip
-# after which the model added the word and relaunched. The advice itself stays in
-# the appended contract, where it costs no turn.
 # `additionalContext` would land in the *caller's* context, not the subagent's;
 # only `updatedInput.prompt` reaches the agent being spawned. The final report of
 # an agent is re-injected whole into the main conversation, so the contract is the
@@ -40,7 +26,7 @@ deny() {
 }
 
 description=$(echo "$input" | jq -r '.tool_input.description // ""')
-[ -z "$description" ] && deny "Agent spawn blocked: every Agent call carries a description (CLAUDE.md). A delegation with no name is a delegation that was never scoped."
+[ -z "$description" ] && deny "Agent spawn blocked: every Agent call carries a description. A delegation with no name is a delegation that was never scoped."
 
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 
@@ -105,7 +91,7 @@ fi
 contract=$(printf '%s\n' \
   '' \
   '--- Report contract (explore-guard) ---' \
-  'Style: caveman-ultra, in English (CLAUDE.md: English everywhere; the main chain answers the user in their language). Drop articles, pleasantries, hedging, tool narration. Fragments are fine. State each fact once. No prose abbreviations (impl/req/cfg), no arrows. Paths, symbols, commands and error messages: verbatim, in backticks.' \
+  'Style: caveman-ultra, in English (the main chain answers the user in their language). Drop articles, pleasantries, hedging, tool narration. Fragments are fine. State each fact once. No prose abbreviations (impl/req/cfg), no arrows. Paths, symbols, commands and error messages: verbatim, in backticks.' \
   "$bound" \
   'Locate with `graphify explain|path|query` before reaching for grep; grep is for text, the graph is for symbols and relations.' \
   'Your final report is re-injected whole into the main conversation. Everything it carries is paid for there.')

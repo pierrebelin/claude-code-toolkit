@@ -2,7 +2,7 @@
 # SubagentStop hook: checks the SHAPE of the `## RED` / `## GREEN` report a TDD subagent
 # hands back, and makes the agent re-emit it when a required line is missing.
 #
-# Why here and not in the orchestrator: a report missing its `Diff production` line or its
+# Why here and not in the orchestrator: a report missing its `Production diff` line or its
 # table costs the orchestrator a turn to notice plus a `SendMessage` to repair — 1 to 4 per
 # batch (measured 2026-09-13). The agent still holds its context, so it re-emits for free.
 #
@@ -63,7 +63,7 @@ issues = []
 if missing:
     issues.append("missing lines: " + ", ".join(f"`- {lb}:`" for lb in missing))
 
-# `exit N` sits on the `Commande` line: without it the orchestrator cannot tick RED or GREEN
+# `exit N` sits on the `Command` line: without it the orchestrator cannot tick RED or GREEN
 # on observed evidence, and asks for it every time.
 cmd_line = next((l for l in body.splitlines()
                  if re.match(r"^\s*[-*]\s*", l) and fold("Command") in fold(l)), "")

@@ -3,7 +3,7 @@
 #
 # /implement-tdd relaunched without /clear makes the new batch pay the whole
 # accumulated context of the previous one on every turn. The skill already says so
-# (closing.md), but a consigne addressed to the
+# (closing.md), but an instruction addressed to the
 # agent is not a barrier: the orchestrator reads it after the reads it was meant to
 # prevent.
 #
@@ -14,7 +14,7 @@
 # either case. F<n> requires a digit, so the skill sources and this file, which quote
 # "Lot FX" / "Batch FX", never match.
 #
-# Escape hatch, same convention as read-bounds.sh (and guard-graphify-grep.sh, removed 2026-09-13):
+# Escape hatch, same convention as read-bounds.sh:
 # re-issuing the identical launch lets it through. The first attempt drops a marker,
 # the second consumes it.
 set -u

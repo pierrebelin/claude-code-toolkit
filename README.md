@@ -42,7 +42,7 @@ flowchart LR
 | Stops | at the first batch that does not pass | the batch comes back `DONE`, or with what needs your eyes |
 | Fits | a plan you trust, a run over lunch or overnight | a new plan, a tricky batch, a team that reviews every commit |
 
-**Whole plan** runs `run-lot` on each batch the plan's dependency table allows, then checks the result from disk before going on — report status, audit verdict, the plan's `✅ DONE`, the build and the always-run test suites, nothing written outside the batch. The first failure stops everything: nothing is relaunched, nothing is fixed behind your back. It never commits, so you review the batches together at the end, with a `REPORT.md` and one patch per batch. `--until F3` stops after a given batch, `--only F2` runs just one.
+**Whole plan** runs `run-lot` on each batch the plan's dependency table allows, then checks each result from disk before going on. The first failure stops everything: nothing is relaunched, nothing is fixed behind your back. It never commits, so you review the batches together at the end, with a `REPORT.md` and one patch per batch. `--until F3` stops after a given batch, `--only F2` runs just one.
 
 **Batch by batch** keeps you in the loop: each batch ends on a report, you read the diff, commit and start the next one with a clean context.
 

@@ -137,7 +137,7 @@ def scan(s):
                 meta = json.load(fh)
         except (OSError, ValueError):
             meta = {}
-        if meta.get("agentType", "fork") not in AUDITORS:
+        if str(meta.get("agentType", "fork")).rsplit(":", 1)[-1] not in AUDITORS:
             continue
         session = os.path.basename(os.path.dirname(os.path.dirname(path)))[:8]
         for text, ts in verdict_texts(path):

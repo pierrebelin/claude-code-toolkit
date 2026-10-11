@@ -1,7 +1,7 @@
 #!/bin/bash
 # Hook evals — replay recorded tool payloads through the hooks, check the decision.
 #
-# Why. 2 115 lines of hook bash guard every Read, Bash and Agent call of every
+# Why. Two thousand lines of hook bash guard every Read, Bash and Agent call of every
 # session, and until 2026-09-12 nothing exercised them outside a live session.
 # Six defects were found in production and documented in the hooks' own
 # comments: a tab separator that shifted agent_id (bash-dispatch.sh), two skip
@@ -41,19 +41,10 @@
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
-# Two layouts: `.claude/evals/` inside a project, and `evals/` at the root of the
-# toolkit repo, where the hooks sit one level up with no `.claude` segment. Before
-# 2026-09-17 only the first was handled: in the toolkit, ROOT resolved one directory
-# above the repo and every hook path pointed at a file that does not exist. The runs
-# still reported passes — a missing hook prints nothing, which reads as "not_deny" —
-# so 139 broken cases looked like 60 green ones. Resolve the layout, never assume it.
-[ -d "$ROOT/.claude/hooks" ] || ROOT="$(cd "$HERE/.." && pwd)"
-# The kit is the directory holding hooks/: `.claude/` in a copied install, the
-# root itself in the toolkit or the plugin cache — where a bare `.claude/` may
-# exist for the runtime files the hooks write, and is not the kit.
-CLAUDE_DIR="$ROOT/.claude"
-[ -d "$CLAUDE_DIR/hooks" ] || CLAUDE_DIR="$ROOT"
+# The runner sits in `evals/` of the kit: the toolkit checkout or the plugin cache.
+# A bare `.claude/` there holds the runtime files the hooks write, not the kit.
+ROOT="$(cd "$HERE/.." && pwd)"
+KIT_DIR="$ROOT"
 # A fixture repo is its own project: an inherited CLAUDE_PROJECT_DIR would point
 # every hook and script at the repo the runner was launched from.
 unset CLAUDE_PROJECT_DIR
@@ -144,7 +135,7 @@ public sealed class FlatHandler
 CS
       ;;
     cs-loop)
-      # One repository read per received identifier — the N+1 the COUT step must refuse.
+      # One repository read per received identifier — the N+1 the COST step must refuse.
       cat > "$path" <<'CS'
 public sealed class LoopHandler
 {
@@ -180,7 +171,7 @@ CS
 }
 
 expand() {
-  printf '%s' "$1" | sed -e "s|{{FIX}}|$FIX|g" -e "s|{{ROOT}}|$ROOT|g" -e "s|{{KIT}}|$CLAUDE_DIR|g" -e "s|{{SID}}|$2|g"
+  printf '%s' "$1" | sed -e "s|{{FIX}}|$FIX|g" -e "s|{{ROOT}}|$ROOT|g" -e "s|{{KIT}}|$KIT_DIR|g" -e "s|{{SID}}|$2|g"
 }
 
 jf() { printf '%s' "$1" | jq -r "$2"; }
@@ -192,7 +183,7 @@ ENVARGS=()
 now_ms() { perl -MTime::HiRes=time -e 'printf "%d\n", time * 1000'; }
 
 run_payload() {
-  (cd "$ROOT" && printf '%s' "$2" | env ${ENVARGS[@]+"${ENVARGS[@]}"} bash "$CLAUDE_DIR/$1" 2>"$ERRF")
+  (cd "$ROOT" && printf '%s' "$2" | env ${ENVARGS[@]+"${ENVARGS[@]}"} bash "$KIT_DIR/$1" 2>"$ERRF")
 }
 
 check() {

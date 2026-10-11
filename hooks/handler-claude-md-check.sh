@@ -129,7 +129,7 @@ for base, files in C.walk(C.use_case_roots):
         prefix_of[md] = os.path.basename(base)
     # A feature or root CLAUDE.md is an index: no fixed structure to check.
     # Keep the folder carrying a handler, plus any file declaring rules
-    # (Core/Shared documents its own without being a handler).
+    # (a shared folder such as Catalog/Pricing documents its own without being a handler).
     if md in rules or is_handler_dir(base):
         all_md.add(md)
         prefix_of.setdefault(md, os.path.basename(base))
@@ -221,7 +221,7 @@ for md in sorted(focus):
     orphans = sorted(k for k, (_, cls, carried, bound) in methods.items()
                      if bound and cls in md_classes and not carried)
 
-    # The fixed shape only applies to a handler folder. Core/Shared declares shared
+    # The fixed shape only applies to a handler folder. A shared folder (Catalog/Pricing) declares shared
     # rules without being one: keep its traceability, not its shape.
     lines = shape_issues(md) if is_handler_dir(os.path.dirname(md)) else []
     lines = [f"  {i}" for i in lines]

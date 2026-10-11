@@ -63,7 +63,7 @@ A repo of another shape names its preset and overrides only what differs — obj
 | `testTag.framework` | `xunit` | the carrier of the rule tag: `xunit` `[Trait("RM", "F/RM-01")]`, `pytest` `@pytest.mark.rm("F/RM-01")`, `junit` `@Tag("RM:F/RM-01")`, `jest` `[RM F/RM-01]` in an `it`/`test`/`describe` title (a `describe` tag covers its tests) | the value `<SheetFolder>/<RM\|RL-xx>` |
 | `testTag.regex`, `testTag.files` | the adapter's | carrier regex (one capture group: the value), test file globs | — |
 | `commands.build`, `commands.architectureTest` | `rtk dotnet build {product}.sln --no-restore`; the `ArchitectureTests` run and its `when` path regex | what `audit-capture.sh` runs; empty = section reported "not run" | — |
-| `commands.test` | `rtk dotnet test --project tests/{product}.{suite}/…` | the suite command template — validated by the doctor, not yet read by the skills (run 3) | — |
+| `commands.test` | `rtk dotnet test --project tests/{product}.{suite}/…` | the suite command template — validated by the doctor, not yet read by the skills | — |
 
 Path patterns are segment globs relative to the repo root (`*` stays inside one folder), `layout.aggregate` excepted. `cctoolkit doctor` validates the file; a hook never reports a broken config — it exits 0 in silence.
 
@@ -81,7 +81,6 @@ Paths, markers, the tag carrier and the build commands are `kit.config.json`; th
 | `skills/implement-tdd/references/test-scope.md` | test environment variable, namespace roots, filter examples: projects, suites actually present, integration test splitting |
 | `skills/quality-report/commands-dotnet.md`, `commands-js.md` | suite list, SonarQube project key, Stryker config names; Jest config paths |
 | `skills/*/SKILL.md`, `skills/*/references/*.md` | code examples: namespaces and aggregate names |
-| `docs/TOOLING.md` | `## Bootstrap`: restore command, `--no-restore` policy, purge, per-OS SDK paths |
 | `docs/CONTEXT-COST.md` | the measured figures — re-measure with `cctoolkit turn-batching-check`, then create `.claude/context-baseline.json` (`--until <date> --save-baseline`) |
 
 Hooks, `lib/` and `scripts/` adaptation points: [`hooks/README.md`](../hooks/README.md), [`scripts/README.md`](../scripts/README.md).

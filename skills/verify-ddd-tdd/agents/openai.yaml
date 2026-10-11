@@ -1,4 +1,0 @@
-interface:
-  display_name: "Verify DDD TDD"
-  short_description: "Verify a DDD batch implemented with TDD"
-  default_prompt: "Verify the implemented batch against its DDD and TDD plan."

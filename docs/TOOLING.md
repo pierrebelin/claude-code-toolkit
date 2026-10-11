@@ -1,9 +1,7 @@
-# Tooling details — RTK, graphify, worktrees, bootstrap
+# Tooling details — RTK, graphify, worktrees, guards, workflows
 
 Opened on demand. `CLAUDE.md` keeps the standing rules and the traps; the measurements and the
 procedures live here.
-
-Adapt the bootstrap section to the repo: it is the only one that is not portable as is.
 
 ## RTK
 
@@ -20,8 +18,8 @@ them — `rtk gain [--history]`.
   on `sed -n 'X,Yp'`. Deliberate: rewriting would change what the caller parses.
 - **`rtk grep` mangles its output** (`6 matches in 0 files`, no file names). When the actual match
   text is needed, use `rtk proxy grep ...` — `proxy` runs the raw command unfiltered.
-- `rtk hook claude` rewrites `dotnet build` but **not** `dotnet test|restore|format`, although the
-  `rtk dotnet` filter accepts all four. `rewrite-rtk.sh` closes that gap itself, in command
+- `rtk hook claude` leaves some `dotnet` verbs unrewritten although the `rtk dotnet` filter
+  accepts them (current coverage: header of `lib/rewrite-rtk.sh`). `rewrite-rtk.sh` closes that gap itself, in command
   position only (start of line or after `; & | (`, behind any `VAR=value` prefixes), so
   `APP_TEST_MODE=true dotnet test ...` is covered. The expression is skipped entirely on a
   command carrying `<<`: sed matches `^` on every line, so a heredoc body was being rewritten
@@ -60,7 +58,8 @@ nodes out of 25 where budget 2000 keeps 42 out of 61. Filter the output, do not 
 
 `explain` is left unfiltered on purpose — it emits 37-500 B and has nothing to trim.
 
-**`affected` fires by itself on a Domain edit** (`affected-blast-radius.sh`, `PreToolUse:Edit|Write`): editing
+**`affected` fires by itself on a Domain edit** (`affected-blast-radius.sh`, `PreToolUse:Edit|Write`; paused until
+2026-10-23, `CCTOOLKIT_BLAST_RADIUS=1` turns it back on): editing
 an aggregate or a value object attaches the blast radius of the edited type, rolled up per project.
 The raw output is never injected — 421 lines / 65 kB on a central id, against 8 rolled-up lines. Call
 `graphify affected "<symbol>"` by hand for the file:line detail. Since 0.9.58 node ids are
@@ -81,8 +80,7 @@ rebuilds. Log: `/tmp/graphify-hook.log`.
 ## Project hooks inside a worktree
 
 The hooks ship in the plugin (`hooks/hooks.json`); a worktree runs them when the plugin is enabled
-there. Enabled in the committed `.claude/settings.json` (the shipped template, README §
-Installation), it is: the file is tracked, so every worktree carries it. Nothing to fix.
+there. Enabled in the committed `.claude/settings.json` (project scope, `INSTALL.md`), it is: the file is tracked, so every worktree carries it. Nothing to fix.
 
 Enabled at local scope instead (`claude plugin install cctoolkit@cctoolkit --scope local`, written
 to the gitignored `.claude/settings.local.json`), a worktree is a checkout that carries none of it,
@@ -115,19 +113,10 @@ git -C <worktree> diff HEAD > /tmp/wt.patch
 git apply /tmp/wt.patch               # applies to the working tree, no commit (asks for approval)
 ```
 
-## Bootstrap
-
-Repo-specific — replace this section when installing the toolkit. What it must answer:
-
-- the one-off restore command, if the feed is not reachable from every machine;
-- whether `--no-restore` is mandatory on build/test/publish, and why;
-- the purge to run when the restore fails or drags (`bin`/`obj` removal);
-- per-OS SDK paths, when host and container share the workspace.
-
 ## Guard details
 
-**`guard-cat-bounds.sh`** denies a bare `cat` on a file past 120 lines or 8 kB
-(`CLAUDE_CAT_BOUNDS_BYTES`). It never fires on a pipe (`cat f | grep x` is already filtered),
+**`guard-cat-bounds.sh`** denies a bare `cat` on a file past the line and byte bounds
+(values and subagent bar: `lib/README.md`). It never fires on a pipe (`cat f | grep x` is already filtered),
 on a redirect (`cat f > out` never enters the context), on binary or rendered formats, or on a
 second identical command from the same agent. `read-bounds.sh` applies the same two bounds since
 2026-09-12 — it tested the line count alone before, so a 119-line, 18 kB plan passed a `Read` and
@@ -159,7 +148,7 @@ the 30-day bill and nothing else guards them → `docs/CONTEXT-COST.md`.
 `cctoolkit doctor [--quiet] [--evals]`. One line per check, `ok` / `WARN` / `FAIL`, every
 non-ok line naming the command that repairs; it never repairs itself (Spotify's rule for its own
 `doctor`). Checks: the binaries the hooks need (`jq`, `python3`, `perl`, `rtk` and its identity
-through `rtk gain`, `graphify`, `claude`, `ast-grep`); `cctoolkit` enabled in a settings file
+through `rtk gain`, `graphify`, `ast-grep`); `cctoolkit` enabled in a settings file
 of the repo or the user, every settings file valid; every command of `hooks/hooks.json` pointing
 at an existing script and every `hooks/*.sh` registered there (a script nobody registered is a
 dead hook); leftovers of a manual install — `.claude/hooks/` registrations, `.claude/{hooks,lib,
@@ -168,7 +157,7 @@ skills,agents,tools,presets,evals}`, `scripts/` — that would run beside the pl
 the dispatcher's `MODULES` present in `lib/`; the git `post-checkout` hook that links the config
 into new worktrees; `graphify-out/graph.json` present, its lag through `graphify-freshness.sh`,
 the last autosync refusal in `/tmp/graphify-hook.log`;
-`+x` on tools, `bin/` and evals; `kit.config.json` through `kit_config.py validate`; `/tmp` leftovers older than two days.
+`+x` on tools, `bin/` and evals; `kit.config.json` through `kit_config.py validate`; `/tmp` leftovers older than three days.
 `--evals` also runs the hook evals and reports their summary line.
 
 Registered on `SessionStart` as `doctor --quiet || true`, after `session-cleanup.sh`: silent when
@@ -219,22 +208,11 @@ cctoolkit batch-wallclock                          # batches detected over 14 da
 cctoolkit batch-wallclock --sessions <id> --subagents
 ```
 
-## caveman without the plugin
-
-Installing the caveman plugin puts 7 skills and 3 agents in the listing of every turn, ~900 tokens,
-and `skillOverrides` cannot switch them off (official docs: names are unqualified, plugin skills are
-not affected). What actually carries the mode is two node hooks. Keeping them outside the plugin —
-copied to `~/.claude/caveman-local` and registered in `~/.claude/settings.json` — keeps the mode and
-drops the listing: `caveman-activate.js` (SessionStart, emits the ruleset read from
-`skills/caveman/SKILL.md`) and `caveman-mode-tracker.js` (UserPromptSubmit, 204 bytes per prompt,
-still serving `/caveman <level>` and `/caveman-stats`). Lost with the plugin: `/caveman-commit`,
-`/caveman-review`, `/caveman-compress`, `/caveman-help`, `/cavecrew` and the three cavecrew agents.
-
 ## Hook evals
 
 `cctoolkit evals [-v] [cases/x.json]` replays recorded payloads through the hooks and
-checks the decision, the rewritten command, the appended prompt or the injected context. 255
-cases in `evals/cases/*.json`, ~6 s, fixtures generated in `evals/.fixtures/` (ignored) and
+checks the decision, the rewritten command, the appended prompt or the injected context. Cases
+in `evals/cases/*.json`, fixtures generated in `evals/.fixtures/` (ignored) and
 `/tmp` state keyed by a run id and removed. Each defect found in production before 2026-09-12 is
 a case; the first run found two more — the heredoc rewrite above, and a byte-limit message in
 `bulk-read` (removed 2026-10-10). Shape borrowed from `plugins/shunt/evals/run.sh`. A hook change without a case is
@@ -242,13 +220,7 @@ not finished.
 
 ## Mods — `context-band`, `run-lot-pane`, `spec-pane`
 
-Function-hook plugins live under `mods/` and nowhere else — never under `skills/`, even though the engine would adopt a plugin folder there. The toolkit's `.claude-plugin/marketplace.json` lists them beside `cctoolkit`; a repo enables them in its `.claude/settings.json` (`enabledPlugins` `<mod>@cctoolkit`), independently of the kit. `CLAUDE_CODE_PLUGIN_DIRS` is ruled out, read from the process or `~/.claude/settings.json` only, so it would load every repo's copy in every session.
-
-- `context-band` — band above the prompt: context trend, 150k step and 250k ceiling, cache expiry, single-call turns, top contributions over 5 turns, graphify rebuild.
-- `run-lot-pane` — side pane following a Workflow run: phases, agents running and done, label, model, effort, current tool, durations, context and cost per agent, run outcome; a `run-plan` run opens on a plan view, `p` back to it, `1`-`9` a batch (1.2.0). Replaces `tdd-batch` (removed 2026-10-10: it armed only on `/implement-tdd`, dead once batches run through `run-lot`).
-- `spec-pane` — side pane following a `/business-spec`: decisions and answers, open questions, use cases, business rules and sections of the spec, full content on click.
-
-One copy for every repo, served by the plugin cache. New mod: written in the session's dev-mods folder (`plugin-authoring` skill), then copied with `rsync --exclude .claude-plugin/types/` and added to the root `marketplace.json`. Check: `claude plugin validate .` and `claude plugin test mods/<mod>`. `.claude-plugin/types/` is laid by the engine and ignored.
+Optional in-terminal panes, each its own plugin of the marketplace: what each shows, where they live and how a new one is added — [`mods/README.md`](../mods/README.md).
 
 ## Workflow `run-lot` — autonomous batch as a script
 
@@ -272,7 +244,7 @@ Before launching: previous batch committed (else `cctoolkit pre-audit` fails on 
 
 Resume (`resumeFromRunId`) is tied to the session id: after a session fork the journal is not found, and auto mode refuses to copy it (session transcript tampering). Then finish the batch with `/cctoolkit:implement-tdd`, sheet ticks fixed by hand.
 
-Requires the `Workflow` tool: `disableWorkflows` absent or `false` in `.claude/settings.local.json`, `Workflow` out of its `deny` (+2k startup tokens, measured 2026-10-09). The startup-trim template leaves it in.
+Requires the `Workflow` tool: `disableWorkflows` absent or `false` in `.claude/settings.local.json`, `Workflow` out of its `deny` (startup cost: `templates/README.md` § Startup trim). The startup-trim template leaves it in.
 
 ## Workflow `run-plan` — whole plan, one `run-lot` per batch
 

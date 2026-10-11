@@ -1,7 +1,7 @@
 #!/bin/bash
 # bash-dispatch module — hard ban on mutating Git commands.
 #
-# CLAUDE.md states "Never commit to Git", but an instruction is advisory:
+# The skills state "Never commit to Git" (skills/README.md), but an instruction is advisory:
 # nothing enforces it. This module makes it deterministic.
 #
 # Covers the forms `permissions.deny` misses, because it matches on a

@@ -4,6 +4,18 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 1.7.0 — 2026-10-11
+
+- `cctoolkit`: `scripts/migrate-rm-traits.py` removed (the four-column rule sheet it migrated is no longer produced); the test-tag adapters lose their `apply()` writers.
+- `cctoolkit`: `session-cleanup.sh` no longer restores the caveman flag of the hook removed in 1.0.0, nor sweeps the `graphify-seen` / `delegation` state nothing writes any more.
+- `cctoolkit`: `tools/doctor` no longer aborts in a linked worktree (undefined `$SETTINGS`); `batch-wallclock` and `learn-candidates` recognise `cctoolkit:`-namespaced skills and agents.
+- `cctoolkit`: `explore-guard` no longer appends "CLAUDE.md: English everywhere" to subagent prompts; `turn-batching-check` prints English labels.
+- `cctoolkit`: `templates/settings.local.json` (startup trim, opt-in) now ships — it was documented but ignored by git.
+- `run-lot-pane`: English display (`thinking`, `output`, `tool`, `waiting model`, decimal point); the pre-split `PLAN.md` / `## Lot FX` layout is no longer read.
+- Stale comments, dead references and duplicated docs cleaned across the kit.
+
+**Rules changed**: `rules/markdown-output.md` (frozen-literal rows no longer cite `scripts/migrate-rm-traits.py`).
+
 ## 1.6.0 — 2026-10-11
 
 - One version for the whole marketplace: `cctoolkit`, `context-band`, `run-lot-pane` and `spec-pane` all move to 1.6.0 and are released together from now on. No behaviour change: updating any of them pulls the same release.

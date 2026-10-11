@@ -6,7 +6,7 @@ import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
   alertOf, argumentOf, childWorkflowOf, lotRun, lotStateOf, mergeLots, parsePlanLots, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   detailsOf, duration, editedPath, errorOf, headlineOf, figuresLine, firstLine, fit, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
-  parseJournal, parseLotSection, parsePhases, parseSheet, phaseInsight, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
+  parseJournal, parsePhases, parseSheet, phaseInsight, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
   liveSignalOf, stallReasons, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, weightOf, withFile, withSamples,
 } from '../hooks/register'
 
@@ -107,44 +107,6 @@ const SPAN_JOURNAL = JSON.stringify({
     { type: 'workflow_agent', agentId: 'h4', phaseTitle: 'GREEN', state: 'done', startedAt: 181_000, durationMs: 240_000, toolCalls: 12 },
   ],
 })
-
-const PLAN_PATH = 'todo/catalog-lifecycle/PLAN.md'
-const PLAN_ARGUMENT = `F2 ${PLAN_PATH}`
-
-const PLAN = `# PLAN — Catalogue et produits
-
-## Avancement
-
-| Lot | Intention | RM/CU | Dépend de | État |
-|-----|-----------|-------|-----------|------|
-| F1 | Produits | RM-01 / CU-01 | — | ✅ |
-| F2 | Archivages en catalogue | RM-05 / CU-03 | F1 | ⬜ |
-
-## Lot F1 — Produits et catalogue — ✅
-
-#### Étape 1 — Le gestionnaire crée un produit — ✅
-
-### Hypothèses
-- H1 — hors lot F2
-
-## Lot F2 — Archivages payés en catalogue — ⬜
-
-### Étapes et tests
-
-#### Étape 1 — Le gestionnaire archive un produit contre un motif — ✅
-
-#### Étape 2 — Le gestionnaire voit les archivages en catalogue — ⬜
-
-#### Étape 3 — Vérification — ⬜
-
-### Hypothèses
-- H1 — suppression de \`income.ts\` reportée — à valider par l'utilisateur.
-- H2 — fixtures d'envoi adaptées — à valider par l'utilisateur.
-
-## Lot F10 — Publication — ⬜
-
-#### Étape 1 — Le gestionnaire publie un produit — ⬜
-`
 
 const KILLED_JOURNAL = JSON.stringify({ status: 'killed', durationMs: 5_000, args: SHEET_PATH })
 const JOURNAL_PATH = `${SESSION}/workflows/${RUN}.json`
@@ -274,36 +236,10 @@ describe('reading the run', () => {
     expect(lotOf('todo/x/notes.md')).toBeNull()
     expect(lotOf(null)).toBeNull()
     expect(argumentOf({ name: 'run-lot', args: `  ${SHEET_PATH} ` })).toBe(SHEET_PATH)
-    expect(argumentOf({ args: { fiche: SHEET_PATH } })).toBe(SHEET_PATH)
+    expect(argumentOf({ args: { sheet: SHEET_PATH } })).toBe(SHEET_PATH)
     expect(argumentOf({ name: 'run-lot' })).toBeNull()
     expect(sheetPathOf(SHEET_PATH)).toBe(SHEET_PATH)
-    expect(sheetPathOf('todo/x/PLAN.md')).toBeNull()
-  })
-
-  test('batch plan: batch and folder from `Fn todo/<slug>/PLAN.md`, plan path followed', () => {
-    expect(lotOf(PLAN_ARGUMENT)).toEqual({ lot: 'F2', code: 'catalog-lifecycle' })
-    expect(lotOf(`F2 @${PLAN_PATH}`)).toEqual({ lot: 'F2', code: 'catalog-lifecycle' })
-    expect(sheetPathOf(PLAN_ARGUMENT)).toBe(PLAN_PATH)
-    expect(sheetPathOf(`F2 /repo/${PLAN_PATH}`)).toBe(`/repo/${PLAN_PATH}`)
-    expect(lotOf('F2 todo/x/notes.md')).toBeNull()
-  })
-
-  test('batch plan: `## Lot Fn` section only, steps ticked by title, batch assumptions', () => {
-    const sheet = parseLotSection(PLAN, 'F2')
-    expect(sheet).toEqual({
-      lot: 'F2',
-      name: 'Archivages payés en catalogue',
-      isDone: false,
-      hypotheses: 2,
-      steps: [
-        { number: '1', title: "Le gestionnaire archive un produit contre un motif", isDone: true, tdd: null, corrections: [] },
-        { number: '2', title: 'Le gestionnaire voit les archivages en catalogue', isDone: false, tdd: null, corrections: [] },
-        { number: '3', title: 'Vérification', isDone: false, tdd: null, corrections: [] },
-      ],
-    })
-    expect(parseLotSection(PLAN, 'F1')).toMatchObject({ isDone: true, hypotheses: 1, steps: [{ number: '1', isDone: true }] })
-    expect(parseLotSection(PLAN, 'F10')?.steps.map(step => step.title)).toEqual(['Le gestionnaire publie un produit'])
-    expect(parseLotSection(PLAN, 'F3')).toBeNull()
+    expect(sheetPathOf('todo/x/X-PLAN.md')).toBeNull()
   })
 
   test('sheet: steps, TDD marks, fixes, assumptions, step closed by its title', () => {
@@ -403,14 +339,14 @@ describe('history, estimated end, stall, cost and alert', () => {
     expect(throughputOf(streaming(16_000, 100_000))).toBe(40)
     expect(throughputOf(streaming(600, 999))).toBeNull()
     expect(throughputOf(running({ streamChars: 600, firstChunkAt: 0, lastChunkAt: 5_000 }))).toBeNull()
-    expect(liveSignalOf(streaming(1_600, 61_000), 61_000)).toBe('lent')
+    expect(liveSignalOf(streaming(1_600, 61_000), 61_000)).toBe('slow')
     expect(liveSignalOf(streaming(1_600, 60_000), 60_000)).toBeNull()
     expect(liveSignalOf(streaming(36_600, 61_000), 61_000)).toBeNull()
     expect(liveSignalOf(streaming(1_600, 61_000), 121_001)).toBe('idle 1m')
     expect(liveSignalOf(running({ waitingSince: 0 }), 120_000)).toBeNull()
-    expect(liveSignalOf(running({ waitingSince: 0 }), 120_001)).toBe('attente')
+    expect(liveSignalOf(running({ waitingSince: 0 }), 120_001)).toBe('waiting')
     expect(liveSignalOf(running({ openCalls: 1, toolSince: 0 }), 300_000)).toBeNull()
-    expect(liveSignalOf(running({ openCalls: 1, toolSince: 0, waitingSince: 0 }), 300_001)).toBe('outil long')
+    expect(liveSignalOf(running({ openCalls: 1, toolSince: 0, waitingSince: 0 }), 300_001)).toBe('long tool')
     expect(liveSignalOf(agentOf('d', 'GREEN', 'done', { waitingSince: 0 }), 600_000)).toBeNull()
   })
 
@@ -750,42 +686,6 @@ test('audit verdict read from the audit agent’s structured answer, the last on
   expect(valid?.props.color).toBe('success')
 })
 
-test('batch plan: sheet read from the batch section, header named by the folder, no Review phase', async ($, on) => {
-  const reads: string[] = []
-  const stamps: Stamps = {}
-  const files: Record<string, string> = {
-    [`${SESSION}/workflows/scripts/run-lot-${RUN}.js`]: `export const meta = {
-  name: 'run-lot',
-  description: 'Lot',
-  phases: [{ title: 'Design' }, { title: 'RED' }, { title: 'GREEN' }, { title: 'Global green' }, { title: 'Audit' }, { title: 'Closing' }],
-}
-`,
-    [PLAN_PATH]: PLAN,
-  }
-  const clock = world(on, files, { stamps, reads })
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await launch($, PLAN_ARGUMENT)
-  await $.agent.spawn(spawn('design', 1))
-  await clock.advance(2_000)
-
-  const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /✻ run-lot · F2 · catalog-lifecycle/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /SHEET F2 · 2 hypotheses/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^1\/3 steps$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /✓ 1 Le joueur envoie une/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /○ 2 Le joueur voit les envois/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Review/ })).toBeUndefined()
-  await ui.unmount()
-
-  files[PLAN_PATH] = PLAN.replace('#### Étape 2 — Le gestionnaire voit les archivages en catalogue — ⬜', '#### Étape 2 — Le gestionnaire voit les archivages en catalogue — ✅')
-  stamps[PLAN_PATH] = 2
-  await clock.advance(2_000)
-  const after = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await after.find({ type: 'Text', text: /^2\/3 steps$/ })).toBeDefined()
-  expect(await after.find({ type: 'Text', text: /✓ 2 Le joueur voit les envois/ })).toBeDefined()
-  await after.unmount()
-})
-
 test('empty pane without a run, calls outside a workflow ignored, close button present', async ($, on) => {
   const closed: string[] = []
   world(on, {}, { closed })
@@ -814,7 +714,7 @@ test('running demo: columns, model, retry, slow agent, stalled, interrupted, est
     expect((await ui.find({ key: 'model-demo-g1' }))?.text).toBe('Sonnet · high')
     expect(await colorOf(ui, 'agent-demo-g2b-time')).toBe('warning')
     expect(await colorOf(ui, 'agent-demo-g1-time')).toBe('inactive')
-    expect(await ui.find({ type: 'Text', text: /^ {9}● réflexion · 4,2k car\. · 160 tok\/s · Edit \(48\) · ctx 36k · ⚠ 48 tools$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^ {9}● thinking · 4.2k chars · 160 tok\/s · Edit \(48\) · ctx 36k · ⚠ 48 tools$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /tdd-implementer, ser/ })).toBeDefined()
     expect(await ui.find({ type: 'Button', text: /○ Global green/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /whole or filtered suites/ })).toBeDefined()
@@ -1051,12 +951,12 @@ test('stalling agent: yellow reason under the agent row and in its card, idle ou
   const pending = $.tool.call({ tool: 'Bash', agentId: 'a3', command: 'dotnet test' } as unknown as Parameters<typeof $.tool.call>[0])
   await clock.advance(190_000)
   const waiting = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await waiting.find({ type: 'Text', text: /^ {9}outil Bash 3 min · Bash \(1\)$/ })).toBeDefined()
+  expect(await waiting.find({ type: 'Text', text: /^ {9}tool Bash 3 min · Bash \(1\)$/ })).toBeDefined()
   await waiting.unmount()
   await clock.advance(120_000)
   const long = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await long.find({ type: 'Text', text: /^ {9}outil Bash 5 min · Bash \(1\) · ⚠ outil long$/ })).toBeDefined()
-  expect((await long.find({ type: 'Text', text: /^ · ⚠ outil long$/ }))?.props.color).toBe('warning')
+  expect(await long.find({ type: 'Text', text: /^ {9}tool Bash 5 min · Bash \(1\) · ⚠ long tool$/ })).toBeDefined()
+  expect((await long.find({ type: 'Text', text: /^ · ⚠ long tool$/ }))?.props.color).toBe('warning')
   await long.unmount()
 
   release()
@@ -1098,7 +998,7 @@ test('followed stream: waiting for the first chunk, thinking then output with ch
   await launch($)
   await $.agent.spawn(spawn('RED 1', 1))
   await drain($.turn.step(step('a1')))
-  expect(seen).toEqual(['○ attente modèle 40 s', '● réflexion · 3,8k car. · 160 tok/s', '● sortie · 4,5k car. · 160 tok/s'])
+  expect(seen).toEqual(['○ waiting model 40 s', '● thinking · 3.8k chars · 160 tok/s', '● output · 4.5k chars · 160 tok/s'])
   expect(await activityLine($)).toBe('ctx 43k')
 })
 
@@ -1117,7 +1017,7 @@ test('followed stream: one write per second at most, never per chunk', async ($,
   await launch($)
   await $.agent.spawn(spawn('RED 1', 1))
   await drain($.turn.step(step('a1')))
-  expect(seen).toEqual([...Array(5).fill('○ attente modèle 0 s'), '● sortie · 600 car. · 150 tok/s', '● sortie · 600 car. · 150 tok/s'])
+  expect(seen).toEqual([...Array(5).fill('○ waiting model 0 s'), '● output · 600 chars · 150 tok/s', '● output · 600 chars · 150 tok/s'])
 })
 
 test('signals during a stream: slow at a sustained 4 tok/s, never idle nor slow at 150 tok/s, idle after 60 s without a chunk, waiting beyond 120 s', async ($, on) => {
@@ -1155,13 +1055,13 @@ test('signals during a stream: slow at a sustained 4 tok/s, never idle nor slow 
   await drain($.turn.step(step('a1', 1)))
   await drain($.turn.step(step('a1', 2)))
   expect(seen).toEqual([
-    '● sortie · 480 car. · 4 tok/s',
-    '● sortie · 1,1k car. · 4 tok/s · ⚠ lent',
-    '● sortie · 1,1k car. · 4 tok/s · ⚠ idle 1m',
-    '○ attente modèle 1 min · ctx 43k',
-    '○ attente modèle 2 min · ctx 43k · ⚠ attente',
-    '● sortie · 18k car. · 150 tok/s · ctx 43k',
-    '● sortie · 42k car. · 150 tok/s · ctx 43k',
+    '● output · 480 chars · 4 tok/s',
+    '● output · 1.1k chars · 4 tok/s · ⚠ slow',
+    '● output · 1.1k chars · 4 tok/s · ⚠ idle 1m',
+    '○ waiting model 1 min · ctx 43k',
+    '○ waiting model 2 min · ctx 43k · ⚠ waiting',
+    '● output · 18k chars · 150 tok/s · ctx 43k',
+    '● output · 42k chars · 150 tok/s · ctx 43k',
   ])
 })
 
@@ -1190,7 +1090,7 @@ describe('batch plan through run-plan', () => {
     expect(childWorkflowOf("await workflow({ scriptPath: `${pre.kit}/workflows/run-lot.js` }, b.sheet)")).toBe('run-lot')
     expect(childWorkflowOf("await workflow('cctoolkit:run-lot', s)")).toBe('run-lot')
     expect(promptLotOf('mode: next-batch /r/X-PLAN-F3.md /r/X-PLAN-F2.md')).toEqual({ lot: 'F2', sheet: '/r/X-PLAN-F2.md' })
-    expect(planPathOf('todo/cat/CAT-PLAN.md --seul F2')).toBe('todo/cat/CAT-PLAN.md')
+    expect(planPathOf('todo/cat/CAT-PLAN.md --only F2')).toBe('todo/cat/CAT-PLAN.md')
     expect(planPathOf('todo/cat/CAT-PLAN-F2.md')).toBeNull()
     expect(promptLotOf(lotPrompt('F2'))).toEqual({ lot: 'F2', sheet: '/repo/todo/cat/CAT-PLAN-F2.md' })
     expect(promptLotOf('mode: lot-suivant /repo/todo/cat/CAT-PLAN-F3.md /repo/todo/cat/CAT-PLAN-F2.md\n\nReturn')).toEqual({ lot: 'F2', sheet: '/repo/todo/cat/CAT-PLAN-F2.md' })
@@ -1274,7 +1174,7 @@ const result = await workflow('run-lot', b.sheet)
   }
   const clock = world(on, files, { workflowName: 'run-plan' })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await launch($, `${RUN_PLAN_PATH} --jusqu-a F3`)
+  await launch($, `${RUN_PLAN_PATH} --until F3`)
   await $.agent.spawn(spawn('preflight', 1, 'Workflow run-plan, supervisor step.'))
   await $.turn.complete(complete('a1'))
   await $.agent.spawn(spawn('design', 2, lotPrompt('F1')))
@@ -1320,7 +1220,7 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /^Supervisor$/ })).toBeDefined()
   await ui.press({ key: 'open-lot-F2' })
   expect(await ui.find({ type: 'Text', text: /SHEET F2/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {9}outil Bash 2 min · Bash \(17\) · ctx \d+k$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {9}tool Bash 2 min · Bash \(17\) · ctx \d+k$/ })).toBeDefined()
   await ui.unmount()
 
   await $.command.run({ command: 'run-lot-pane', args: 'demo plan end' } as Parameters<typeof $.command.run>[0])

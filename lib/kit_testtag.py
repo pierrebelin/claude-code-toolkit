@@ -15,9 +15,8 @@ carrier changes with the test framework, chosen by `testTag.framework`:
 and the four scripts read tests through `adapter(config).scan(path)` — one copy of
 the parsing, never one per caller.
 
-A scanned test: `Test(path, cls, method, line, tags, anchor, indent)` — `line` is the
-1-based line of the method or call, `anchor` the 0-based line a new tag is written
-relative to (scripts/migrate-rm-traits.py).
+A scanned test: `Test(path, cls, method, line, tags)` — `line` is the 1-based line of
+the method or call.
 """
 import fnmatch
 import os
@@ -29,11 +28,11 @@ class TestTagError(Exception):
 
 
 class Test:
-    __slots__ = ("path", "cls", "method", "line", "tags", "anchor", "indent")
+    __slots__ = ("path", "cls", "method", "line", "tags")
 
-    def __init__(self, path, cls, method, line, tags, anchor, indent):
+    def __init__(self, path, cls, method, line, tags):
         self.path, self.cls, self.method, self.line = path, cls, method, line
-        self.tags, self.anchor, self.indent = tags, anchor, indent
+        self.tags = tags
 
     @property
     def key(self):
@@ -85,10 +84,6 @@ class Adapter:
     def scan(self, path):
         raise NotImplementedError
 
-    def apply(self, lines, test, values):
-        """Writes `values` onto `test` in `lines` (read with keepends)."""
-        raise NotImplementedError
-
 
 class XUnit(Adapter):
     name = "xunit"
@@ -98,7 +93,7 @@ class XUnit(Adapter):
     tag_label = '`[Trait("RM", …)]`'
     example = '[Trait("RM", "CreateProduct/RM-01")]'
     CLASS = re.compile(r"^\s*(?:public|internal)\s+(?:sealed\s+|abstract\s+|partial\s+)*class\s+(\w+)")
-    ATTR = re.compile(r"^(\s*)\[(?:Fact|Theory)[\](]")
+    ATTR = re.compile(r"^\s*\[(?:Fact|Theory)[\](]")
     METHOD = re.compile(r"^\s*(?:public|internal)\s+(?:async\s+)?(?:Task|void|ValueTask)\s+(\w+)\s*\(")
 
     def __init__(self, regex=None, files=None):
@@ -111,17 +106,16 @@ class XUnit(Adapter):
 
     def scan(self, path):
         out = []
-        cls, anchor, indent, carried = None, None, "", []
+        cls, armed, carried = None, None, []
         for i, line in enumerate(_read_lines(path)):
             cm = self.CLASS.match(line)
             if cm:
-                cls, anchor, carried = cm.group(1), None, []
+                cls, armed, carried = cm.group(1), None, []
                 continue
-            am = self.ATTR.match(line)
-            if am:
-                anchor, indent, carried = i, am.group(1), []
+            if self.ATTR.match(line):
+                armed, carried = i, []
                 continue
-            if anchor is None:
+            if armed is None:
                 continue
             tm = self.line_tag.match(line)
             if tm:
@@ -129,12 +123,9 @@ class XUnit(Adapter):
                 continue
             mm = self.METHOD.match(line)
             if mm and cls:
-                out.append(Test(path, cls, mm.group(1), i + 1, carried, anchor, indent))
-                anchor = None
+                out.append(Test(path, cls, mm.group(1), i + 1, carried))
+                armed = None
         return out
-
-    def apply(self, lines, test, values):
-        lines.insert(test.anchor + 1, "".join(f'{test.indent}[Trait("RM", "{v}")]\n' for v in values))
 
 
 class Pytest(Adapter):
@@ -166,12 +157,9 @@ class Pytest(Adapter):
                 classes = [c for c in classes if c[0] < ind]
                 if dm.group(2).startswith("test"):
                     cls = classes[-1][1] if classes else module
-                    out.append(Test(path, cls, dm.group(2), i + 1, pending, i, dm.group(1)))
+                    out.append(Test(path, cls, dm.group(2), i + 1, pending))
                 pending = []
         return out
-
-    def apply(self, lines, test, values):
-        lines.insert(test.anchor, "".join(f'{test.indent}@pytest.mark.rm("{v}")\n' for v in values))
 
 
 class JUnit(Adapter):
@@ -182,12 +170,12 @@ class JUnit(Adapter):
     tag_label = '`@Tag("RM:…")`'
     example = '@Tag("RM:CreateProduct/RM-01")'
     CLASS = re.compile(r"^\s*(?:(?:public|protected|private|abstract|final|static|sealed|open|internal|data|inner)\s+)*(?:class|object)\s+(\w+)")
-    MARKER = re.compile(r"^(\s*)@(?:Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b")
+    MARKER = re.compile(r"^\s*@(?:Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b")
     NAME = re.compile(r"(`[^`]+`|[A-Za-z_]\w*)\s*\(")
 
     def scan(self, path):
         out = []
-        cls, armed, indent, pending = None, None, "", []
+        cls, armed, pending = None, None, []
         for i, line in enumerate(_read_lines(path)):
             s = line.strip()
             cm = self.CLASS.match(line)
@@ -196,21 +184,17 @@ class JUnit(Adapter):
                 continue
             if s.startswith("@"):
                 pending.extend(self.values_in(line))
-                mm = self.MARKER.match(line)
-                if mm:
-                    armed, indent = i, mm.group(1)
+                if self.MARKER.match(line):
+                    armed = i
                 continue
             if not s or s.startswith("//") or s.startswith("*") or s.startswith("/*"):
                 continue
             if armed is not None and cls:
                 nm = self.NAME.search(line)
                 if nm:
-                    out.append(Test(path, cls, nm.group(1).strip("`"), i + 1, pending, armed, indent))
+                    out.append(Test(path, cls, nm.group(1).strip("`"), i + 1, pending))
             armed, pending = None, []
         return out
-
-    def apply(self, lines, test, values):
-        lines.insert(test.anchor + 1, "".join(f'{test.indent}@Tag("RM:{v}")\n' for v in values))
 
 
 class Jest(Adapter):
@@ -237,17 +221,8 @@ class Jest(Adapter):
                 continue
             tags = [v for _, t in stack for v in self.values_in(t)] + self.values_in(title)
             name = " > ".join([t for _, t in stack] + [title])
-            out.append(Test(path, cls, name, i + 1, tags, i, m.group(1)))
+            out.append(Test(path, cls, name, i + 1, tags))
         return out
-
-    def apply(self, lines, test, values):
-        line = lines[test.anchor]
-        m = self.CALL.match(line)
-        if not m:
-            return
-        prefix = "".join(f"[RM {v}] " for v in values)
-        at = m.start(4)
-        lines[test.anchor] = line[:at] + prefix + line[at:]
 
 
 ADAPTERS = {a.name: a for a in (XUnit, Pytest, JUnit, Jest)}

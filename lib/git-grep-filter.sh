@@ -3,11 +3,11 @@
 # (profile `git-grep`).
 #
 # Groups matches under a per-file header instead of repeating the path on every
-# line. Nothing is dropped: every match and every full line survives, which is what
-# "aucune limite de grep" in CLAUDE.md requires — the saving is pure path
-# repetition. Measured 2026-09-10: `git grep -n DiagramNode` 2063 kB -> -48 %,
-# ProductRelease 145 kB -> -33 %, ProductItemId 52 kB -> -32 %. Paths in this
-# repo run ~130 characters against ~100 for the matched content, hence the ratio.
+# line. Nothing is dropped: every match and every full line survives, so grep
+# output is never capped — the saving is pure path repetition. Measured
+# 2026-09-10 on three symbols of a .NET repo: 2063 kB -> -48 %, 145 kB -> -33 %,
+# 52 kB -> -32 %. Paths in that repo run ~130 characters against ~100 for the
+# matched content, hence the ratio.
 #
 # The tradeoff, chosen deliberately: the header path is clickable, the individual
 # matches are not. Truncating long lines was the alternative and buys only 8-10 %.

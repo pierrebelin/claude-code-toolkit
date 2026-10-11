@@ -1,16 +1,11 @@
 #!/bin/bash
 # PreToolUse Bash hook — single entry point for every Bash guard.
 #
-# Why one dispatcher instead of four hooks. Measured on 2026-09-09, the previous
-# chain cost ~75 ms per Bash call (git-guard 22, rtk-normalize 19,
-# graphify-enforce 14, plus a dead graphify-usage logger at 20) and each stage
-# re-ran its own `cat` + `jq` on the same payload.
-#
-# It also removes a real bug: rtk-normalize and graphify-enforce both returned an
-# `updatedInput` for the same command (`grep -rn ProductKey .` produced both
-# `rtk grep -rn ProductKey .` and `graphify explain "ProductKey"`), with no defined
-# winner — and graphify burned its per-session escape hatch even when rtk won.
-# Here the order is explicit and only one stage ever answers.
+# Why one dispatcher. Each guard used to be its own hook, re-running `cat` + `jq`
+# on the same payload (~75 ms per Bash call for four of them, measured 2026-09-09),
+# and two of them could both rewrite the same command with no defined winner.
+# Here the payload is parsed once, the order is explicit and only one stage ever
+# answers.
 #
 # Order:
 #   1. guard-git         deny / ask -> terminal, nothing else runs
@@ -19,11 +14,6 @@
 #   4. guard-integration deny       -> terminal, a whole IntegrationTests suite never runs
 #   5. piped-filter x2   rewrite    -> terminal, rtk knows neither of these tools
 #   6. rewrite-rtk       rewrite    -> the default path
-#
-# guard-graphify-grep sat in second position until 2026-09-13: it ran a
-# `graphify explain` on every symbol-looking grep to decide whether to
-# substitute — 2.25 s per call measured — and substituted once in the last 60
-# sessions, never followed by a re-grep. Removed: cost with no decision behind it.
 #
 # A module entry may carry an argument, which is why MODULES is an array and the
 # expansion below is deliberately unquoted: the strings are ours, not the user's.

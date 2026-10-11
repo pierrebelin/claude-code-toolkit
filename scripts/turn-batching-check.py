@@ -6,7 +6,8 @@ accumulated context. Two independent calls made in two turns pay that accumulati
 twice. This script measures what could have fitted in a single message.
 
 Usage:
-    cctoolkit turn-batching-check [--days N] [--project <substring>]
+    cctoolkit turn-batching-check [--days N] [--until YYYY-MM-DD] [--project <substring>]
+                                  [--save-baseline <file.json>] [--compare <file.json>]
 
 By default the project filter is derived from the repository folder name, which is
 how Claude Code names the transcript directory under ~/.claude/projects.
@@ -36,7 +37,7 @@ except ImportError:
     REPO_ROOT = HERE
 DEFAULT_PROJECT = re.sub(r"[^A-Za-z0-9]+", "-", os.path.basename(REPO_ROOT)).strip("-")
 READ_TOOLS = {"Read", "Grep", "Glob"}
-# Emitted verbatim by .claude/hooks/read-bounds.sh — frozen literal.
+# Emitted verbatim by hooks/read-bounds.sh — frozen literal.
 DENIAL_MARK = "Unbounded Read on"
 # Emitted verbatim by lib/guard-cat-bounds.sh and lib/guard-diff-bounds.sh — frozen literals.
 BASH_DENIAL_MARKS = ("Unbounded cat on", "Unbounded head on", "Unbounded tail on", "Unbounded patch")
@@ -102,19 +103,19 @@ def after_denial(name, command, payload, refused):
     """
     if name == "Read":
         if "offset" in payload or "limit" in payload:
-            return "Read borne"
+            return "bounded Read"
         if payload.get("file_path") == refused:
-            return "forcage (meme Read reemis)"
-        return "Read entier d'un autre fichier"
+            return "forcing (same Read re-issued)"
+        return "whole Read of another file"
     if name == "Bash":
         head = command.strip()
         if re.match(r"^(sed -n|head |tail |grep |rg |git grep|graphify |rtk )", head):
-            return "Bash borne (sed -n, head, grep, graphify)"
+            return "bounded Bash (sed -n, head, grep, graphify)"
         if head.startswith("cat "):
             return "cat"
-        return "Bash autre"
+        return "other Bash"
     if name == "Agent":
-        return "sous-agent"
+        return "subagent"
     return name or "?"
 
 

@@ -87,7 +87,7 @@ also prints the **call that follows a refusal** on the main chain — bounded Re
 subagent, `cat`, other Bash. That is the production form of Spotify's behavioural evals
 (`plugins/shunt/evals/evals.json`: "blocked by the hook, then invokes bulk-read"): it measures
 the path actually taken instead of asking a model whether it would take it. First reading over
-7 days: 17 follow-ups, 10 of them "Bash autre" — refine the classifier as patterns appear. Lowered 300 to 120 on
+7 days: 17 follow-ups, 10 of them "other Bash" — refine the classifier as patterns appear. Lowered 300 to 120 on
 2026-09-08: at 300 the hook only caught the giant aggregates, while 42 of 59 unbounded Reads
 that day were on files of 23 to 303 lines. The cost was the count, not one huge read.
 
@@ -195,7 +195,7 @@ Changes made on 2026-09-12, to be measured against the table above after five ba
 1. `scripts/pre-audit.sh` gates the fork — ids, comments, scope, traits, closed sheet, whitespace.
 2. `closing.md` §1-2 (sheet, handler `CLAUDE.md`, index) run before the gate, not after the verdict.
 3. The orchestrator's hunk-by-hunk diff re-read at closing is removed; the auditor's walk stays.
-4. `## RED` carries `Diff production`, `## GREEN` carries `Diff tests`: the orchestrator no
+4. `## RED` carries `Production diff`, `## GREEN` carries `Tests diff`: the orchestrator no
    longer opens the diff to check test-first integrity.
 5. The RED contract names the test class, the fixture and the methods; `tdd-test-author` runs at
    `effort: low`. Watch its round trips and its share of `## BLOCKED`; back to `medium` if the
@@ -216,7 +216,7 @@ Changes made on 2026-09-12, to be measured against the table above after five ba
 9. `implement-tdd/SKILL.md` 26.7 kB → 21.2 kB (~1.4 k tokens less per turn of a batch): every
    measurement and reason moved to `references/rationale.md`, never loaded during a batch. The
    rest is contract templates and rules — cutting further cuts instructions.
-10. Sheet ticks: one `Edit` per behaviour after COUT, one per file at closing.
+10. Sheet ticks: one `Edit` per behaviour after COST, one per file at closing.
 
 Second round, same day, from the transcripts of sessions `7df05023` (lot F4, 2026-09-10, 138
 turns, $26.8), `123817d9` and `eb3b18a4` (plans) and the subagent runs of 2026-09-10:
@@ -245,7 +245,7 @@ turns, $26.8), `123817d9` and `eb3b18a4` (plans) and the subagent runs of 2026-0
 16. Agents: a new file is one `Write`, edits on distinct files share a message. Measured
     2026-09-10, one `tdd-implementer` run of 108 turns: 19 consecutive `Edit` turns and 14
     `rtk grep` (42 kB); one `tdd-test-author` run of 55 turns: 7 consecutive `Edit` turns.
-17. **COUT read off the syntax tree.** `scripts/access-cost.py` (ast-grep rules under
+17. **COST read off the syntax tree.** `scripts/access-cost.py` (ast-grep rules under
     `scripts/access-cost/rules/`) lists the awaited Infrastructure calls of the files
     `tdd-implementer` touched, flags loop, lambda and in-memory filter, and prints the `Cost`
     line its `## GREEN` copies; `audit-capture.sh` runs it `--diff` for the `Cost` axis, added

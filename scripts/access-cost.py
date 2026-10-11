@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Access cost of a behaviour — the COUT step of the TDD cycle, mechanically.
+"""Access cost of a behaviour — the COST step of the TDD cycle, mechanically.
 
 No test observes the number of Infrastructure calls a handler makes: a handler
 doing 1 query and one doing 2N+2 are equally green. Until 2026-09-12 the

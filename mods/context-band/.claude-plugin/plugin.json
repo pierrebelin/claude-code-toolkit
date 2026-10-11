@@ -1,6 +1,6 @@
 {
   "name": "context-band",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Line under the prompt input: context meter, cache expiry, single-call streak, 5h limit, session time, turns and cost, top context contributors, graphify rebuild",
   "author": {
     "name": "Pierre Belin",

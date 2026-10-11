@@ -72,13 +72,13 @@ else
   report FAIL "rtk" "not on PATH — rewrite-rtk.sh has nothing to call"
 fi
 command -v graphify >/dev/null 2>&1 && report ok "binary graphify" "$(command -v graphify)" || report FAIL "binary graphify" "not on PATH — affected-blast-radius and the autosync are dead (docs/TOOLING.md of the kit)"
-command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report ok "binary ast-grep" || report WARN "binary ast-grep" "cctoolkit access-cost exits 3, COUT stated by hand; structural search unavailable (brew install ast-grep)"
+command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report ok "binary ast-grep" || report WARN "binary ast-grep" "cctoolkit access-cost exits 3, COST stated by hand; structural search unavailable (brew install ast-grep)"
 
 # --- plugin registration and hook wiring ----------------------------------------
 # The hooks ship in the plugin (hooks/hooks.json, paths under ${CLAUDE_PLUGIN_ROOT});
 # what the repo carries is the plugin's enablement in a settings file. Committed in
 # .claude/settings.json it reaches every clone and worktree; in settings.local.json
-# only this checkout (a worktree then needs scripts/install-git-hooks.sh).
+# only this checkout (a worktree then needs `cctoolkit install-git-hooks`).
 local_hooks=0
 enabled_in=""
 for f in "$CL/settings.json" "$CL/settings.local.json" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"; do
@@ -103,7 +103,7 @@ if [ -n "$enabled_in" ]; then
   report ok "plugin enabled" "cctoolkit in${enabled_in}"
   case "$enabled_in" in *settings.json*) local_hooks=0 ;; esac
 else
-  report FAIL "plugin enabled" "cctoolkit is not enabled for $ROOT — no kit hook fires here (README § Installation)"
+  report FAIL "plugin enabled" "cctoolkit is not enabled for $ROOT — no kit hook fires here (INSTALL.md)"
 fi
 HJ="$KIT/hooks/hooks.json"
 if [ ! -f "$HJ" ]; then
@@ -191,7 +191,7 @@ if git -C "$ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
   main=$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
   here=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)
   if [ -n "$main" ] && [ "$here" != "$main" ]; then
-    { [ "$local_hooks" -eq 0 ] || [ -L "$SETTINGS" ]; } && report ok "worktree" "$here, hooks reach it from $main" \
+    { [ "$local_hooks" -eq 0 ] || [ -L "$CL/settings.local.json" ]; } && report ok "worktree" "$here, hooks reach it from $main" \
       || report WARN "worktree" "$here has its own settings.local.json — edits here never reach $main"
   fi
 else

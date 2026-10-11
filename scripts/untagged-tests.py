@@ -16,7 +16,6 @@ Two categories, which do not read the same way:
 import collections
 import datetime
 import os
-import re
 import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -1,6 +1,5 @@
 #!/bin/bash
-# PreToolUse Read hook — require offset/limit on large files, then count the
-# reads that go through towards the delegation nudge.
+# PreToolUse Read hook — require offset/limit on large files.
 #
 # Read is 30% of context fill (5.6 MB measured over 30 days) and only 34% of
 # calls are bounded. A full aggregate read is ~24k characters carried to the end
@@ -14,8 +13,7 @@
 # Bash cat/grep in two sessions, each carried to the end. 120 catches the test
 # fixtures and infrastructure files (160 to 500 lines) that made up that volume.
 #
-# Escape hatch, same shape as the graphify substitution (lib/guard-graphify-grep.sh, removed 2026-09-13):
-# the denial is recorded per (agent, file). Re-issuing the identical unbounded
+# Escape hatch: the denial is recorded per (agent, file). Re-issuing the identical unbounded
 # Read passes through — that is how you force a full read when you genuinely want
 # one.
 #
@@ -42,8 +40,6 @@ IFS=$'\x1f' read -r tool_name session_id agent_id file_path has_offset has_limit
 [ "$tool_name" = "Read" ] || exit 0
 [ -n "$file_path" ] || exit 0
 [ -f "$file_path" ] || exit 0
-
-export HOOK_SESSION_ID="$session_id" HOOK_AGENT_ID="$agent_id" HOOK_FILE_PATH="$file_path"
 
 pass() { exit 0; }
 

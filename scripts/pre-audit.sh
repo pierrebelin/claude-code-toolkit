@@ -11,7 +11,8 @@ set -uo pipefail
 # left unclosed. Each one cost a five-minute Opus audit
 # plus a correction round plus a `resume` audit. This script fails on every
 # one of them before the audit is forked — except comments, listed for the
-# audit to judge since 2026-10-09.
+# audit to judge since 2026-10-09, and `.claude/` / `todo/` hunks, never counted
+# as outside the batch since 1.3.1: they were the user's own harness edits.
 #
 # What stays with the audit: correctness, reuse, placement, cost, a stale plan.
 # None of that is decidable by a grep.

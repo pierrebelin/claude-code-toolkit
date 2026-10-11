@@ -47,7 +47,6 @@ const LOT_WAITING = ['ATTENTE-RÉPONSE', 'AWAITING-ANSWER']
 const WAITING_TONE = 'cyan'
 const REPORT_NAMES = ['rapport', 'report']
 const REPORT_PHASE = 'Report'
-const PLAN_LOT_PATTERN = /^(F\d+)\s+@?((?:\S*\/)?([^/\s]+)\/PLAN\.md)$/
 
 type Launched = { status?: string; runId?: string; scriptPath?: string; workflowName?: string; transcriptDir?: string }
 
@@ -272,27 +271,18 @@ export const argumentOf = (input: Record<string, unknown>): string | null => {
   const given = input.args
   if (typeof given === 'object' && given !== null) {
     const fields = given as Record<string, unknown>
-    return textOf(fields.fiche) ?? textOf(fields.plan)
+    return textOf(fields.sheet) ?? textOf(fields.plan)
   }
   return textOf(given)
 }
 
-const planLotOf = (argument: string | null): { lot: string; code: string; plan: string } | null => {
-  const found = argument === null ? null : PLAN_LOT_PATTERN.exec(argument)
-  return found?.[1] === undefined || found[2] === undefined || found[3] === undefined
-    ? null
-    : { lot: found[1], code: found[3], plan: found[2] }
-}
-
 export const lotOf = (argument: string | null): { lot: string; code: string } | null => {
-  const inPlan = planLotOf(argument)
-  if (inPlan !== null) return { lot: inPlan.lot, code: inPlan.code }
   const found = argument === null ? null : LOT_PATTERN.exec(argument)
   return found?.[1] === undefined || found[2] === undefined ? null : { lot: found[2], code: found[1] }
 }
 
 export const sheetPathOf = (argument: string | null): string | null =>
-  planLotOf(argument)?.plan ?? (argument !== null && SHEET_PATTERN.test(argument) ? argument : null)
+  argument !== null && SHEET_PATTERN.test(argument) ? argument : null
 
 export const childWorkflowOf = (script: string): string | null => {
   const found = CHILD_CALL.exec(script)
@@ -570,13 +560,13 @@ export const throughputOf = (agent: WorkflowAgent): number | null => {
 
 export const liveSignalOf = (agent: WorkflowAgent, at: number): string | null => {
   if (agent.state !== 'running') return null
-  if (agent.openCalls > 0) return agent.toolSince !== null && at - agent.toolSince > STALL_TOOL_MS ? 'outil long' : null
-  if (agent.waitingSince !== null) return at - agent.waitingSince > STALL_WAIT_MS ? 'attente' : null
+  if (agent.openCalls > 0) return agent.toolSince !== null && at - agent.toolSince > STALL_TOOL_MS ? 'long tool' : null
+  if (agent.waitingSince !== null) return at - agent.waitingSince > STALL_WAIT_MS ? 'waiting' : null
   const idle = at - Math.max(agent.lastActiveAt, agent.lastChunkAt ?? 0)
   if (idle > STALL_IDLE_MS) return `idle ${Math.floor(idle / 60_000)}m`
   const rate = throughputOf(agent)
   const span = (agent.lastChunkAt ?? 0) - (agent.firstChunkAt ?? at)
-  return rate !== null && span > STALL_SLOW_MS && rate < SLOW_RATE ? 'lent' : null
+  return rate !== null && span > STALL_SLOW_MS && rate < SLOW_RATE ? 'slow' : null
 }
 
 export const stallReasons = (agent: WorkflowAgent, typical: number | null, at: number): string[] => {
@@ -590,14 +580,14 @@ export const stallReasons = (agent: WorkflowAgent, typical: number | null, at: n
     .map(reason => `⚠ ${reason}`)
 }
 
-const STREAM_LABELS: Record<StreamKind, string> = { thinking: 'réflexion', output: 'sortie', tool: 'outil' }
+const STREAM_LABELS: Record<StreamKind, string> = { thinking: 'thinking', output: 'output', tool: 'tool' }
 
 export const characters = (count: number): string => {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace('.', ',')}M car.`
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M chars`
   const tenths = Math.round(count / 100)
-  if (tenths >= 100) return `${Math.round(count / 1000)}k car.`
-  if (count >= 1000) return `${(tenths / 10).toFixed(1).replace('.', ',')}k car.`
-  return `${count} car.`
+  if (tenths >= 100) return `${Math.round(count / 1000)}k chars`
+  if (count >= 1000) return `${(tenths / 10).toFixed(1)}k chars`
+  return `${count} chars`
 }
 
 export const elapsed = (ms: number): string => {
@@ -607,8 +597,8 @@ export const elapsed = (ms: number): string => {
 
 export const activityOf = (agent: WorkflowAgent, at: number): string | null => {
   if (agent.state !== 'running') return null
-  if (agent.openCalls > 0 && agent.toolSince !== null) return `outil ${agent.lastTool ?? '?'} ${elapsed(at - agent.toolSince)}`
-  if (agent.waitingSince !== null) return `○ attente modèle ${elapsed(at - agent.waitingSince)}`
+  if (agent.openCalls > 0 && agent.toolSince !== null) return `tool ${agent.lastTool ?? '?'} ${elapsed(at - agent.toolSince)}`
+  if (agent.waitingSince !== null) return `○ waiting model ${elapsed(at - agent.waitingSince)}`
   if (agent.streamKind === null) return null
   const rate = throughputOf(agent)
   return `● ${STREAM_LABELS[agent.streamKind]} · ${characters(agent.streamChars)}${rate === null ? '' : ` · ${Math.round(rate)} tok/s`}`
@@ -636,31 +626,6 @@ export const isStepStarted = (step: Step): boolean =>
   )
 
 export const markOf = (value: string): string => (value === DONE ? '✓' : value === '' || value === '⬜' ? '·' : value)
-
-const LOT_STATE = /\s+—\s+(?:✅|⬜)\s*$/
-
-export const parseLotSection = (text: string, lot: string): Sheet | null => {
-  const lines = text.split(/\r?\n/)
-  const start = lines.findIndex(line => new RegExp(`^## Lot ${lot}\\b`).test(line))
-  const heading = lines[start]
-  if (heading === undefined) return null
-  const end = lines.findIndex((line, index) => index > start && line.startsWith('## '))
-  const name = heading.replace(LOT_STATE, '').split(' — ').slice(1).join(' — ')
-  const steps: Step[] = []
-  let section = ''
-  let hypotheses = 0
-  for (const line of lines.slice(start + 1, end < 0 ? undefined : end)) {
-    if (line.startsWith('### ')) section = line.slice(4).trim()
-    if (/^H[yi]poth[eè]ses/i.test(section) && /^\s*[-*]\s+\**H\d+\b/.test(line)) hypotheses += 1
-    const step = /^#### [EÉ]tape (\S+) — (.+)$/.exec(line)
-    if (step) {
-      const title = step[2] ?? ''
-      steps.push({ number: step[1] ?? '', title: title.replace(LOT_STATE, ''), isDone: /—\s+✅\s*$/.test(title), tdd: null, corrections: [] })
-    }
-  }
-  const isDone = /—\s+✅\s*$/.test(heading) || (steps.length > 0 && steps.every(isStepDone))
-  return { lot, name, isDone, steps, hypotheses }
-}
 
 export const parseSheet = (text: string, path: string): Sheet => {
   const lines = text.split(/\r?\n/)
@@ -1317,9 +1282,7 @@ async function refreshSheet($: EngineInterface, run: WorkflowRun): Promise<void>
   const text = await readText($, path)
   if (text === null) return
   seenSheet = { path, mtimeMs: stat.mtimeMs }
-  const inPlan = planLotOf(run.argument)
-  const sheet = inPlan === null ? parseSheet(text, path) : parseLotSection(text, inPlan.lot)
-  if (sheet === null) return
+  const sheet = parseSheet(text, path)
   await update($, runs, stored => stored.map(one => (one.runId === run.runId ? { ...one, sheet } : one)))
 }
 

@@ -1,9 +1,8 @@
 #!/bin/bash
 # Freshness of the graphify graph, measured from the working tree fingerprint.
 #
-# Not a hook: a helper called by .claude/hooks/graphify-autosync.sh and by
-# .claude/statusline-command.sh. Lived in hooks/ until 2026-09-09, where it read
-# like a dead hook.
+# Not a hook: a helper called by hooks/graphify-autosync.sh and by the repo's
+# .claude/statusline-command.sh.
 #
 # Compares source mtimes against the mtime of graph.json. Unlike a flag dropped
 # by the Edit/Write hooks, this measure also catches IDE edits, merges, pulls

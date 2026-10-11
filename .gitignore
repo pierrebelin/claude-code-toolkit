@@ -6,6 +6,7 @@ context-log.raw.json
 
 # Session-local grants, machine paths: never shared.
 settings.local.json
+!templates/settings.local.json
 
 # Python byte-code: a build artefact, regenerated on every run.
 __pycache__/

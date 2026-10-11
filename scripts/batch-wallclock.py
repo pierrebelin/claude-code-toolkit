@@ -41,9 +41,14 @@ import statistics
 import sys
 
 PROJECTS = os.path.expanduser("~/.claude/projects")
-LAUNCH_RE = re.compile(r"<command-name>/?implement-tdd</command-name>", re.I)
+LAUNCH_RE = re.compile(r"<command-name>/?(?:cctoolkit:)?implement-tdd</command-name>", re.I)
 AUDIT_SKILL = "verify-ddd-tdd"
 AUDITOR_AGENT = "ddd-tdd-auditor"
+
+
+def bare(name):
+    """A skill or agent name without its plugin namespace: `cctoolkit:x` -> `x`."""
+    return str(name or "").rsplit(":", 1)[-1]
 
 
 def project_dir(name):
@@ -177,7 +182,7 @@ def analyse(entries):
                 pending[tid] = (name, desc, t, inp)
                 if name == "Skill" and AUDIT_SKILL in str(inp.get("skill", "")):
                     seen_audit = True
-                if name == "Agent" and inp.get("subagent_type") == AUDITOR_AGENT:
+                if name == "Agent" and bare(inp.get("subagent_type")) == AUDITOR_AGENT:
                     seen_audit = True
             if i + 1 < len(groups) and groups[i + 1]["kind"] == "u":
                 # Two assistant groups in a row (split message, resume after an
@@ -235,9 +240,9 @@ def is_batch(entries):
             if b.get("type") != "tool_use":
                 continue
             inp = b.get("input") or {}
-            if b.get("name") == "Skill" and inp.get("skill") == "implement-tdd":
+            if b.get("name") == "Skill" and bare(inp.get("skill")) == "implement-tdd":
                 launched = True
-            if b.get("name") == "Agent" and str(inp.get("subagent_type", "")).startswith("tdd-"):
+            if b.get("name") == "Agent" and bare(inp.get("subagent_type")).startswith("tdd-"):
                 delegated = True
     return launched and delegated
 

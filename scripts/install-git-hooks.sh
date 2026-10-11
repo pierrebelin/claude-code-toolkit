@@ -1,15 +1,15 @@
 #!/bin/sh
 # Install the git-level hooks this toolkit relies on. Run once per clone.
 #
-#   bash scripts/install-git-hooks.sh [repo-root]
+#   cctoolkit install-git-hooks [repo-root]
 #
-# Why a git hook and not a Claude hook. Every script under `.claude/hooks` and
-# `.claude/lib` is tracked, but their REGISTRATION lives in
+# Why a git hook and not a Claude hook. The hooks ship in the plugin, but a repo
+# that enables the plugin at local scope keeps that enablement in
 # `.claude/settings.local.json`, which `.claude/.gitignore` excludes. A worktree is
-# a checkout: it carries the scripts and none of the registrations, so without help
-# not one project hook fires there — no git guard, no read bounds, no traceability
-# check. Committing the registration would fix the worktree and hand the whole
-# setup to the team, which is usually not wanted.
+# a checkout: it carries none of it, so without help not one kit hook fires
+# there — no git guard, no read bounds, no traceability check. Enabling the plugin
+# in the committed settings.json fixes the worktree and hands the setup to the
+# team, which is not always wanted.
 #
 # `.git/hooks` is the third way: it lives in the common git dir, so every worktree
 # of the repo shares it, and it is never committed. Which is also why it cannot
@@ -34,7 +34,7 @@ cat > "$target" <<'HOOK'
 #!/bin/sh
 # Link the gitignored Claude config into a freshly created worktree.
 #
-# Installed by scripts/install-git-hooks.sh — see that file for the rationale.
+# Installed by `cctoolkit install-git-hooks` — see that script for the rationale.
 # Lives in the common git dir: shared by every worktree, never committed.
 #
 # Timing: git runs post-checkout at the end of a worktree creation, with the new

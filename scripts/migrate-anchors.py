@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Migration: produced documents written before the `<!-- kit:… -->` anchors get them.
 
-The parsers (`.claude/hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`,
-`scripts/migrate-rm-traits.py`, the `/plan-implementation` gate) match anchors, never
-titles. A document written earlier carries its English or French title and no anchor:
+The parsers (`hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`, the
+`/plan-implementation` gate) match anchors, never titles. A document written earlier carries its English or French title and no anchor:
 the parsers no longer see it. This script appends the anchor to every heading, row
 and line it recognises, by folded title (accents and case ignored), English or French.
 

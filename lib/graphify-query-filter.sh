@@ -10,7 +10,7 @@
 #   3. collapse `[src=PATH loc=LNN]` to `PATH:NN`, the clickable form.
 #
 # graphify 0.9.58 (2026-09-11) renamed communities: `community=583` became
-# `community={{PRODUCT}}.Catalog.Domain.Core`, `community=ModuleDiagram/CLAUDE.md`.
+# `community=<Product>.Catalog.Domain.Core`, `community=ModuleDiagram/CLAUDE.md`.
 # The old `[0-9]+` pattern stopped matching, and because the community token sits
 # between `loc=` and the closing bracket, pass 3 stopped matching with it — the
 # filter silently degraded to a no-op on EVERY line. Hence the token class below:

@@ -32,7 +32,7 @@ The title is prose in `language.docs`; the anchor is the literal. A parser match
 
 | Anchor | Where | Parsed by |
 |---|---|---|
-| `<!-- kit:rules -->`, `<!-- kit:flow -->`, `<!-- kit:events -->` ending the three `##` headings; `<!-- kit:cols id,rule,outcome -->` above the rules table (columns read by position); `<!-- kit:none -->` on an explicitly empty rules section | handler `CLAUDE.md` | `hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`, `scripts/migrate-rm-traits.py` |
+| `<!-- kit:rules -->`, `<!-- kit:flow -->`, `<!-- kit:events -->` ending the three `##` headings; `<!-- kit:cols id,rule,outcome -->` above the rules table (columns read by position); `<!-- kit:none -->` on an explicitly empty rules section | handler `CLAUDE.md` | `hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py` |
 | `<!-- kit:applied-rules -->` in the first cell of the `Design` row listing the applied ids; `<!-- kit:na-rules -->` after the global plan's non-applicable label | batch sheet, global plan | `scripts/rules-coverage.py --ids`, then `scripts/pre-audit.sh` |
 | `<!-- kit:open-questions -->` heading, `<!-- kit:cols n,severity,question,impact,options -->` above its table; severity values `Blocking`/`Major` stay verbatim | spec | `/plan-implementation` gate (awk on the section) |
 | Every other heading anchor of the templates — spec `kit:context` … `kit:assumptions`, global plan `kit:summary` … `kit:cross-cutting`, sheet `kit:intent` … `kit:assumptions` | spec, global plan, batch sheet | the skills and agents locating a section in any language; `scripts/migrate-anchors.py` writes them into older documents |
@@ -47,7 +47,7 @@ English, verbatim, whatever `language`.
 
 | Frozen literal | Parsed by |
 |---|---|
-| The rule tag's value `{HandlerFolder}/{RM\|RL-xx}`, and each carrier of `lib/kit_testtag.py`: xUnit `[Trait("RM", "…")]`, pytest `@pytest.mark.rm("…")`, JUnit `@Tag("RM:…")`, Jest `[RM …]` in a title | `lib/kit_testtag.py`, read by `hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`, `scripts/untagged-tests.py`, `scripts/migrate-rm-traits.py`, `scripts/pre-audit.sh` |
+| The rule tag's value `{HandlerFolder}/{RM\|RL-xx}`, and each carrier of `lib/kit_testtag.py`: xUnit `[Trait("RM", "…")]`, pytest `@pytest.mark.rm("…")`, JUnit `@Tag("RM:…")`, Jest `[RM …]` in a title | `lib/kit_testtag.py`, read by `hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`, `scripts/untagged-tests.py`, `scripts/pre-audit.sh` |
 | `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Comments`/`Test`/`Plan`/`Scope` | `/verify-ddd-tdd` verdict format, `scripts/learn-candidates.py` |
 | `## RED`, `## GREEN`, `## BLOCKED` and their fields | `/implement-tdd` orchestrator |
 | `→ Batch FX complete — manual validation required` — the closing line | `hooks/implement-tdd-guard.sh` |
@@ -56,6 +56,6 @@ English, verbatim, whatever `language`.
 | `### Batch execution`, columns `Batch` / `Depends on` / `Repo`, `### Batch FX — … — ✅ DONE` | `cctoolkit plan-next-batch` |
 | `## STATUS — …` first line (`DONE`, `BLOCKED`, `GAPS`, `AWAITING-ANSWER`), `Reason:` of `run/FX/FX-report.md`; `Workflow run-lot, batch FX.` first line of every run-lot prompt | `run-plan` gate, `run-lot-pane` mod |
 | `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names and the JSON's first-level keys | `scripts/quality-report-check.py`, the whole report history and any viewer built on it |
-| `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/migrate-rm-traits.py`, `scripts/pre-audit.sh` and `skills/implement-tdd/references/closing.md` |
+| `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/pre-audit.sh` and `skills/implement-tdd/references/closing.md` |
 
 Identifier prefixes are language-neutral and stay as they are: `RM-xx` (business rule), `RL-xx` (rule local to a handler), `CU-xx` (use case), `DDD-nn`, `APP-nn`, `PERF-nn`.

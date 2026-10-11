@@ -14,16 +14,15 @@
 # to exist.
 #
 # Profiles:
-#   graphify-query  measured 2026-09-10 on `graphify query "product SDK client"`:
+#   graphify-query  measured 2026-09-10 on `graphify query "<three-word question>"`:
 #                   6102 B raw, 4282 B filtered (-30%), same source-carrying nodes on
 #                   both sides. Re-measured against graphify 0.9.58 on 2026-09-11:
 #                   -29.2%. `explain` is left alone — it emits 37-500 B and has
 #                   nothing to trim.
 #   git-grep        groups matches under a per-file header instead of repeating the
-#                   path on every line. Measured 2026-09-10: `git grep -n DiagramNode`
-#                   -48%, ProductRelease -33%, ProductItemId -32%. Nothing is
-#                   dropped, which is what "aucune limite de grep" in CLAUDE.md
-#                   requires: the saving is pure path repetition.
+#                   path on every line. Measured 2026-09-10: `git grep -n <symbol>` on
+#                   three symbols: -48%, -33%, -32%. Nothing is dropped, so grep
+#                   output is never capped: the saving is pure path repetition.
 #
 # Firing rule: the LAST segment of the command must be a bare match, so
 # `cd x && git grep -n "y"` counts and the appended pipe binds to that command

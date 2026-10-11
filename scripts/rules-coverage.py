@@ -130,7 +130,7 @@ def handlers():
 
 def declared_values():
     """Every legitimate tag value, including those of the sheets that declare
-    rules without carrying a handler (Core/Shared)."""
+    rules without carrying a handler (Catalog/Pricing)."""
     values = set()
     for base, files in C.walk(C.use_case_roots):
         if C.rule_sheet not in files:

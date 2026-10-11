@@ -46,7 +46,7 @@ Pick the narrowest owner. One motif → one destination.
 
 Prefer a mechanical check when both fit: prose is read, a check fails.
 
-**Kit destinations are never edited in place.** `cctoolkit root` is the plugin cache, replaced on every update. A kit change is written in a checkout of the toolkit repo — its path asked once with AskUserQuestion — then flows back through the plugin update (`README` § Updating). No checkout → hand the user the exact patch (file, old line, new line) instead of writing.
+**Kit destinations are never edited in place.** `cctoolkit root` is the plugin cache, replaced on every update. A kit change is written in a checkout of the toolkit repo — its path asked once with AskUserQuestion — then flows back through the plugin update (`INSTALL.md` § Updating). No checkout → hand the user the exact patch (file, old line, new line) instead of writing.
 
 ## 4. Reconcile
 
