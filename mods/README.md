@@ -6,13 +6,15 @@ Three optional panes drawn inside Claude Code (terminal or desktop Code tab), to
 
 A `/cctoolkit:run-lot` batch runs for tens of minutes across a dozen agents. The pane shows it live: phases with their agents, time and cost, each agent's model and current tool, retries and stalls flagged as they happen, the batch sheet ticking RED → GREEN → COST, an estimated end, then the outcome and the audit verdict. Opens by itself when a Workflow starts; `/run-lot-pane demo` shows an example.
 
-![run-lot-pane during a run: phases, agents with model and effort, the batch sheet](run-lot-pane/screenshots/demo-plan-lot.png)
+![run-lot-pane during a run: phases, agents with model and effort, a retry, a stall warning, the batch sheet](run-lot-pane/screenshots/demo-running.png)
+
+End of the same run: [`demo-end.png`](run-lot-pane/screenshots/demo-end.png).
 
 A `/cctoolkit:run-plan` run opens on the plan: batches with their state, agents, time and cost, then the supervisor steps between them. `1`-`9` opens a batch in the view above, `p` returns to the plan; `/run-lot-pane demo plan` shows an example.
 
 ![run-lot-pane on a run-plan: four batches, one done, one running, two waiting on their dependencies, supervisor steps](run-lot-pane/screenshots/demo-plan-running.png)
 
-End of the plan: [`demo-plan-end.png`](run-lot-pane/screenshots/demo-plan-end.png).
+Batch F2 opened from the plan: [`demo-plan-lot.png`](run-lot-pane/screenshots/demo-plan-lot.png). End of the plan: [`demo-plan-end.png`](run-lot-pane/screenshots/demo-plan-end.png).
 
 ## `spec-pane` — see the spec take shape
 
@@ -57,7 +59,7 @@ Each folder is one plugin, listed beside `cctoolkit` by the kit's marketplace (`
 | `run-lot-pane` | side pane following a `run-lot` Workflow run (English display, demo included; English statuses `DONE` / `BLOCKED` / `GAPS` / `AWAITING-ANSWER` and their French counterparts recognised): batch named from the sheet (F4 · CAT-LIFECYCLE), phases as columns (agents, duration, cost) with their detail, estimated end `ETA ~14m` in the header (mean durations of earlier runs, a parallel pair counted at its maximum), phases always unfolded with their agents, agents (model · effort, live activity `● thinking · 4.2k chars` / `● output · 12k chars` / `○ waiting model 40 s` / `tool Bash 2 min` read from the model stream, current tool and context, retries `↻ 2`, slowness in yellow past 2× the phase's usual time, stalls `⚠ 48 tools` / `⚠ ctx 160k` / `⚠ idle 1m` (no chunk for 60 s, no open tool, no model wait under 120 s), interruption `⊘` of an agent still running when the run stops), each agent's cost split pro rata of weighted tokens when agents run in parallel, batch sheet (steps, RED/GREEN/COST, corrections, assumptions) re-read when its file changes, audit verdict by severity, run outcome as a coloured block with reason and report path, toast at the end of the run; `resumeFromRunId` resume followed without freezing the display (a stopped journal older than the relaunch is ignored); phase card and agent card; a `run-plan` run opens a plan view (batches from the plan's execution table, state from `run/FX/FX-report.md`, supervisor agents), `1`-`9` a batch, `p` back; `/run-lot-pane demo`, `demo end`, `demo plan` or `demo plan end` for an example | by itself, when a Workflow starts |
 | `spec-pane` | side pane following a `/business-spec` of the current session (read-only): decisions asked through `AskUserQuestion` with their answer (`?` pending, `✓` recommended option kept, `≠` another choice), then, once `todo/<code>/SPEC-<code>.md` is written and on every change (mtime every 3 s), title, summary, §12 open questions in full, by severity, names of use cases, business rules and sections; a click unfolds the full content inline under its row (several at once, a second click folds it), `fold all` (`b`) folds them all back; collapsible groups; `/spec-pane todo/<code>/SPEC-<code>.md` follows an existing spec, `/spec-pane clear` forgets it; French and English specs both parsed | on its own, when `/business-spec` starts or a spec is written |
 
-Screenshots taken from the real panes: `demo plan` (then `ctrl+x tab`, `2`) and `demo plan end`, `/spec-pane` on a fictional spec, `context-band` after one turn.
+Screenshots taken from the real panes: `/run-lot-pane demo`, `demo end` (rendered from the pane's drawn tree), `demo plan` (then `ctrl+x tab`, `2`) and `demo plan end`, `/spec-pane` on a fictional spec, `context-band` after one turn.
 
 A `tool.call` hook reads the tool's arguments flat on `e` (`e.skill`, `e.file_path`): there is no `e.input`.
 
