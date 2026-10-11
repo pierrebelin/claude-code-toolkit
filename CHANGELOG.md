@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 1.7.1 — 2026-10-11
+
+- `run-lot-pane`: the agent card shows the outcome read from the agent's structured answer (verdict and every gap), every tool call in order with its short argument (up to 300), and errors with exit code and last output line, greyed once the agent recovered; the prompt is shown without the shared workflow frame.
+
 ## 1.7.0 — 2026-10-11
 
 - `cctoolkit`: `scripts/migrate-rm-traits.py` removed (the four-column rule sheet it migrated is no longer produced); the test-tag adapters lose their `apply()` writers.

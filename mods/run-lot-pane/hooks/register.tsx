@@ -3,7 +3,7 @@ import type { EngineInterface, FsEntry, ModelUsage, Register, TurnStepChunk } fr
 
 import type {
   AuditVerdict, ChildWorkflow, Journal, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet,
-  PlanLot, Step, StreamKind, TddMarks, WorkflowAgent, WorkflowRun,
+  PlanLot, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun,
 } from '../types'
 
 const PANE = 'run-lot-pane'
@@ -153,6 +153,111 @@ export const editedPath = (tool: string, input: Record<string, unknown>): string
 
 export const withFile = (files: string[], path: string): string[] =>
   [...files.filter(one => one !== path), path].slice(-KEPT_FILES)
+
+const KEPT_CALLS = 300
+const RESERVED_KEYS = ['tool', 'tool_use_id', 'consent', 'agentId', 'requestMeta']
+
+const ownFields = (input: Record<string, unknown>): [string, unknown][] =>
+  Object.entries(input).filter(([key]) => !RESERVED_KEYS.includes(key))
+
+export const callBrief = (tool: string, input: Record<string, unknown>, root: string | null): string => {
+  const text = (key: string) => textOf(input[key])
+  const path = (key: string) => {
+    const found = text(key)
+    return found === null ? null : relativePath(found, root)
+  }
+  if (tool === 'Bash') return firstLine(text('description') ?? text('command') ?? '', 120)
+  if (tool === 'Read' || tool === 'Edit' || tool === 'Write') return path('file_path') ?? ''
+  if (tool === 'NotebookEdit') return path('notebook_path') ?? ''
+  if (tool === 'Grep') return [text('pattern'), path('path') ?? text('glob')].filter(part => part !== null).join(' in ')
+  if (tool === 'StructuredOutput') return ''
+  const first = ownFields(input).map(([, value]) => textOf(value)).find(value => value !== null)
+  return first === undefined || first === null ? '' : firstLine(first, 120)
+}
+
+const EXIT_LINE = /^Exit code (\d+)$/
+
+export const errorDetail = (result: { deny?: string; isError?: boolean; text?: string }): string | null => {
+  if (typeof result.deny === 'string') return `denied · ${firstLine(result.deny, 200)}`
+  if (result.isError !== true) return null
+  const lines = (result.text ?? '').split('\n').map(one => one.trim()).filter(one => one !== '')
+  const exit = lines.map(one => EXIT_LINE.exec(one)?.[1]).find(code => code !== undefined)
+  const detail = lines.filter(one => !EXIT_LINE.test(one)).pop()
+  const parts = [exit === undefined ? null : `exit ${exit}`, detail === undefined ? null : firstLine(detail, 200)].filter(part => part !== null)
+  return parts.length === 0 ? 'error' : parts.join(' · ')
+}
+
+export const errorOf = (tool: string, result: { deny?: string; isError?: boolean; text?: string }, brief = ''): string | null => {
+  const detail = errorDetail(result)
+  return detail === null ? null : `${brief === '' ? tool : `${tool} · ${brief}`}: ${detail}`
+}
+
+export const withCall = (calls: ToolTrace[], trace: ToolTrace): ToolTrace[] => [...calls, trace].slice(-KEPT_CALLS)
+
+export const closedCall = (calls: ToolTrace[], id: string, error: string | null): ToolTrace[] =>
+  calls.map(call => (call.id === id ? { ...call, state: error === null ? 'ok' : 'error', error } : call))
+
+export type ErrorSummary = { count: number; last: ToolTrace | null; isRecovered: boolean }
+
+export const errorsOf = (agent: WorkflowAgent): ErrorSummary => {
+  const failed = agent.calls.filter(call => call.state === 'error')
+  const last = failed[failed.length - 1] ?? null
+  if (last === null) return { count: 0, last: null, isRecovered: true }
+  const after = agent.calls.slice(agent.calls.indexOf(last) + 1)
+  return { count: failed.length, last, isRecovered: agent.state !== 'error' && after.some(call => call.state === 'ok') }
+}
+
+const KEPT_ANSWER_LINES = 20
+const ITEM_KEYS = ['gap', 'question', 'behaviour', 'title', 'summary', 'name', 'path']
+
+const itemLine = (item: unknown): string => {
+  if (item === null || typeof item !== 'object') return firstLine(String(item), 200)
+  const fields = item as Record<string, unknown>
+  const head = [textOf(fields.severity), textOf(fields.axis)].filter(part => part !== null)
+  const body = ITEM_KEYS.map(key => textOf(fields[key])).find(value => value !== null) ?? Object.values(fields).map(textOf).find(value => value !== null) ?? '…'
+  return [...head, firstLine(body, 200)].join(' · ')
+}
+
+export const structuredLines = (value: unknown): string[] | null => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const audit = auditOf(value)
+  const lines = audit === null ? [] : [auditLabel(audit)]
+  for (const [key, field] of ownFields(value as Record<string, unknown>)) {
+    if (audit !== null && key === 'verdict') continue
+    if (Array.isArray(field)) {
+      lines.push(field.length === 0 ? `${key}: none` : `${key} · ${field.length}`)
+      lines.push(...field.map(item => `  ${itemLine(item)}`))
+    } else if (field !== null && typeof field === 'object') {
+      lines.push(`${key}: {…}`)
+    } else if (field !== null && field !== undefined && String(field).trim() !== '') {
+      lines.push(`${key}: ${firstLine(String(field), 200)}`)
+    }
+  }
+  if (lines.length === 0) return null
+  return lines.length > KEPT_ANSWER_LINES
+    ? [...lines.slice(0, KEPT_ANSWER_LINES - 1), `… ${lines.length - KEPT_ANSWER_LINES + 1} more lines`]
+    : lines
+}
+
+const KEPT_PROMPT_LINES = 6
+
+export const promptBrief = (prompt: string): string => {
+  const trimmed = prompt.trim()
+  const split = trimmed.indexOf('\n\n')
+  const body = /^Workflow run-/.test(trimmed) && split >= 0 ? trimmed.slice(split).trim() : trimmed
+  return body
+    .split('\n')
+    .map(one => one.trim())
+    .filter(one => one !== '')
+    .slice(0, KEPT_PROMPT_LINES)
+    .map(one => firstLine(one, 300))
+    .join('\n')
+}
+
+export const clockOf = (ms: number): string => {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
 
 export type PhaseInsight = { totals: Totals; share: number | null; costliest: string | null; slowest: string | null }
 
@@ -690,10 +795,40 @@ export type PhaseRow = {
   detail: string | null
   mark: 'done' | 'running' | 'pending'
   agents: WorkflowAgent[]
+  earlier: WorkflowAgent[]
   span: number
 }
 
 const isLive = (agent: WorkflowAgent): boolean => agent.state !== 'interrupted'
+
+const phaseTitles = (run: WorkflowRun): string[] => {
+  const titles = [...run.phases]
+  for (const agent of run.agents) {
+    const title = agent.phase ?? NO_PHASE
+    if (!titles.includes(title)) titles.push(title)
+  }
+  return titles
+}
+
+export type Passes = { start: number | null; count: number }
+
+export const passesOf = (run: WorkflowRun): Passes => {
+  const titles = phaseTitles(run)
+  const rank = (title: string): number => {
+    const mates = PARALLEL_PHASES.find(group => group.includes(title)) ?? [title]
+    const found = mates.map(one => titles.indexOf(one)).filter(index => index >= 0)
+    return found.length === 0 ? -1 : Math.min(...found)
+  }
+  let top = -1
+  let passes: Passes = { start: null, count: 1 }
+  for (const agent of run.agents.filter(isLive).sort((a, b) => a.startedAt - b.startedAt || a.index - b.index)) {
+    if (agent.phase === null) continue
+    const one = rank(agent.phase)
+    if (one < top) passes = { start: agent.startedAt, count: passes.count + 1 }
+    top = one < top ? one : Math.max(top, one)
+  }
+  return passes
+}
 
 export const isStaleReport = (agents: WorkflowAgent[], agent: WorkflowAgent): boolean =>
   agent.phase === REPORT_PHASE &&
@@ -701,24 +836,24 @@ export const isStaleReport = (agents: WorkflowAgent[], agent: WorkflowAgent): bo
   agents.some(other => other.phase !== REPORT_PHASE && isLive(other) && other.startedAt > (agent.endedAt ?? 0))
 
 export const phaseRows = (run: WorkflowRun, at: number): PhaseRow[] => {
-  const titles = [...run.phases]
-  for (const agent of run.agents) {
-    const title = agent.phase ?? NO_PHASE
-    if (!titles.includes(title)) titles.push(title)
-  }
-  const current = run.agents.filter(agent => !isStaleReport(run.agents, agent))
-  const reached = Math.max(-1, ...current.filter(isLive).map(agent => titles.indexOf(agent.phase ?? NO_PHASE)))
+  const titles = phaseTitles(run)
+  const { start } = passesOf(run)
+  const isCurrent = (agent: WorkflowAgent): boolean => start === null || agent.startedAt >= start
+  const reached = Math.max(-1, ...run.agents.filter(agent => isLive(agent) && isCurrent(agent)).map(agent => titles.indexOf(agent.phase ?? NO_PHASE)))
   return titles
     .map((title, index) => {
-      const agents = current.filter(agent => (agent.phase ?? NO_PHASE) === title)
+      const all = run.agents.filter(agent => (agent.phase ?? NO_PHASE) === title)
+      const agents = index <= reached ? all : all.filter(isCurrent)
+      const earlier = index <= reached ? [] : all.filter(agent => !isCurrent(agent))
       const isRunning = agents.some(agent => agent.state === 'running')
-      const starts = agents.map(agent => agent.startedAt)
-      const ends = agents.map(agent => agent.endedAt ?? at)
-      const span = agents.length === 0 ? 0 : Math.max(...ends) - Math.min(...starts)
+      const timed = agents.some(isCurrent) ? agents.filter(isCurrent) : agents
+      const starts = timed.map(agent => agent.startedAt)
+      const ends = timed.map(agent => agent.endedAt ?? at)
+      const span = timed.length === 0 ? 0 : Math.max(...ends) - Math.min(...starts)
       const mark: PhaseRow['mark'] = isRunning ? 'running' : index <= reached && agents.some(isLive) ? 'done' : 'pending'
-      return { title, detail: run.details[title] ?? null, mark, agents, span }
+      return { title, detail: run.details[title] ?? null, mark, agents, earlier, span }
     })
-    .filter(row => row.title !== NO_PHASE || row.agents.length > 0)
+    .filter(row => row.title !== NO_PHASE || row.agents.length > 0 || row.earlier.length > 0)
 }
 
 export type CurrentStep = {
@@ -765,6 +900,8 @@ export const remainingMs = (run: WorkflowRun, rows: PhaseRow[], known: PhaseSamp
   return parts.length === 0 ? null : parts.reduce((sum, part) => sum + part, 0)
 }
 
+export const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim()
+
 export const fit = (text: string, width: number): string =>
   width < 1 ? '' : text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text
 
@@ -798,6 +935,8 @@ const completeAgent = (agent: WorkflowAgent): WorkflowAgent => ({
   lastChunkAt: agent.lastChunkAt ?? null,
   streamKind: agent.streamKind ?? null,
   streamChars: agent.streamChars ?? 0,
+  structured: agent.structured ?? null,
+  calls: agent.calls ?? [],
   lot: agent.lot ?? null,
 })
 
@@ -890,9 +1029,42 @@ const demoAgent = (
   answer: state === 'running' || state === 'error' || state === 'interrupted' ? null : (options.answer ?? `${label}: done, tests green.`),
   toolCounts: { Read: 4 + index, Bash: index, Edit: index > 3 ? 3 : 0, Grep: 2 },
   files: index > 3 ? ['src/Acme.Application/Catalog/Products/CreateProduct/CreateProductCommandHandler.cs'] : [],
-  lastError: state === 'error' ? 'Bash: dotnet test exited with code 1 (2 failed)' : null,
+  lastError: state === 'error' ? 'Bash · Run the unit tests: exit 1 · Failed: 2, Passed: 41' : null,
+  structured: state === 'done' && (options.type ?? '').includes('auditor') ? DEMO_VERDICT : null,
+  calls: demoCalls(`${DEMO}${id}`, index, from, to, state),
   ...options.live,
 })
+
+const DEMO_VERDICT = structuredLines({
+  verdict: 'ECARTS',
+  gaps: [
+    { severity: 'Blocking', axis: 'Correctness', gap: 'organization lock not checked before deletion', evidence: 'DeleteProductCommandHandler.cs:41' },
+    { severity: 'Minor', axis: 'Simplification', gap: 'duplicated guard in the aggregate', evidence: 'Product.cs:88' },
+  ],
+})
+
+const DEMO_STEPS: [string, string][] = [
+  ['Read', 'todo/catalog-lifecycle/CAT-CYCLE-PLAN-F4.md'],
+  ['Grep', 'Product in src'],
+  ['Bash', 'Find handlers touching the lock'],
+  ['Read', 'src/Acme.Domain/Catalog/Products/Product.cs'],
+  ['Edit', 'src/Acme.Application/Catalog/Products/CreateProduct/CreateProductCommandHandler.cs'],
+  ['Bash', 'Run the unit tests'],
+]
+
+const demoCalls = (id: string, index: number, from: number, to: number | null, state: WorkflowAgent['state']): ToolTrace[] => {
+  const count = state === 'running' ? 3 : DEMO_STEPS.length
+  const span = (to ?? from + inMs(1)) - from
+  return DEMO_STEPS.slice(0, count).map(([tool, brief], step) => {
+    const isLast = step === count - 1
+    const failed = (index % 3 === 0 && step === 2) || (state === 'error' && isLast)
+    return {
+      id: `${id}-${step}`, tool, brief, at: from + Math.round((span * step) / count),
+      state: state === 'running' && isLast ? 'running' : failed ? 'error' : 'ok',
+      error: failed ? (isLast ? 'exit 1 · Failed: 2, Passed: 41' : 'exit 1') : null,
+    }
+  })
+}
 
 const demoSheet = (isFinished: boolean): Sheet => {
   const marks = (isReached: boolean): TddMarks => ({ red: isReached ? DONE : '⬜', green: isReached ? DONE : '⬜', cost: isReached ? DONE : '⬜' })
@@ -1309,15 +1481,9 @@ const tick = async ($: EngineInterface): Promise<void> => {
 
 export const blankAgent = (id: string, index: number, label: string, model: string, type: string, prompt: string, at: number): WorkflowAgent => ({
   id, index, label, phase: null, model, effort: null, type, startedAt: at, endedAt: null, lastActiveAt: at, openCalls: 0, ...QUIET, lastChunkAt: null, streamChars: 0, state: 'running',
-  lastTool: null, tools: 0, context: 0, contextStart: 0, contextPeak: 0, tokens: 0, cost: 0, prompt: firstLine(prompt), answer: null,
-  toolCounts: {}, files: [], lastError: null, lot: null,
+  lastTool: null, tools: 0, context: 0, contextStart: 0, contextPeak: 0, tokens: 0, cost: 0, prompt: promptBrief(prompt), answer: null,
+  structured: null, calls: [], toolCounts: {}, files: [], lastError: null, lot: null,
 })
-
-export const errorOf = (tool: string, result: { deny?: string; isError?: boolean; text?: string }): string | null => {
-  if (typeof result.deny === 'string') return `${tool}: ${firstLine(result.deny)}`
-  if (result.isError === true) return `${tool}: ${firstLine(result.text ?? 'error')}`
-  return null
-}
 
 const closeCall = async ($: EngineInterface, agentId: string): Promise<void> => {
   const at = await $.clock.now()
@@ -1388,6 +1554,7 @@ export const register: Register = on => {
   let bookedCost: number | null = null
   let requested: Record<string, number> = {}
   let root: string | null = null
+  let sequence = 0
 
   on('session.start', async ($, e, next) => {
     root = e.cwd
@@ -1432,12 +1599,19 @@ export const register: Register = on => {
     if (e.agentId !== undefined) {
       const agentId = e.agentId
       if (isFollowed(await read($, runs), agentId)) {
-        const audit = (e.tool as string) === 'StructuredOutput' ? auditOf(e) : null
+        const isStructured = (e.tool as string) === 'StructuredOutput'
+        const audit = isStructured ? auditOf(e) : null
         if (audit !== null) await update($, runs, list => withAudit(list, agentId, audit))
+        const input = e as unknown as Record<string, unknown>
         const calledAt = await $.clock.now()
+        const callId = typeof e.tool_use_id === 'string' && e.tool_use_id !== '' ? e.tool_use_id : `call-${(sequence += 1)}`
+        const brief = callBrief(e.tool, input, root)
+        const structured = isStructured ? structuredLines(input) : null
         await update($, runs, list =>
           withAgent(list, agentId, agent => ({
             ...agent,
+            structured: structured ?? agent.structured,
+            calls: withCall(agent.calls, { id: callId, tool: e.tool, brief, at: calledAt, state: 'running', error: null }),
             lastTool: e.tool,
             tools: agent.tools + 1,
             openCalls: agent.openCalls + 1,
@@ -1447,21 +1621,23 @@ export const register: Register = on => {
           })),
         )
         const answered = await next(e).catch(async (failure: unknown) => {
+          const detail = failure instanceof Error ? firstLine(failure.message, 200) : 'failed'
+          await update($, runs, list => withAgent(list, agentId, agent => ({ ...agent, calls: closedCall(agent.calls, callId, detail) })))
           await closeCall($, agentId)
           throw failure
         })
         await closeCall($, agentId)
-        const error = errorOf(e.tool, answered)
-        const path = editedPath(e.tool, e as unknown as Record<string, unknown>)
-        if (error !== null || path !== null) {
-          await update($, runs, list =>
-            withAgent(list, agentId, agent => ({
-              ...agent,
-              lastError: error ?? agent.lastError,
-              files: path !== null && error === null ? withFile(agent.files, relativePath(path, root)) : agent.files,
-            })),
-          )
-        }
+        const detail = errorDetail(answered)
+        const error = errorOf(e.tool, answered, brief)
+        const path = editedPath(e.tool, input)
+        await update($, runs, list =>
+          withAgent(list, agentId, agent => ({
+            ...agent,
+            calls: closedCall(agent.calls, callId, detail),
+            lastError: error ?? agent.lastError,
+            files: path !== null && error === null ? withFile(agent.files, relativePath(path, root)) : agent.files,
+          })),
+        )
         return answered
       }
       return next(e)
@@ -1598,7 +1774,9 @@ export const register: Register = on => {
       const at = await $.clock.now()
       const state = e.isAborted || e.reason === 'error' || e.reason === 'refusal' ? 'error' : 'done'
       const answer = (e as { answer?: unknown }).answer
-      const audit = typeof answer === 'string' ? auditOf(jsonOf(answer)) : null
+      const parsed = typeof answer === 'string' ? jsonOf(answer) : null
+      const structured = structuredLines(parsed)
+      const audit = auditOf(parsed)
       if (audit !== null) await update($, runs, list => withAudit(list, agentId, audit))
       await update($, runs, list =>
         withAgent(list, agentId, agent => ({
@@ -1608,7 +1786,8 @@ export const register: Register = on => {
           lastActiveAt: at,
           openCalls: 0,
           ...QUIET,
-          answer: typeof answer === 'string' && answer.trim() !== '' ? firstLine(answer, 400) : agent.answer,
+          structured: structured ?? agent.structured,
+          answer: structured === null && typeof answer === 'string' && answer.trim() !== '' ? firstLine(answer, 400) : agent.answer,
         })),
       )
     }
@@ -1662,6 +1841,30 @@ export const register: Register = on => {
         {text}
       </Text>
     )
+
+    const callRows = (agent: WorkflowAgent, call: ToolTrace, width: number) => {
+      const isStuck = call.state === 'running' && agent.state !== 'running'
+      const recovered = call.state === 'error' && agent.calls.slice(agent.calls.indexOf(call) + 1).some(one => one.state === 'ok')
+      const tone = call.state === 'ok' ? 'success' : call.state === 'error' ? (recovered ? 'warning' : 'error') : isStuck ? 'inactive' : 'claude'
+      const glyph = call.state === 'ok' ? '✓' : call.state === 'error' ? '✗' : isStuck ? '⊘' : spin
+      const rows = [
+        <Text key={`call-${call.id}`} wrap="truncate-end">
+          {'  '}
+          <Text color="inactive">{clockOf(call.at - agent.startedAt).padStart(5)} </Text>
+          <Text color={tone}>{glyph} </Text>
+          {call.tool.padEnd(width)} <Text color="inactive">{call.brief}</Text>
+        </Text>,
+      ]
+      if (call.error !== null) {
+        rows.push(
+          <Text key={`call-error-${call.id}`} color={recovered ? 'inactive' : 'error'} wrap="wrap">
+            {'          ⎿ '}
+            {call.error}
+          </Text>,
+        )
+      }
+      return rows
+    }
 
     const agentButton = (agent: WorkflowAgent, prefix: string, from: Screen, mark = '') => (
       <Box key={`agent-${agent.id}`} height={1}>
@@ -1770,6 +1973,9 @@ export const register: Register = on => {
             : agent.state === 'interrupted'
               ? 'Interrupted before it answered.'
               : 'No answer.')
+      const errors = errorsOf(agent)
+      const outcomeColor = agent.state === 'error' ? 'error' : undefined
+      const toolWidth = Math.min(10, Math.max(4, ...agent.calls.map(call => call.tool.length)))
       return (
         <Box flexDirection="column" marginTop={1}>
           {crumbs(`${current.name} › ${agent.phase ?? NO_PHASE}`, `agent ${agent.index}`)}
@@ -1811,18 +2017,38 @@ export const register: Register = on => {
             ),
             line('tok', `${kilo(agent.tokens)} tok · ${dollars(agent.cost)}`),
           ])}
-          {section('tools', `Tools · ${agent.tools} call${agent.tools > 1 ? 's' : ''}`, [
-            line('summary', agent.tools === 0 ? 'none yet' : toolSummary(agent.toolCounts)),
-          ])}
+          {section(
+            'outcome',
+            'Outcome',
+            (agent.structured ?? [outcome]).map((text, index) =>
+              line(`outcome-${index}`, text, index === 0 ? outcomeColor : undefined, 'wrap'),
+            ),
+          )}
+          {errors.last !== null &&
+            section(
+              'error',
+              `Errors · ${errors.count}${errors.isRecovered ? (errors.count > 1 ? ' · all recovered' : ' · recovered') : ''}`,
+              [line('error', `${errors.last.tool}${errors.last.brief === '' ? '' : ` · ${errors.last.brief}`}: ${errors.last.error ?? 'error'}`, errors.isRecovered ? 'inactive' : 'error', 'wrap')],
+            )}
+          {errors.last === null && agent.lastError !== null && section('error', 'Last error', [line('error', agent.lastError, 'error', 'wrap')])}
           {agent.files.length > 0 &&
             section(
               'files',
               `Files modified · ${agent.files.length}`,
               agent.files.map(path => line(`file-${path}`, path, undefined, 'truncate-start')),
             )}
-          {agent.lastError !== null && section('error', 'Last error', [line('error', agent.lastError, 'error', 'wrap')])}
-          {section('prompt', 'Prompt', [line('prompt', agent.prompt === '' ? '—' : agent.prompt, 'inactive', 'wrap')])}
-          {section('outcome', 'Outcome', [line('outcome', outcome, agent.state === 'error' ? 'error' : undefined, 'wrap')])}
+          {section(
+            'prompt',
+            'Prompt',
+            (agent.prompt === '' ? ['—'] : agent.prompt.split('\n')).map((text, index) => line(`prompt-${index}`, text, 'inactive', 'wrap')),
+          )}
+          {section('tools', `Activity · ${agent.tools} call${agent.tools > 1 ? 's' : ''}`, [
+            line('summary', agent.tools === 0 ? 'none yet' : toolSummary(agent.toolCounts), 'inactive'),
+            ...(agent.tools > agent.calls.length && agent.calls.length > 0
+              ? [line('dropped', `… ${agent.tools - agent.calls.length} earlier calls not kept`, 'inactive')]
+              : []),
+            ...agent.calls.flatMap(call => callRows(agent, call, toolWidth)),
+          ])}
         </Box>
       )
     }
@@ -1882,6 +2108,7 @@ export const register: Register = on => {
     const tone = headline.tone
     const reached = rows.filter(one => one.mark === 'done').length
     const step = currentStep(current, rows)
+    const passes = passesOf(current)
     const runTotals = totalsOf(current.agents)
     const lot = lotOf(current.argument)
     const outcome = current.outcome
@@ -1889,7 +2116,8 @@ export const register: Register = on => {
     const isWide = columns >= WIDE_COLUMNS
     const figuresWidth = COUNT_WIDTH + TIME_WIDTH + COST_WIDTH
     const agentsRightWidth = figuresWidth + (isWide ? MODEL_WIDTH : 0)
-    const isOpen = (phase: PhaseRow) => phase.agents.length > 0 && !where.toggled.includes(phase.title)
+    const isOpen = (phase: PhaseRow) =>
+      phase.agents.length > 0 ? !where.toggled.includes(phase.title) : phase.earlier.length > 0 && where.toggled.includes(phase.title)
     const toggle = (title: string) => () =>
       void update($, nav, state => ({
         ...state,
@@ -1975,6 +2203,15 @@ export const register: Register = on => {
           </Text>
         )
       }
+      if (phase.earlier.length > 0 && room >= 10) {
+        const previous = totalsOf(phase.earlier)
+        return (
+          <Text color="inactive" wrap="truncate-end">
+            {'  '}
+            {fit(`↻ previous pass · ${phase.earlier.length} agents · ${dollars(previous.cost)}`, room - 2)}
+          </Text>
+        )
+      }
       if (phase.detail === null || phase.mark === 'done' || room < 10) return null
       return (
         <Text color="inactive" wrap="truncate-end">
@@ -1986,6 +2223,7 @@ export const register: Register = on => {
 
     const phaseRow = (phase: PhaseRow) => {
       const hasAgents = phase.agents.length > 0
+      const isToggled = hasAgents || phase.earlier.length > 0
       const room = columns - 4 - phase.title.length - (hasAgents ? figuresWidth : 0)
       const attempts = attemptsOf(phase.agents)
       return (
@@ -1993,7 +2231,7 @@ export const register: Register = on => {
           {row(
             `phase-row-${phase.title}`,
             <Box flexShrink={1}>
-              {hasAgents ? (
+              {isToggled ? (
                 <Button key={`toggle-${phase.title}`} plain dimColor onPress={toggle(phase.title)}>
                   {isOpen(phase) ? '▾' : '▸'}
                 </Button>
@@ -2013,6 +2251,7 @@ export const register: Register = on => {
           )}
           {isOpen(phase) &&
             phase.agents.map(agent => agentRow(agent, attempts[agent.id] ?? 1, typicalMs(known, current.agents, agent)))}
+          {isOpen(phase) && phase.earlier.map(agent => agentRow(agent, 1, null))}
         </Box>
       )
     }
@@ -2082,7 +2321,7 @@ export const register: Register = on => {
       const code = planRun.plan === null ? null : (planRun.plan.split('/').pop() ?? '').replace(/\.md$/, '')
       const planOutcome = planRun.outcome
       const lotDetail = (entry: PlanLot, state: LotState, agents: WorkflowAgent[]) => {
-        if (entry.outcome !== null) return [entry.outcome.label, entry.outcome.reason ?? ''].filter(one => one !== '').join(' · ')
+        if (entry.outcome !== null) return [entry.outcome.label, oneLine(entry.outcome.reason ?? '')].filter(one => one !== '').join(' · ')
         if (state === 'running') {
           const active = [...agents].sort((a, b) => b.index - a.index).find(agent => agent.state === 'running') ?? agents[agents.length - 1]
           return active === undefined ? 'running' : `${active.phase ?? NO_PHASE} · ${active.label}`
@@ -2148,6 +2387,29 @@ export const register: Register = on => {
               )}
             </Box>
           )}
+          {states
+            .filter(({ entry, state }) => (state === 'waiting' || state === 'failed') && entry.outcome !== null && entry.outcome.reason !== null)
+            .map(({ entry, state }) => (
+              <Box
+                key={`attention-${entry.lot}`}
+                flexDirection="column"
+                marginTop={1}
+                marginLeft={2}
+                paddingX={1}
+                borderStyle="round"
+                borderColor={lotTone(state)}
+              >
+                <Text bold color={lotTone(state)} wrap="wrap">
+                  {lotGlyph(state)} {entry.lot} · {entry.outcome?.label}
+                </Text>
+                <Text wrap="wrap">{entry.outcome?.reason}</Text>
+                {entry.outcome?.report != null && (
+                  <Text color="inactive" wrap="wrap">
+                    Report: {relativePath(entry.outcome.report, root)}
+                  </Text>
+                )}
+              </Box>
+            ))}
           <Box marginTop={1} flexDirection="column">
             {figureRow(
               'session',
@@ -2230,6 +2492,7 @@ export const register: Register = on => {
           <Text bold color={tone}>
             {isRunning ? spin : headline.glyph} {headline.text}
           </Text>
+          {passes.count > 1 && <Text color="warning">{`  ↻ pass ${passes.count}`}</Text>}
           <Text>
             {'   '}
             {duration(elapsed)}

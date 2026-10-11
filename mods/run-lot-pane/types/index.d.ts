@@ -2,6 +2,17 @@ export type AgentState = 'running' | 'done' | 'error' | 'interrupted'
 
 export type StreamKind = 'thinking' | 'output' | 'tool'
 
+export type CallState = 'running' | 'ok' | 'error'
+
+export type ToolTrace = {
+  id: string
+  tool: string
+  brief: string
+  at: number
+  state: CallState
+  error: string | null
+}
+
 export type WorkflowAgent = {
   id: string
   index: number
@@ -30,6 +41,8 @@ export type WorkflowAgent = {
   cost: number
   prompt: string
   answer: string | null
+  structured: string[] | null
+  calls: ToolTrace[]
   toolCounts: Record<string, number>
   files: string[]
   lastError: string | null

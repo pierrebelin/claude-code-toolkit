@@ -5,8 +5,8 @@ import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput, TurnStepChunk,
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
   alertOf, argumentOf, childWorkflowOf, lotRun, lotStateOf, mergeLots, parsePlanLots, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
-  detailsOf, duration, editedPath, errorOf, headlineOf, figuresLine, firstLine, fit, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
-  parseJournal, parsePhases, parseSheet, phaseInsight, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
+  callBrief, clockOf, closedCall, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
+  parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
   liveSignalOf, stallReasons, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, weightOf, withFile, withSamples,
 } from '../hooks/register'
 
@@ -127,10 +127,47 @@ describe('reading the run', () => {
     expect(editedPath('Edit', { file_path: '/r/a.cs' })).toBe('/r/a.cs')
     expect(editedPath('Read', { file_path: '/r/a.cs' })).toBeNull()
     expect(withFile(['a', 'b'], 'a')).toEqual(['b', 'a'])
-    expect(errorOf('Bash', { isError: true, text: 'exit 1\ndétail' })).toBe('Bash: exit 1')
-    expect(errorOf('Bash', { deny: 'refusé' })).toBe('Bash: refusé')
+    expect(errorOf('Bash', { isError: true, text: 'exit 1\ndétail' })).toBe('Bash: détail')
+    expect(errorOf('Bash', { deny: 'refusé' })).toBe('Bash: denied · refusé')
     expect(errorOf('Bash', { text: 'ok' })).toBeNull()
     expect(firstLine('\n  Workflow run-lot\nsuite')).toBe('Workflow run-lot')
+  })
+
+  test('call trace: short argument per tool, error with exit code and last output line, recovered or final', () => {
+    expect(callBrief('Bash', { description: 'Run the unit tests', command: 'dotnet test' }, '/r')).toBe('Run the unit tests')
+    expect(callBrief('Bash', { command: 'grep -n foo src\nsecond' }, '/r')).toBe('grep -n foo src')
+    expect(callBrief('Read', { file_path: '/r/src/a.cs' }, '/r')).toBe('src/a.cs')
+    expect(callBrief('Grep', { pattern: 'Lock', path: '/r/src' }, '/r')).toBe('Lock in src')
+    expect(callBrief('Skill', { tool: 'Skill', agentId: 'a1', skill: 'tests-unit-tests' }, '/r')).toBe('tests-unit-tests')
+    expect(callBrief('StructuredOutput', { verdict: 'VALIDE' }, '/r')).toBe('')
+    expect(errorDetail({ isError: true, text: 'Exit code 1' })).toBe('exit 1')
+    expect(errorDetail({ isError: true, text: 'Exit code 1\nBuild started\nFailed: 2, Passed: 41\n' })).toBe('exit 1 · Failed: 2, Passed: 41')
+    expect(errorOf('Bash', { isError: true, text: 'Exit code 2\nboom' }, 'Run the unit tests')).toBe('Bash · Run the unit tests: exit 2 · boom')
+    expect(clockOf(127_400)).toBe('2:07')
+
+    const trace = (id: string) => ({ id, tool: 'Bash', brief: id, at: 0, state: 'running' as const, error: null })
+    const failed = closedCall(withCall(withCall([], trace('c1')), trace('c2')), 'c1', 'exit 1')
+    const agent = { ...blankAgent('a1', 1, 'audit', 'Opus', 'ddd-tdd-auditor', 'x', 0), calls: failed }
+    expect(errorsOf(agent)).toMatchObject({ count: 1, isRecovered: false })
+    expect(errorsOf({ ...agent, calls: closedCall(failed, 'c2', null) })).toMatchObject({ count: 1, isRecovered: true, last: { id: 'c1' } })
+    expect(errorsOf({ ...agent, state: 'error', calls: closedCall(failed, 'c2', null) }).isRecovered).toBe(false)
+    expect(withCall(Array.from({ length: 300 }, (_, i) => trace(`c${i}`)), trace('last'))[0]?.id).toBe('c1')
+  })
+
+  test('structured answer: verdict label, every gap with severity and axis, scalars, empty lists; prompt without the workflow frame', () => {
+    expect(structuredLines({
+      tool: 'StructuredOutput', agentId: 'a1', verdict: 'ECARTS', block: '## Verdict\nlong',
+      gaps: [{ severity: 'Blocking', axis: 'Correctness', gap: 'lock not checked', evidence: 'A.cs:4' }, { severity: 'Minor', axis: 'Reuse', gap: 'dup' }],
+    })).toEqual(['ECARTS · 1 blocking', 'block: ## Verdict', 'gaps · 2', '  Blocking · Correctness · lock not checked', '  Minor · Reuse · dup'])
+    expect(structuredLines({ result: 'CLEAR', questions: [] })).toEqual(['result: CLEAR', 'questions: none'])
+    expect(structuredLines('text')).toBeNull()
+    expect(structuredLines({ tool: 'StructuredOutput' })).toBeNull()
+    expect(structuredLines({ items: Array.from({ length: 30 }, (_, i) => `i${i}`) })?.at(-1)).toBe('… 12 more lines')
+
+    const frame = 'Workflow run-lot, batch F1. Global plan: p.md. Batch sheet: s.md.\nAutonomous mode: nobody answers.'
+    expect(promptBrief(`${frame}\n\nmode: fast F1 s.md\n\nReturn the verdict.`)).toBe('mode: fast F1 s.md\nReturn the verdict.')
+    expect(promptBrief('Workflow run-lot, batch F4. RED 1.')).toBe('Workflow run-lot, batch F4. RED 1.')
+    expect(promptBrief('Write the test.\n\nThen stop.')).toBe('Write the test.\nThen stop.')
   })
 
   test('phases and their detail read from meta.phases only, bracket inside a detail included', () => {
@@ -201,6 +238,30 @@ describe('reading the run', () => {
     expect(phaseRows(runOf([agentOf('d', 'Design', 'done', { endedAt: 4 }), stopped], { phases }), 30).at(-1)?.mark).toBe('done')
   })
 
+  test('resume after an answer: phases past the restart pending again, previous pass kept apart', () => {
+    const phases = ['Design', 'RED', 'GREEN', 'Global green', 'Closing', 'Audit', 'Review', 'Report']
+    const first = [
+      agentOf('d', 'Design', 'done', { startedAt: 0, endedAt: 4 }),
+      agentOf('r1', 'RED', 'done', { label: 'RED 1', startedAt: 5, endedAt: 8 }),
+      agentOf('g1', 'GREEN', 'done', { label: 'GREEN 1', startedAt: 9, endedAt: 12 }),
+      agentOf('s', 'Global green', 'done', { startedAt: 13, endedAt: 14 }),
+      agentOf('c', 'Closing', 'done', { startedAt: 13, endedAt: 16 }),
+      agentOf('a', 'Audit', 'done', { startedAt: 17, endedAt: 20 }),
+      agentOf('v', 'Review', 'done', { startedAt: 18, endedAt: 19 }),
+      agentOf('a2', 'Audit', 'done', { label: 'audit retry 1', startedAt: 21, endedAt: 22 }),
+    ]
+    expect(passesOf(runOf(first, { phases }))).toEqual({ start: null, count: 1 })
+    const run = runOf([...first, agentOf('r1b', 'RED', 'running', { label: 'RED 1', startedAt: 100 })], { phases })
+    expect(passesOf(run)).toEqual({ start: 100, count: 2 })
+    const rows = phaseRows(run, 130)
+    expect(rows.map(row => [row.title, row.mark, row.agents.length, row.earlier.length, row.span])).toEqual([
+      ['Design', 'done', 1, 0, 4], ['RED', 'running', 2, 0, 30], ['GREEN', 'pending', 0, 1, 0], ['Global green', 'pending', 0, 1, 0],
+      ['Closing', 'pending', 0, 1, 0], ['Audit', 'pending', 0, 2, 0], ['Review', 'pending', 0, 1, 0], ['Report', 'pending', 0, 0, 0],
+    ])
+    expect(currentStep(run, rows)?.row.title).toBe('RED')
+    expect(remainingMs(run, rows, { GREEN: spanned(60_000), Closing: spanned(100_000), Audit: spanned(50_000) })).toBe(210_000)
+  })
+
   test('stop awaiting an answer: header reads waiting for user, not failed', () => {
     const outcome = (label: string) => ({ label, reason: null, report: null })
     expect(['BLOQUÉ', 'BLOCKED', 'ATTENTE-RÉPONSE', 'RELECTURE-BLOQUANTE'].map(label => headlineOf('failed', outcome(label)).text)).toEqual(Array(4).fill('waiting for user'))
@@ -229,6 +290,7 @@ describe('reading the run', () => {
     expect(fit('GREEN 2 verrou', 14)).toBe('GREEN 2 verrou')
     expect(fit('GREEN 2 verrou', 8)).toBe('GREEN 2…')
     expect(fit('abc', 0)).toBe('')
+    expect(oneLine('RED not 0 on\n  `dotnet test`\n')).toBe('RED not 0 on `dotnet test`')
   })
 
   test('batch named from the workflow argument, string or object', () => {
@@ -430,6 +492,7 @@ type Options = {
   hold?: Promise<void>
   workflowName?: string
   stream?: (e: TurnStepInput) => AsyncIterable<TurnStepChunk>
+  bashFails?: boolean
 }
 
 const world = (on: On, files: Record<string, string>, options: Options = {}) => {
@@ -492,7 +555,9 @@ const world = (on: On, files: Record<string, string>, options: Options = {}) => 
           },
           text: 'launched',
         }
-      : { result: { type: 'text' }, text: 'ok' }
+      : e.tool === 'Bash' && options.bashFails === true
+        ? { result: { type: 'text' }, text: 'Exit code 1\n', isError: true }
+        : { result: { type: 'text' }, text: 'ok' }
   })
   on('agent.spawn', () => {
     agents += 1
@@ -619,7 +684,8 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
   expect(await nav.find({ type: 'Text', text: /run-lot › RED › agent 2/ })).toBeDefined()
   expect(await nav.find({ type: 'Text', text: /Sonnet · high · tdd-test-author/ })).toBeDefined()
   expect(await nav.find({ type: 'Text', text: /ctx 43k ↗ 43k · now 43k/ })).toBeDefined()
-  expect(await nav.find({ type: 'Text', text: /Tools · 1 call/ })).toBeDefined()
+  expect(await nav.find({ type: 'Text', text: /Activity · 1 call/ })).toBeDefined()
+  expect(await nav.find({ type: 'Text', text: /✓ Edit f$/ })).toBeDefined()
   expect(await nav.find({ type: 'Text', text: /^  Edit 1$/ })).toBeDefined()
   expect(await nav.find({ type: 'Text', text: /Files modified · 1/ })).toBeDefined()
   expect(await nav.find({ type: 'Text', text: /Still running…/ })).toBeDefined()
@@ -684,6 +750,43 @@ test('audit verdict read from the audit agent’s structured answer, the last on
   const valid = await verdictRow('terminal')
   expect(valid?.text).toMatch(/VALIDE/)
   expect(valid?.props.color).toBe('success')
+})
+
+test('agent view: structured verdict as outcome, every call in order, recovered error greyed, prompt without the frame', async ($, on) => {
+  const files: Record<string, string> = {
+    [`${SESSION}/workflows/scripts/run-lot-${RUN}.js`]: AUDIT_SCRIPT,
+    [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ description: 'audit', workflowPhase: 'Audit' }),
+  }
+  world(on, files, { bashFails: true })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await launch($, null)
+  await $.agent.spawn(spawn('audit', 1, 'Workflow run-lot, batch F1. Global plan: p.md.\nAutonomous mode.\n\nmode: fast F1 s.md'))
+  const call = (input: Record<string, unknown>) => $.tool.call({ agentId: 'a1', ...input } as unknown as Parameters<typeof $.tool.call>[0])
+  await call({ tool: 'Bash', description: 'Find the handlers', command: 'grep -rn Lock src' })
+  await call({ tool: 'Read', file_path: '/repo/src/A.cs' })
+  await call({ tool: 'StructuredOutput', verdict: 'ECARTS', gaps: [{ severity: 'Blocking', axis: 'Correctness', gap: 'lock not checked' }] })
+  await $.turn.complete(complete('a1', ''))
+
+  const open = async () => {
+    const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+    await ui.press({ key: 'open-a1' })
+    return ui
+  }
+  const ui = await open()
+  expect(await ui.find({ type: 'Text', text: /No answer/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}ECARTS · 1 blocking$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {4}Blocking · Correctness · lock not checked$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Errors · 1 · recovered/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^ {2}Bash · Find the handlers: exit 1$/ }))?.props.color).toBe('inactive')
+  expect(await ui.find({ type: 'Text', text: /^ {2}mode: fast F1 s\.md$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Global plan/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Activity · 3 calls/ })).toBeDefined()
+  const rows = (await ui.findAll({ type: 'Text', text: /^ {2} +\d+:\d{2} [✓✗]/ })).map(row => row.text)
+  expect(rows).toHaveLength(3)
+  expect(rows[0]).toMatch(/✗ Bash +Find the handlers$/)
+  expect(rows[1]).toMatch(/✓ Read +src\/A\.cs$/)
+  expect(rows[2]).toMatch(/✓ StructuredOutput/)
+  await ui.unmount()
 })
 
 test('empty pane without a run, calls outside a workflow ignored, close button present', async ($, on) => {
