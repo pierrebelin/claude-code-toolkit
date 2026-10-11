@@ -10,6 +10,10 @@ A release that changes a file under `rules/` or `presets/*/rules/` lists it unde
 - `/cctoolkit:run-lot`: the batch report is composed by the script from the run history (fixed English headings, a `Verdict:` line, files grouped by project, cost, assumptions, audit rounds, validations, test recap per class); the haiku agent only writes it verbatim. `## Resume` names both ways: same run resumed with `resumeFromRunId` and `args.decisions` in the session, relaunch out of it. Closing agent on sonnet.
 - `/cctoolkit:run-plan`: preflight starts Docker Desktop on macOS when it is down and checks it again after the build; a run where no batch was launched deletes its run folder; the gate reads `grep -m1 '^Verdict:'` of the batch report.
 
+## spec-pane 1.0.1 — 2026-10-11
+
+- Tests named in English. No behaviour change.
+
 ## cctoolkit 1.3.0 — 2026-10-10
 
 - `adversarial-reviewer` adds `Settled by` and `Answer` columns: a Blocking already answered by a rule, a `CLAUDE.md`, the spec or an earlier `user decision` cites it and dictates the answer; without source it gives options and a recommendation. Output cap 2 kB.
