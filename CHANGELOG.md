@@ -1,8 +1,12 @@
 # Changelog
 
-One section per release, newest first, headed `## <plugin> <version> — <date>`: `cctoolkit` and each mod are versioned on their own.
+One section per release, newest first, headed `## <version> — <date>`: `cctoolkit` and its mods share one version since 1.6.0, each entry names the plugin it changes. Older sections, headed `## <plugin> <version>`, date from per-plugin versions.
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
+
+## 1.6.0 — 2026-10-11
+
+- One version for the whole marketplace: `cctoolkit`, `context-band`, `run-lot-pane` and `spec-pane` all move to 1.6.0 and are released together from now on. No behaviour change: updating any of them pulls the same release.
 
 ## cctoolkit 1.3.1 — 2026-10-11
 

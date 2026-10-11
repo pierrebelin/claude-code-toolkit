@@ -4,7 +4,9 @@
 #
 # Why. Claude Code pins an installed plugin to the `version` of its plugin.json:
 # a push that changes shipped files under the same version never reaches the
-# users who already installed it. For each plugin of the marketplace:
+# users who already installed it. The kit and its mods share one version:
+#   FAIL  a plugin.json whose version differs from the others (`bash dev/bump.sh`)
+# Then, for each plugin of the marketplace:
 #   FAIL  shipped files changed since the current version was released
 #   FAIL  a pending version whose release changes rules, with no
 #         "Rules changed" in its CHANGELOG section
@@ -21,6 +23,15 @@ KIT_PATHS="skills agents hooks lib scripts tools presets rules templates workflo
 RULE_PATHS="rules presets/*/rules"
 
 fail=0
+versions=$(jq -r '.plugins[].source' .claude-plugin/marketplace.json | while read -r source; do
+  dir=${source#./}; [ "$dir" = . ] && dir=""
+  printf '%s\t%s\n' "$(jq -r '.version // empty' "${dir:+$dir/}.claude-plugin/plugin.json")" "${dir:-.}"
+done)
+if [ "$(cut -f1 <<<"$versions" | sort -u | wc -l)" -gt 1 ]; then
+  echo "FAIL  versions differ — one version for every plugin: bash dev/bump.sh <version>"
+  sed $'s/^/        /; s/\t/  /' <<<"$versions"
+  fail=1
+fi
 changed_since() { # <ref> <paths…> — committed, staged, unstaged and untracked
   local ref=$1; shift
   { git diff --name-only "$ref" -- "$@"; git ls-files --others --exclude-standard -- "$@"; } | sort -u
@@ -57,8 +68,8 @@ while IFS=$'\t' read -r name source; do
   fi
 
   # Pending version: what its release changes.
-  section=$(awk -v h="## $name $ver " 'index($0, h) == 1 {p = 1; next} /^## / {p = 0} p' CHANGELOG.md 2>/dev/null)
-  [ -n "$section" ] || { echo "FAIL  $name $ver: no '## $name $ver — …' section in CHANGELOG.md"; fail=1; continue; }
+  section=$(awk -v h="## $ver " 'index($0, h) == 1 {p = 1; next} /^## / {p = 0} p' CHANGELOG.md 2>/dev/null)
+  [ -n "$section" ] || { echo "FAIL  $name $ver: no '## $ver — …' section in CHANGELOG.md"; fail=1; continue; }
   if [ -z "$dir" ]; then
     # shellcheck disable=SC2086
     rules=$(changed_since "$base" $RULE_PATHS)

@@ -20,7 +20,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
 | `docs/` | context cost, tooling |
-| `dev/` | maintainer tools: `release-check.sh` |
+| `dev/` | maintainer tools: `bump.sh`, `release-check.sh` |
 
 ## Anonymisation — do not break it
 
@@ -50,7 +50,7 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 | description of the kit's behaviour | `README.md` for the workflow, `INSTALL.md` for installation and update, the folder's `README.md` for a brick |
 | measurement, protocol or procedure too long for `CLAUDE.md` | `docs/CONTEXT-COST.md`, `docs/TOOLING.md` — opened on demand, so the standing rule stays in `CLAUDE.md` and only points here |
 | repo-wide scanner or one-shot migration | `scripts/` — never a hook: a hook fires per edit, a scan reads the whole repo |
-| a maintainer tool for this checkout only (release check) | `dev/` — never shipped as a `cctoolkit` command |
+| a maintainer tool for this checkout only (version bump, release check) | `dev/` — never shipped as a `cctoolkit` command |
 
 Two sources that drift make the choice random: a fact lives in exactly one place.
 
@@ -64,8 +64,8 @@ Two sources that drift make the choice random: a fact lives in exactly one place
 
 ## Releasing
 
-Claude Code pins an installed plugin to the `version` of its `plugin.json`: a push changing shipped files under the same version never reaches the users who installed it. `cctoolkit` and each mod carry their own version.
+Claude Code pins an installed plugin to the `version` of its `plugin.json`: a push changing shipped files under the same version never reaches the users who installed it. `cctoolkit` and its mods share **one version**, the same in every `plugin.json`.
 
-1. A change to shipped files → bump `version` in that plugin's `plugin.json` (patch: fix; minor: behaviour or rule change; major: a change that breaks an installed repo) and add its `## <plugin> <version> — <date>` section to `CHANGELOG.md`, user-facing. A change under `rules/` or `presets/*/rules/` is listed under **Rules changed**: the user pulls it by re-running `/cctoolkit:kit-init`.
-2. Before pushing: `bash dev/release-check.sh` — `FAIL` blocks the push, `TODO` names a release still to tag.
-3. After the commit: `claude plugin tag --push <plugin dir>` creates `<name>--v<version>`.
+1. A change to shipped files of any plugin → `bash dev/bump.sh <version>` sets it in every `plugin.json` (patch: fix; minor: behaviour or rule change; major: a change that breaks an installed repo), and add its `## <version> — <date>` section to `CHANGELOG.md`, user-facing, each entry naming the plugin it changes. A change under `rules/` or `presets/*/rules/` is listed under **Rules changed**: the user pulls it by re-running `/cctoolkit:kit-init`.
+2. Before pushing: `bash dev/release-check.sh` — `FAIL` blocks the push (shipped change without bump, versions that differ), `TODO` names a release still to tag.
+3. After the commit: `claude plugin tag --push <plugin dir>` for every plugin, each creating `<name>--v<version>`.
