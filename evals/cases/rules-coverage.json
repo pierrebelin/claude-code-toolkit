@@ -1,0 +1,84 @@
+{
+  "fixtures": [
+    {
+      "path": "ids-en/X-PLAN.md",
+      "kind": "text",
+      "content": "# X-PLAN\n\n- **Non-applicable rules** <!-- kit:na-rules -->: APP-98: N/A — no command\n"
+    },
+    {
+      "path": "ids-en/X-PLAN-F1.md",
+      "kind": "text",
+      "content": "# X-PLAN-F1\n\n## Design <!-- kit:design -->\n\n| Point | Decision |\n|---|---|\n| Applied rules <!-- kit:applied-rules --> | DDD-01, DDD-02, DDD-99 |\n"
+    },
+    {
+      "path": "ids-fr/X-PLAN.md",
+      "kind": "text",
+      "content": "# X-PLAN\n\n- **Regles non applicables** : APP-98 — aucune commande\n"
+    },
+    {
+      "path": "ids-fr/X-PLAN-F1.md",
+      "kind": "text",
+      "content": "# X-PLAN-F1\n\n## Design\n\n| Point | Decision |\n|---|---|\n| Règles appliquées | DDD-01, DDD-02, DDD-99 |\n"
+    },
+    {
+      "path": "ids-fr-accent/X-PLAN.md",
+      "kind": "text",
+      "content": "# X-PLAN\n\n- **Règles non applicables** : APP-98 — aucune commande\n"
+    },
+    {
+      "path": "ids-fr-accent/X-PLAN-F1.md",
+      "kind": "text",
+      "content": "# X-PLAN-F1\n\n## Design\n\n| Point | Decision |\n|---|---|\n| Règles appliquées avec dérogation | DDD-01, DDD-02, DDD-99 |\n"
+    }
+  ],
+  "cases": [
+    {
+      "name": "--ids reads the anchored applied-rules row and na-rules line of an English plan",
+      "cmd": "python3 {{KIT}}/scripts/rules-coverage.py --ids {{FIX}}/ids-en/X-PLAN-F1.md | grep -o 'cited : [0-9][0-9]*\\|unknown references : .*' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "cited : 2;unknown references : APP-98, DDD-99;"
+      }
+    },
+    {
+      "name": "--ids reads « Règles appliquées » and « Regles non applicables » of a plan written before the anchors",
+      "cmd": "python3 {{KIT}}/scripts/rules-coverage.py --ids {{FIX}}/ids-fr/X-PLAN-F1.md | grep -o 'cited : [0-9][0-9]*\\|unknown references : .*' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "cited : 2;unknown references : APP-98, DDD-99;"
+      }
+    },
+    {
+      "name": "--ids reads the accented « Règles non applicables » and the « avec dérogation » row",
+      "cmd": "python3 {{KIT}}/scripts/rules-coverage.py --ids {{FIX}}/ids-fr-accent/X-PLAN-F1.md | grep -o 'cited : [0-9][0-9]*\\|unknown references : .*' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "cited : 2;unknown references : APP-98, DDD-99;"
+      }
+    },
+    {
+      "name": "--untested reads the anchored rules table of an English handler sheet",
+      "cmd": "R={{FIX}}/rc-{{SID}}; mkdir -p $R/src/P.Application/Feat/Do $R/tests/P.UnitTests/Feat; cd $R && git init -q .; printf 'public sealed class DoHandler { }\\n' > src/P.Application/Feat/Do/DoHandler.cs; cat > src/P.Application/Feat/Do/CLAUDE.md <<'MD'\n# Do\n\n## Business rules <!-- kit:rules -->\n\n| ID | Rule | Outcome |\n|----|------|---------|\n| RM-01 | a | — |\n| RM-02 | b | — |\n\n## Flow <!-- kit:flow -->\n\nx\nMD\ncat > tests/P.UnitTests/Feat/DoTests.cs <<'CS'\npublic class DoTests\n{\n    [Fact]\n    [Trait(\"RM\", \"Do/RM-01\")]\n    public void ShouldA() { }\n\n    [Fact]\n    public void ShouldB() { }\n}\nCS\npython3 {{KIT}}/scripts/rules-coverage.py --untested | head -3 | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "rules: 2 | with test: 1 | with no test: 1;dead references: 0 | unbound tests: 1;;"
+      }
+    },
+    {
+      "name": "--untested reads the « Règles métier » table of a handler sheet written before the anchors",
+      "cmd": "R={{FIX}}/rc-{{SID}}; mkdir -p $R/src/P.Application/Feat/Do $R/tests/P.UnitTests/Feat; cd $R && git init -q .; printf 'public sealed class DoHandler { }\\n' > src/P.Application/Feat/Do/DoHandler.cs; cat > src/P.Application/Feat/Do/CLAUDE.md <<'MD'\n# Do\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | a | — |\n| RM-02 | b | — |\n\n## Flux\n\nx\nMD\ncat > tests/P.UnitTests/Feat/DoTests.cs <<'CS'\npublic class DoTests\n{\n    [Fact]\n    [Trait(\"RM\", \"Do/RM-01\")]\n    public void ShouldA() { }\n\n    [Fact]\n    public void ShouldB() { }\n}\nCS\npython3 {{KIT}}/scripts/rules-coverage.py --untested | head -3 | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "rules: 2 | with test: 1 | with no test: 1;dead references: 0 | unbound tests: 1;;"
+      }
+    },
+    {
+      "name": "--untested names the rule left without test of a French handler sheet",
+      "cmd": "R={{FIX}}/rc-{{SID}}; mkdir -p $R/src/P.Application/Feat/Do $R/tests/P.UnitTests/Feat; cd $R && git init -q .; printf 'public sealed class DoHandler { }\\n' > src/P.Application/Feat/Do/DoHandler.cs; cat > src/P.Application/Feat/Do/CLAUDE.md <<'MD'\n# Do\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | a | — |\n| RM-02 | b | — |\n\n## Flux\n\nx\nMD\ncat > tests/P.UnitTests/Feat/DoTests.cs <<'CS'\npublic class DoTests\n{\n    [Fact]\n    [Trait(\"RM\", \"Do/RM-01\")]\n    public void ShouldA() { }\n\n    [Fact]\n    public void ShouldB() { }\n}\nCS\npython3 {{KIT}}/scripts/rules-coverage.py --untested | grep 'with no test —'",
+      "expect": {
+        "exit": 0,
+        "stdout": "Feat/Do: 1/2 with no test — RM-02"
+      }
+    }
+  ]
+}

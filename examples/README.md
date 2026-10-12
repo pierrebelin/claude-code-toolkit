@@ -7,7 +7,7 @@ What the kit writes into a repo for one small feature, *archive a product* in a 
 | 1 | [`todo/product-archiving/SPEC-product-archiving.md`](todo/product-archiving/SPEC-product-archiving.md) | `/cctoolkit:business-spec` | business rules `RM-xx` and use cases `CU-xx`, no technical word; one `Major` open question left, which doesn't block the plan |
 | 2 | [`todo/product-archiving/PRD-ARCH-PLAN.md`](todo/product-archiving/PRD-ARCH-PLAN.md) | `/cctoolkit:plan-implementation` | the global plan: batches, their order, each RM/CU traced to its code owner |
 | 3 | [`todo/product-archiving/PRD-ARCH-PLAN-F1.md`](todo/product-archiving/PRD-ARCH-PLAN-F1.md) | `/cctoolkit:plan-implementation`, ticked by `/cctoolkit:run-lot` | one batch sheet: tests named before any code, exact file paths, the `TDD:` progress line |
-| 4 | [`todo/product-archiving/run/F1/F1-report.md`](todo/product-archiving/run/F1/F1-report.md) | `/cctoolkit:run-lot` | the end-of-batch report: status, files, access cost, validations, every test tied to its rule |
+| 4 | [`todo/product-archiving/run/batches/F1.md`](todo/product-archiving/run/batches/F1.md) | `/cctoolkit:run-lot` | the end-of-batch report: status, verdict, files, access cost, validations, every test tied to its rule, what is left to validate |
 | 5 | [`src/Application/Catalog/Products/ArchiveProduct/CLAUDE.md`](src/Application/Catalog/Products/ArchiveProduct/CLAUDE.md) | `/cctoolkit:run-lot` (closing) | the handler sheet: its rules table is checked against the tests' `[Trait("RM", …)]` tags |
 
 Batch F2 (restore) is still ⬜ in the plan: its sheet is left out, it reads like F1.

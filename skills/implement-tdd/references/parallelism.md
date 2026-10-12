@@ -1,11 +1,12 @@
-# Parallel REDs — waves
+# Waves — parallel REDs
 
-Measurements: `rationale.md` § 2, "Waves" and "RED(n+1) beside GREEN(n)".
+Read by the `run-lot` design. The workflow runs a wave's REDs in parallel, its GREENs one after the other, and starts wave n+1's REDs beside wave n's first GREEN.
 
-Two behaviours with disjoint target test files → both `tdd-test-author` in one message. Check disjointness on the sheet first: shared fixture, shared `CoreTests/` builder, or one test class carrying both scenarios → sequential. GREEN serialised whatever happens: two implementers on one layer collide.
+- **Same wave** = cycles whose tests touch neither the same test file nor the same production code — typically one Application + one Infrastructure or WebAPI. Check on the sheet: shared fixture, shared builder under `layout.tests.shared`, or one test class carrying both scenarios → successive waves. `cctoolkit sheet-cycles <sheet> --index` refuses two cycles of one wave sharing a `full` test file or a `production` file.
+- **Wave n+1 beside GREEN(n)** is safe while its test files stay disjoint from wave n's and no signature stub its RED needs lands in a file a GREEN of wave n fills. Shared stub → move that cycle one wave later.
 
-Wave = behaviours whose tests touch neither the same test file nor the same production code — typically one Application + one Infrastructure or WebAPI. A wave's REDs in one message, one `Agent` call each; its GREENs sequential.
+**One cycle = one homogeneous pattern, one test project, at most 4 test files rewritten and 8 production files.** Every RED and every GREEN costs a fixed spawn, build and read; eleven small cycles for one repeated change cost three times four grouped ones. Group what the same reasoning settles — the same change applied to several exceptions, handlers or endpoints — into one cycle, as long as one test project carries it and the caps hold; `cctoolkit sheet-cycles <sheet> --index` enforces them (test files under `layout.tests.shared` of `kit.config.json` excepted). Past a cap, split by test class or by production folder, each sub-cycle carrying the same step title and its own methods. A sub-cycle with no production of its own (its tests only observe what another sub-cycle's GREEN writes) is not a cycle: keep its tests in the cycle that drives that code.
 
-**Next wave's REDs go in the same message as the current wave's first GREEN.** Safe while wave n+1 test files stay disjoint from wave n's and no signature stub RED(n+1) needs lands in a file GREEN(n) fills — check both on the sheet; shared stub → that RED back to sequential.
+**A `file in use` / locked-output build error in an agent = build collision**, not a design fault: two agents building the same output directory at once. Have it re-issue its filtered command; don't re-delegate.
 
-**`CS2012` / `file in use` in an agent = build collision**, not a design fault: two agents building the same `obj/`. Have it re-issue its filtered command, don't re-delegate.
+**Turn budget.** `tdd-test-author` stops writing past about 26 turns and reports what it wrote; a cycle with more methods than one agent writes in that budget comes back partial and is retried. Keep a cycle's methods to what one agent writes in a sitting — about a dozen of the same shape, fewer when each needs its own fixture.

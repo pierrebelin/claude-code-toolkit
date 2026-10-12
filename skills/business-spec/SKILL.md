@@ -16,7 +16,7 @@ $ARGUMENTS
 2. **Clarify decisions** until shared understanding, **before** writing:
    - One question at a time, branch by branch (answer to Q1 changes Q2).
    - Answer in code → explore, don't ask. Ask only what can't be deduced.
-   - Via **AskUserQuestion**: 1 question = 1 decision, **recommended answer as first option** (`(recommended)`).
+   - Via **AskUserQuestion**: 1 question = 1 decision, **recommended answer as first option** (`(recommended)`, `(recommandé)` in French).
    - Business constraint = decision too: regulation, standard, SLA, contractual commitment, existing behaviour that must survive. Elicit here; lands as business rule carrying its origin, never its own section. Technical, temporal or resource constraint: out of scope, belongs to `/plan-implementation`.
    - Continue until no decision left that would change a use case, business rule, data, states or scope. Settled → spec; unsettled → section `kit:open-questions`.
 3. **Challenge the product owner** only when a decision cuts scope, complexity or risk — ≤3 questions via **AskUserQuestion**:

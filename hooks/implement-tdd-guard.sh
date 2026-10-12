@@ -3,16 +3,18 @@
 #
 # /implement-tdd relaunched without /clear makes the new batch pay the whole
 # accumulated context of the previous one on every turn. The skill already says so
-# (closing.md), but an instruction addressed to the
+# (its closing line), but an instruction addressed to the
 # agent is not a barrier: the orchestrator reads it after the reads it was meant to
 # prevent.
 #
 # Detection reads the transcript, not a state file: the closing literal emitted by
 # /implement-tdd is emitted once per closed batch and by nothing else. Both wordings
-# are matched — the skill emits the English one, the French alternative only catches
-# a transcript started before the kit was translated — and the reply is English in
-# either case. F<n> requires a digit, so the skill sources and this file, which quote
-# "Lot FX" / "Batch FX", never match.
+# are matched — the skill emits the English one (`→ Batch FX complete — manual
+# validation required`), the French one (`→ Lot FX terminé — validation manuelle
+# requise`) stays in the transcripts and repos written before the switch — and the
+# reply is English in either case. F<n> requires a digit, so the skill sources and
+# this file, which quote "Lot FX" / "Batch FX", never match. A French launch (`lot F2`)
+# names its batch the same way: the id is the first F<n> of the prompt.
 #
 # Escape hatch, same convention as read-bounds.sh:
 # re-issuing the identical launch lets it through. The first attempt drops a marker,
@@ -117,7 +119,7 @@ fi
 touch "$marker"
 
 reason="Batch ${closed} already closed in this session — /clear before batch ${lot:-next}.
-The next batch would pay the accumulated context of the previous one on every turn (measured: 1.9x the input at equal request count, see implement-tdd references/rationale.md \"One batch, one session\").
+The next batch would pay the accumulated context of the previous one on every turn (measured: 1.9x the input at equal request count).
 Read nothing, delegate nothing, write nothing. Relaunch /cctoolkit:implement-tdd batch ${lot:-FX} after the /clear.
 Force: re-issue the identical launch a second time."
 

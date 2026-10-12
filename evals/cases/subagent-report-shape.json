@@ -65,6 +65,90 @@
       "hook": "hooks/subagent-report-shape.sh",
       "input": {},
       "expect": {"exit": 0, "decision": "none"}
+    },
+    {
+      "name": "a complete French ## RED passes untouched (Commande, Diff production, Échec attendu, Cas couvert)",
+      "cmd": "printf '%s' '{\"last_assistant_message\": \"## RED\\n- Tests: `tests/A/BTests.cs`\\n- Commande : `rtk dotnet test ...` — exit 1\\n- Diff production : `git diff --stat -- src/` — vide\\n- Échec attendu : la règle n est pas portée\\n\\n| Test | Cas couvert |\\n|---|---|\\n| `BTests.Refuses` | refus sans délégation |\\n\"}' | bash {{KIT}}/hooks/subagent-report-shape.sh | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "expect": {
+        "exit": 0,
+        "stdout": "bytes=0"
+      }
+    },
+    {
+      "name": "a French ## RED without its Cas couvert table is sent back, in English",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {
+        "last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Commande : `rtk dotnet test ...` — exit 1\n- Diff production : `git diff --stat -- src/` — vide\n- Échec attendu : la règle n est pas portée\n"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "Case covered"
+      }
+    },
+    {
+      "name": "a French ## RED missing its Diff production line names the English label",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {
+        "last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Commande : `rtk dotnet test ...` — exit 1\n- Échec attendu : la règle n est pas portée\n\n| Test | Cas couvert |\n|---|---|\n| `BTests.Refuses` | refus |\n"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "Production diff"
+      }
+    },
+    {
+      "name": "a French Commande line without an observed exit code is sent back",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {
+        "last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Commande : `rtk dotnet test ...`\n- Diff production : `git diff --stat -- src/` — vide\n- Échec attendu : rien\n\n| Test | Cas couvert |\n|---|---|\n| `BTests.Refuses` | refus |\n"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "observed exit code"
+      }
+    },
+    {
+      "name": "a complete French ## GREEN passes untouched (Diff tests, Coût, Supprimé au REFACTOR, Signalé sans correction)",
+      "cmd": "printf '%s' '{\"last_assistant_message\": \"## GREEN\\n- Production: `src/A/B.cs`\\n- Commande : `rtk dotnet test ...` — exit 0\\n- Diff tests : `git diff --stat -- tests/` — vide\\n- Coût : `Infrastructure en boucle : aucun`\\n- Supprimé au REFACTOR : rien\\n- Signalé sans correction : rien\\n\"}' | bash {{KIT}}/hooks/subagent-report-shape.sh | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "expect": {
+        "exit": 0,
+        "stdout": "bytes=0"
+      }
+    },
+    {
+      "name": "a French ## GREEN without its Coût line is sent back, the English label named",
+      "hook": "hooks/subagent-report-shape.sh",
+      "input": {
+        "last_assistant_message": "## GREEN\n- Production: `src/A/B.cs`\n- Commande : `rtk dotnet test ...` — exit 0\n- Diff tests : `git diff --stat -- tests/` — vide\n- Supprimé au REFACTOR : rien\n- Signalé sans correction : rien\n"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "Cost"
+      }
+    },
+    {
+      "name": "a French ## BLOQUÉ is never policed",
+      "cmd": "printf '%s' '{\"last_assistant_message\": \"## BLOQUÉ\\nLe test ne peut pas passer sans modifier son assertion.\\n\"}' | bash {{KIT}}/hooks/subagent-report-shape.sh | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "expect": {
+        "exit": 0,
+        "stdout": "bytes=0"
+      }
+    },
+    {
+      "name": "an English complete ## GREEN passes untouched",
+      "cmd": "printf '%s' '{\"last_assistant_message\": \"## GREEN\\n- Production: `src/A/B.cs`\\n- Command: `rtk dotnet test ...` — exit 0\\n- Tests diff: `git diff --stat -- tests/` — empty\\n- Cost: `none`\\n- Deleted at REFACTOR: nothing\\n- Reported without fixing: nothing\\n\"}' | bash {{KIT}}/hooks/subagent-report-shape.sh | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "expect": {
+        "exit": 0,
+        "stdout": "bytes=0"
+      }
+    },
+    {
+      "name": "an English ## BLOCKED is never policed",
+      "cmd": "printf '%s' '{\"last_assistant_message\": \"## BLOCKED\\nThe test cannot pass without modifying its assertion.\\n\"}' | bash {{KIT}}/hooks/subagent-report-shape.sh | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "expect": {
+        "exit": 0,
+        "stdout": "bytes=0"
+      }
     }
   ]
 }

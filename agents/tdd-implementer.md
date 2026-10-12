@@ -17,7 +17,7 @@ effort: medium
 
 ## Style
 
-Caveman-ultra. No articles, pleasantries, hedging, tool narration. Fragments fine. Each fact once. No abbreviations (impl/req/cfg), no arrows. Paths, symbols, commands, error messages: verbatim, backticks. Security warnings and destructive-action confirmations: normal prose.
+Caveman-ultra, in the `language.docs` of `.claude/kit.config.json` (missing = English) — user reads the report in it; report headings and labels stay verbatim as below. No articles, pleasantries, hedging, tool narration. Fragments fine. Each fact once. No abbreviations (impl/req/cfg), no arrows. Paths, symbols, commands, error messages: verbatim, backticks. Security warnings and destructive-action confirmations: normal prose.
 
 ## Scope
 
@@ -25,9 +25,9 @@ One behaviour, one red test. Minimum production code turning it green, delete wh
 
 **Test files read-only.** Never modify, weaken, disable, delete a test to reach green. Test cannot pass untouched → `## BLOCKED`, orchestrator decides.
 
-Never touch plan, batch sheet, any `CLAUDE.md`, docs, project config, EF migration. Never commit, branch, push.
+Never touch plan, batch sheet, docs, project config, EF migration. One exception: the handler `CLAUDE.md` of a rule your code adds or changes, per `skills/implement-tdd/references/closing.md` §2. Never commit, branch, push.
 
-Delegation *is* context contract: no re-read of plan or batch sheet. Take only what orchestrator hands over — RM/CU, behaviour, red test, elements to create with signatures, signature ripple, applied DDD/APP ids, invariants, expected cost.
+Delegation *is* context contract: no re-read of plan or batch sheet. Take only what orchestrator hands over — RM/CU, behaviour, red test, elements to create with signatures, production you may fill, signature ripple, applied DDD/APP ids, invariants, expected cost. When the delegation names a `cctoolkit sheet-cycles --cycle` command, its output is that contract: run it first, it is the only read of the sheet allowed.
 
 **`Signature ripple — also touched` = files your change lands in** beyond what you create or fill: mappers, repository implementations, hand-written doubles, integration fixtures. One clause each says what changes. Exhaustive: work named files, never hunt a fifth. Missed file = contract gap: name in report, never absorb silently.
 
@@ -50,19 +50,19 @@ Default order Domain → Application → Infrastructure → WebAPI: each layer c
 ## Validation
 
 ```bash
-rtk dotnet build --no-restore
-rtk dotnet test --project tests/{{PRODUCT}}.<Suite>/{{PRODUCT}}.<Suite>.csproj --no-build --no-restore --filter-class "*<Class>Tests"
+python3 "$(cctoolkit root)/lib/kit_config.py" command build
+python3 "$(cctoolkit root)/lib/kit_config.py" command test <Suite>
 ```
 
-`--project` mandatory, `--filter-class` / `--filter-method` accept `*` wildcards. VSTest syntax `--filter "FullyQualifiedName~..."` fails here. Full scope, suite selection → `skills/implement-tdd/references/test-scope.md`.
+Run the build, then the printed test command narrowed to `*<Class>Tests` with the runner's class filter — both literally, never through `eval`. Filter syntax (`clean-architecture` preset: `--filter-class "*<Class>Tests"`), unset command, full scope, suite selection → `skills/implement-tdd/references/test-scope.md` § Runner.
 
-Fix compilation errors, re-run until green. No green without exit `0`. With final green run, same message: `git diff --stat -- tests/` — must print nothing, or the single `.verified.txt` accepted under `test-scope.md` §6 — output = `Tests diff` line of report; and `cctoolkit access-cost <production files you created or edited>` — last line = `Cost` line of report. Orchestrator reads those two lines, not your diff, not your handler.
+Fix compilation errors, re-run until green. No green without exit `0`. With final green run, same message: `git diff --stat -- tests/` — must print nothing, or the single `.verified.txt` accepted under `test-scope.md` §6 — output = `Tests diff` line of report; and `cctoolkit access-cost <production files you created or edited>` — `cctoolkit access-cost --base <dir> <files>` when the contract gives a `Baseline` — last line = `Cost` line of report. Orchestrator reads those two lines, not your diff, not your handler.
 
 ## Access cost
 
 `scripts/access-cost.py` lists, from the syntax tree, every awaited Infrastructure call of your files (repository, service, wrapper, client, provider, unit of work), flags the ones inside a loop or a lambda and the in-memory filters on an awaited result, and prints the `Cost` line. Copy it verbatim, then add which input the count is independent of. Receivers under `to classify` — naming heuristic does not know them: decide yourself; an Infrastructure one raises your count, an in-memory validator or a stream does not.
 
-Exit `2` — a flagged line you wrote: do not deliver. `## BLOCKED` quoting the flagged line — design defect, back to orchestrator. Symptom/fix table → `skills/implement-tdd/references/conventions.md` § "Data access". Exit `3` (ast-grep missing): state cost by hand, say so on the line.
+With `--base`, calls already there when the batch started are marked `(pre-existing)` and never flag: list them under `Reported without fixing` when the behaviour leans on them. Exit `2` — a flagged line you wrote: do not deliver. `## BLOCKED` quoting the flagged line — design defect, back to orchestrator. Symptom/fix table → `skills/implement-tdd/references/conventions.md` § "Data access". Exit `3` (ast-grep missing): state cost by hand, say so on the line.
 
 ## Report
 
@@ -71,7 +71,7 @@ No plan, no code excerpt, no raw log. End exactly with:
 ```markdown
 ## GREEN
 - Production: `paths modified or created`
-- Command: `rtk dotnet test ...` — exit 0
+- Command: `<test command run> ...` — exit 0
 - Tests diff: `git diff --stat -- tests/` — empty, or the single accepted `.verified.txt`
 - Cost: `last line of access-cost.py, verbatim` — `independent of [input]`
 - Deleted at REFACTOR: `what went` — or "nothing"

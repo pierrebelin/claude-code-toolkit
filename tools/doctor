@@ -15,6 +15,8 @@
 #
 # The repo is the one lib/project-root.sh resolves ($CLAUDE_PROJECT_DIR, else the
 # git top level); CLAUDE_DOCTOR_ROOT overrides it (evals).
+# CLAUDE_DOCTOR_BUDGET_LINES=<n> opts into a NOTE when the repo's .claude/ tooling
+# folders hold more than n lines.
 #
 # Exit 1 when any check FAILs, 0 otherwise. The SessionStart registration appends
 # `|| true`: a doctor must never block a session, only report.
@@ -80,6 +82,7 @@ command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report o
 # .claude/settings.json it reaches every clone and worktree; in settings.local.json
 # only this checkout (a worktree then needs `cctoolkit install-git-hooks`).
 local_hooks=0
+shared=0
 enabled_in=""
 for f in "$CL/settings.json" "$CL/settings.local.json" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"; do
   [ -e "$f" ] || continue
@@ -101,7 +104,12 @@ for f in "$CL/settings.json" "$CL/settings.local.json" "${CLAUDE_CONFIG_DIR:-$HO
 done
 if [ -n "$enabled_in" ]; then
   report ok "plugin enabled" "cctoolkit in${enabled_in}"
-  case "$enabled_in" in *settings.json*) local_hooks=0 ;; esac
+  # The user's settings and a committed .claude/settings.json reach every worktree; a
+  # git-ignored one does not, and settings.local.json then carries the plugin there.
+  case " $enabled_in " in *" ~/.claude/settings.json "*) shared=1 ;; esac
+  case " $enabled_in " in *" .claude/settings.json "*)
+    git -C "$ROOT" check-ignore -q "$CL/settings.json" 2>/dev/null || shared=1 ;; esac
+  [ "$shared" -eq 1 ] && local_hooks=0
 else
   report FAIL "plugin enabled" "cctoolkit is not enabled for $ROOT — no kit hook fires here (INSTALL.md)"
 fi
@@ -181,8 +189,10 @@ if git -C "$ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
   common=$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null)
   case "$common" in /*) ;; *) common="$ROOT/$common" ;; esac
   pc="$common/hooks/post-checkout"
-  if [ "$local_hooks" -eq 0 ]; then
+  if [ "$shared" -eq 1 ]; then
     report ok "git post-checkout hook" "not needed — the plugin enabled in the committed settings.json reaches every worktree"
+  elif [ "$local_hooks" -eq 0 ]; then
+    report WARN "worktree plugin" ".claude/settings.json is git-ignored: a new worktree gets neither it nor the plugin — enable cctoolkit@cctoolkit in settings.local.json too, linked by cctoolkit install-git-hooks"
   elif [ -f "$pc" ] && grep -q 'settings.local.json' "$pc" 2>/dev/null; then
     report ok "git post-checkout hook" "links settings.local.json into new worktrees"
   else
@@ -245,6 +255,19 @@ fi
 orphans=$(find -H /tmp -maxdepth 1 -name 'claude-*' -mtime +3 2>/dev/null | wc -l | tr -d ' ')
 [ "${orphans:-0}" -eq 0 ] && report ok "/tmp state" "nothing older than 3 days" \
   || report WARN "/tmp state" "$orphans claude-* file(s) older than 3 days survived session-cleanup.sh — check its PREFIXES list"
+
+# --- tooling budget (opt-in) ----------------------------------------------------
+# What the repo keeps under .claude/{skills,agents,rules,hooks,scripts,lib,workflows,
+# docs} is read or run every session: a ceiling turns its growth into a decision.
+# Unset = no check. Over the ceiling is a NOTE, never a FAIL.
+if [ -n "${CLAUDE_DOCTOR_BUDGET_LINES:-}" ]; then
+  tooling=$(cd "$CL" 2>/dev/null && find skills agents rules hooks scripts lib workflows docs -type f ! -path "*/__pycache__/*" -exec cat {} + 2>/dev/null | wc -l | tr -d ' ')
+  if [ "${tooling:-0}" -gt "$CLAUDE_DOCTOR_BUDGET_LINES" ]; then
+    report NOTE "tooling budget" "$tooling lines > $CLAUDE_DOCTOR_BUDGET_LINES — every addition to .claude/ replaces something"
+  else
+    report ok "tooling budget" "$tooling / $CLAUDE_DOCTOR_BUDGET_LINES lines"
+  fi
+fi
 
 # --- /learn backlog -------------------------------------------------------------
 # Verdict deviations nobody turned into a rule yet. The script only refreshes its

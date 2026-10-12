@@ -4,7 +4,7 @@
 
 - Claude Code with plugin support
 - `jq` and `python3`
-- for `/cctoolkit:run-lot` and `/cctoolkit:run-plan`: the `Workflow` tool (`disableWorkflows` absent or `false`)
+- the `Workflow` tool (`disableWorkflows` absent or `false`): `/implement-tdd` launches `/cctoolkit:run-lot` or `/cctoolkit:run-plan`, there is no manual implementation path
 
 ## 1. Install the plugin
 

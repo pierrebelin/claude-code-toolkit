@@ -255,6 +255,45 @@
         "stderr": "run it from the toolkit checkout",
         "exit": 2
       }
+    },
+    {
+      "name": "validate: a malformed layout.integrationGuard is a FAIL line",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py $R/scripts/\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nF=$A\nmkdir -p $A $T\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"product\": \"Acme\", \"layout\": {\"integrationGuard\": {\"sources\": \"src/Acme.Infrastructure\"}}}' > $R/.claude/kit.config.json\npython3 $R/.claude/lib/kit_config.py validate $R\n",
+      "expect": {
+        "stdout": "FAIL\tlayout.integrationGuard\texpects",
+        "exit": 0
+      }
+    },
+    {
+      "name": "command test <suite>: the clean-architecture default, {product} and {suite} expanded",
+      "cmd": "R={{FIX}}/kcmd-{{SID}}\nmkdir -p $R/.claude\nprintf '%s' '{\"product\": \"Acme\"}' > $R/.claude/kit.config.json\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py command test UnitTests\n",
+      "expect": {
+        "exit": 0,
+        "stdout": "rtk dotnet test --project tests/Acme.UnitTests/Acme.UnitTests.csproj --no-build --no-restore"
+      }
+    },
+    {
+      "name": "command architectureTest: the run of an object-valued command",
+      "cmd": "R={{FIX}}/kcmd-{{SID}}\nmkdir -p $R/.claude\nprintf '%s' '{\"product\": \"Acme\"}' > $R/.claude/kit.config.json\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py command architectureTest\n",
+      "expect": {
+        "exit": 0,
+        "stdout": "tests/Acme.ArchitectureTests/Acme.ArchitectureTests.csproj"
+      }
+    },
+    {
+      "name": "command test: the repo's own command overrides the preset's",
+      "cmd": "R={{FIX}}/kcmd-{{SID}}\nmkdir -p $R/.claude\nprintf '%s' '{\"preset\": \"vertical-slices\", \"commands\": {\"test\": \"pytest tests/{suite}\"}}' > $R/.claude/kit.config.json\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py command test unit\n",
+      "expect": {
+        "exit": 0,
+        "stdout": "pytest tests/unit"
+      }
+    },
+    {
+      "name": "command test: unset in the preset prints nothing, exit 0",
+      "cmd": "R={{FIX}}/kcmd-{{SID}}\nmkdir -p $R/.claude\nprintf '%s' '{\"preset\": \"hexagonal\"}' > $R/.claude/kit.config.json\nout=$(CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py command test UnitTests); echo \"exit=$? bytes=${#out}\"\n",
+      "expect": {
+        "stdout": "exit=0 bytes=0"
+      }
     }
   ]
 }

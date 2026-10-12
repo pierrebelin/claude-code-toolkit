@@ -39,10 +39,10 @@ flowchart LR
 | Command | `/cctoolkit:run-plan <plan>` | `/cctoolkit:run-lot <sheet>` |
 | Runs | every batch, in dependency order | one batch |
 | You step in | once, at the end | after each batch: review, commit, `/clear`, next |
-| Stops | at the first batch that does not pass | the batch comes back `DONE`, or with what needs your eyes |
+| Stops | a batch that cannot pass is set aside, only its dependents wait | the batch comes back `DONE`, or with what needs your eyes |
 | Fits | a plan you trust, a run over lunch or overnight | a new plan, a tricky batch, a team that reviews every commit |
 
-**Whole plan** runs `run-lot` on each batch the plan's dependency table allows, then checks each result from disk before going on. The first failure stops everything: nothing is relaunched, nothing is fixed behind your back. It never commits, so you review the batches together at the end, with a `REPORT.md` and one patch per batch. `--until F3` stops after a given batch, `--only F2` runs just one.
+**Whole plan** runs `run-lot` on each batch the plan's dependency table allows, then checks each result from disk before going on. A stop is settled by an arbiter agent, not by a question: what it decided without you lands in `TO-VALIDATE.md`, to read after the plan. A batch that still cannot pass is set aside, its partial work saved as a patch, and the batches that do not depend on it carry on. A question reaches you only when no decision is defensible: arm `cctoolkit run-question watch <plan folder>/run` in the background, answer through AskUserQuestion, the run goes on. It never commits, so you review the batches together at the end, with a `REPORT.md`, a `TO-VALIDATE.md` and the patch of every batch set aside. `--until F3` stops after a given batch, `--only F2` runs just one.
 
 **Batch by batch** keeps you in the loop: each batch ends on a report, you read the diff, commit and start the next one with a clean context.
 
@@ -52,7 +52,7 @@ Inside `run-lot`, each behaviour of the batch is one loop:
 
 ```mermaid
 flowchart LR
-    I["run-lot / implement-tdd"] --> R
+    I["run-lot"] --> R
     R["RED"] -->|"compact contract:<br/>RM/CU, scenario, level"| A["tdd-test-author subagent<br/>writes the red test"]
     A -->|"red test<br/>no production code"| R
     R --> G["GREEN + REFACTOR"]
@@ -65,7 +65,7 @@ flowchart LR
 
 The orchestrator writes neither tests nor code: it splits the work, checks the diffs, validates the cost and settles the design. One agent writes the failing test, another makes it pass without touching it, a third audits.
 
-A batch that stops short, either way, is finished by hand with `/cctoolkit:implement-tdd` then `/cctoolkit:verify-ddd-tdd` ([`docs/TOOLING.md`](docs/TOOLING.md)).
+A batch that stops short: fix the cause and run `/cctoolkit:run-lot` on the same sheet again, it resumes from the cycles already done. `/cctoolkit:implement-tdd` launches the chain from a plan path, `/cctoolkit:verify-ddd-tdd` audits a batch on demand ([`docs/TOOLING.md`](docs/TOOLING.md)).
 
 Want to see the files? **[`examples/`](examples/README.md)** walks one small feature from spec to report.
 
@@ -103,7 +103,7 @@ If your team works differently, half of it will feel like noise. Full list: [`sk
 | Install, update, dependencies | [INSTALL.md](INSTALL.md) |
 | A feature from spec to report | [`examples/`](examples/README.md) |
 | Every skill and agent | [`skills/README.md`](skills/README.md) |
-| Autonomous runs, finishing a batch by hand | [`docs/TOOLING.md`](docs/TOOLING.md) |
+| Autonomous runs, resuming a stopped batch | [`docs/TOOLING.md`](docs/TOOLING.md) |
 | Layouts and configuration | [`presets/README.md`](presets/README.md) |
 | Other repos configuring a coding agent | [RESOURCES.md](RESOURCES.md) |
 

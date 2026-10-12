@@ -14,6 +14,12 @@
       "expect": {"decision": "deny", "reason": "Unbounded cat on"}
     },
     {
+      "name": "cat denial names cctoolkit bulk-read as the third way out",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/big.cs"}},
+      "expect": {"decision": "deny", "reason": "cctoolkit bulk-read --question"}
+    },
+    {
       "name": "piped cat passes (the pipe bounds it)",
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat {{FIX}}/big.cs | grep C1"}},

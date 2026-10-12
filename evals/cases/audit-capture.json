@@ -1,0 +1,17 @@
+{
+  "fixtures": [],
+  "cases": [
+    { "name": "audit-capture --base: the diff is the batch's own, an earlier batch's lines stay out, its files are still listed",
+      "cmd": "R={{FIX}}/capture-{{SID}}; B=$R.bl; O=$R.out/audit.txt; rm -rf $R $B $R.out; mkdir -p $R/src $R/tests $R/.claude && cd $R && git init -q && printf '{\"commands\": {\"build\": \"true\", \"architectureTest\": {\"run\": \"true\", \"when\": \"^$\"}}}\\n' > .claude/kit.config.json && printf '# S\\n' > sheet.md && printf 'v0\\n' > src/Seed.cs && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && printf 'early\\n' > src/Early.cs && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $B --root $R >/dev/null && printf 'batch\\n' >> $R/src/Early.cs && printf 'batch\\n' > $R/src/Batch.cs && cd $R && bash {{KIT}}/scripts/audit-capture.sh F1 sheet.md $O --base $B >/dev/null && echo \"$(grep -c '^+early' $O)|$(grep -c '^+batch' $O)|$(grep -c '^src/Batch.cs$' $O)|$(grep -c '^src/Early.cs$' $O)\"",
+      "expect": { "exit": 0, "stdout": "0|2|1|1" } },
+    { "name": "audit-capture without --base: the tree against HEAD, earlier batches included",
+      "cmd": "R={{FIX}}/capture-{{SID}}; O=$R.out/audit.txt; rm -rf $R $R.out; mkdir -p $R/src $R/tests $R/.claude && cd $R && git init -q && printf '{\"commands\": {\"build\": \"true\", \"architectureTest\": {\"run\": \"true\", \"when\": \"^$\"}}}\\n' > .claude/kit.config.json && printf '# S\\n' > sheet.md && printf 'v0\\n' > src/Seed.cs && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && printf 'early\\nbatch\\n' > src/Early.cs && printf 'batch\\n' > src/Batch.cs && bash {{KIT}}/scripts/audit-capture.sh F1 sheet.md $O >/dev/null && echo \"$(grep -c '^+early' $O)|$(grep -c '^+batch' $O)\"",
+      "expect": { "exit": 0, "stdout": "1|2" } },
+    { "name": "audit-capture: a diff past 1200 lines is never cut, it stays in its own file and the capture indexes it file by file",
+      "cmd": "R={{FIX}}/capture-{{SID}}; O=$R.out/audit.txt; rm -rf $R $R.out; mkdir -p $R/src $R/tests $R/.claude && cd $R && git init -q && printf '{\"commands\": {\"build\": \"true\", \"architectureTest\": {\"run\": \"true\", \"when\": \"^$\"}}}\\n' > .claude/kit.config.json && printf '# S\\n' > sheet.md && printf 'v0\\n' > src/Seed.cs && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && seq 1 1300 > src/Big.cs && printf 'small\\n' > src/Small.cs && bash {{KIT}}/scripts/audit-capture.sh F1 sheet.md $O >/dev/null && echo \"$(grep -c '^full diff: ' $O)|$(grep -c '^b/src/Big.cs: lines ' $O)|$(grep -c '^b/src/Small.cs: lines ' $O)|$(test -f $R.out/audit.diff && echo kept || echo removed)\"",
+      "expect": { "exit": 0, "stdout": "1|1|1|kept" } },
+    { "name": "audit-capture with a dangling --base exits 2 with the usage",
+      "cmd": "bash {{KIT}}/scripts/audit-capture.sh F1 sheet.md {{FIX}}/capture-out-{{SID}}.txt --base",
+      "expect": { "exit": 2, "stderr": "Usage: cctoolkit audit-capture <batch> <sheet.md> <output> [--base <dir>]" } }
+  ]
+}

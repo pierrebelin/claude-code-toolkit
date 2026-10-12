@@ -49,7 +49,7 @@ public sealed class Create[Entity]Tests : BaseEndpointTests
 
 ## Verification
 
-- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.ContractTests/{{PRODUCT}}.ContractTests.csproj --no-build --no-restore --filter-class "*[Endpoint]Tests"` green
+- [ ] `commands.test` with `{suite}` = `ContractTests`, narrowed to `*[Endpoint]Tests` (`implement-tdd/references/test-scope.md` § Runner), green
 - [ ] Single route, happy path, plus error only when its HTTP contract changes; snapshot re-read, public headers explicitly selected
 - [ ] No duplicated business rule; contractual error mapping centralised
 - [ ] Infrastructure mocks only, stable IDs

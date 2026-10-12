@@ -21,7 +21,8 @@
     "tests": {
       "roots": ["tests"],
       "bound": ["tests/{product}.UnitTests"],
-      "interaction": ["tests/*.UnitTests", "tests/*.CoreTests"]
+      "interaction": ["tests/*.UnitTests", "tests/*.CoreTests"],
+      "shared": ["tests/*.CoreTests"]
     },
     "skipDirs": ["bin", "obj", "bin-linux", "obj-linux", "Properties"]
   },

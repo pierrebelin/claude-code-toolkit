@@ -8,7 +8,7 @@ argument-hint: "[optional axis, e.g. Plan | memory]"
 
 Gap fixed inside its batch leaves no trace: next batch repeats it, auditor finds it again. Turn **recurring** gaps into what prevents them. Writes only what user confirms, only in repo — never memory, except in memory mode, which writes memory only.
 
-Argument `memory` → skip §1-6, follow **Memory mode** below.
+Argument `memory` (`mémoire` when `language.docs` is `fr`) → skip §1-6, follow **Memory mode** below.
 
 Few motifs, each proven, and destinations that do not only grow: a line no one can check is read by every later agent for nothing.
 
@@ -78,7 +78,7 @@ One `AskUserQuestion` per axis, `multiSelect: true`, one option per motif and pe
 
 ## Output
 
-Per axis, one table, nothing else:
+Prose in the `language.docs` of `.claude/kit.config.json`. Per axis, one table, nothing else:
 
 ```markdown
 | Motif | Batches | Status | Decision | Destination | Δ lines |
@@ -100,7 +100,7 @@ A stale entry is worse than none: recalled, then followed. Only the `description
 4. **Confirm** — one `AskUserQuestion`, `multiSelect: true`, one option per entry; description = defect + evidence (`path:line`, command output) + exact new description or `deleted`. Mechanical `index` fixes grouped in one option.
 5. **Write** — memory folder only: edit or delete the file, then its `MEMORY.md` line in the same message. Refused option: `cctoolkit learn-candidates --refuse "keep: <file>"`, and never propose it again while the refusal stands.
 
-Output, one table:
+Output, prose in the `language.docs` of `.claude/kit.config.json`, one table:
 
 ```markdown
 | Entry | Defect | Status | Decision |

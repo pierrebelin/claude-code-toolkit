@@ -11,20 +11,23 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | Command | Role |
 |---------|------|
 | `detect-stack` | stack, test framework, product, and how many use-case folders each preset recognises — the model-free half of `/cctoolkit:kit-init` |
-| `rules-coverage` | rules ↔ tags, repo-wide; `--ids <sheet>` lists the DDD/APP/PERF ids the sheet never cites |
+| `rules-coverage` | rules ↔ tags, repo-wide (a rule sheet without anchors is read by its `Business rules` / `Règles métier` title); `--ids <sheet>` lists the DDD/APP/PERF ids the sheet never cites |
 | `untagged-tests` | tests carrying no rule tag |
 | `migrate-anchors` | one-shot: appends the `<!-- kit:… -->` anchors to documents written before them — dry run by default, `--apply` writes |
 | `turn-batching-check` | tool-call batching, context fill per tool, `read-bounds` denials and forcings followed by an edit — main chain, then subagents (`<session>/subagents/`); `--save-baseline` / `--compare` |
 | `quality-report-check` | checks a `docs/metrics/quality-report-*` pair |
-| `audit-capture` | the deterministic audit material in one file, so `/verify-ddd-tdd` opens it once |
-| `pre-audit` | the mechanical gate before `/verify-ddd-tdd` — red means no fork |
-| `access-cost` | awaited Infrastructure calls read off the syntax tree with ast-grep; C# only |
+| `audit-capture` | the deterministic audit material in one file, so `/verify-ddd-tdd` opens it once; `--base <dir>` (a `batch-baseline` snapshot) limits the diff to the batch's own |
+| `pre-audit` | the mechanical gate before `/verify-ddd-tdd` — red means no fork. Gate 8 (opt-in, `layout.sources.languageGuard`) lists French sentences added to production literals |
+| `access-cost` | awaited Infrastructure calls read off the syntax tree with ast-grep; C# only; `--base <dir>` flags only the lines added since the `batch-baseline` snapshot |
 | `install-git-hooks` | links `settings.local.json` into new worktrees, for a plugin enabled at local scope |
-| `plan-next-batch` | `run-plan`'s scheduler: next runnable batch of a plan's `### Batch execution` table, `--check`, `--next`, `--outside`, `--exclude`, `--context` |
+| `plan-next-batch` | `run-plan`'s scheduler: next runnable batch of a plan's `### Batch execution` table, `--check`, `--next`, `--outside`, `--exclude`, `--skip FX,FY` (batches set aside by the run — read as not done, never launched, nor their dependents; `--next` lists them as `held`), `--context` |
+| `sheet-cycles` | the `## Cycles` json block of a batch sheet: `--index` validates it (names, paths, one test project, 4 test / 8 production files per cycle, disjoint waves; exit 2 = no block), `--cycle ID --red\|--green` prints one cycle's contract, `--done`/`--methods`/`--summary` read the cycle states for `pre-audit` and `audit-capture` |
+| `run-question` | questions a running `run-lot`/`run-plan` asks: `wait` (workflow side), `watch`/`pending`/`answer` (session side) |
+| `batch-baseline` | snapshot of the files modified under the source and test roots when a batch starts: `snapshot <dir>`, `diff <dir> [--code] [--name-only]`, `base <dir> <path>`, `restore <dir> [--save <patch>]` sets a blocked batch aside; `audit-capture` and `access-cost` take `--base <dir>` to see the batch alone |
 | `batch-wallclock` | wall clock of an `/implement-tdd` batch |
 | `kit-diff <repo>` | a manual copy against the kit: MISSING / ADDED / DRIFT / MERGED, plus anonymisation alerts — the migration's first step |
 | `remove-copy` | the migration's deletion: DELETE the files the kit ships, KEEP the repo's own skills and scripts, MOVE a file added inside a kit skill, ORPHAN the repo's eval cases — dry run, `--apply` deletes |
-| `learn-candidates` | the model-free half of `/learn` |
+| `learn-candidates` | the model-free half of `/learn`; reads French verdicts (`## Verdict — ECARTS`) and a `learn-state.json` written with French keys, saves it back in English |
 
 ## Adapting
 
@@ -32,5 +35,6 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 |------|----------------|
 | `access-cost.py`, `access-cost/` | `.cs` and the ast-grep rules — C# only |
 | `pre-audit.sh` § 7 | `Assert.…(_fixture.…Repository…)`, `Received/CallCount/Called`: the spy and double-state idioms of the test framework; the suites it reads are `layout.tests.interaction` |
+| `pre-audit.sh` § 8 | the French function words that mark a sentence; the guard test and its exclusions are `layout.sources.languageGuard` |
 
 Paths, markers and commands come from `kit.config.json` through `lib/kit_config.py` — never a constant in a script.

@@ -3,50 +3,309 @@
     {
       "name": "dotnet test is prefixed with rtk (upstream declines it, the module does it)",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "dotnet test --project tests/X/X.csproj --no-build --no-restore"}},
-      "expect": {"decision": "allow", "command": "rtk dotnet test --project"}
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "dotnet test --project tests/X/X.csproj --no-build --no-restore"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "command": "rtk dotnet test --project"
+      }
     },
     {
       "name": "VAR=value dotnet test is prefixed behind the assignment",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "APP_TEST_MODE=true dotnet test --project tests/X/X.csproj --no-build"}},
-      "expect": {"decision": "allow", "command": "APP_TEST_MODE=true rtk dotnet test"}
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "APP_TEST_MODE=true dotnet test --project tests/X/X.csproj --no-build"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "command": "APP_TEST_MODE=true rtk dotnet test"
+      }
     },
     {
       "name": "an already prefixed rtk dotnet test is not prefixed twice",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "rtk dotnet test --project tests/X/X.csproj"}},
-      "expect": {"command_absent": "rtk rtk"}
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "rtk dotnet test --project tests/X/X.csproj"
+        }
+      },
+      "expect": {
+        "command_absent": "rtk rtk"
+      }
     },
     {
       "name": "dotnet test inside a heredoc body is text, not a command, and stays untouched",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "cat <<'EOF' > /tmp/claude-evalhd-{{SID}}\ndotnet test --project x\nEOF"}},
-      "expect": {"command_absent": "rtk dotnet"}
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "cat <<'EOF' > /tmp/claude-evalhd-{{SID}}\ndotnet test --project x\nEOF"
+        }
+      },
+      "expect": {
+        "command_absent": "rtk dotnet"
+      }
     },
     {
       "name": "dotnet reached through a tool path is not a dotnet command",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "~/.dotnet/tools/ilspycmd --help"}},
-      "expect": {"command_absent": "rtk dotnet"}
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "~/.dotnet/tools/ilspycmd --help"
+        }
+      },
+      "expect": {
+        "command_absent": "rtk dotnet"
+      }
     },
     {
       "name": "grep on a symbol absent from the graph goes to rtk, not to graphify (upstream emits updatedInput without a decision)",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "grep -rn ZzzNotASymbolXyz src"}},
-      "expect": {"decision": "not_deny", "command": "rtk grep"}
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "grep -rn ZzzNotASymbolXyz src"
+        }
+      },
+      "expect": {
+        "decision": "not_deny",
+        "command": "rtk grep"
+      }
     },
     {
       "name": "/usr/bin/grep is normalized so the rtk regex catches it",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "/usr/bin/grep -rn ZzzNotASymbolXyz src"}},
-      "expect": {"decision": "not_deny", "command": "rtk grep"}
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "/usr/bin/grep -rn ZzzNotASymbolXyz src"
+        }
+      },
+      "expect": {
+        "decision": "not_deny",
+        "command": "rtk grep"
+      }
     },
     {
       "name": "dotnet build is rewritten by rtk itself (upstream emits updatedInput without a decision, the permission flow decides)",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "", "tool_input": {"command": "dotnet build --no-restore"}},
-      "expect": {"decision": "not_deny", "command": "rtk dotnet build"}
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "dotnet build --no-restore"
+        }
+      },
+      "expect": {
+        "decision": "not_deny",
+        "command": "rtk dotnet build"
+      }
+    },
+    {
+      "name": "an explicit --timeout is kept and no second one is added",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "dotnet test --project tests/X/X.csproj --timeout 2m"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "command_absent": "5m"
+      },
+      "env": {
+        "CLAUDE_DOTNET_TEST_TIMEOUT": "5m"
+      }
+    },
+    {
+      "name": "an already prefixed rtk dotnet test still gets the 5 min timeout",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "rtk dotnet test --project tests/X/X.csproj --no-build"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "command": "rtk dotnet test --timeout 5m --project"
+      },
+      "env": {
+        "CLAUDE_DOTNET_TEST_TIMEOUT": "5m"
+      }
+    },
+    {
+      "name": "the timeout goes behind test, so a trailing pipe keeps its place",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "dotnet test --project tests/X/X.csproj 2>&1 | tail -5"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "command": "rtk dotnet test --timeout 5m --project tests/X/X.csproj 2>&1 | tail -5"
+      },
+      "env": {
+        "CLAUDE_DOTNET_TEST_TIMEOUT": "5m"
+      }
+    },
+    {
+      "name": "dotnet test after && gets the timeout too",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "cd tests && dotnet test --project X/X.csproj"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "command": "&& rtk dotnet test --timeout 5m --project"
+      },
+      "env": {
+        "CLAUDE_DOTNET_TEST_TIMEOUT": "5m"
+      }
+    },
+    {
+      "name": "dotnet test quoted inside a grep pattern is text and gets no timeout",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "grep -n \"dotnet test\" CLAUDE.md"
+        }
+      },
+      "expect": {
+        "command_absent": "--timeout"
+      },
+      "env": {
+        "CLAUDE_DOTNET_TEST_TIMEOUT": "5m"
+      }
+    },
+    {
+      "name": "dotnet test inside a heredoc body gets no timeout",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "cat <<'EOF' > /tmp/claude-evalhd2-{{SID}}\ndotnet test --project x\nEOF"
+        }
+      },
+      "expect": {
+        "command_absent": "--timeout"
+      },
+      "env": {
+        "CLAUDE_DOTNET_TEST_TIMEOUT": "5m"
+      }
+    },
+    {
+      "name": "dotnet build gets no timeout",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "dotnet build --no-restore"
+        }
+      },
+      "expect": {
+        "command_absent": "--timeout"
+      },
+      "env": {
+        "CLAUDE_DOTNET_TEST_TIMEOUT": "5m"
+      }
+    },
+    {
+      "name": "without CLAUDE_DOTNET_TEST_TIMEOUT dotnet test gets no timeout",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "dotnet test --project tests/X/X.csproj"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "command_absent": "--timeout"
+      }
+    },
+    {
+      "name": "a CLAUDE_DOTNET_TEST_TIMEOUT carrying shell metacharacters is ignored",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {
+        "CLAUDE_DOTNET_TEST_TIMEOUT": "5m;rm"
+      },
+      "input": {
+        "tool_name": "Bash",
+        "session_id": "{{SID}}",
+        "agent_id": "",
+        "transcript_path": "",
+        "tool_input": {
+          "command": "dotnet test --project tests/X/X.csproj"
+        }
+      },
+      "expect": {
+        "decision": "allow",
+        "command_absent": "--timeout"
+      }
     }
   ]
 }

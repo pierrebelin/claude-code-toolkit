@@ -40,6 +40,13 @@
 # runs them. Everything the run leaves in /tmp carries the run id and is removed.
 set -u
 
+# Claude Code exports the session's effort to Bash: a run launched from a session
+# would hand it to every hook and decide the effort cases in its place.
+unset CLAUDE_EFFORT
+# The repo's opt-ins (`env` of its settings) reach Bash the same way and would decide
+# the cases written for their absence.
+unset CLAUDE_DOCTOR_BUDGET_LINES CLAUDE_DOTNET_TEST_TIMEOUT
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The runner sits in `evals/` of the kit: the toolkit checkout or the plugin cache.
 # A bare `.claude/` there holds the runtime files the hooks write, not the kit.
@@ -67,6 +74,14 @@ for a in "$@"; do
   esac
 done
 [ "${#files[@]}" -gt 0 ] || files=("$HERE"/cases/*.json)
+# A repo's own case (`cctoolkit evals .claude/evals/cases/<f>.json`) checks that repo:
+# its hooks and commands run from the folder holding the case's `.claude/`, not the kit.
+for f in "${files[@]}"; do
+  d="$(cd "$(dirname "$f")" 2>/dev/null && pwd)" || continue
+  case "$d/" in "$KIT_DIR"/*) continue ;; esac
+  while [ "$d" != / ] && [ ! -d "$d/.claude" ]; do d="$(dirname "$d")"; done
+  [ -d "$d/.claude" ] && ROOT="$d"
+done
 
 PASSED=0
 FAILED=0

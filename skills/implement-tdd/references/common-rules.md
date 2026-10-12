@@ -1,6 +1,6 @@
 # Common rules — implementation skills (.NET)
 
-Read by `tdd-test-author` and `tdd-implementer`. `/implement-tdd` opens §4.5 alone, bounded; first-run-green rule restated in its `SKILL.md`.
+Read by `tdd-test-author` and `tdd-implementer`; the `run-lot` design reads §4 point 5 only.
 Test rules → `/tests-unit-tests`, `/tests-integration-tests`, `/tests-contract-tests`.
 Per-layer DDD conventions (naming, base classes, structure, pitfalls) → `.claude/rules/*.md`, auto-loaded. Code pattern → an existing file of the same kind in the repo.
 
@@ -8,7 +8,7 @@ Per-layer DDD conventions (naming, base classes, structure, pitfalls) → `.clau
 
 - **Comment only what the code cannot say** — a constraint, a decision, a workaround, an external reason. Never a paraphrase of the code, a change narrative or a ticket number. Match the file's comment density; XML `///` doc only where the file already documents its members that way.
 - Delete useless comments (restating code, stale, ownerless TODO) **within lines your change touches**. Useless comment elsewhere in file: report, don't delete.
-- Naming must make flow and invariants readable without a comment. Durable business rule also documented in handler folder's `CLAUDE.md`, kept by the orchestrator (`closing.md` §2), not by you: your change contradicts a line you read there or in the sheet → name it, `path:line`, in your report.
+- Naming must make flow and invariants readable without a comment. Durable business rule also documented in handler folder's `CLAUDE.md`, kept by the GREEN (`closing.md` §2): at RED, your change contradicts a line you read there → name it, `path:line`, in your report.
 - **A predicate on Domain state is a business rule** — "does it change", "is it excluded", "is it eligible": call the aggregate or value object member that states it (add it there if missing), never re-code it in a handler `if` or an Infrastructure `Where`. A query filter needing it reads the boundary from the Domain (exposed set or constant), never a copied comparison.
 - **Surgical change**: every modified line ties to the behaviour at hand. No improving adjacent working code, no renaming/reformatting outside scope, no flexibility or configurability nobody asked for. File's local style beats personal preference. Delete orphans (`using`, variable, method, type) **your** change created; pre-existing dead code reported, not deleted. Adjacent bug outside the batch's RM/CU: reported, not fixed.
 - **Reuse before creation**: an existing element covering 80 % of the need is extended, not duplicated. A second type sharing an existing one's shape: rename or extend, never copy.

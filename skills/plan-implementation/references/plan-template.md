@@ -1,8 +1,8 @@
 # Implementation plan template
 
-Structure expected by `/implement-tdd`. Two levels:
+Structure expected by the `run-plan` / `run-lot` workflows. Two levels:
 - **Global plan** (`-PLAN.md`): compact human-readable view — one table row + the step list per batch, nothing repeated from the sheets
-- **Batch sheets** (`-PLAN-F1.md`, `-PLAN-F2.md`…): technical detail per batch, loaded by `/implement-tdd`
+- **Batch sheets** (`-PLAN-F1.md`, `-PLAN-F2.md`…): technical detail per batch, loaded by `run-lot`
 
 **Principle**: global plan = WHAT + WHY + ORDER. Batch sheet = WHAT + HOW for that batch alone. A fact belongs to exactly one of the two — element lists, decisions, test names, applied rule ids live in the sheet only.
 
@@ -24,17 +24,16 @@ Structure expected by `/implement-tdd`. Two levels:
 
 ### Batch execution
 
-| Batch | Intent | RM/CU | Depends on | Execution | Reason |
-|-------|--------|-------|------------|-----------|--------|
-| F1 | [1 sentence] | RM-01, RM-03 / CU-01 | — | sequential | foundation / first contract |
-| F2 | [1 sentence] | RM-04 / CU-02 | F1 | parallelisable with F3 (2 worktrees) / sequential | [no shared code, configuration or fixtures] |
-| F3 | [1 sentence] | RM-05 / CU-03 | F1 | parallelisable with F2 (2 worktrees) / sequential | [concrete reason] |
+| Batch | Intent | RM/CU | Depends on | Repo | Execution | Reason |
+|-------|--------|-------|------------|------|-----------|--------|
+| F1 | [1 sentence] | RM-01, RM-03 / CU-01 | — | . | sequential | foundation / first contract |
+| F2 | [1 sentence] | RM-04 / CU-02 | F1 | . | parallelisable with F3 (2 worktrees) / sequential | [no shared code, configuration or fixtures] |
+| F3 | [1 sentence] | RM-05 / CU-03 | F1 | ../[Other.Repo] | parallelisable with F2 (2 repos) / sequential | [concrete reason] |
 
-`sequential` is the default. Mark `parallelisable` only if the prerequisites are finished and the batches touch neither the same aggregate, handler, endpoint, project, DI, migration, route nor test fixture.
+`Repo`: path relative to the root of this repository, `.` by default — read by `cctoolkit plan-next-batch` for `/run-plan`. `sequential` is the default. Mark `parallelisable` only if the prerequisites are finished and the batches touch neither the same aggregate, handler, endpoint, project, DI, migration, route nor test fixture.
 
 ### Batch F1 — [Name] — ⬜
 - [ ] 1. [Step title]
-- [ ] N. Build + test verification — scope: [whole suites] · [IT filter]
 
 ### Batch F2 — [Name] — ⬜
 - [ ] 1. [Step title]
@@ -72,13 +71,13 @@ Structure expected by `/implement-tdd`. Two levels:
 
 ## Batch sheet (`[CODE]-PLAN-F1.md`)
 
-Section order is fixed: why (`Intent`, `Design`, `Decisions`), then what gets written and in which order (`TDD sequence`, `Test policy and scopes`), then the reference (`Code elements`, `Ancrages`), then `Assumptions` which fills up during the batch.
+Section order is fixed: why (`Intent`, `Design`, `Decisions`), then how it is verified (`Test policy and scopes`), then the reference (`Code elements`), then the TDD contract (`Cycles`, read by `run-lot` through `cctoolkit sheet-cycles`), then `Assumptions`. About 20 KB at most.
 
 ```markdown
 # [CODE]-PLAN-F1 — [Batch name]
 
 > Batch F1 of plan `[CODE]-PLAN.md`. Spec: `[path]`.
-> Reading: **Intent**, **Design**, **Decisions** say why; **TDD sequence** what gets written and in which order; **Code elements** the signature detail; **Ancrages** the exact paths where all of it lands.
+> Reading: **Intent**, **Design**, **Decisions** say why; **Code elements** the signature detail; **Cycles** the tests, the exact paths and the order of the TDD cycles.
 
 ## Intent <!-- kit:intent -->
 
@@ -99,49 +98,19 @@ Section order is fixed: why (`Intent`, `Design`, `Decisions`), then what gets wr
 
 [Non-obvious choices, trade-offs, reuses, with the date of the user decisions. Omitted if nothing notable.]
 
-## TDD sequence <!-- kit:tdd-sequence -->
-
-One step = one RED → GREEN → COST cycle. The tests below are **written and red before a single production line** of the step. Order inside a step: success first (it fixes the signatures), refusals next, integration then contract last[, E2E at the very end].
-
-Declarative artefacts with no prior RED (list: `/implement-tdd` `common-rules.md` §4.5): [those of this batch, e.g. `Abstractions.Models` DTO, `[Entity]` EF and its configuration] / none. They are covered by the integration or contract test of the behaviour they serve.
-
-### Step 1 — [Exact title of the step in the global plan]
-
-| # | Test | Level | Project | RM |
-|---|------|-------|---------|-----|
-| 1 | `ShouldCreate[Entity]_WhenCommandIsValid` | UT | `UnitTests` | RM-01 |
-| 2 | `ShouldEmit[Entity]CreatedEvent_WhenSuccessful` | UT | `UnitTests` | RM-03 |
-| 3 | `ShouldThrowEmptyNameException_When[Prop]IsEmpty` | UT | `UnitTests` | RL-01 (exception of the `Name` VO, local to the handler) |
-| 4 | `ShouldPersist[Entity]_WhenSaved` | IT | `IntegrationTests` | RM-01 |
-| 5 | `ShouldCreate[Entity]_WhenRequestIsValid` | contract | `ContractTests` | — |
-
-`RM` = id of the test's `[Trait("RM", …)]` (`RM-xx` / `RL-xx` of the handler table). `UnitTests` bind every test; `ContractTests` never carry one; `—` for an integration or E2E test covering no documented rule (`.claude/rules/tests.md`).
-
-[At most two lines: what merges into a single cycle, and from which test Docker is required.]
-
-TDD: RED ⬜ · GREEN ⬜ · COST ⬜
-
-### Step N — Handler documentation
-
-No test: update of the handler `CLAUDE.md` files; feature index only if its bounded-context sentences no longer hold.
-
-### Step N+1 — Build + test verification
-
-No new test: replay of the scopes named in `## Test policy and scopes`.
-
 ## Test policy and scopes <!-- kit:test-policy -->
 
 **Handler policy**: query = mock fed with data then result asserted; command = `SavedEvents` asserted by type and payload. Never a spy, a counter, nor a call assertion. Never a direct test on the aggregate: its behaviour is proven through the handler.
 
-**IT regression scope**: `--filter-class "*.[Context].[Feature].*"` [+ other impacted namespaces]. The whole `IntegrationTests` suite is never run: naming the namespaces to replay here avoids having to derive them from the diff on every validation. Available roots: `Catalog`, `Database`, `Scripting`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
+**IT regression scope**: `--filter-class "*.[Context].[Feature].*"` [+ other impacted namespaces]. The whole `IntegrationTests` suite is never run: naming the namespaces to replay here avoids having to derive them from the diff on every validation. Available roots: [first-level folders of the integration test project, from the inventory].
 
-**Verification step scope**: [whole suites]; IT filtered above; [suites not run and why].
+**Global green scope**: [whole suites]; IT filtered above; [suites not run and why].
 
 **E2E**: [lifecycle scenario name ≥2 operations, carrying step] / omitted — [no cross-cutting lifecycle].
 
 ## Code elements <!-- kit:code-elements -->
 
-Signature and pseudo-code detail of every artefact anchored in `## Ancrages`. Reference section, consulted during RED for the signatures and during GREEN for the content; it dictates neither order nor scope.
+Signature and pseudo-code detail of every artefact `## Cycles` cites. Reference section, consulted during RED for the signatures and during GREEN for the content; it dictates neither order nor scope.
 
 ### Domain
 
@@ -180,21 +149,39 @@ Signature and pseudo-code detail of every artefact anchored in `## Ancrages`. Re
 
 **`[Action][Entity]`** — `[VERB] /[route]` → `[Request]` → command → dispatch → [status]
 
-## Ancrages <!-- kit:ancrages -->
+## Cycles
 
-**What this table is for.** `/implement-tdd` searches for no file: it copies these paths as they stand into the contracts it gives to the RED and GREEN subagents. One row = one step. Column 2 = where the test is written; column 3 = the shared `CoreTests` builders and doubles to extend (with the member to add); column 4 = the production files GREEN is allowed to touch — nothing else. A path marked _existing_ comes from the plan's inventory; a path _to create_ is the future path, mirrored on the named sibling. **A missing row or a path that cannot be copied is a plan hole**, to fill in this sheet before starting the step.
+TDD contract of the batch, read by `run-lot` through `cctoolkit sheet-cycles <sheet> --index` (exit 0 required). Fields: `/implement-tdd` `references/design.md` § "The `## Cycles` block"; waves and caps: `parallelism.md`. One cycle = one homogeneous pattern, one test project, at most 4 test files and 8 production files. Order inside a cycle: success first (it fixes the signatures), refusals next. No anchor comment needed on this heading.
 
-| Step | Test class / fixture | `CoreTests` builders and doubles | Production filled or created |
-|-------|--------------------------|----------------------------------|-----------------------------|
-| 1 — [Title] | `tests/{{PRODUCT}}.UnitTests/[Context]/[Feature]/[Action][Entity]/[Action][Entity]Tests.cs` — _to create_ ; `[Action][Entity]Fixture.cs` — _existing_ | `tests/{{PRODUCT}}.CoreTests/DataBuilder/[Feature]/[Aggregate]Builder.cs` (`With[Prop]` to add) ; `Doubles/Mock[Repo].cs` | `src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs` — _to create_ ; `src/{{PRODUCT}}.Domain/.../Aggregates/[Aggregate].cs` — `[Method]` |
-| 1 — [Title] (IT) | `tests/{{PRODUCT}}.IntegrationTests/[Context]/[Repo]/[MethodName]/[MethodName]Tests.cs` ; `[MethodName]Fixture.cs` | `tests/{{PRODUCT}}.CoreTests/DataBuilder/[Feature]/[Entity]EntityBuilder.cs` | `src/{{PRODUCT}}.Infrastructure/.../[Repo].cs` ; `Mappers/[Entity]Mapper.cs` |
-| 1 — [Title] (contract) | `tests/{{PRODUCT}}.ContractTests/[Context]/[Action][Entity]Tests.cs` ; `Fixtures/[Feature]/[Action][Entity]Fixture.cs` ; snapshot `Verified/[Feature]Tests.[Test].verified.txt` | `tests/{{PRODUCT}}.ContractTests/Core/WebApplicationFactory.cs` — repository substituted by its double | `src/{{PRODUCT}}.WebAPI/Endpoints/[Feature]/[Endpoint].cs` ; `Endpoints/Endpoints.cs` |
-| N — Documentation | — | — | `src/{{PRODUCT}}.Application/[Context]/[Feature]/CLAUDE.md` ; `…/[Action]/CLAUDE.md` |
-| N+1 — Verification | — | — | — |
+```json
+{
+ "declaratives": ["src/{{PRODUCT}}.Abstractions.Models/[Feature]/[Action][Entity]Request.cs — mirrors [sibling].cs; props [types]"],
+ "cycles": [
+  {
+   "id": "C1", "wave": 1,
+   "behaviour": "A valid [entity] creation is saved",
+   "rmcu": "RM-01, RM-03 / CU-01", "steps": ["1. [Exact title of the step in the global plan]"],
+   "level": "UT", "skill": "tests-unit-tests",
+   "testClass": "[Action][Entity]Tests", "fixture": "[Action][Entity]Fixture",
+   "methods": ["[Action][Entity]Tests.ShouldCreate[Entity]_WhenCommandIsValid", "[Action][Entity]Tests.ShouldThrowEmptyNameException_When[Prop]IsEmpty"],
+   "full": ["tests/{{PRODUCT}}.UnitTests/[Context]/[Feature]/[Action][Entity]/[Action][Entity]Tests.cs (to create)"],
+   "bounded": ["tests/{{PRODUCT}}.CoreTests/DataBuilder/[Feature]/[Aggregate]Builder.cs"],
+   "scenarios": "valid command; empty name", "observation": "SavedEvents holds [Event] with [fields]; EmptyNameException",
+   "outOfScope": "[guard of the next cycle]",
+   "toCreate": ["src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs"],
+   "production": ["src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs", "src/{{PRODUCT}}.Domain/[...]/Aggregates/[Aggregate].cs", "src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/CLAUDE.md"],
+   "ripple": [], "boundedGreen": [],
+   "elements": "[Aggregate].Create(...); [Command](props) → [EntityId]",
+   "appliedIds": "DDD-01, DDD-02, APP-01", "invariants": "[RM-XX] — removes [defensive branch]",
+   "expectedCost": "1 read + 1 write to Infrastructure, independent of [input]"
+  }
+ ]
+}
+```
 
 ## Assumptions <!-- kit:assumptions -->
 
-_Empty when the plan is written. Filled by `/implement-tdd` on every non-obvious decision settled mid-batch._
+_Empty when the plan is written. The run never writes here: its decisions go to `TO-VALIDATE.md`; a decision that changes the scope goes under `## Decisions`._
 
 | # | Assumption | To be validated by |
 |---|------------|--------------------|

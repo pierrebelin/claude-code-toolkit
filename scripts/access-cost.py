@@ -13,9 +13,13 @@ This script lists what the code actually awaits, from the syntax tree
 cost from evidence and the orchestrator validates a line instead of a file.
 
 Usage:
-    cctoolkit access-cost <file.cs> [...]       # files the implementer touched
-    cctoolkit access-cost --diff                # every .cs modified under src/,
-                                                         # added lines flagged (audit)
+    cctoolkit access-cost <file.cs> [...]   # files the implementer touched
+    cctoolkit access-cost --diff            # every .cs modified under the source roots,
+                                            # added lines flagged (audit)
+    cctoolkit access-cost --base <dir> [<file.cs> ...]
+        # lines added since the `batch-baseline snapshot <dir>` flagged, the others
+        # listed "(pre-existing)"; no file = every .cs of the batch diff under the
+        # source roots. A loop an earlier batch wrote never blocks the current GREEN.
 
 Exit 0: no Infrastructure call inside a loop or lambda, no in-memory filter on
 an awaited result. Exit 2: at least one (on an added line with --diff). Exit 3:
@@ -27,6 +31,7 @@ client, provider, unit of work, DbContext…): anything else is listed as
 "to classify" and left to the reader — a validator runner or a stream is not
 Infrastructure, a badly named gateway is.
 """
+import difflib
 import json
 import os
 import re
@@ -37,10 +42,13 @@ import sys
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "lib"))
 try:
+    import kit_config
     from kit_config import project_root
     ROOT = project_root()
 except ImportError:
+    kit_config = None
     ROOT = HERE
+BASELINE = os.path.join(HERE, "scripts", "batch-baseline.py")
 CONFIG = os.path.join(HERE, "scripts", "access-cost", "sgconfig.yml")
 
 INFRA = re.compile(
@@ -89,6 +97,34 @@ def added_lines(path):
         start, count = int(m.group(1)), int(m.group(2) or 1)
         lines.update(range(start, start + count))
     return lines
+
+
+def added_since(base, path):
+    before = subprocess.run(
+        [sys.executable, BASELINE, "base", base, path, "--root", ROOT],
+        capture_output=True, text=True, cwd=ROOT,
+    ).stdout.splitlines()
+    with open(os.path.join(ROOT, path), encoding="utf-8", errors="replace") as f:
+        after = f.read().splitlines()
+    lines = set()
+    for tag, _, _, j1, j2 in difflib.SequenceMatcher(None, before, after, autojunk=False).get_opcodes():
+        if tag in ("replace", "insert"):
+            lines.update(range(j1 + 1, j2 + 1))
+    return lines
+
+
+def kit():
+    if kit_config is None:
+        sys.exit("kit_config.py not found beside scripts/ — reinstall the cctoolkit plugin")
+    try:
+        return kit_config.load(ROOT)
+    except kit_config.KitConfigError as e:
+        sys.exit(f"kit.config.json: {e} — cctoolkit doctor")
+
+
+def cs_files(names, config=None):
+    return [f for f in names if f.endswith(".cs") and os.path.exists(os.path.join(ROOT, f))
+            and (config is None or config.under(f, config.source_roots))]
 
 
 def scan(binary, files):
@@ -172,12 +208,24 @@ def main(argv):
     if not binary:
         print("ast-grep missing — brew install ast-grep — cost not checked mechanically, state it by hand")
         return 3
+    base = argv[1] if len(argv) >= 2 and argv[0] == "--base" else None
+    if base:
+        argv = argv[2:]
+        if not argv:
+            out = subprocess.run(
+                [sys.executable, BASELINE, "diff", base, "--name-only", "--root", ROOT],
+                capture_output=True, text=True, cwd=ROOT,
+            ).stdout
+            argv = cs_files(out.split(), kit())
+            if not argv:
+                print("no .cs file modified under the source roots since the batch started")
+                return 0
     diff_mode = argv == ["--diff"]
     if diff_mode:
-        out = subprocess.run(["git", "diff", "--name-only", "--", "src/"], capture_output=True, text=True, cwd=ROOT).stdout
-        files = [f for f in out.split() if f.endswith(".cs") and os.path.exists(os.path.join(ROOT, f))]
+        out = subprocess.run(["git", "diff", "--name-only", "--", *kit().source_roots], capture_output=True, text=True, cwd=ROOT).stdout
+        files = cs_files(out.split())
         if not files:
-            print("no .cs file modified under src/")
+            print("no .cs file modified under the source roots")
             return 0
     else:
         files = [rel(f) for f in argv]
@@ -189,7 +237,7 @@ def main(argv):
     reads = writes = 0
     blocking = []
     for f in files:
-        r, w, b = analyse(matches, f, added_lines(f) if diff_mode else None)
+        r, w, b = analyse(matches, f, added_since(base, f) if base else added_lines(f) if diff_mode else None)
         reads += r
         writes += w
         blocking += b

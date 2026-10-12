@@ -59,6 +59,31 @@
       "path": "mem/c.md",
       "kind": "text",
       "content": "---\nname: c\ndescription: \"desc\"\nmetadata:\n---\n\nNo type.\n"
+    },
+    {
+      "path": "trfr/dddddddd-4/subagents/agent-4.jsonl",
+      "kind": "text",
+      "content": "{\"type\": \"assistant\", \"timestamp\": \"2026-09-30T10:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"## Verdict — ECARTS\\n\\n| Sévérité | Axe | Écart | Preuve | Correction attendue |\\n|---|---|---|---|---|\\n| Bloquant | Périmètre | Hunk hors lot sans RM | `x.cs:1` | retirer |\\n| Mineur | Simplification | ignoré | `x.cs:1` | rien |\\n\"}]}}\n"
+    },
+    {
+      "path": "trfr/dddddddd-4/subagents/agent-4.meta.json",
+      "kind": "text",
+      "content": "{\"agentType\": \"ddd-tdd-auditor\", \"description\": \"Audit lot F1\"}"
+    },
+    {
+      "path": "trfr/eeeeeeee-5/subagents/agent-5.jsonl",
+      "kind": "text",
+      "content": "{\"type\": \"assistant\", \"timestamp\": \"2026-09-30T10:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"## Verdict — ECARTS\\n\\n| Sévérité | Axe | Écart | Preuve | Correction attendue |\\n|---|---|---|---|---|\\n| Majeur | Plan périmé | Fiche non resynchronisée | `x.cs:1` | mettre à jour |\\n| Majeur | Coût | Lecture dans une boucle | `x.cs:1` | une lecture |\\n\"}]}}\n"
+    },
+    {
+      "path": "trfr/eeeeeeee-5/subagents/agent-5.meta.json",
+      "kind": "text",
+      "content": "{\"agentType\": \"ddd-tdd-auditor\", \"description\": \"Audit lot F1\"}"
+    },
+    {
+      "path": "state-fr.json",
+      "kind": "text",
+      "content": "{\"files\": {}, \"treated\": [], \"refused\": [\"garder : a.md\"], \"rows\": [{\"id\": \"aaaaaaaaaa\", \"session\": \"s1\", \"date\": \"2026-10-01\", \"lot\": \"Audit lot F1\", \"severite\": \"Bloquant\", \"axe\": \"Périmètre\", \"ecart\": \"Hunk hors lot sans RM\", \"preuve\": \"x.cs:1\", \"correction\": \"retirer\"}, {\"id\": \"bbbbbbbbbb\", \"session\": \"s2\", \"date\": \"2026-10-02\", \"lot\": \"Audit lot F2\", \"severite\": \"Majeur\", \"axe\": \"Réutilisation\", \"ecart\": \"Second record de même forme\", \"preuve\": \"y.cs:2\", \"correction\": \"renommer\"}]}"
     }
   ],
   "cases": [
@@ -216,6 +241,118 @@
       "expect": {
         "exit": 0,
         "stdout": "- keep: a.md"
+      }
+    },
+    {
+      "name": "French verdicts (## Verdict — ECARTS, Bloquant/Majeur) raise the nudge like English ones",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --count",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/trfr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "3 untreated verdict gap(s) across 2 batches"
+      }
+    },
+    {
+      "name": "« Plan périmé » folds into the axis Plan, severity Majeur read as Major",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --axis plan",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/trfr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "- [Major] Fiche non resynchronisée"
+      }
+    },
+    {
+      "name": "the French axis Périmètre is the axis Scope, severity Bloquant read as Blocking",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --axis Scope",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/trfr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "- [Blocking] Hunk hors lot sans RM"
+      }
+    },
+    {
+      "name": "--axe is accepted as --axis, the French axis name included",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --axe Périmètre",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/trfr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "- [Blocking] Hunk hors lot sans RM"
+      }
+    },
+    {
+      "name": "the summary of French verdicts names the English axes",
+      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py | grep -c '^Cost \\|^Scope \\|^Plan '",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/trfr",
+        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "3"
+      }
+    },
+    {
+      "name": "a state file written with the French row keys loads, rows in the English vocabulary",
+      "cmd": "cp {{FIX}}/state-fr.json {{FIX}}/st-{{SID}}.json; python3 {{KIT}}/scripts/learn-candidates.py --axis Scope",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/trnone",
+        "LEARN_STATE": "{{FIX}}/st-{{SID}}.json",
+        "LEARN_MEMORY": "{{FIX}}/mem"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "- [Blocking] Hunk hors lot sans RM"
+      }
+    },
+    {
+      "name": "a French state file is saved back with the English keys",
+      "cmd": "cp {{FIX}}/state-fr.json {{FIX}}/st-{{SID}}.json; python3 {{KIT}}/scripts/learn-candidates.py >/dev/null; jq -c '.rows[0] | keys' {{FIX}}/st-{{SID}}.json",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/trnone",
+        "LEARN_STATE": "{{FIX}}/st-{{SID}}.json",
+        "LEARN_MEMORY": "{{FIX}}/mem"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "[\"axis\",\"batch\",\"date\",\"evidence\",\"fix\",\"gap\",\"id\",\"session\",\"severity\"]"
+      }
+    },
+    {
+      "name": "--axis Reuse finds the French row Réutilisation of an old state file",
+      "cmd": "cp {{FIX}}/state-fr.json {{FIX}}/st-{{SID}}.json; python3 {{KIT}}/scripts/learn-candidates.py --axis Reuse",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/trnone",
+        "LEARN_STATE": "{{FIX}}/st-{{SID}}.json",
+        "LEARN_MEMORY": "{{FIX}}/mem"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "Second record de même forme"
+      }
+    },
+    {
+      "name": "--memoire hands back entries kept after a French « garder : » refusal",
+      "cmd": "cp {{FIX}}/state-fr.json {{FIX}}/st-{{SID}}.json; python3 {{KIT}}/scripts/learn-candidates.py --memoire",
+      "env": {
+        "LEARN_TRANSCRIPTS": "{{FIX}}/trnone",
+        "LEARN_STATE": "{{FIX}}/st-{{SID}}.json",
+        "LEARN_MEMORY": "{{FIX}}/mem"
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": "garder : a.md"
       }
     }
   ]

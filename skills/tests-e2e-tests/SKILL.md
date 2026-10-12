@@ -59,7 +59,7 @@ public sealed class [Feature]LifecycleTests(ApiApplicationFixture fixture)
 
 ## Verification
 
-- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.E2ETests/{{PRODUCT}}.E2ETests.csproj --no-build --no-restore --filter-class "*[Feature]LifecycleTests"` green, or justified Skip
+- [ ] `commands.test` with `{suite}` = `E2ETests`, narrowed to `*[Feature]LifecycleTests` (`implement-tdd/references/test-scope.md` § Runner), green, or justified Skip
 - [ ] Lifecycle selected, ≥2 operations, API cleanup
 - [ ] Real SDK + Aspire; no mock, no database seeding, no secret, no isolated endpoint
 - [ ] Existing file extended, existing fixture reused

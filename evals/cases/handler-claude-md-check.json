@@ -97,8 +97,8 @@
       }
     },
     {
-      "name": "a sheet written before the anchors is named, with the migration to run",
-      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flux\n\n1. Load the catalog, create the product, save.\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$A/CLAUDE.md'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "name": "a sheet whose titles are neither anchored nor exactly a known title is named, with the migration to run",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier (RM)\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flux détaillé\n\n1. Load the catalog, create the product, save.\n\n## Événements émis (domaine)\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$A/CLAUDE.md'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
       "expect": {
         "context": "cctoolkit migrate-anchors --apply",
         "exit": 0
@@ -117,6 +117,102 @@
       "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols rule,id,outcome -->\n| Rule | ID | Exception / Outcome |\n|------|----|---------------------|\n| The name is unique in the catalog | RM-01 | ProductNameAlreadyUsed |\n| The catalog is open | RM-02 | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
       "expect": {
         "context": "rules with no test: RM-02",
+        "exit": 0
+      }
+    },
+    {
+      "name": "French rules heading without anchor is parsed, columns read from its header: the rule no test cites is named",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | Le nom est unique dans le catalogue | ProductNameAlreadyUsed |\n| RM-02 | Le catalogue est ouvert | CatalogClosed |\n\n## Flux <!-- kit:flow -->\n\n1. Charger le catalogue, créer le produit, enregistrer.\n\n## Événements émis <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules with no test: RM-02",
+        "exit": 0
+      }
+    },
+    {
+      "name": "English rules heading without anchor is parsed, columns read from its header: the rule no test cites is named",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules\n\n| ID | Rule | Exception / Result |\n|----|------|--------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules with no test: RM-02",
+        "exit": 0
+      }
+    },
+    {
+      "name": "French flow heading without anchor passes the fixed shape: traceability up to date",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | Le nom est unique dans le catalogue | ProductNameAlreadyUsed |\n\n## Flux\n\n1. Charger le catalogue, créer le produit, enregistrer.\n\n## Événements émis <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules/tests traceability up to date",
+        "exit": 0
+      }
+    },
+    {
+      "name": "English flow heading without anchor passes the fixed shape: traceability up to date",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flow\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules/tests traceability up to date",
+        "exit": 0
+      }
+    },
+    {
+      "name": "French events heading without anchor passes the fixed shape: traceability up to date",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | Le nom est unique dans le catalogue | ProductNameAlreadyUsed |\n\n## Flux <!-- kit:flow -->\n\n1. Charger le catalogue, créer le produit, enregistrer.\n\n## Événements émis\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules/tests traceability up to date",
+        "exit": 0
+      }
+    },
+    {
+      "name": "English events heading without anchor passes the fixed shape: traceability up to date",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules/tests traceability up to date",
+        "exit": 0
+      }
+    },
+    {
+      "name": "French headings fold accents and case: Regles metier, FLUX, EVENEMENTS EMIS without anchors pass",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## REGLES METIER\n\n| ID | Regle | Exception / Resultat |\n|----|-------|----------------------|\n| RM-01 | Le nom est unique dans le catalogue | ProductNameAlreadyUsed |\n\n## flux\n\n1. Charger le catalogue.\n\n## EVENEMENTS EMIS\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules/tests traceability up to date",
+        "exit": 0
+      }
+    },
+    {
+      "name": "English headings fold case: BUSINESS RULES, flow, EMITTED EVENTS without anchors pass",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## BUSINESS RULES\n\n| id | RULE | exception / result |\n|----|------|--------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## flow\n\n1. Load the catalog.\n\n## EMITTED EVENTS\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules/tests traceability up to date",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a header row moves the id column when no kit:cols anchor is given (French)",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\n| Règle | ID | Exception / Résultat |\n|-------|----|----------------------|\n| Le nom est unique dans le catalogue | RM-01 | ProductNameAlreadyUsed |\n| Le catalogue est ouvert | RM-02 | CatalogClosed |\n\n## Flux <!-- kit:flow -->\n\n1. Charger le catalogue, créer le produit, enregistrer.\n\n## Événements émis <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules with no test: RM-02",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a header row moves the id column when no kit:cols anchor is given (English)",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules\n\n| Rule | ID | Exception / Outcome |\n|------|----|---------------------|\n| The name is unique in the catalog | RM-01 | ProductNameAlreadyUsed |\n| The catalog is open | RM-02 | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules with no test: RM-02",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a French rules section reading « Aucun » is empty on purpose, not missing",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier\n\nAucun (requête pure)\n\n## Flux <!-- kit:flow -->\n\n1. Charger le catalogue, créer le produit, enregistrer.\n\n## Événements émis\n\nAucun (requête)\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-09\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "traits citing a rule absent from the table: CreateProduct/RM-09",
+        "exit": 0
+      }
+    },
+    {
+      "name": "an English rules section reading « None » is empty on purpose, not missing",
+      "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules\n\nNone (pure query)\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events\n\nNone (query)\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-09\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "traits citing a rule absent from the table: CreateProduct/RM-09",
         "exit": 0
       }
     },

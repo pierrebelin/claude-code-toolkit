@@ -3,7 +3,7 @@ import type { EngineInterface, FsEntry, ModelUsage, Register, TurnStepChunk } fr
 
 import type {
   AuditVerdict, ChildWorkflow, Journal, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet,
-  PlanLot, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun,
+  PlanLot, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun,
 } from '../types'
 
 const PANE = 'run-lot-pane'
@@ -26,6 +26,8 @@ const MAIN = '(main)'
 const ALERT_MS = 10_000
 const ALERT_REASON = 110
 const PARALLEL_PHASES = [['Global green', 'Closing'], ['Audit', 'Review']]
+const INTERLEAVED_PHASES = [['RED', 'GREEN']]
+const CONDITIONAL_PHASES = ['Arbiter', 'Question']
 const KEPT_JOURNALS = 8
 const SCANNED_SESSIONS = 200
 const DONE = '✅'
@@ -43,10 +45,17 @@ const PLAN_SECTIONS = ['### Execution des lots', '### Batch execution']
 const PLAN_DONE = /^### (?:Lot|Batch) (F\d+)\b.*✅ DONE/gm
 const REPORT_STATUS = /^## (?:STATUT|STATUS) — (\S+)/
 const LOT_DONE = ['TERMINÉ', 'DONE']
-const LOT_WAITING = ['ATTENTE-RÉPONSE', 'AWAITING-ANSWER']
 const WAITING_TONE = 'cyan'
 const REPORT_NAMES = ['rapport', 'report']
+const BATCH_REPORT_DIRS = ['batches', 'lots']
+const WORK_DIRS = ['.work', '.travail']
+const WAVE_LABEL = /^RED \S+ w(\d+)\b/
+const LAUNCHED_PHASE = 'Review'
 const REPORT_PHASE = 'Report'
+const CYCLES_SECTION = '## Cycles'
+const AHEAD_LABEL = /^pre-design (F\d+)\b/
+const RETIRED_LABELS = [/^tick /, /^closing \+ pre-audit$/]
+const INTRODUCED_LABELS = [/^index /, /^declaratives$/, /^pre-design /, /^pre-audit$/]
 
 type Launched = { status?: string; runId?: string; scriptPath?: string; workflowName?: string; transcriptDir?: string }
 
@@ -74,10 +83,10 @@ export const statusTone = (status: RunStatus): 'claude' | 'success' | 'error' | 
 export const statusGlyph = (status: RunStatus): string =>
   status === 'running' ? '⏺' : status === 'completed' ? '✓' : status === 'killed' ? '⏹' : '✗'
 
-const USER_WAITING = ['BLOQUÉ', 'BLOCKED', 'ATTENTE-RÉPONSE', 'AWAITING-ANSWER', 'RELECTURE-BLOQUANTE', 'REVIEW-BLOCKING']
+const USER_WAITING = ['BLOQUÉ', 'BLOCKED', 'RELECTURE-BLOQUANTE', 'REVIEW-BLOCKING']
 
-export const headlineOf = (status: RunStatus, outcome: Outcome | null): { glyph: string; text: string; tone: string } =>
-  status !== 'running' && outcome !== null && USER_WAITING.includes(outcome.label)
+export const headlineOf = (status: RunStatus, outcome: Outcome | null, asking = 0): { glyph: string; text: string; tone: string } =>
+  (status === 'running' && asking > 0) || (status !== 'running' && outcome !== null && USER_WAITING.includes(outcome.label))
     ? { glyph: '?', text: 'waiting for user', tone: WAITING_TONE }
     : { glyph: statusGlyph(status), text: status, tone: statusTone(status) }
 
@@ -316,10 +325,53 @@ export const parsePhases = (script: string): PhaseDeclaration[] => {
 export const detailsOf = (phases: PhaseDeclaration[]): Record<string, string> =>
   Object.fromEntries(phases.flatMap(phase => (phase.detail === null ? [] : [[phase.title, phase.detail]])))
 
-const literalPrefixesOf = (expression: string): string[] =>
-  [...expression.matchAll(/(['"`])((?:(?!\1).)*)\1/g)].map(found => (found[2] ?? '').split('${')[0] ?? '').filter(label => label !== '')
+const OPENERS: Record<string, string> = { "'": "'", '"': '"', '`': '`', '{': '}', '(': ')', '[': ']' }
 
-const forwardedLabelsOf = (script: string, lines: string[], at: number, parameter: string): string[] => {
+const closingOf = (text: string, from: number): number => {
+  const open = text[from] ?? ''
+  const close = OPENERS[open]
+  let at = from + 1
+  while (at < text.length && text[at] !== close) {
+    const char = text[at] ?? ''
+    if (char === '\\') at += 1
+    else if (open === '`' && text.startsWith('${', at)) at = closingOf(text, at + 1)
+    else if (open !== "'" && open !== '"' && open !== '`' && char in OPENERS) at = closingOf(text, at)
+    at += 1
+  }
+  return at
+}
+
+const branchesOf = (expression: string): string[] | null => {
+  let question = -1
+  let nested = 0
+  for (let at = 0; at < expression.length; at++) {
+    const char = expression[at] ?? ''
+    if (char in OPENERS) {
+      at = closingOf(expression, at)
+      continue
+    }
+    const isTernary = char === '?' && expression[at + 1] !== '.' && expression[at + 1] !== '?' && expression[at - 1] !== '?'
+    if (isTernary && question < 0) question = at
+    else if (isTernary) nested += 1
+    else if (char === ':' && question >= 0 && nested > 0) nested -= 1
+    else if (char === ':' && question >= 0) return [expression.slice(question + 1, at), expression.slice(at + 1)]
+  }
+  return null
+}
+
+const literalPrefixesOf = (expression: string): string[] => {
+  const text = expression.trim()
+  const branches = branchesOf(text)
+  if (branches !== null) return branches.flatMap(literalPrefixesOf)
+  const quote = text[0] ?? ''
+  if (quote !== "'" && quote !== '"' && quote !== '`') return []
+  const body = text.slice(1, closingOf(text, 0))
+  const head = quote === '`' ? (body.split('${')[0] ?? '') : body
+  if (head !== '') return [head]
+  return quote === '`' && body.startsWith('${') ? literalPrefixesOf(text.slice(3, closingOf(text, 2))) : []
+}
+
+const forwardedValuesOf = (script: string, lines: string[], at: number, parameter: string): string[] => {
   const owner = lines
     .slice(0, at + 1)
     .reverse()
@@ -334,28 +386,58 @@ const forwardedLabelsOf = (script: string, lines: string[], at: number, paramete
   )
 }
 
+const optionOf = (text: string, key: string): string | null => {
+  const start = text.search(new RegExp(`\\b${key}\\s*:`))
+  return start < 0 ? null : (text.slice(start).replace(new RegExp(`^${key}\\s*:`), '').split(/,\s*\w+\s*:/)[0] ?? '')
+}
+
+const identifierOf = (expression: string): string | null => /^\s*(\w+)\s*}?\s*$/.exec(expression)?.[1] ?? null
+
+const literalOf = (expression: string): string | null => /^\s*(['"`])((?:(?!\1).)+)\1/.exec(expression)?.[2] ?? null
+
+const phasesOf = (script: string, lines: string[], at: number, expression: string): string[] => {
+  const branches = branchesOf(expression.trim())
+  if (branches !== null) {
+    const phases = branches.map(literalOf)
+    return phases.every((one): one is string => one !== null) ? phases : []
+  }
+  const literal = literalOf(expression)
+  if (literal !== null) return [literal]
+  const parameter = identifierOf(expression)
+  const forwarded = parameter === null ? [] : [...new Set(forwardedValuesOf(script, lines, at, parameter))]
+  return forwarded.length === 1 ? forwarded : []
+}
+
 export const labelPhasesOf = (script: string): Record<string, string> => {
   const lines = script.split('\n')
   return Object.fromEntries(
     lines.flatMap((text, at) => {
-      const phase = /\bphase\s*:\s*(['"`])((?:(?!\1).)+)\1/.exec(text)?.[2]
-      if (phase === undefined) return []
-      const start = text.search(/\blabel\s*:/)
-      const expression = start < 0 ? null : text.slice(start).replace(/^label\s*:/, '').split(/,\s*\w+\s*:/)[0] ?? ''
-      const forwarded = expression === null ? (/\blabel\s*[,}]/.test(text) ? 'label' : null) : (/^\s*(\w+)\s*}?\s*$/.exec(expression)?.[1] ?? null)
-      const labels = forwarded !== null ? forwardedLabelsOf(script, lines, at, forwarded) : literalPrefixesOf(expression ?? '')
-      return labels.map(label => [label, phase])
+      const phaseExpression = optionOf(text, 'phase')
+      const phases = phaseExpression === null ? [] : phasesOf(script, lines, at, phaseExpression)
+      if (phases.length === 0) return []
+      const expression = optionOf(text, 'label')
+      const forwarded = expression === null ? (/\blabel\s*[,}]/.test(text) ? 'label' : null) : identifierOf(expression)
+      if (phases.length > 1) {
+        const branches = expression === null || forwarded !== null ? null : branchesOf(expression.trim())
+        if (branches === null || branches.length !== phases.length) return []
+        return branches.flatMap((branch, index) => literalPrefixesOf(branch).map(label => [label, phases[index] ?? '']))
+      }
+      const labels = forwarded !== null ? forwardedValuesOf(script, lines, at, forwarded) : literalPrefixesOf(expression ?? '')
+      return labels.map(label => [label, phases[0] ?? ''])
     }),
   )
 }
 
-export const nestedPhaseOf = (child: ChildWorkflow | null, label: string, phase: string | null): string | null => {
-  if (child === null || (phase !== null && !phase.startsWith('▸ '))) return phase
-  const prefix = Object.keys(child.labels ?? {})
+const labelledPhaseOf = (labels: Record<string, string>, label: string, phase: string | null): string | null => {
+  if (phase !== null && !phase.startsWith('▸ ')) return phase
+  const prefix = Object.keys(labels)
     .filter(one => label.startsWith(one))
     .sort((a, b) => b.length - a.length)[0]
-  return prefix === undefined ? phase : (child.labels[prefix] ?? phase)
+  return prefix === undefined ? phase : (labels[prefix] ?? phase)
 }
+
+export const nestedPhaseOf = (child: ChildWorkflow | null, label: string, phase: string | null): string | null =>
+  child === null ? phase : labelledPhaseOf(child.labels ?? {}, label, phase)
 
 export const journalPathOf =(transcriptDir: string, runId: string): string =>
   transcriptDir.replace(new RegExp(`/subagents/workflows/${runId}/?$`), `/workflows/${runId}.json`)
@@ -449,8 +531,34 @@ export const mergeLots = (known: PlanLot[], planned: PlanLot[]): PlanLot[] => [
 export const withLot = (lots: PlanLot[], lot: string, change: (one: PlanLot) => PlanLot): PlanLot[] =>
   lots.some(one => one.lot === lot) ? lots.map(one => (one.lot === lot ? change(one) : one)) : [...lots, change(blankLot(lot))]
 
-export const reportPathsOf = (sheet: string, lot: string): string[] =>
-  REPORT_NAMES.map(name => `${sheet.slice(0, sheet.lastIndexOf('/') + 1)}run/${lot}/${lot}-${name}.md`)
+const runRootOf = (sheet: string): string => `${sheet.slice(0, sheet.lastIndexOf('/') + 1)}run`
+
+export const reportPathsOf = (sheet: string, lot: string): string[] => [
+  ...BATCH_REPORT_DIRS.map(dir => `${runRootOf(sheet)}/${dir}/${lot}.md`),
+  ...REPORT_NAMES.map(name => `${runRootOf(sheet)}/${lot}/${lot}-${name}.md`),
+]
+
+export const questionsDirOf = (sheet: string, lot: string): string => `${runRootOf(sheet)}/${lot}/questions`
+
+export const questionsDirsOf = (sheet: string, lot: string): string[] => [
+  questionsDirOf(sheet, lot),
+  ...WORK_DIRS.map(dir => `${runRootOf(sheet)}/${dir}/${lot}/questions`),
+]
+
+export const cyclesDirOf = (sheet: string, lot: string): string => `${runRootOf(sheet)}/${WORK_DIRS[0]}/${lot}/cycles`
+
+export const cyclesDirsOf = (sheet: string, lot: string): string[] => [
+  ...WORK_DIRS.map(dir => `${runRootOf(sheet)}/${dir}/${lot}/cycles`),
+  `${runRootOf(sheet)}/${lot}/cycles`,
+]
+
+export const aheadLotOf = (label: string): string | null => AHEAD_LABEL.exec(label)?.[1] ?? null
+
+export const pendingQuestionsOf = (entries: FsEntry[]): string[] =>
+  entries
+    .filter(entry => entry.kind === 'file' && entry.name.endsWith('.json') && !entry.name.endsWith('.answer.json'))
+    .filter(entry => !entries.some(other => other.name === entry.name.replace(/\.json$/, '.answer.json')))
+    .map(entry => entry.name)
 
 export const reportOutcomeOf = (text: string, path: string): Outcome | null => {
   const status = REPORT_STATUS.exec(text.split('\n')[0] ?? '')?.[1]
@@ -461,26 +569,101 @@ export const reportOutcomeOf = (text: string, path: string): Outcome | null => {
 
 export type LotState = RunStatus | 'pending' | 'done' | 'waiting'
 
+export type Wave = { wave: number; total: number }
+
+export const waveOf = (run: WorkflowRun): Wave | null => {
+  const seen = run.agents.flatMap(agent => {
+    const found = WAVE_LABEL.exec(agent.label)?.[1]
+    return found === undefined ? [] : [Number(found)]
+  })
+  if (seen.length === 0) return null
+  const wave = Math.max(...seen)
+  const indexed = Math.max(0, ...(run.sheet?.cycles ?? []).map(cycle => cycle.wave))
+  return { wave, total: Math.max(wave, indexed) }
+}
+
+const isAhead = (agent: WorkflowAgent): boolean => aheadLotOf(agent.label) !== null
+
 export const lotStateOf = (run: WorkflowRun, entry: PlanLot): LotState => {
-  const agents = run.agents.filter(agent => agent.lot === entry.lot)
+  const agents = run.agents.filter(agent => agent.lot === entry.lot && !isAhead(agent))
+  if ((entry.asking ?? 0) > 0 && entry.outcome === null) return 'waiting'
   if (entry.outcome !== null && USER_WAITING.includes(entry.outcome.label)) {
     return agents.some(agent => agent.state === 'running') ? 'running' : 'waiting'
   }
   if (entry.outcome !== null) return LOT_DONE.includes(entry.outcome.label) ? 'completed' : 'failed'
   if (agents.length === 0) return entry.isDone ? 'done' : 'pending'
   if (agents.some(agent => agent.state === 'running')) return 'running'
-  const latest = [...run.agents].filter(agent => agent.lot !== null).sort((a, b) => b.index - a.index)[0]?.lot
+  const latest = [...run.agents].filter(agent => agent.lot !== null && !isAhead(agent)).sort((a, b) => b.index - a.index)[0]?.lot
   if (latest !== entry.lot) return 'completed'
   return run.status
 }
 
+export const PREDESIGN_GLYPH = '◐'
+
+const aheadOf = (run: WorkflowRun, lot: string): WorkflowAgent[] => run.agents.filter(agent => agent.lot === lot && isAhead(agent))
+
+export const isPredesigning = (run: WorkflowRun, entry: PlanLot, state: LotState): boolean =>
+  state === 'pending' && aheadOf(run, entry.lot).some(agent => agent.state === 'running')
+
+export const lotDetailOf = (run: WorkflowRun, entry: PlanLot, state: LotState, at: number): string => {
+  if (entry.outcome !== null) return [entry.outcome.label, oneLine(entry.outcome.reason ?? '')].filter(one => one !== '').join(' · ')
+  if (state === 'running') {
+    const active = [...run.agents]
+      .filter(agent => agent.lot === entry.lot && !isAhead(agent) && agent.state === 'running')
+      .sort((a, b) => b.index - a.index)[0]
+    if (active !== undefined) return `${active.phase ?? NO_PHASE} · ${active.label}`
+    const awaited = launchedBy(run, entry.lot).find(agent => agent.state === 'running')
+    if (awaited !== undefined) return `waiting ${awaited.label}`
+    const rows = phaseRows(lotRun(run, entry.lot), at)
+    const reached = rows.map(row => row.mark !== 'pending').lastIndexOf(true)
+    const step = rows.slice(reached + 1).find(row => !CONDITIONAL_PHASES.includes(row.title))
+    return step === undefined ? 'running' : step.title
+  }
+  if (state === 'waiting') return 'question awaiting an answer'
+  if (state === 'done') return 'done before this run'
+  const ahead = aheadOf(run, entry.lot)
+  if (state === 'pending' && ahead.length > 0) {
+    const launcher = ahead.map(agent => launcherOf(run, agent)).find(one => one !== null)
+    const by = launcher === undefined ? '' : ` (by ${launcher})`
+    return isPredesigning(run, entry, state) ? `pre-design${by}` : `pre-designed${by}`
+  }
+  if (state === 'pending') return entry.deps.length > 0 ? `after ${entry.deps.join(', ')}` : 'pending'
+  return state
+}
+
+export const placedInPhases = (agents: WorkflowAgent[], phases: string[]): WorkflowAgent[] => {
+  if (phases.length === 0) return agents
+  let previous = phases[0] ?? null
+  const placed = new Map(
+    [...agents]
+      .sort((a, b) => a.index - b.index)
+      .map(agent => {
+        if (agent.phase !== null && phases.includes(agent.phase)) previous = agent.phase
+        return [agent.id, previous] as const
+      }),
+  )
+  return agents.map(agent => ({ ...agent, phase: placed.get(agent.id) ?? agent.phase }))
+}
+
+export const launcherOf = (run: WorkflowRun, agent: WorkflowAgent): string | null =>
+  [...run.agents]
+    .filter(other => other.lot !== null && !isAhead(other) && other.index < agent.index)
+    .sort((a, b) => b.index - a.index)[0]?.lot ?? null
+
+export const launchedBy = (run: WorkflowRun, lot: string): WorkflowAgent[] =>
+  run.agents.filter(agent => isAhead(agent) && agent.lot !== lot && launcherOf(run, agent) === lot)
+
 export const lotRun = (run: WorkflowRun, lot: string): WorkflowRun => {
   const entry = run.lots.find(one => one.lot === lot) ?? blankLot(lot)
-  const agents = run.agents
+  const phases = run.child?.phases ?? []
+  const resolved = run.agents
     .filter(agent => agent.lot === lot)
-    .map(agent => ({ ...agent, phase: nestedPhaseOf(run.child, agent.label, agent.phase) }))
+    .map(agent => ({ ...agent, phase: isAhead(agent) ? (phases[0] ?? agent.phase) : nestedPhaseOf(run.child, agent.label, agent.phase) }))
+  const launched = launchedBy(run, lot).map(agent => ({ ...agent, phase: phases.includes(LAUNCHED_PHASE) ? LAUNCHED_PHASE : agent.phase }))
+  const agents = [...placedInPhases(resolved, phases), ...launched]
   const state = lotStateOf(run, entry)
-  const status: RunStatus = state === 'pending' || state === 'done' || state === 'waiting' ? 'completed' : state
+  const asking = entry.outcome === null ? (entry.asking ?? 0) : 0
+  const status: RunStatus = state === 'waiting' && asking > 0 ? 'running' : state === 'pending' || state === 'done' || state === 'waiting' ? 'completed' : state
   const startedAt = agents.length > 0 ? Math.min(...agents.map(agent => agent.startedAt)) : run.startedAt
   const endedAt = agents.length > 0 ? Math.max(...agents.map(agent => agent.endedAt ?? agent.lastActiveAt)) : startedAt
   return {
@@ -501,6 +684,7 @@ export const lotRun = (run: WorkflowRun, lot: string): WorkflowRun => {
     child: null,
     plan: null,
     lots: [],
+    asking,
   }
 }
 
@@ -541,7 +725,6 @@ const outcomeOf = (result: unknown): Outcome | null => {
 
 export const outcomeTone = (outcome: Outcome, status: RunStatus): 'success' | 'warning' | 'error' | typeof WAITING_TONE => {
   if (['TERMINÉ', 'DONE'].includes(outcome.label)) return 'success'
-  if (LOT_WAITING.includes(outcome.label)) return WAITING_TONE
   if (['ECARTS', 'ÉCARTS', 'GAPS', 'RELECTURE-BLOQUANTE', 'REVIEW-BLOCKING'].includes(outcome.label)) return 'warning'
   if (['BLOQUÉ', 'BLOCKED'].includes(outcome.label)) return 'error'
   return status === 'completed' ? 'success' : status === 'killed' ? 'warning' : 'error'
@@ -578,9 +761,9 @@ export const parseJournal = (text: string): Journal | null => {
   }
 }
 
-export type Sample = { phase: string; ms: number; tools: number | null; startedAt: number | null }
+export type Sample = { phase: string; ms: number; tools: number | null; startedAt: number | null; scope?: string; label?: string }
 
-export const samplesOf = (text: string): Sample[] => {
+export const samplesOf = (text: string, labels: Record<string, string> = {}): Sample[] => {
   const raw = recordOf(text)
   if (raw === null) return []
   const isComplete = raw.status === 'completed'
@@ -588,7 +771,9 @@ export const samplesOf = (text: string): Sample[] => {
     entry?.type === 'workflow_agent' && entry.state === 'done' && typeof entry.phaseTitle === 'string' && typeof entry.durationMs === 'number'
       ? [
           {
-            phase: entry.phaseTitle as string,
+            phase: labelledPhaseOf(labels, typeof entry.label === 'string' ? entry.label : '', entry.phaseTitle as string) ?? (entry.phaseTitle as string),
+            scope: entry.phaseTitle as string,
+            label: typeof entry.label === 'string' ? entry.label : '',
             ms: entry.durationMs as number,
             tools: typeof entry.toolCalls === 'number' ? entry.toolCalls : null,
             startedAt: isComplete && typeof entry.startedAt === 'number' ? entry.startedAt : null,
@@ -602,11 +787,24 @@ const spansOf = (samples: Sample[]): { phase: string; ms: number }[] => {
   const bounds: Record<string, { from: number; to: number }> = {}
   for (const sample of samples) {
     if (sample.startedAt === null) continue
-    const found = bounds[sample.phase]
+    const key = JSON.stringify([sample.scope ?? sample.phase, sample.phase])
+    const found = bounds[key]
     const end = sample.startedAt + sample.ms
-    bounds[sample.phase] = { from: Math.min(found?.from ?? sample.startedAt, sample.startedAt), to: Math.max(found?.to ?? end, end) }
+    bounds[key] = { from: Math.min(found?.from ?? sample.startedAt, sample.startedAt), to: Math.max(found?.to ?? end, end) }
   }
-  return Object.entries(bounds).map(([phase, one]) => ({ phase, ms: one.to - one.from }))
+  return Object.entries(bounds).map(([key, one]) => ({ phase: (JSON.parse(key) as string[])[1] ?? '', ms: one.to - one.from }))
+}
+
+const labelled = (patterns: RegExp[], sample: Sample): boolean => patterns.some(pattern => pattern.test(sample.label ?? ''))
+
+export const currentShapeSamples = (journals: Sample[][]): Sample[][] => {
+  const isRecent = (samples: Sample[]): boolean => samples.some(one => labelled(INTRODUCED_LABELS, one))
+  const recent = journals.filter(isRecent)
+  if (recent.length === 0) return journals
+  const reshaped = new Set(
+    [...recent.flat().filter(one => labelled(INTRODUCED_LABELS, one)), ...journals.flat().filter(one => labelled(RETIRED_LABELS, one))].map(one => one.phase),
+  )
+  return journals.map(samples => (isRecent(samples) ? samples : samples.filter(one => !reshaped.has(one.phase))))
 }
 
 const NO_SAMPLE: PhaseSample = { total: 0, count: 0, tools: 0, toolCount: 0, span: 0, spanCount: 0 }
@@ -787,8 +985,64 @@ export const parseSheet = (text: string, path: string): Sheet => {
   }
 
   const isDone = title.includes('✅ DONE') || (steps.length > 0 && steps.every(isStepDone))
-  return { lot, name, isDone, steps, hypotheses }
+  const cycles = parseCycles(text)
+  return { lot, name, isDone, steps, hypotheses, ...(cycles === null ? {} : { cycles }) }
 }
+
+export const parseCycles = (text: string): SheetCycle[] | null => {
+  const lines = text.split(/\r?\n/)
+  const start = lines.findIndex(line => line.trim() === CYCLES_SECTION)
+  if (start < 0) return null
+  const end = lines.findIndex((line, at) => at > start && line.startsWith('## '))
+  const fenced = /```json[ \t]*\n([\s\S]*?)\n```/.exec(lines.slice(start + 1, end < 0 ? undefined : end).join('\n'))?.[1]
+  const block = fenced === undefined ? null : recordOf(fenced)
+  const listed = Array.isArray(block?.cycles) ? (block.cycles as unknown[]) : []
+  const cycles = listed.flatMap((one, at): SheetCycle[] => {
+    const fields = one !== null && typeof one === 'object' ? (one as Record<string, unknown>) : null
+    const behaviour = textOf(fields?.behaviour)
+    if (fields === null || behaviour === null) return []
+    return [
+      {
+        id: textOf(fields.id) ?? `${at + 1}`,
+        behaviour,
+        wave: typeof fields.wave === 'number' ? fields.wave : 1,
+        guard: fields.guard === true,
+        state: 'pending',
+        unreachable: [],
+      },
+    ]
+  })
+  return cycles.length === 0 ? null : cycles
+}
+
+export const cycleSlugOf = (behaviour: string): string =>
+  behaviour
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60)
+
+const fieldsOf = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+
+export const cycleProgressOf = (cycle: SheetCycle, saved: string | null): SheetCycle => {
+  const state = saved === null ? null : recordOf(saved)
+  const red = fieldsOf(state?.red)
+  if (red === null) return { ...cycle, state: 'pending', unreachable: [] }
+  const green = fieldsOf(state?.green)
+  const unreachable = (Array.isArray(red.unreachable) ? (red.unreachable as unknown[]) : []).flatMap(one => {
+    const method = textOf(fieldsOf(one)?.method)
+    return method === null ? [] : [method]
+  })
+  const isGreen = green?.status === 'GREEN' && green.exit === 0
+  const needsNoGreen = red.status === 'ALREADY_GREEN' || cycle.guard || (Array.isArray(red.table) && red.table.length === 0)
+  return { ...cycle, state: isGreen || needsNoGreen ? 'done' : 'red', unreachable }
+}
+
+export const isSheetDone = (sheet: Sheet): boolean =>
+  sheet.isDone || (sheet.cycles !== undefined && sheet.cycles.every(one => one.state === 'done'))
 
 export type PhaseRow = {
   title: string
@@ -815,14 +1069,14 @@ export type Passes = { start: number | null; count: number }
 export const passesOf = (run: WorkflowRun): Passes => {
   const titles = phaseTitles(run)
   const rank = (title: string): number => {
-    const mates = PARALLEL_PHASES.find(group => group.includes(title)) ?? [title]
+    const mates = [...PARALLEL_PHASES, ...INTERLEAVED_PHASES].find(group => group.includes(title)) ?? [title]
     const found = mates.map(one => titles.indexOf(one)).filter(index => index >= 0)
     return found.length === 0 ? -1 : Math.min(...found)
   }
   let top = -1
   let passes: Passes = { start: null, count: 1 }
   for (const agent of run.agents.filter(isLive).sort((a, b) => a.startedAt - b.startedAt || a.index - b.index)) {
-    if (agent.phase === null) continue
+    if (agent.phase === null || CONDITIONAL_PHASES.includes(agent.phase)) continue
     const one = rank(agent.phase)
     if (one < top) passes = { start: agent.startedAt, count: passes.count + 1 }
     top = one < top ? one : Math.max(top, one)
@@ -839,21 +1093,37 @@ export const phaseRows = (run: WorkflowRun, at: number): PhaseRow[] => {
   const titles = phaseTitles(run)
   const { start } = passesOf(run)
   const isCurrent = (agent: WorkflowAgent): boolean => start === null || agent.startedAt >= start
-  const reached = Math.max(-1, ...run.agents.filter(agent => isLive(agent) && isCurrent(agent)).map(agent => titles.indexOf(agent.phase ?? NO_PHASE)))
-  return titles
+  const reached = Math.max(-1, ...run.agents.filter(agent => isLive(agent) && isCurrent(agent) && !CONDITIONAL_PHASES.includes(agent.phase ?? NO_PHASE)).map(agent => titles.indexOf(agent.phase ?? NO_PHASE)))
+  const rows = titles
     .map((title, index) => {
       const all = run.agents.filter(agent => (agent.phase ?? NO_PHASE) === title)
-      const agents = index <= reached ? all : all.filter(isCurrent)
-      const earlier = index <= reached ? [] : all.filter(agent => !isCurrent(agent))
+      const isReached = index <= reached || CONDITIONAL_PHASES.includes(title)
+      const agents = isReached ? all : all.filter(isCurrent)
+      const earlier = isReached ? [] : all.filter(agent => !isCurrent(agent))
       const isRunning = agents.some(agent => agent.state === 'running')
       const timed = agents.some(isCurrent) ? agents.filter(isCurrent) : agents
       const starts = timed.map(agent => agent.startedAt)
       const ends = timed.map(agent => agent.endedAt ?? at)
       const span = timed.length === 0 ? 0 : Math.max(...ends) - Math.min(...starts)
-      const mark: PhaseRow['mark'] = isRunning ? 'running' : index <= reached && agents.some(isLive) ? 'done' : 'pending'
+      const mark: PhaseRow['mark'] = isRunning ? 'running' : isReached && agents.some(isLive) ? 'done' : 'pending'
       return { title, detail: run.details[title] ?? null, mark, agents, earlier, span }
     })
     .filter(row => row.title !== NO_PHASE || row.agents.length > 0 || row.earlier.length > 0)
+  return besideInterrupted(rows)
+}
+
+const besideInterrupted = (rows: PhaseRow[]): PhaseRow[] => {
+  const isConditional = (row: PhaseRow | undefined): boolean => row !== undefined && CONDITIONAL_PHASES.includes(row.title) && row.agents.length > 0
+  const ordered = rows.filter(row => !isConditional(row))
+  for (const row of rows.filter(isConditional)) {
+    const from = Math.min(...row.agents.map(agent => agent.startedAt))
+    const lastBefore = (other: PhaseRow): number => Math.max(-Infinity, ...other.agents.map(agent => agent.startedAt).filter(start => start <= from))
+    const interrupted = ordered.filter(other => !CONDITIONAL_PHASES.includes(other.title)).sort((a, b) => lastBefore(b) - lastBefore(a))[0]
+    let at = interrupted === undefined || lastBefore(interrupted) === -Infinity ? ordered.length : ordered.indexOf(interrupted) + 1
+    while (isConditional(ordered[at])) at += 1
+    ordered.splice(at, 0, row)
+  }
+  return ordered
 }
 
 export type CurrentStep = {
@@ -883,7 +1153,7 @@ export const phaseTypical = (known: PhaseSamples, title: string): number | null 
 export const remainingMs = (run: WorkflowRun, rows: PhaseRow[], known: PhaseSamples): number | null => {
   if (run.status !== 'running') return null
   const groups: PhaseRow[][] = []
-  for (const row of rows.filter(one => one.mark !== 'done')) {
+  for (const row of rows.filter(one => one.mark === 'running' || (one.mark === 'pending' && !CONDITIONAL_PHASES.includes(one.title)))) {
     const mates = PARALLEL_PHASES.find(group => group.includes(row.title)) ?? []
     const placed = groups.find(group => group.some(other => mates.includes(other.title)))
     if (placed === undefined) groups.push([row])
@@ -904,6 +1174,61 @@ export const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim(
 
 export const fit = (text: string, width: number): string =>
   width < 1 ? '' : text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text
+
+export const wrapWords = (text: string, width: number): string[] => {
+  if (width < 1) return []
+  const lines: string[] = []
+  let line = ''
+  for (const word of oneLine(text).split(' ').filter(one => one !== '')) {
+    const candidate = line === '' ? word : `${line} ${word}`
+    if (candidate.length <= width) {
+      line = candidate
+      continue
+    }
+    if (line !== '') lines.push(line)
+    let rest = word
+    while (rest.length > width) {
+      lines.push(rest.slice(0, width))
+      rest = rest.slice(width)
+    }
+    line = rest
+  }
+  return line === '' ? lines : [...lines, line]
+}
+
+export type ReasonLine = { text: string; kind: 'cause' | 'item' | 'context' }
+
+const REASON_CONTEXT_LINES = 2
+const REASON_ITEMS = 8
+
+export const reasonLines = (reason: string, width: number): ReasonLine[] => {
+  const segments = oneLine(reason).split(' — ').filter(one => one !== '')
+  if (segments.length === 0) return []
+  const cause = segments[segments.length - 1]!
+  const context = segments.slice(0, -1).join(' — ')
+  const listed = /^([^:]{1,80}):\s+(.+)$/.exec(cause)
+  const items = listed === null ? [] : listed[2]!.split(/,\s+/).filter(one => one !== '')
+  const head: ReasonLine[] =
+    items.length >= 2
+      ? [
+          ...wrapWords(`${listed![1]}:`, width).map(text => ({ text, kind: 'cause' as const })),
+          ...items.slice(0, REASON_ITEMS).map(item => ({ text: fit(`• ${item}`, width), kind: 'item' as const })),
+          ...(items.length > REASON_ITEMS ? [{ text: `  … ${items.length - REASON_ITEMS} more`, kind: 'item' as const }] : []),
+        ]
+      : wrapWords(cause, width).map(text => ({ text, kind: 'cause' as const }))
+  const wrapped = wrapWords(context, width)
+  const shown = wrapped.slice(0, REASON_CONTEXT_LINES)
+  if (wrapped.length > REASON_CONTEXT_LINES) {
+    const last = shown[shown.length - 1]!
+    shown[shown.length - 1] = `${last.length < width ? last : last.slice(0, width - 1)}…`
+  }
+  return [...head, ...shown.map(text => ({ text, kind: 'context' as const }))]
+}
+
+export const withoutRepeated = (reason: string, repeated: string[]): string => {
+  const quoted = repeated.map(oneLine).filter(one => one !== '')
+  return quoted.reduce((text, one) => (text.endsWith(` — ${one}`) ? text.slice(0, -one.length - 3) : text), oneLine(reason))
+}
 
 const emptyRun = (runId: string, at: number): WorkflowRun => ({
   runId,
@@ -1067,20 +1392,21 @@ const demoCalls = (id: string, index: number, from: number, to: number | null, s
 }
 
 const demoSheet = (isFinished: boolean): Sheet => {
-  const marks = (isReached: boolean): TddMarks => ({ red: isReached ? DONE : '⬜', green: isReached ? DONE : '⬜', cost: isReached ? DONE : '⬜' })
-  const step = (number: string, title: string, tdd: TddMarks): Step => ({ number, title, isDone: false, tdd, corrections: [] })
-  const partial = { red: DONE, green: '⬜', cost: '⬜' }
+  const cycle = (id: string, wave: number, behaviour: string, state: SheetCycle['state'], unreachable: string[] = []): SheetCycle => ({
+    id, wave, behaviour, guard: false, state, unreachable,
+  })
   return {
     lot: 'F4',
     name: 'Product lifecycle',
     isDone: isFinished,
     hypotheses: 2,
-    steps: [
-      step('1', 'Create the product', marks(true)),
-      step('2', 'Refuse without catalog', marks(true)),
-      { ...step('3', 'Publication lock', isFinished ? marks(true) : partial), corrections: [{ id: 'C1', finding: 'lock set after creation', tdd: marks(isFinished) }] },
-      step('4', 'Remove a deleted item', marks(isFinished)),
-      step('5', 'Product audit', marks(isFinished)),
+    steps: [],
+    cycles: [
+      cycle('X1', 1, 'Create the product', 'done'),
+      cycle('X2', 1, 'Refuse without catalog', 'done', ['ProductTests.Refuse_WhenCatalogArchived']),
+      cycle('X3', 1, 'Publication lock', isFinished ? 'done' : 'red'),
+      cycle('X4', 2, 'Remove a deleted item', isFinished ? 'done' : 'pending'),
+      { ...cycle('X5', 2, 'Product audit', isFinished ? 'done' : 'pending'), guard: true },
     ],
   }
 }
@@ -1092,11 +1418,11 @@ const sampled = (agentMs: number, tools: number, spanMs: number): PhaseSample =>
 })
 
 export const demoHistory = (): PhaseSamples => ({
-  Design: sampled(inMs(4), 20, inMs(4)),
+  Design: sampled(inMs(1, 10), 8, inMs(2)),
   RED: sampled(inMs(1, 30), 14, inMs(2)),
   GREEN: sampled(inMs(1, 30), 14, inMs(8)),
   'Global green': sampled(inMs(1), 8, inMs(1, 10)),
-  Closing: sampled(inMs(1, 40), 12, inMs(1, 40)),
+  Closing: sampled(inMs(0, 50), 6, inMs(0, 50)),
   Audit: sampled(inMs(2), 16, inMs(5)),
   Review: sampled(inMs(2), 18, inMs(2, 30)),
   Report: sampled(inMs(0, 30), 4, inMs(0, 30)),
@@ -1108,14 +1434,14 @@ export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
   const begin = isFinished ? at - total : at - t(12, 40)
   const phases = ['Design', 'RED', 'GREEN', 'Global green', 'Closing', 'Audit', 'Review', 'Report']
   const details = {
-    Design: 'earlier audit gaps, behaviours, waves, RED and GREEN contracts, declaratives',
-    RED: 'tdd-test-author, one wave in parallel',
-    GREEN: 'tdd-implementer, serial, TDD tick after COST',
-    'Global green': 'whole or filtered suites per test-scope.md, beside closing',
-    Closing: 'closing.md §1-2 then pre-audit.sh, beside global green',
+    Design: 'cycle index of the sheet; design writes the `## Cycles` block only when absent or invalid; declaratives',
+    RED: 'tdd-test-author, waves in sequence, cycles of a wave in parallel',
+    GREEN: 'tdd-implementer, serial, writes the cycle state',
+    'Global green': 'whole or filtered suites per test-scope.md, beside the pre-audit gate',
+    Closing: 'pre-audit.sh and what it lists, beside global green',
     Audit: 'audit-capture.sh, ddd-tdd-auditor, two retries at most',
-    Review: 'adversarial-reviewer on the next sheet, beside the audit',
-    Report: 'FX-report.md, written even on stop',
+    Review: 'adversarial-reviewer and pre-design of the next sheet, beside the audit',
+    Report: 'run/batches/FX.md, written even on stop',
   }
   const agent = (
     id: string, index: number, label: string, phase: string, from: number, to: number | null,
@@ -1126,24 +1452,26 @@ export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
       ...(options.activeAt === undefined ? {} : { activeAt: begin + options.activeAt }),
     })
   const build = [
-    agent('d', 1, 'design', 'Design', 0, t(4, 30), 'done', 'Opus'),
-    agent('r1', 2, 'RED 1 create', 'RED', t(4, 30), t(6, 18), 'done'),
-    agent('r2', 3, 'RED 2 refusal', 'RED', t(4, 30), t(6, 10), 'done'),
-    agent('r3', 14, 'RED 3 declaratives', 'RED', t(4, 30), t(5, 20), 'interrupted', 'Sonnet'),
-    agent('g1', 4, 'GREEN 1 removal', 'GREEN', t(6, 20), t(7, 14), 'done', 'Sonnet', { type: 'tdd-implementer' }),
-    agent('g2', 5, 'GREEN 2 lock', 'GREEN', t(7, 20), t(8, 32), 'error', 'Sonnet', { type: 'tdd-implementer' }),
+    agent('d', 1, 'index CAT-LIFECYCLE-PLAN-F4.md', 'Design', 0, t(0, 40), 'done', 'Haiku'),
+    agent('dc', 15, 'declaratives', 'Design', t(0, 40), t(4, 30), 'done', 'Sonnet'),
+    agent('r1', 2, 'RED X1 w1 create', 'RED', t(4, 30), t(6, 18), 'done'),
+    agent('r2', 3, 'RED X2 w1 refusal', 'RED', t(4, 30), t(6, 10), 'done'),
+    agent('r3', 14, 'RED X3 w1 lock', 'RED', t(4, 30), t(5, 20), 'interrupted', 'Sonnet'),
+    agent('g1', 4, 'GREEN X1 create', 'GREEN', t(6, 20), t(7, 14), 'done', 'Sonnet', { type: 'tdd-implementer' }),
+    agent('g2', 5, 'GREEN X3 lock', 'GREEN', t(7, 20), t(8, 32), 'error', 'Sonnet', { type: 'tdd-implementer' }),
     isFinished
-      ? agent('g2b', 6, 'GREEN 2 lock', 'GREEN', t(8, 40), t(12), 'done', 'Sonnet', { type: 'tdd-implementer' })
-      : agent('g2b', 6, 'GREEN 2 lock', 'GREEN', t(8, 40), null, 'running', 'Sonnet', {
+      ? agent('g2b', 6, 'GREEN X3 lock', 'GREEN', t(8, 40), t(12), 'done', 'Sonnet', { type: 'tdd-implementer' })
+      : agent('g2b', 6, 'GREEN X3 lock', 'GREEN', t(8, 40), null, 'running', 'Sonnet', {
           type: 'tdd-implementer', lastTool: 'Edit', tools: 48, activeAt: t(12, 35),
           live: { streamKind: 'thinking', streamChars: 4_200, firstChunkAt: at - 7_560, lastChunkAt: at - 1_000 },
         }),
   ]
   const closing = [
     agent('s', 7, 'suites', 'Global green', t(12, 5), t(13, 15), 'done', 'Haiku'),
-    agent('c', 8, 'closing + pre-audit', 'Closing', t(12, 5), t(13, 45), 'done', 'Sonnet'),
+    agent('c', 8, 'pre-audit', 'Closing', t(12, 5), t(13), 'done', 'Sonnet'),
     agent('a1', 9, 'audit', 'Audit', t(13, 50), t(15, 40), 'done', 'Opus', { type: 'ddd-tdd-auditor' }),
     agent('rv', 10, 'next batch review', 'Review', t(13, 50), t(16, 20), 'done', 'Opus', { type: 'adversarial-reviewer' }),
+    agent('pd', 16, 'pre-design F5', 'Review', t(16, 25), t(18, 40), 'done', 'Opus'),
     agent('f1', 11, 'fix 1', 'Audit', t(15, 45), t(17, 45), 'done', 'Sonnet', { type: 'tdd-implementer' }),
     agent('a2', 12, 'audit retry 1', 'Audit', t(17, 50), t(19), 'done', 'Opus', { type: 'ddd-tdd-auditor' }),
     agent('rp', 13, 'report', 'Report', t(19, 5), total, 'done', 'Haiku'),
@@ -1156,7 +1484,7 @@ export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
         ? {
             label: 'GAPS',
             reason: 'two fix rounds done, one blocking gap remains on the organization lock',
-            report: 'todo/catalog-lifecycle/run/F4/F4-report.md',
+            report: 'todo/catalog-lifecycle/run/batches/F4.md',
           }
         : null,
       audit: isFinished ? { verdict: 'GAPS', blocking: 1, major: 2 } : null,
@@ -1205,20 +1533,25 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
     const at = (minutes: number, seconds = 0) => Math.round(t(minutes, seconds) * pace)
     const steps: [string, string, number, string, string?][] = [
       ['design', 'Design', at(3, 40), 'Opus'],
-      ...behaviours.map((one, index): [string, string, number, string] => [`RED ${index + 1} ${one}`, 'RED', at(1, 20 + index * 10), 'Sonnet']),
-      ...behaviours.map((one, index): [string, string, number, string, string] => [`GREEN ${index + 1} ${one}`, 'GREEN', at(1, 10 + index * 30), 'Sonnet', 'tdd-implementer']),
+      ...behaviours.map((one, index): [string, string, number, string] => [`RED C${index + 1} w1 ${one}`, 'RED', at(1, 20 + index * 10), 'Sonnet']),
+      ...behaviours.map((one, index): [string, string, number, string, string] => [`GREEN C${index + 1} ${one}`, 'GREEN', at(1, 10 + index * 30), 'Sonnet', 'tdd-implementer']),
       ['suites', 'Global green', at(1, 10), 'Haiku'],
       ['audit', 'Audit', at(2, 20), 'Opus', 'ddd-tdd-auditor'],
       ['report', 'Report', at(0, 30), 'Haiku'],
     ]
     let clock = from
     let redFrom = from
+    let wave: string | null = null
     const out: WorkflowAgent[] = []
     for (const [offset, [label, phase, length, model, type]] of steps.entries()) {
       const isLast = last === label
       const isWave = phase === 'RED'
-      if (isWave && !label.startsWith('RED 1 ')) clock = redFrom
-      if (label.startsWith('RED 1 ')) redFrom = clock
+      const labelWave = WAVE_LABEL.exec(label)?.[1] ?? null
+      if (isWave && labelWave === wave) clock = redFrom
+      if (isWave && labelWave !== wave) {
+        redFrom = clock
+        wave = labelWave
+      }
       out.push(agent(`${lot}-${offset}`, first + offset, lot, label, phase, clock, isLast ? null : clock + length, isLast ? 'running' : 'done', model, {
         ...(type === undefined ? {} : { type }),
         ...(isLast ? { lastTool: 'Bash', tools: 17, activeAt: t(29, 10), live: { openCalls: 1, toolSince: loadedAt - t(2) } } : {}),
@@ -1233,7 +1566,7 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
   const f1 = lotAgents('F1', 3, t(1, 10), null, ['create', 'duplicate name'], 1)
   const f1End = Math.max(...f1.map(one => (one.endedAt ?? 0) - begin))
   const f2Start = f1End + t(1, 40)
-  const f2 = lotAgents('F2', 20, f2Start, isFinished ? null : 'GREEN 3 hide', ['archive', 'twice', 'hide'], 1.15)
+  const f2 = lotAgents('F2', 20, f2Start, isFinished ? null : 'GREEN C3 hide', ['archive', 'twice', 'hide'], 1.15)
   const f2End = Math.max(...f2.map(one => (one.endedAt ?? 0) - begin))
   const f3 = isFinished ? lotAgents('F3', 40, f2End + t(1, 40), null, ['restore', 'deleted'], 0.8) : []
   const f3End = f3.length > 0 ? Math.max(...f3.map(one => (one.endedAt ?? 0) - begin)) : 0
@@ -1251,7 +1584,7 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
         ]
       : []),
   ]
-  const done = (lot: string): Outcome => ({ label: 'DONE', reason: null, report: `todo/product-archiving/run/${lot}/${lot}-report.md` })
+  const done = (lot: string): Outcome => ({ label: 'DONE', reason: null, report: `todo/product-archiving/run/batches/${lot}.md` })
   const lot = (id: string, deps: string[], outcome: Outcome | null): PlanLot => ({
     lot: id, sheet: `todo/product-archiving/PRD-ARCH-PLAN-${id}.md`, deps, isDone: false, outcome,
     audit: outcome === null ? null : { verdict: 'VALID', blocking: 0, major: 0 }, view: views[id] ?? null,
@@ -1329,17 +1662,38 @@ async function changedText($: EngineInterface, path: string): Promise<string | n
   return text
 }
 
+async function askingOf($: EngineInterface, sheet: string, lot: string): Promise<number> {
+  let asking = 0
+  for (const dir of questionsDirsOf(sheet, lot)) asking += pendingQuestionsOf(await listDirectory($, dir)).length
+  return asking
+}
+
+async function refreshAsking($: EngineInterface, run: WorkflowRun): Promise<void> {
+  const sheet = sheetPathOf(run.argument)
+  const lot = lotOf(run.argument)
+  if (sheet === null || lot === null || run.runId.startsWith(DEMO)) return
+  const asking = await askingOf($, sheet, lot.lot)
+  if (asking === (run.asking ?? 0)) return
+  await update($, runs, stored => stored.map(one => (one.runId === run.runId ? { ...one, asking } : one)))
+}
+
 async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> {
   if (run.child === null || run.runId.startsWith(DEMO)) return
   const planText = run.plan === null ? null : await changedText($, run.plan)
   const planned = planText === null ? null : parsePlanLots(planText)
   const views: Record<string, Sheet> = {}
   const outcomes: Record<string, Outcome> = {}
+  const askings: Record<string, number> = {}
   for (const entry of run.lots) {
     const agents = run.agents.filter(agent => agent.lot === entry.lot)
     if (entry.sheet === null || agents.length === 0) continue
+    const asking = await askingOf($, entry.sheet, entry.lot)
+    if (asking !== (entry.asking ?? 0)) askings[entry.lot] = asking
     const text = await changedText($, entry.sheet)
-    if (text !== null) views[entry.lot] = parseSheet(text, entry.sheet)
+    const parsed = text === null ? null : parseSheet(text, entry.sheet)
+    const base = parsed ?? entry.view
+    const view = base === null ? null : await withCycleProgress($, base, entry.sheet, entry.lot, parsed !== null)
+    if (view !== null) views[entry.lot] = view
     if (entry.outcome === null && agents.some(agent => agent.phase === REPORT_PHASE && agent.state !== 'running' && !isStaleReport(agents, agent))) {
       for (const path of reportPathsOf(entry.sheet, entry.lot)) {
         const report = await readText($, path)
@@ -1351,13 +1705,13 @@ async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> 
       }
     }
   }
-  if (planned === null && Object.keys(views).length === 0 && Object.keys(outcomes).length === 0) return
+  if (planned === null && Object.keys(views).length === 0 && Object.keys(outcomes).length === 0 && Object.keys(askings).length === 0) return
   await update($, runs, stored =>
     stored.map(one => {
       if (one.runId !== run.runId) return one
       const kept = completeRun(one)
       const lots = planned === null ? kept.lots : mergeLots(kept.lots, planned)
-      return { ...kept, lots: lots.map(entry => ({ ...entry, view: views[entry.lot] ?? entry.view, outcome: outcomes[entry.lot] ?? entry.outcome })) }
+      return { ...kept, lots: lots.map(entry => ({ ...entry, view: views[entry.lot] ?? entry.view, outcome: outcomes[entry.lot] ?? entry.outcome, asking: askings[entry.lot] ?? entry.asking })) }
     }),
   )
 }
@@ -1365,7 +1719,7 @@ async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> 
 async function poll($: EngineInterface): Promise<void> {
   const list = (await read($, runs)).map(completeRun)
   for (const run of list) {
-    if (run.status === 'running') await refreshLots($, run)
+    if (run.status === 'running') await (run.child === null ? refreshAsking($, run) : refreshLots($, run))
     if (run.status !== 'running' || run.transcriptDir === null) continue
     const dir = run.transcriptDir
     const journalPath = journalPathOf(dir, run.runId)
@@ -1435,11 +1789,12 @@ async function learnHistory($: EngineInterface, run: WorkflowRun): Promise<void>
     }
   }
   const newest = journals.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, KEPT_JOURNALS)
-  let known: PhaseSamples = {}
+  const sampled: Sample[][] = []
   for (const journal of newest) {
     const text = await readText($, journal.path)
-    if (text !== null) known = withSamples(known, samplesOf(text))
+    if (text !== null) sampled.push(samplesOf(text, run.child?.labels ?? {}))
   }
+  const known = currentShapeSamples(sampled).reduce(withSamples, {} as PhaseSamples)
   await update($, history, () => known)
 }
 
@@ -1450,12 +1805,38 @@ async function refreshSheet($: EngineInterface, run: WorkflowRun): Promise<void>
   if (path === null || run.runId.startsWith(DEMO)) return
   const stat = await $.fs.stat(path).catch(() => null)
   if (stat === null) return
-  if (run.sheet !== null && seenSheet?.path === path && seenSheet.mtimeMs === stat.mtimeMs) return
-  const text = await readText($, path)
-  if (text === null) return
-  seenSheet = { path, mtimeMs: stat.mtimeMs }
-  const sheet = parseSheet(text, path)
+  const isSeen = run.sheet !== null && seenSheet?.path === path && seenSheet.mtimeMs === stat.mtimeMs
+  const text = isSeen ? null : await readText($, path)
+  if (!isSeen && text === null) return
+  if (!isSeen) seenSheet = { path, mtimeMs: stat.mtimeMs }
+  const parsed = text === null ? null : parseSheet(text, path)
+  const base = parsed ?? run.sheet
+  const sheet = base === null ? null : await withCycleProgress($, base, path, base.lot, parsed !== null)
+  if (sheet === null) return
   await update($, runs, stored => stored.map(one => (one.runId === run.runId ? { ...one, sheet } : one)))
+}
+
+const seenCycles = new Map<string, string>()
+
+async function withCycleProgress($: EngineInterface, sheet: Sheet, path: string, lot: string, isFresh: boolean): Promise<Sheet | null> {
+  if (sheet.cycles === undefined) return isFresh ? sheet : null
+  let dir = cyclesDirOf(path, lot)
+  let entries: FsEntry[] = []
+  for (const candidate of cyclesDirsOf(path, lot)) {
+    entries = (await listDirectory($, candidate)).filter(entry => entry.kind === 'file' && entry.name.endsWith('.json'))
+    dir = candidate
+    if (entries.length > 0) break
+  }
+  const signature = entries.map(entry => `${entry.name}@${entry.mtimeMs}`).sort().join('|')
+  if (!isFresh && seenCycles.get(dir) === signature) return null
+  seenCycles.set(dir, signature)
+  const names = new Set(entries.map(entry => entry.name))
+  const cycles: SheetCycle[] = []
+  for (const cycle of sheet.cycles) {
+    const name = `${cycleSlugOf(cycle.behaviour)}.json`
+    cycles.push(cycleProgressOf(cycle, names.has(name) ? await readText($, `${dir}/${name}`) : null))
+  }
+  return { ...sheet, cycles }
 }
 
 async function refreshUsage($: EngineInterface): Promise<void> {
@@ -1747,9 +2128,10 @@ export const register: Register = on => {
     const agentId = spawned.agentId
     const at = await $.clock.now()
     const found = promptLotOf(e.prompt)
+    const label = e.description || e.subagentType
     const agent = {
-      ...blankAgent(agentId, agentIndex, e.description || e.subagentType, shortModel(spawned.model), e.subagentType, e.prompt, at),
-      lot: found?.lot ?? null,
+      ...blankAgent(agentId, agentIndex, label, shortModel(spawned.model), e.subagentType, e.prompt, at),
+      lot: found === null ? null : (aheadLotOf(label) ?? found.lot),
     }
     await update($, runs, list =>
       withRun(list, runId, at, run => ({
@@ -1811,6 +2193,17 @@ export const register: Register = on => {
     const go = (change: Partial<Navigation>) => () => void update($, nav, state => ({ ...state, ...change }))
     const close = <Button key="close" label="✕" plain dimColor onPress={() => $.ui.close({ id: PANE })} />
 
+    const reasonBlock = (key: string, reason: string) =>
+      reasonLines(reason, columns - 7).map((line, index) => (
+        <Text
+          key={`${key}-${index}`}
+          wrap="truncate-end"
+          bold={line.kind === 'cause'}
+          color={line.kind === 'context' ? 'inactive' : undefined}
+        >
+          {line.text}
+        </Text>
+      ))
     const row = (key: string, left: JSX.Element, right?: JSX.Element | JSX.Element[]) => (
       <Box key={key} height={1}>
         <Box flexGrow={1} flexShrink={1}>
@@ -1906,6 +2299,8 @@ export const register: Register = on => {
       state === 'running' ? 'claude' : state === 'completed' ? 'success' : state === 'killed' ? 'warning' : state === 'failed' ? 'error' : state === 'waiting' ? WAITING_TONE : 'inactive'
     const lotGlyph = (state: LotState) =>
       state === 'running' ? spin : state === 'completed' || state === 'done' ? '✓' : state === 'pending' ? '○' : state === 'killed' ? '⏹' : state === 'waiting' ? '?' : '✗'
+    const lotMark = (run: WorkflowRun, entry: PlanLot, state: LotState) =>
+      isPredesigning(run, entry, state) ? { glyph: PREDESIGN_GLYPH, tone: 'claude' } : { glyph: lotGlyph(state), tone: lotTone(state) }
     const openLot = (lot: string | null) => go({ lot, screen: 'run', phase: null, agentId: null, toggled: [] })
     const lotBar =
       planRun === null ? null : (
@@ -1917,7 +2312,7 @@ export const register: Register = on => {
             const state = lotStateOf(planRun, entry)
             const label = (
               <Text key={`label-${entry.lot}`}>
-                <Text color={lotTone(state)}>{lotGlyph(state)} </Text>
+                <Text color={lotMark(planRun, entry, state).tone}>{lotMark(planRun, entry, state).glyph} </Text>
                 <Text bold={entry.lot === lotInView} color={entry.lot === lotInView ? undefined : 'inactive'}>
                   {entry.lot}
                 </Text>
@@ -2104,7 +2499,7 @@ export const register: Register = on => {
     const counted = current.agents.filter(isLive)
     const done = counted.filter(agent => agent.state !== 'running').length
     const remaining = remainingMs(current, rows, known)
-    const headline = headlineOf(current.status, current.outcome)
+    const headline = headlineOf(current.status, current.outcome, current.asking ?? 0)
     const tone = headline.tone
     const reached = rows.filter(one => one.mark === 'done').length
     const step = currentStep(current, rows)
@@ -2158,7 +2553,8 @@ export const register: Register = on => {
       const labelColor =
         agent.state === 'error' ? 'error' : isSlowAgent || stalls.length > 0 ? 'warning' : agent.state === 'running' ? undefined : 'inactive'
       const retry = attempt > 1 ? ` ↻ ${attempt}` : ''
-      const labelWidth = columns - 7 - agentsRightWidth - retry.length - 1
+      const ahead = isAhead(agent) ? ' · next batch' : ''
+      const labelWidth = columns - 7 - agentsRightWidth - retry.length - ahead.length - 1
       const live = [
         activityOf(agent, at) ?? '',
         agent.lastTool === null ? '' : `${agent.lastTool} (${agent.tools})`,
@@ -2173,6 +2569,7 @@ export const register: Register = on => {
               <Button key={`open-${agent.id}`} plain onPress={go({ screen: 'agent', agentId: agent.id, back: 'run' })}>
                 <Text color={agentTone(agent)}>{agentGlyph(agent)} </Text>
                 <Text color={labelColor}>{fit(agent.label, labelWidth)}</Text>
+                {ahead !== '' && <Text color={WAITING_TONE}>{ahead}</Text>}
                 {retry !== '' && <Text color="warning">{retry}</Text>}
               </Button>
             </Box>,
@@ -2212,11 +2609,15 @@ export const register: Register = on => {
           </Text>
         )
       }
-      if (phase.detail === null || phase.mark === 'done' || room < 10) return null
+      const wave = phase.title === 'RED' ? waveOf(current) : null
+      const waveText = wave === null ? '' : `wave ${wave.wave}/${wave.total}`
+      const detail = phase.detail === null || phase.mark === 'done' ? '' : phase.detail
+      const text = [waveText, detail].filter(one => one !== '').join(' · ')
+      if (text === '' || room < 10) return null
       return (
         <Text color="inactive" wrap="truncate-end">
           {'  '}
-          {fit(phase.detail, room - 2)}
+          {fit(text, room - 2)}
         </Text>
       )
     }
@@ -2310,26 +2711,69 @@ export const register: Register = on => {
         ]
       })
 
+    const currentCycle = sheet?.cycles?.find(one => one.state !== 'done')
+    const cycleMarks = (cycle: SheetCycle) => (
+      <Box key={`cycle-marks-${cycle.id}`} width={marksWidth} flexShrink={0} justifyContent="flex-end">
+        <Text wrap="truncate-end">
+          {(
+            [
+              ['RED', cycle.state !== 'pending'],
+              ['GREEN', cycle.state === 'done'],
+            ] as const
+          ).map(([label, isReached], index) => (
+            <Text key={label}>
+              {index > 0 ? '  ' : ''}
+              {isWide && <Text color="inactive">{label} </Text>}
+              <Text color={isReached ? 'success' : 'inactive'}>{isReached ? '✓' : '·'}</Text>
+            </Text>
+          ))}
+        </Text>
+      </Box>
+    )
+    const cycleRows = (cycles: SheetCycle[]) =>
+      cycles.flatMap(one => {
+        const isDone = one.state === 'done'
+        const isStarted = one.state === 'red'
+        const titleWidth = columns - 6 - marksWidth - 1
+        return [
+          row(
+            `cycle-${one.id}`,
+            <Text wrap="truncate-end">
+              {'  '}
+              <Text color={isDone ? 'success' : isStarted ? 'claude' : 'inactive'}>{isDone ? '✓' : isStarted ? '◐' : '○'} </Text>
+              <Text bold={one === currentCycle} color={isDone || one === currentCycle ? undefined : 'inactive'}>
+                {fit(`${one.id} ${one.behaviour}`, titleWidth)}
+              </Text>
+            </Text>,
+            [cycleMarks(one)],
+          ),
+          ...one.unreachable.map(method =>
+            row(
+              `cycle-unreachable-${one.id}-${method}`,
+              <Text wrap="truncate-end" color="warning">
+                {'    '}
+                {fit(`↳ unreachable, not written: ${method}`, columns - 6)}
+              </Text>,
+            ),
+          ),
+        ]
+      })
+
     if (planRun !== null && lotInView === null) {
       const states = planRun.lots.map(entry => ({ entry, state: lotStateOf(planRun, entry) }))
       const finished = states.filter(one => one.state === 'completed' || one.state === 'done').length
-      const planHeadline = headlineOf(planRun.status, planRun.outcome)
+      const planHeadline = headlineOf(planRun.status, planRun.outcome, planRun.lots.reduce((sum, entry) => sum + (entry.outcome === null ? (entry.asking ?? 0) : 0), 0))
       const planTone = planHeadline.tone
       const planElapsed = planRun.durationMs ?? at - planRun.startedAt
       const planTotals = totalsOf(planRun.agents)
       const supervisors = planRun.agents.filter(agent => agent.lot === null)
       const code = planRun.plan === null ? null : (planRun.plan.split('/').pop() ?? '').replace(/\.md$/, '')
       const planOutcome = planRun.outcome
-      const lotDetail = (entry: PlanLot, state: LotState, agents: WorkflowAgent[]) => {
-        if (entry.outcome !== null) return [entry.outcome.label, oneLine(entry.outcome.reason ?? '')].filter(one => one !== '').join(' · ')
-        if (state === 'running') {
-          const active = [...agents].sort((a, b) => b.index - a.index).find(agent => agent.state === 'running') ?? agents[agents.length - 1]
-          return active === undefined ? 'running' : `${active.phase ?? NO_PHASE} · ${active.label}`
-        }
-        if (state === 'done') return 'done before this run'
-        if (state === 'pending') return entry.deps.length > 0 ? `after ${entry.deps.join(', ')}` : 'pending'
-        return state
-      }
+      const attention = states.filter(
+        ({ entry, state }) => (state === 'waiting' || state === 'failed') && entry.outcome !== null && entry.outcome.reason !== null,
+      )
+      const planReason =
+        planOutcome?.reason == null ? '' : withoutRepeated(planOutcome.reason, attention.map(({ entry }) => entry.outcome?.reason ?? ''))
       return (
         <Box flexDirection="column" marginTop={1}>
           {row(
@@ -2379,7 +2823,7 @@ export const register: Register = on => {
               <Text bold color={outcomeTone(planOutcome, planRun.status)} wrap="wrap">
                 {planOutcome.label}
               </Text>
-              {planOutcome.reason !== null && <Text wrap="wrap">{planOutcome.reason}</Text>}
+              {planReason !== '' && reasonBlock('plan-reason', planReason)}
               {planOutcome.report !== null && (
                 <Text color="inactive" wrap="wrap">
                   Report: {relativePath(planOutcome.report, root)}
@@ -2387,29 +2831,27 @@ export const register: Register = on => {
               )}
             </Box>
           )}
-          {states
-            .filter(({ entry, state }) => (state === 'waiting' || state === 'failed') && entry.outcome !== null && entry.outcome.reason !== null)
-            .map(({ entry, state }) => (
-              <Box
-                key={`attention-${entry.lot}`}
-                flexDirection="column"
-                marginTop={1}
-                marginLeft={2}
-                paddingX={1}
-                borderStyle="round"
-                borderColor={lotTone(state)}
-              >
-                <Text bold color={lotTone(state)} wrap="wrap">
-                  {lotGlyph(state)} {entry.lot} · {entry.outcome?.label}
+          {attention.map(({ entry, state }) => (
+            <Box
+              key={`attention-${entry.lot}`}
+              flexDirection="column"
+              marginTop={1}
+              marginLeft={2}
+              paddingX={1}
+              borderStyle="round"
+              borderColor={lotTone(state)}
+            >
+              <Text bold color={lotTone(state)} wrap="wrap">
+                {lotGlyph(state)} {entry.lot} · {entry.outcome?.label}
+              </Text>
+              {reasonBlock(`reason-${entry.lot}`, entry.outcome?.reason ?? '')}
+              {entry.outcome?.report != null && (
+                <Text color="inactive" wrap="wrap">
+                  Report: {relativePath(entry.outcome.report, root)}
                 </Text>
-                <Text wrap="wrap">{entry.outcome?.reason}</Text>
-                {entry.outcome?.report != null && (
-                  <Text color="inactive" wrap="wrap">
-                    Report: {relativePath(entry.outcome.report, root)}
-                  </Text>
-                )}
-              </Box>
-            ))}
+              )}
+            </Box>
+          ))}
           <Box marginTop={1} flexDirection="column">
             {figureRow(
               'session',
@@ -2438,9 +2880,9 @@ export const register: Register = on => {
               const left = (
                 <Text key={`plan-lot-text-${entry.lot}`} wrap="truncate-end">
                   {'  '}
-                  <Text color={lotTone(state)}>{lotGlyph(state)} </Text>
+                  <Text color={lotMark(planRun, entry, state).tone}>{lotMark(planRun, entry, state).glyph} </Text>
                   <Text bold={state === 'running'}>{entry.lot}</Text>
-                  <Text color={state === 'failed' ? 'error' : 'inactive'}> {lotDetail(entry, state, agents)}</Text>
+                  <Text color={state === 'failed' ? 'error' : 'inactive'}> {lotDetailOf(planRun, entry, state, at)}</Text>
                 </Text>
               )
               return row(
@@ -2532,7 +2974,7 @@ export const register: Register = on => {
             <Text bold color={outcomeTone(outcome, current.status)} wrap="wrap">
               {outcome.label}
             </Text>
-            {outcome.reason !== null && <Text wrap="wrap">{outcome.reason}</Text>}
+            {outcome.reason !== null && reasonBlock('reason', outcome.reason)}
             {outcome.report !== null && (
               <Text color="inactive" wrap="wrap">
                 Report: {relativePath(outcome.report, root)}
@@ -2580,11 +3022,17 @@ export const register: Register = on => {
                   </Text>
                 )}
               </Text>,
-              <Text color={sheet.isDone ? 'success' : 'inactive'}>
-                {sheet.steps.filter(isStepDone).length}/{sheet.steps.length} steps
-              </Text>,
+              sheet.cycles === undefined ? (
+                <Text color={sheet.isDone ? 'success' : 'inactive'}>
+                  {sheet.steps.filter(isStepDone).length}/{sheet.steps.length} steps
+                </Text>
+              ) : (
+                <Text color={isSheetDone(sheet) ? 'success' : 'inactive'}>
+                  {sheet.cycles.filter(one => one.state === 'done').length}/{sheet.cycles.length} cycles
+                </Text>
+              ),
             )}
-            {stepRows(sheet)}
+            {sheet.cycles === undefined ? stepRows(sheet) : cycleRows(sheet.cycles)}
           </Box>
         )}
         {step !== null && (

@@ -214,7 +214,7 @@ Changes made on 2026-09-12, to be measured against the table above after five ba
    divided by ~10; if the reads compensate the loads, move the chapters back — nothing left
    the folder.
 9. `implement-tdd/SKILL.md` 26.7 kB → 21.2 kB (~1.4 k tokens less per turn of a batch): every
-   measurement and reason moved to `references/rationale.md`, never loaded during a batch. The
+   measurement and reason moved to `references/rationale.md` (deleted 2026-10-11 with the single `run-lot` chain), never loaded during a batch. The
    rest is contract templates and rules — cutting further cuts instructions.
 10. Sheet ticks: one `Edit` per behaviour after COST, one per file at closing.
 

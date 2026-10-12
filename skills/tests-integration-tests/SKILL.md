@@ -116,7 +116,7 @@ public class [MethodName]Tests : IAsyncLifetime
 
 ## Final verification
 
-- [ ] Target test green: `APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore --filter-class "*[MethodName]Tests"`
+- [ ] Target test green: the suite's test-mode variable, then `commands.test` with `{suite}` = `IntegrationTests`, narrowed to `*[MethodName]Tests` (`implement-tdd/references/test-scope.md` § Runner, § 3)
 - [ ] Direct `DbContext` seeding, `BaseTestFixture` / `DatabaseContainerPool` fixture
 - [ ] Persisted state verified after detaching or re-reading where needed
 - [ ] This test really covers persistence, not business rules

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Business-rule coverage by the tests.
 
-Reads the rules tables (heading anchored `<!-- kit:rules -->`) of the rule sheets
+Reads the rules tables (heading anchored `<!-- kit:rules -->`, or titled `Business
+rules` / `Règles métier` when a sheet predates the anchors) of the rule sheets
 (`layout.ruleSheet` in each `layout.useCase` folder of `.claude/kit.config.json`;
 clean-architecture: `src/<Product>.Application/**/<Handler>/CLAUDE.md`) and matches
 them against the `<Folder>/<RM|RL-xx>` tags the tests carry (`testTag` adapter;
@@ -16,6 +17,7 @@ persistence rule by an integration test.
 import os
 import re
 import sys
+import unicodedata
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # The kit (plugin cache, toolkit checkout): scripts/ next to lib/. A copy predating
@@ -48,10 +50,19 @@ def load_kit():
 
 
 # Sections and rows are found by their `<!-- kit:… -->` anchor, never by their
-# title: titles are prose in the language of kit.config.json `language.docs`.
+# title: titles are prose in the language of kit.config.json `language.docs`. A sheet
+# written before the anchors carries none: its English or French title is read
+# instead, compared folded (case, accents).
 ANCHOR = re.compile(r"<!--\s*kit:([a-z][a-z0-9-]*)")
 COLS = re.compile(r"<!--\s*kit:cols\s+([\w,-]+)\s*-->")
 RULE_ID = re.compile(r"R[ML]-\d+")
+RULES_TITLE = re.compile(r"(business rules?|regles? metier)\b")
+APPLIED_LABEL = re.compile(r"(applied rules|regles appliquees)\b")
+NA_LABEL = re.compile(r"(non-applicable rules|regles non applicables)\b")
+
+
+def fold(s):
+    return "".join(c for c in unicodedata.normalize("NFD", s.strip().lower()) if unicodedata.category(c) != "Mn")
 
 # The DDD/APP/PERF referential: one markdown table per file, the id in the first
 # cell. `/plan-implementation` owns those two files; the sheets cite them.
@@ -60,11 +71,14 @@ _SKILLS = next((d for d in (os.path.join(HERE, "skills"), os.path.join(HERE, ".c
 REFS = [os.path.join(_SKILLS, "plan-implementation", "references", f)
         for f in ("ddd-rules.md", "architecture-rules.md")]
 REF_ROW = re.compile(r"^\|\s*((?:DDD|APP|PERF)-\d+)\s*\|")
-# A sheet declares the ids it applies on the row anchored `kit:applied-rules`, and
-# on the deviation variant when it carries one. The global plan lists the others
-# once, on its line anchored `kit:na-rules`: an id is classified when either says so.
-APPLIED_ROW = re.compile(r"^\|([^|]*<!--\s*kit:applied-rules\s*-->[^|]*)\|(.*)$")
+# A sheet declares the ids it applies on the row anchored `kit:applied-rules` (or
+# labelled `Applied rules` / `Règles appliquées`), and on the deviation variant when it
+# carries one. The global plan lists the others once, on its line anchored
+# `kit:na-rules` (or `**Non-applicable rules**` / `**Règles non applicables**`): an id
+# is classified when either says so.
+APPLIED_ROW = re.compile(r"^\|([^|]+)\|(.*)$")
 NA_LINE = re.compile(r"<!--\s*kit:na-rules\s*-->(.*)$")
+NA_LABELLED = re.compile(r"^\s*[-*]\s*\*\*([^*]+)\*\*\s*:(.*)$")
 SHEET = re.compile(r"-PLAN(?:-F\d+)?\.md$")
 ID = re.compile(r"(DDD|APP|PERF)-(\d+)")
 # `DDD-05 → DDD-08` stands for the four ids: the sheets write ranges.
@@ -98,7 +112,8 @@ def rules_of(md):
     for line in open(md, encoding="utf-8").read().splitlines():
         if line.startswith("## "):
             m = ANCHOR.search(line)
-            in_section = bool(m) and m.group(1) == "rules"
+            title = fold(re.sub(r"<!--.*?-->", "", line[3:]))
+            in_section = m.group(1) == "rules" if m else bool(RULES_TITLE.match(title))
             continue
         if not in_section:
             continue
@@ -166,7 +181,7 @@ def ids_in(cell):
 
 def cited_ids(fiche):
     """Ids cited by the sheet's `kit:applied-rules` rows and the global plan's
-    `kit:na-rules` line, ranges expanded.
+    `kit:na-rules` line (or their French-titled forms), ranges expanded.
 
     Only the absence of a citation is decided here. Whether an id is applied or
     `N/A` is left to the audit: those cells are free prose — `**N/A**`,
@@ -175,12 +190,16 @@ def cited_ids(fiche):
     cited = set()
     for line in open(fiche, encoding="utf-8").read().splitlines():
         m = APPLIED_ROW.match(line.strip())
-        if m:
+        if m and (re.search(r"<!--\s*kit:applied-rules\s*-->", m.group(1)) or APPLIED_LABEL.match(fold(m.group(1)))):
             cited |= ids_in(m.group(2))
             continue
         m = NA_LINE.search(line)
         if m:
             cited |= ids_in(m.group(1))
+            continue
+        m = NA_LABELLED.match(line)
+        if m and NA_LABEL.match(fold(m.group(1))):
+            cited |= ids_in(m.group(2))
     return cited
 
 

@@ -1,0 +1,61 @@
+{
+  "fixtures": [],
+  "cases": [
+    {
+      "name": "run-lot checks: grants passed by value, a behaviour already on disk accepted without code, English and French cost lines, RED/GREEN labels carry cycle id and wave, run files under run/.work and run/batches",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -cE '^(FAIL|ERR)' | sed 's/^/fails=/'",
+      "expect": {
+        "exit": 0,
+        "stdout": "fails=0"
+      }
+    },
+    {
+      "name": "run-lot checks: an unanswered question takes its recommendation after 30 min, an exhausted RED/GREEN gets one last attempt on opus, a deferred step never escalates",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -E 'FAIL|ERR|30 min|on opus|never escalates' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "ok   question waits 30 min at most;ok   GREEN stopped twice the same way after its decisions gets one last attempt on opus;ok   deferred step never escalates;"
+      }
+    },
+    {
+      "name": "run-plan checks: failures red at start never fail the gate; the gate reads an English and a French batch report",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-checks.js {{KIT}}/workflows/run-plan.js | grep -cE '^(FAIL|ERR)' | sed 's/^/fails=/'",
+      "expect": {
+        "exit": 0,
+        "stdout": "fails=0"
+      }
+    },
+    {
+      "name": "run-plan checks: French report (STATUT — TERMINÉ, Verdict : ECARTS reportés) and English report (STATUS — DONE, Verdict: GAPS carried) both pass the gate",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-checks.js {{KIT}}/workflows/run-plan.js | grep -E 'carried gaps passes' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "ok   English report: finished batch with carried gaps passes;ok   French report: finished batch with carried gaps passes;"
+      }
+    },
+    {
+      "name": "run-lot flow: a valid cycle block runs no design, unreachable methods go to review, pre-design of the next sheet beside the audit",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js block | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Pre-design F4;AGENTS resume state | declaratives | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites | pre-audit | next batch review | pre-design F4 | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a sheet without the block is designed once, then indexed",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js nodesign | grep -E 'AGENTS|ERR' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "AGENTS resume state | design | index X-PLAN-F3.md | RED C1 w1 One"
+      }
+    },
+    {
+      "name": "run-lot flow: a cycle saved with green is not redone",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js resume | grep -E 'log: |ERR' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "log: 1 wave(s), 1 behaviour(s), 1 already done;"
+      }
+    }
+  ]
+}

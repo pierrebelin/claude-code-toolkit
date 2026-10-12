@@ -80,7 +80,11 @@ export type Step = {
   corrections: Correction[]
 }
 
-export type Sheet = { lot: string; name: string; isDone: boolean; steps: Step[]; hypotheses: number }
+export type CycleState = 'pending' | 'red' | 'done'
+
+export type SheetCycle = { id: string; behaviour: string; wave: number; guard: boolean; state: CycleState; unreachable: string[] }
+
+export type Sheet = { lot: string; name: string; isDone: boolean; steps: Step[]; hypotheses: number; cycles?: SheetCycle[] }
 
 export type ChildWorkflow = { name: string; phases: string[]; details: Record<string, string>; labels: Record<string, string> }
 
@@ -92,6 +96,7 @@ export type PlanLot = {
   outcome: Outcome | null
   audit: AuditVerdict | null
   view: Sheet | null
+  asking?: number
 }
 
 export type WorkflowRun = {
@@ -112,6 +117,7 @@ export type WorkflowRun = {
   child: ChildWorkflow | null
   plan: string | null
   lots: PlanLot[]
+  asking?: number
 }
 
 export type Journal = {

@@ -1,6 +1,6 @@
 # DDD rules
 
-The plan classifies every id: `applied` or `N/A — reason`. A batch sheet cites only the applied ids. The verifier rejects an id missing from that coverage.
+The plan classifies every id: `applied` naming the artifact that carries it, or `N/A — reason` stating why that id's own `When` condition does not hold in the batch, never another id's. A batch sheet cites only the applied ids. The verifier rejects an id missing from that coverage.
 
 | ID | Rule | When | Plan decision and evidence | Exception |
 |----|-------|-------|----------------------------|-----------|

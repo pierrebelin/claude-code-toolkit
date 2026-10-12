@@ -4,9 +4,13 @@
 # Every use-case folder (kit.config.json `layout.useCase`; clean-architecture: a handler
 # folder under src/<Product>.Application/) carries a rule sheet (`layout.ruleSheet`,
 # CLAUDE.md) with a three-column rules table under the heading anchored
-# `<!-- kit:rules -->`. Sections are found by their anchor, never by their title: the
-# title is prose in the language of kit.config.json `language.docs`. The rule -> test
-# link lives on the test, as a tag whose value is `<SheetFolder>/<RM|RL-xx>` and whose
+# `<!-- kit:rules -->`. Sections are found by their anchor, never by their prose: the
+# title is in the language of kit.config.json `language.docs`. A sheet written without
+# anchors is read by its exact title instead, English or French, accents and case
+# folded: `Business rules` / `Règles métier`, `Flow` / `Flux`, `Emitted events` /
+# `Événements émis`; its table header row names the columns (`ID`, `Rule` / `Règle`,
+# `Exception / Outcome` | `Result` / `Résultat`). The rule -> test link lives on the
+# test, as a tag whose value is `<SheetFolder>/<RM|RL-xx>` and whose
 # carrier is the `testTag` adapter (xUnit: `[Trait("RM", "…")]`). The hook builds two
 # global indexes (rules declared / tags placed under the test roots) and reports the
 # gaps. A tag counts in every suite (a persistence rule is only provable by an
@@ -31,7 +35,7 @@ KIT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)"
 # One python for parse + check. Until 2026-10-09 a first python3 spawn parsed the
 # payload alone, on every Edit/Write: the hook was the slowest of the kit (157 ms).
 HOOK_INPUT="$INPUT" KIT_LIB="$KIT_LIB" python3 <<'PYEOF' 2>/dev/null
-import json, os, re, sys
+import json, os, re, sys, unicodedata
 
 try:
     _d = json.loads(os.environ.get("HOOK_INPUT") or "{}")
@@ -75,11 +79,24 @@ is_handler_dir = C.is_use_case_dir
 
 # --- Index 1: rules declared in the handler CLAUDE.md files -------------------
 # rules[claude_md] = [(rule_id, label), ...]  ;  prefix_of[claude_md] = folder name
-# `## <any title> <!-- kit:rules -->`; the table under it is read by position, or by
-# the schema anchor `<!-- kit:cols id,rule,outcome -->` when one precedes it.
+# `## <any title> <!-- kit:rules -->`, or the bare title `Business rules` / `Règles métier`;
+# the table under it is read by position, by the schema anchor
+# `<!-- kit:cols id,rule,outcome -->` when one precedes it, else by its header row
+# (`ID`, `Rule` / `Règle`, `Exception / Outcome` / `Résultat`).
 ANCHOR = re.compile(r"<!--\s*kit:([a-z][a-z0-9-]*)")
 COLS = re.compile(r"<!--\s*kit:cols\s+([\w,-]+)\s*-->")
 RULE_ID = re.compile(r"R[ML]-\d+")
+NONE_LINE = re.compile(r"(none|aucune?)\b")
+TITLES = {"regles metier": "rules", "regle metier": "rules", "business rules": "rules",
+          "business rule": "rules", "flux": "flow", "flow": "flow",
+          "evenements emis": "events", "emitted events": "events"}
+COL_LABELS = {"id": "id", "regle": "rule", "rule": "rule", "exception / resultat": "outcome",
+              "exception / result": "outcome", "exception / outcome": "outcome"}
+
+
+def fold(s):
+    return "".join(c for c in unicodedata.normalize("NFD", s.strip().lower())
+                   if unicodedata.category(c) != "Mn")
 
 
 def anchor_of(line):
@@ -87,26 +104,38 @@ def anchor_of(line):
     return m.group(1) if m else None
 
 
+def section_of(heading):
+    """Anchor of a `## ` heading, else the section its bare title names (folded)."""
+    return anchor_of(heading) or TITLES.get(fold(heading[3:].split("<!--")[0]))
+
+
 def rule_rows(text):
     """(rows, explicitly empty) of the section anchored kit:rules."""
-    rows, in_section, empty_ok, cols = [], False, False, ["id", "rule"]
+    rows, in_section, empty_ok, cols, header = [], False, False, ["id", "rule"], False
     for line in text.splitlines():
         if line.startswith("## "):
-            in_section = anchor_of(line) == "rules"
+            in_section = section_of(line) == "rules"
+            cols, header = ["id", "rule"], False
             continue
         if not in_section:
             continue
         # An explicitly empty section carries `<!-- kit:none -->` ("None (pure query)").
-        if anchor_of(line) == "none":
+        if anchor_of(line) == "none" or NONE_LINE.match(fold(line)):
             empty_ok = True
         c = COLS.search(line)
         if c:
-            cols = c.group(1).split(",")
+            cols, header = c.group(1).split(","), True
             continue
         s = line.strip()
         if not s.startswith("|"):
             continue
         cells = [x.strip() for x in s.strip("|").split("|")]
+        if not header:
+            header = True
+            named = [COL_LABELS.get(fold(x), "") for x in cells]
+            if "id" in named and not any(RULE_ID.fullmatch(x) for x in cells):
+                cols = named
+                continue
         i = cols.index("id") if "id" in cols else 0
         j = cols.index("rule") if "rule" in cols else 1
         if i < len(cells) and RULE_ID.fullmatch(cells[i]):
@@ -184,17 +213,17 @@ ALLOWED = ["rules", "flow", "events"]
 def shape_issues(md):
     heads = [l for l in read(md).splitlines() if l.startswith("## ")]
     issues = []
-    extra = [l[3:].split("<!--")[0].strip() for l in heads if anchor_of(l) not in ALLOWED]
+    extra = [l[3:].split("<!--")[0].strip() for l in heads if section_of(l) not in ALLOWED]
     if extra:
         issues.append("forbidden sections: " + ", ".join(f"'{s}'" for s in extra))
-    kept = [anchor_of(l) for l in heads if anchor_of(l) in ALLOWED]
+    kept = [section_of(l) for l in heads if section_of(l) in ALLOWED]
     missing = [f"kit:{a}" for a in ALLOWED if a not in kept]
     if missing:
         issues.append("missing sections: " + ", ".join(missing))
     if kept != [a for a in ALLOWED if a in kept]:
         issues.append("expected order: kit:rules, kit:flow, kit:events")
     if heads and not kept:
-        issues.append("no kit anchor — sheet written before the anchors: cctoolkit migrate-anchors --apply")
+        issues.append("no kit anchor and no recognised title — sheet written before the anchors: cctoolkit migrate-anchors --apply")
     return issues
 
 

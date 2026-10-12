@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""The `## Cycles` block of a batch sheet, read by run-lot, pre-audit and audit-capture.
+
+A batch sheet carries its TDD cycles as one fenced ```json block under `## Cycles`:
+
+    {"declaratives": ["path — mirrors <neighbour>"],
+     "cycles": [{"id": "C1", "wave": 1, "behaviour": "...", "rmcu": "...", "steps": ["Step 1"],
+                 "refactor": false, "guard": false, "level": "UT", "skill": "tests-unit-tests",
+                 "testClass": "...", "fixture": "...", "methods": ["Class.Method"],
+                 "full": [], "bounded": [], "scenarios": "...", "observation": "...",
+                 "outOfScope": "...", "toCreate": [], "production": [], "ripple": [],
+                 "boundedGreen": [], "elements": "...", "appliedIds": "...",
+                 "invariants": "...", "expectedCost": "...", "snapshot": "..."}]}
+
+Why. An Opus design agent used to rebuild these contracts from prose sections
+(`TDD sequence`, `Ancrages`) at the start of every batch: 8 to 13 min per batch, and
+sheets grown to 87-126 KB by every step re-reading and re-writing them. The block is
+written once (plan, or the design fallback, or the pre-design during the previous
+batch's audit) and checked here without any model.
+
+    cctoolkit sheet-cycles <sheet> --index [--root DIR]      validate, print the compact index as JSON
+    cctoolkit sheet-cycles <sheet> --cycle ID --red|--green  print the RED or GREEN contract of one cycle
+    cctoolkit sheet-cycles <sheet> --methods STATE_DIR       method names expected on disk, one per line
+    cctoolkit sheet-cycles <sheet> --done STATE_DIR          every cycle reached its final state
+    cctoolkit sheet-cycles <sheet> --summary STATE_DIR       one line per cycle: RED/GREEN exits (audit capture)
+
+Paths count as code when they sit under the source or test roots of kit.config.json
+(`src/`, `tests/` without one). A cycle rewrites test files of one test project at
+most, 4 test files and 8 production files at most; test files under
+`layout.tests.shared` (shared doubles and builders, optional) never count.
+
+Exit 0 ok, 1 invalid or not done, 2 no `## Cycles` block (callers fall back to the old sheet).
+"""
+import fnmatch
+import json
+import os
+import re
+import subprocess
+import sys
+import unicodedata
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(HERE, "lib"))
+
+REQUIRED = {
+    "id": str, "wave": int, "behaviour": str, "rmcu": str, "steps": list, "level": str,
+    "skill": str, "testClass": str, "fixture": str, "methods": list, "full": list,
+    "bounded": list, "scenarios": str, "observation": str, "outOfScope": str,
+    "toCreate": list, "production": list, "ripple": list, "boundedGreen": list,
+    "elements": str, "appliedIds": str, "invariants": str, "expectedCost": str,
+}
+OPTIONAL = {"refactor": bool, "guard": bool, "snapshot": str, "decisions": str}
+INCOMPLETE_NAME = re.compile(r"…|\.\.\.|[<>{}*]|_$|_?When$")
+TO_CREATE = re.compile(r"to create|\bnew\b|à créer|a creer|nouveau|nouvelle", re.I)
+MAX_TEST_FILES = 4
+MAX_PRODUCTION_FILES = 8
+
+
+class Layout:
+    """Source, test and shared-test roots as segment globs, from kit.config.json."""
+
+    def __init__(self, root):
+        self.root = root
+        self.sources, self.tests, self.shared = ["src"], ["tests"], []
+        try:
+            import kit_config
+            c = kit_config.load(root)
+            self.sources, self.tests = c.source_roots, c.test_roots
+            self.shared = c._list(c.layout["tests"].get("shared", []))
+        except Exception:
+            pass
+
+    @staticmethod
+    def _under(path, patterns):
+        parts = path.split("/")
+        for p in patterns:
+            segs = p.split("/")
+            if len(parts) > len(segs) and all(fnmatch.fnmatchcase(a, b) for a, b in zip(parts, segs)):
+                return p
+        return None
+
+    def is_code(self, path):
+        return self._under(path, self.sources + self.tests) is not None
+
+    def is_test(self, path):
+        return self._under(path, self.tests) is not None and self._under(path, self.shared) is None
+
+    def test_project(self, path):
+        p = self._under(path, self.tests)
+        parts = path.split("/")
+        return parts[len(p.split("/"))] if p is not None else None
+
+
+def block_of(sheet):
+    text = open(sheet, encoding="utf-8").read()
+    m = re.search(r"^## Cycles[ \t]*(?:<!--.*?-->)?[ \t]*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    if not m:
+        return None
+    fence = re.search(r"```json\s*\n(.*?)\n```", m.group(1), re.S)
+    return fence.group(1) if fence else ""
+
+
+def path_of(entry):
+    head = re.split(r"\s+—\s+|\s+\(", str(entry).strip(), maxsplit=1)[0]
+    return head.strip().strip("`").strip()
+
+
+def slug(text):
+    """Same as run-lot.js `slug`: the cycle state file name."""
+    s = "".join(c for c in unicodedata.normalize("NFD", text) if not ("̀" <= c <= "ͯ"))
+    s = re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+    return s[:60]
+
+
+def load(sheet):
+    raw = block_of(sheet)
+    if raw is None:
+        return None, ["no `## Cycles` block"]
+    if not raw.strip():
+        return None, ["`## Cycles` has no ```json block"]
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return None, [f"`## Cycles` JSON invalid: {e}"]
+    if not isinstance(data, dict) or not isinstance(data.get("cycles"), list) or not data["cycles"]:
+        return None, ["`## Cycles` needs a non-empty `cycles` array"]
+    return data, []
+
+
+def validate(data, layout):
+    errors = []
+    seen_ids, seen_behaviours = set(), set()
+    by_wave = {}
+    for i, c in enumerate(data["cycles"]):
+        if not isinstance(c, dict):
+            errors.append(f"cycle {i + 1}: not an object")
+            continue
+        where = f"cycle {c.get('id', i + 1)}"
+        for k, t in REQUIRED.items():
+            if k not in c:
+                errors.append(f"{where}: `{k}` missing")
+            elif not isinstance(c[k], t) or (t is int and isinstance(c[k], bool)):
+                errors.append(f"{where}: `{k}` must be {t.__name__}")
+        for k, t in OPTIONAL.items():
+            if k in c and not isinstance(c[k], t):
+                errors.append(f"{where}: `{k}` must be {t.__name__}")
+        if any(k not in c or not isinstance(c[k], REQUIRED[k]) for k in REQUIRED):
+            continue
+        if c["id"] in seen_ids:
+            errors.append(f"{where}: duplicate id")
+        if c["behaviour"] in seen_behaviours:
+            errors.append(f"{where}: duplicate behaviour")
+        seen_ids.add(c["id"])
+        seen_behaviours.add(c["behaviour"])
+        if c["wave"] < 1:
+            errors.append(f"{where}: `wave` starts at 1")
+        if not c["methods"]:
+            errors.append(f"{where}: `methods` empty")
+        for m in c["methods"]:
+            name = str(m).strip()
+            if not name or "." not in name or INCOMPLETE_NAME.search(name):
+                errors.append(f"{where}: incomplete method name `{m}` — final `Class.Method`, never an ellipsis, placeholder nor open `When`")
+        created = {path_of(p) for p in c["toCreate"]}
+        for key in ("full", "bounded", "production", "ripple", "boundedGreen"):
+            for entry in c[key]:
+                p = path_of(entry)
+                if not layout.is_code(p):
+                    continue
+                if p in created or TO_CREATE.search(str(entry)) or os.path.exists(os.path.join(layout.root, p)):
+                    continue
+                errors.append(f"{where}: `{key}` path absent and not to create: {p}")
+        tests = [path_of(p) for p in c["full"] if layout.is_test(path_of(p))]
+        projects = sorted({layout.test_project(p) for p in tests})
+        if len(projects) > 1:
+            errors.append(f"{where}: one test project per cycle, found {', '.join(projects)} — split the cycle")
+        if len(tests) > MAX_TEST_FILES:
+            errors.append(f"{where}: {len(tests)} test files rewritten, at most {MAX_TEST_FILES} — split the cycle")
+        production = {path_of(p) for p in c["production"]}
+        if len(production) > MAX_PRODUCTION_FILES:
+            errors.append(f"{where}: {len(production)} production files, at most {MAX_PRODUCTION_FILES} — split the cycle")
+        by_wave.setdefault(c["wave"], []).append((c["id"], set(tests), production))
+    for wave, members in sorted(by_wave.items()):
+        for a in range(len(members)):
+            for b in range(a + 1, len(members)):
+                shared = (members[a][1] & members[b][1]) | (members[a][2] & members[b][2])
+                if shared:
+                    errors.append(f"wave {wave}: {members[a][0]} and {members[b][0]} share {', '.join(sorted(shared))} — successive waves")
+    if "declaratives" in data and not isinstance(data["declaratives"], list):
+        errors.append("`declaratives` must be a list")
+    return errors
+
+
+def index(data):
+    return {
+        "ok": True,
+        "missing": False,
+        "errors": [],
+        "declaratives": data.get("declaratives", []),
+        "cycles": [
+            {k: c.get(k, False if k in ("refactor", "guard") else "") for k in
+             ("id", "wave", "behaviour", "rmcu", "steps", "refactor", "guard", "methods", "decisions")}
+            for c in sorted(data["cycles"], key=lambda c: (c["wave"], data["cycles"].index(c)))
+        ],
+    }
+
+
+def listed(xs):
+    return ", ".join(f"`{x}`" for x in xs) if xs else "none"
+
+
+def contract(c, phase):
+    lines = [f"RM/CU: {c['rmcu']}", f"Behaviour: {c['behaviour']}"]
+    if phase == "--red":
+        lines += [
+            f"Level / skill: {c['level']} / {c['skill']}",
+            f"Test class / fixture: `{c['testClass']}` / `{c['fixture']}`",
+            f"Methods: {listed(c['methods'])}",
+            f"Rewritten by you (read in full): {listed(c['full'])}",
+            f"Read bounded (context only): {listed(c['bounded'])}",
+            f"Scenarios: {c['scenarios']}",
+            f"Expected observation: {c['observation']}",
+        ]
+    else:
+        lines += [
+            f"Out of scope — next behaviour: {c['outOfScope'] or 'none'}",
+            f"To create from scratch: {listed(c['toCreate'])}",
+            f"Production you may fill (with the RED stubs, nothing else under the source roots): {listed(c['production'])}",
+            f"Signature ripple — also touched (read in full): {' ; '.join(c['ripple']) if c['ripple'] else 'none'}",
+            f"Read bounded (context only): {listed(c['boundedGreen'])}",
+            f"Elements: {c['elements']}",
+            f"Applied DDD/APP ids: {c['appliedIds']}",
+            f"Exploitable invariants — what they remove: {c['invariants']}",
+            f"Expected access cost: {c['expectedCost']}",
+        ]
+        if c.get("snapshot"):
+            lines.append(f"Snapshot (contract tests only): {c['snapshot']}")
+    if c.get("decisions"):
+        lines.append(f"User decisions (override the sheet): {c['decisions']}")
+    return "\n".join(lines)
+
+
+def state_of(state_dir, c):
+    p = os.path.join(state_dir, slug(c["behaviour"]) + ".json")
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def skipped(red):
+    names = set()
+    for x in (red or {}).get("unreachable", []) or []:
+        names.add(str(x.get("method", "") if isinstance(x, dict) else x))
+    for x in (red or {}).get("removed", []) or []:
+        names.add(str(x))
+    return names
+
+
+def finished(c, state):
+    if not state or not isinstance(state.get("red"), dict):
+        return False
+    red, green = state["red"], state.get("green")
+    if red.get("status") == "ALREADY_GREEN" or c.get("guard") or not red.get("table"):
+        return True
+    return isinstance(green, dict) and green.get("status") == "GREEN" and green.get("exit") == 0
+
+
+def repo_root(sheet):
+    """Git top level of the sheet's folder: sheet paths are relative to its repo."""
+    try:
+        return subprocess.run(["git", "-C", os.path.dirname(os.path.abspath(sheet)), "rev-parse", "--show-toplevel"],
+                              capture_output=True, text=True, check=True).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    try:
+        import kit_config
+        return kit_config.project_root()
+    except Exception:
+        return os.getcwd()
+
+
+def main(argv):
+    if len(argv) < 3:
+        print(next(b for b in __doc__.split("\n\n") if b.lstrip().startswith("cctoolkit sheet-cycles")), file=sys.stderr)
+        return 1
+    sheet, mode = argv[1], argv[2]
+    arg = argv[3] if len(argv) > 3 else None
+    root = argv[argv.index("--root") + 1] if "--root" in argv and argv.index("--root") + 1 < len(argv) else repo_root(sheet)
+    if not os.path.isfile(sheet):
+        print(f"sheet not found: {sheet}", file=sys.stderr)
+        return 1
+    data, errors = load(sheet)
+    if data is None:
+        missing = errors == ["no `## Cycles` block"]
+        if mode == "--index":
+            print(json.dumps({"ok": False, "missing": missing, "errors": errors, "declaratives": [], "cycles": []}, ensure_ascii=False))
+        else:
+            print(errors[0], file=sys.stderr)
+        return 2 if missing else 1
+    if mode == "--index":
+        errors = validate(data, Layout(root))
+        if errors:
+            print(json.dumps({"ok": False, "missing": False, "errors": errors, "declaratives": [], "cycles": []}, ensure_ascii=False))
+            return 1
+        print(json.dumps(index(data), ensure_ascii=False))
+        return 0
+    if mode == "--cycle":
+        c = next((c for c in data["cycles"] if isinstance(c, dict) and c.get("id") == arg), None)
+        if c is None:
+            print(f"cycle {arg} absent from `## Cycles`", file=sys.stderr)
+            return 1
+        phase = argv[4] if len(argv) > 4 else "--red"
+        if phase not in ("--red", "--green"):
+            print("--cycle ID needs --red or --green", file=sys.stderr)
+            return 1
+        missing = [k for k in REQUIRED if k not in c]
+        if missing:
+            print(f"cycle {arg}: {', '.join(missing)} missing — run --index", file=sys.stderr)
+            return 1
+        print(contract(c, phase))
+        return 0
+    if mode in ("--methods", "--done", "--summary") and not arg:
+        print(f"{mode} needs STATE_DIR", file=sys.stderr)
+        return 1
+    cycles = [c for c in data["cycles"] if isinstance(c, dict) and isinstance(c.get("behaviour"), str)]
+    if mode == "--methods":
+        for c in cycles:
+            gone = skipped((state_of(arg, c) or {}).get("red"))
+            last = {g.split(".")[-1] for g in gone}
+            for m in c.get("methods", []):
+                if m not in gone and m.split(".")[-1] not in last:
+                    print(m.split(".")[-1])
+        return 0
+    if mode == "--done":
+        open_cycles = [f"{c.get('id', '?')} {c['behaviour']}" for c in cycles if not finished(c, state_of(arg, c))]
+        for x in open_cycles:
+            print(x)
+        return 1 if open_cycles else 0
+    if mode == "--summary":
+        for c in cycles:
+            s = state_of(arg, c)
+            red = (s or {}).get("red") or {}
+            green = (s or {}).get("green") or {}
+            gone = sorted(skipped(red))
+            print(f"{c.get('id')} — RED {red.get('status', 'absent')} exit {red.get('exit', '—')} — "
+                  f"GREEN {green.get('status', '—')} exit {green.get('exit', '—')}"
+                  + (f" — not written: {', '.join(gone)}" if gone else ""))
+        return 0
+    print(f"unknown mode {mode}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

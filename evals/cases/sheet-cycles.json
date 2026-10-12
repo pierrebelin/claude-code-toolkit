@@ -1,0 +1,234 @@
+{
+  "fixtures": [
+    {
+      "path": "sc/tests/Shop.UnitTests/A/ATests.cs",
+      "kind": "text",
+      "content": "class ATests { void ShouldRefuse_WhenNameIsEmpty() {} }\n"
+    },
+    {
+      "path": "sc/src/P/H.cs",
+      "kind": "text",
+      "content": "class H {}\n"
+    },
+    {
+      "path": "sc/ok.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/anchored.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles <!-- kit:cycles -->\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/name.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_When\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/projects.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\", \"tests/Shop.ContractTests/B.cs (to create)\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/shared.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\", \"tests/Shop.CoreTests/Builders/ABuilder.cs (to create)\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/cap.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/F0.cs (to create)\", \"src/P/F1.cs (to create)\", \"src/P/F2.cs (to create)\", \"src/P/F3.cs (to create)\", \"src/P/F4.cs (to create)\", \"src/P/F5.cs (to create)\", \"src/P/F6.cs (to create)\", \"src/P/F7.cs (to create)\", \"src/P/F8.cs (to create)\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/wave.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C2\", \"wave\": 1, \"behaviour\": \"Two\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldC_WhenD\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/absent.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/Ghost.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/badjson.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"cycles\": [\n```\n"
+    },
+    {
+      "path": "sc/none.md",
+      "kind": "text",
+      "content": "# S\n\n## TDD sequence\n"
+    },
+    {
+      "path": "sc/st/une-creation-refusee.json",
+      "kind": "text",
+      "content": "{\"behaviour\": \"Une création refusée\", \"red\": {\"status\": \"RED\", \"exit\": 1, \"table\": [{\"test\": \"ATests.ShouldRefuse_WhenNameIsEmpty\", \"case\": \"c\"}]}, \"green\": {\"status\": \"GREEN\", \"exit\": 0}}"
+    },
+    {
+      "path": "sc/st-red/une-creation-refusee.json",
+      "kind": "text",
+      "content": "{\"behaviour\": \"Une création refusée\", \"red\": {\"status\": \"RED\", \"exit\": 1, \"table\": [{\"test\": \"ATests.ShouldRefuse_WhenNameIsEmpty\", \"case\": \"c\"}]}}"
+    },
+    {
+      "path": "sc/st-gone/one.json",
+      "kind": "text",
+      "content": "{\"behaviour\": \"One\", \"red\": {\"status\": \"RED\", \"exit\": 1, \"table\": [], \"unreachable\": [{\"method\": \"ATests.ShouldA_WhenB\", \"site\": \"src/P/H.cs:1\", \"why\": \"w\"}]}}"
+    },
+    {
+      "path": "sc/mark-en.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\", \"src/P/Ghost.cs (to create)\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/mark-fr.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\", \"src/P/Ghost.cs (à créer)\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    }
+  ],
+  "cases": [
+    {
+      "name": "valid block: compact index, exit 0",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "\"ok\": true"
+      }
+    },
+    {
+      "name": "an anchor comment on the heading still finds the block",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/anchored.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "\"ok\": true"
+      }
+    },
+    {
+      "name": "open When method name refused",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/name.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "incomplete method name"
+      }
+    },
+    {
+      "name": "two test projects in one cycle refused",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/projects.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "one test project per cycle"
+      }
+    },
+    {
+      "name": "a shared test project (layout.tests.shared of the preset) never counts",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/shared.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "\"ok\": true"
+      }
+    },
+    {
+      "name": "more than 8 production files refused",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/cap.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "at most 8"
+      }
+    },
+    {
+      "name": "two cycles of one wave sharing a file refused",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/wave.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "successive waves"
+      }
+    },
+    {
+      "name": "absent path not marked to create refused",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/absent.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "src/P/Ghost.cs"
+      }
+    },
+    {
+      "name": "invalid JSON: exit 1, missing false",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/badjson.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "\"missing\": false"
+      }
+    },
+    {
+      "name": "sheet without the block: exit 2, missing true",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/none.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 2,
+        "stdout": "\"missing\": true"
+      }
+    },
+    {
+      "name": "RED contract carries the methods, read from the block",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --cycle C1 --red --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "Methods: `ATests.ShouldRefuse_WhenNameIsEmpty`"
+      }
+    },
+    {
+      "name": "GREEN contract carries the production it may fill",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --cycle C1 --green --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "Production you may fill"
+      }
+    },
+    {
+      "name": "cycle with green state is done",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done {{FIX}}/sc/st --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "name": "cycle with a RED only is not done",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done {{FIX}}/sc/st-red --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "C1"
+      }
+    },
+    {
+      "name": "an unreachable method is not expected on disk, its cycle is done",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/anchored.md --methods {{FIX}}/sc/st-gone --root {{FIX}}/sc | wc -l | tr -d ' '; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/anchored.md --done {{FIX}}/sc/st-gone --root {{FIX}}/sc; echo done=$?",
+      "expect": {
+        "exit": 0,
+        "stdout": "0\ndone=0"
+      }
+    },
+    {
+      "name": "summary line per cycle for the audit capture",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --summary {{FIX}}/sc/st --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "C1 — RED RED exit 1 — GREEN GREEN exit 0"
+      }
+    },
+    {
+      "name": "a path marked « (to create) » is not required on disk",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/mark-en.md --index --root {{FIX}}/sc | head -c 11",
+      "expect": {
+        "exit": 0,
+        "stdout": "{\"ok\": true"
+      }
+    },
+    {
+      "name": "a path marked « (à créer) » is not required on disk",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/mark-fr.md --index --root {{FIX}}/sc | head -c 11",
+      "expect": {
+        "exit": 0,
+        "stdout": "{\"ok\": true"
+      }
+    }
+  ]
+}

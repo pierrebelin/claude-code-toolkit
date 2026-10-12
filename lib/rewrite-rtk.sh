@@ -48,11 +48,29 @@ cmd="${HOOK_CMD:-}"
 # while the comment here claimed the opposite. The expression is now skipped for
 # any command carrying `<<`; rtk upstream still sees the command.
 #
-# One sed, up to four -e: the expressions apply to each line in order, exactly as
+# One sed, up to five -e: the expressions apply to each line in order, exactly as
 # the four-stage pipe did, for three spawns fewer (~8.5 ms measured 2026-09-11).
+#
+# Opt-in, CLAUDE_DOTNET_TEST_TIMEOUT=<duration> (`env` of the repo's
+# .claude/settings.json): `dotnet test` in command position gets `--timeout <duration>`
+# right behind `test` when the command carries no `--timeout` yet. That is the
+# Microsoft Testing Platform option — a VSTest repo leaves the variable unset.
+# Inserted behind `test`, never appended, so a trailing pipe or redirection keeps
+# its place. Why: on 2026-10-10 a RED agent ran a contract test that looped at
+# 100 % CPU; it waited 7 min, found neither Monitor nor `timeout` (absent on
+# macOS), died without output and left the test host orphaned. Runs before the
+# parking expression, so `rtk dotnet test` and `rtk proxy dotnet test` are covered.
 sed_args=(-E
-  -e 's#(^|[[:space:]|;&(])/(usr/local/bin|usr/bin|bin)/(grep|rg|find|egrep|fgrep)([[:space:]]|$)#\1\3\4#g'
-  -e 's#(rtk|proxy)[[:space:]]+dotnet#\1 @@RTKDOTNET@@#g')
+  -e 's#(^|[[:space:]|;&(])/(usr/local/bin|usr/bin|bin)/(grep|rg|find|egrep|fgrep)([[:space:]]|$)#\1\3\4#g')
+test_timeout="${CLAUDE_DOTNET_TEST_TIMEOUT:-}"
+case "$test_timeout" in *[!0-9a-z.]*) test_timeout="" ;; esac
+if [ -n "$test_timeout" ]; then
+  case "$cmd" in
+    *'<<'*|*--timeout*) ;;
+    *) sed_args+=(-e 's#(^|[;&|(])([[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*(rtk[[:space:]]+)?(proxy[[:space:]]+)?dotnet[[:space:]]+test)([[:space:]]|$)#\1\2 --timeout '"$test_timeout"'\6#g') ;;
+  esac
+fi
+sed_args+=(-e 's#(rtk|proxy)[[:space:]]+dotnet#\1 @@RTKDOTNET@@#g')
 case "$cmd" in
   *'<<'*) ;;
   *) sed_args+=(-e 's#(^|[;&|(])([[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*)dotnet[[:space:]]+(test|restore|format)([[:space:]]|$)#\1\2rtk dotnet \4\5#g') ;;

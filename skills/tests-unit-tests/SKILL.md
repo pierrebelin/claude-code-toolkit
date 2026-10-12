@@ -128,6 +128,6 @@ public sealed class Mock[Entity]Repository : I[Entity]Repository
 
 ## Verification
 
-- [ ] `rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore --filter-class "*[Action][Entity]Tests"` green
+- [ ] `commands.test` with `{suite}` = `UnitTests`, narrowed to `*[Action][Entity]Tests` (`implement-tdd/references/test-scope.md` § Runner), green
 - [ ] Real handler under test; Infrastructure mocks only
 - [ ] Query by result, command by `SavedEvents`

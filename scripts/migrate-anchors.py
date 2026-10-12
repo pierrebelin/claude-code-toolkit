@@ -2,8 +2,9 @@
 """Migration: produced documents written before the `<!-- kit:… -->` anchors get them.
 
 The parsers (`hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`, the
-`/plan-implementation` gate) match anchors, never titles. A document written earlier carries its English or French title and no anchor:
-the parsers no longer see it. This script appends the anchor to every heading, row
+`/plan-implementation` gate) match anchors. A document written earlier carries its English or French title and no anchor:
+the hook and `rules-coverage` still read the handler-sheet titles exactly, the skills and agents
+locating a section by its anchor do not. This script appends the anchor to every heading, row
 and line it recognises, by folded title (accents and case ignored), English or French.
 
     cctoolkit migrate-anchors           # report (dry run)

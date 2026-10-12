@@ -4,13 +4,13 @@ Installed, each skill is typed with the plugin's prefix — `/cctoolkit:implemen
 
 ## Skills
 
-Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-plan <plan>` for the whole plan, or `/cctoolkit:run-lot <sheet>` per batch (Workflow scripts, `docs/TOOLING.md`). `implement-tdd` → `verify-ddd-tdd` finish by hand a batch `run-lot` left short of `DONE`, or run it when the `Workflow` tool is unavailable.
+Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-plan <plan>` for the whole plan, or `/cctoolkit:run-lot <sheet>` per batch (Workflow scripts, `docs/TOOLING.md`). `implement-tdd` only launches that chain from a plan path (and applies a `— correction:` to a sheet); `verify-ddd-tdd` audits a batch on demand.
 
 | Skill | When |
 |-------|------|
 | `business-spec` | short, testable business spec, no technical design; `adversarial-reviewer` reads it fresh, every `Blocking` open question is put to the user |
 | `plan-implementation` | validated spec → DDD plan split into batches, tracing RM/CU and decisions; refuses to start while the spec carries a `Blocking` open question, ends with an `adversarial-reviewer` pass |
-| `implement-tdd` | implements an all-layer batch under strict TDD; delegates RED to `tdd-test-author`, GREEN and REFACTOR to `tdd-implementer` |
+| `implement-tdd` | launches the `run-lot` workflow on a batch sheet (`run-plan` on a plan) and answers its questions from the session; the chain delegates RED to `tdd-test-author`, GREEN and REFACTOR to `tdd-implementer` |
 | `verify-ddd-tdd` | audits the batch before moving to the next one; runs in a fork on `ddd-tdd-auditor`. `full` widens to the touched boundaries, `resume` re-audits only the deviations of a previous verdict |
 | `tests-unit-tests` | handlers/services: business rules, query results, command events |
 | `tests-integration-tests` | repositories / persistence, Testcontainers |
@@ -29,17 +29,17 @@ Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-plan <
 | `ddd-tdd-auditor` | audits a batch, read-only, for `/verify-ddd-tdd` |
 | `adversarial-reviewer` | tries to refute a spec, a plan or the next batch sheet before any code, read-only; returns closed questions ranked `Blocking` / `Major` |
 
-## How `/implement-tdd` delegates
+## How `run-lot` delegates
 
-`/implement-tdd` is not a step but a loop: one full turn per business behaviour, in the order Domain → Application → Infrastructure → WebAPI. Behaviours whose target test files are disjoint are grouped into a **wave**: their REDs go out as several `Agent` calls in a single message. GREEN never parallelises — two implementers on the same layer collide.
+`run-lot` is not a step but a loop: one full turn per business behaviour, in the order Domain → Application → Infrastructure → WebAPI. Behaviours whose target test files are disjoint are grouped into a **wave**: their REDs go out as several `Agent` calls in a single message. GREEN never parallelises — two implementers on the same layer collide.
 
-- **`/implement-tdd` writes neither its tests nor its code.** RED goes to `tdd-test-author`, allowed to touch test files and nothing else. GREEN and REFACTOR go to `tdd-implementer`, for which test files are read-only: a test that cannot go green without being modified comes back as `BLOCKED` instead of being weakened. The orchestrator produces nothing — it splits, reads the diffs, validates the cost and settles the design.
+- **`run-lot` writes neither its tests nor its code.** RED goes to `tdd-test-author`, allowed to touch test files and nothing else. GREEN and REFACTOR go to `tdd-implementer`, for which test files are read-only: a test that cannot go green without being modified comes back as `BLOCKED` instead of being weakened. The workflow produces nothing — it reads each contract off the sheet's `## Cycles` block, checks the reports, validates the cost and hands every stop to an arbiter agent.
 - **Subagents produce and declare, the orchestrator judges.** That is also what keeps the main context usable over a long batch: build and test logs stay with whoever caused them.
 - **The delegation contract names the paths.** Target test file, fixture, handler under test, shared builders: the orchestrator has just read the sheet and holds them, the subagent does not and would pay a full exploration to rebuild them. Any file search is forbidden to it; a missing path comes back as `BLOCKED` and is a plan gap. Same rule on the GREEN side, plus one: a GREEN contract carries the current behaviour only — a guard written ahead turns the next RED green, and the only way out is to strip the code and re-observe the red.
 - **`COST` is a phase, not a review.** No test measures the number of Infrastructure calls: green proves nothing on that axis. An `await` on a repository inside a loop goes back to design.
 - **`/verify-ddd-tdd` runs before the next batch**, in a fork and with no write access. It audits the delivered code as it is first, and only then its conformance to the plan — the plan is not the ultimate reference, it gets corrected mid-batch. The orchestrator hands it a capture produced by `cctoolkit audit-capture` (status, diff, coverage, `build` and `ArchitectureTests` exit codes) and the sheet's FX section: the audit opens that once instead of rebuilding it over thirty turns. On a re-audit after correction, `resume` narrows the scope to the previous verdict's deviation table plus the diff produced since — what already carries a verdict is not re-established.
 
-**Progressive disclosure inside a skill** — what only one branch or one phase needs lives in its own reference file, read at that point and not before: `correction-mode.md` opens only on a `— correction:` argument, `parallelism.md` only when the batch holds two behaviours or more, `closing.md` only after the audit verdict. A reference loaded at the top of a skill is carried by every turn of the batch.
+**Progressive disclosure inside a skill** — what only one branch or one phase needs lives in its own reference file, read at that point and not before: `design.md` and `parallelism.md` open only when a sheet has no valid `## Cycles` block, `closing.md` only at GREEN and when the pre-audit gate or the audit asks for a fix. A reference loaded at the top of a skill is carried by every turn of the batch.
 
 ## What the kit imposes on the repo
 

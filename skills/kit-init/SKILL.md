@@ -63,7 +63,7 @@ Only what differs from the chosen preset's `preset.json`, plus `language`, `pres
 
 Then `python3 "$(cctoolkit root)/lib/kit_config.py" validate .` — any `FAIL` → fix the file before going on.
 
-Then `cctoolkit migrate-anchors` (dry run): rule sheets, specs and plans written before the `<!-- kit:… -->` anchors are invisible to every parser — `rules-coverage` counts 0 rules and reports each tagged test as a dead reference. `anchors to write: 0` → nothing to do. Otherwise show the count and the `UNRECOGNISED HEADING` lines (free-form headings, left as they are), AskUserQuestion: apply (Recommended) / skip. Apply → `cctoolkit migrate-anchors --apply`, then the first two lines of `cctoolkit rules-coverage` go into the report.
+Then `cctoolkit migrate-anchors` (dry run): specs and plans written before the `<!-- kit:… -->` anchors are invisible to the skills and gates locating a section by its anchor, and a rule sheet whose titles are not exactly `Business rules` / `Règles métier` (a suffix, another wording) is invisible to the parsers — `rules-coverage` counts 0 rules and reports each tagged test as a dead reference. `anchors to write: 0` → nothing to do. Otherwise show the count and the `UNRECOGNISED HEADING` lines (free-form headings, left as they are), AskUserQuestion: apply (Recommended) / skip. Apply → `cctoolkit migrate-anchors --apply`, then the first two lines of `cctoolkit rules-coverage` go into the report.
 
 ## 5. Rules
 

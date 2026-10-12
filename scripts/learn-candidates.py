@@ -8,7 +8,9 @@ out of them and has them written into a layer rule after confirmation. This
 script is the model-free half: extract, remember what was treated, count.
 
 Source. The `ddd-tdd-auditor` sub-transcripts (and the /verify-ddd-tdd forks)
-one message of which starts with `## Verdict — GAPS`. Measured on 2026-10-02 on
+one message of which starts with `## Verdict — GAPS` (`## Verdict — ECARTS` in the
+verdicts written before the kit was translated; their severities `Bloquant`/`Majeur`
+and French axes fold onto the English ones). Measured on 2026-10-02 on
 the repo this kit comes from: 53 verdicts out of 175 sub-transcripts quoting the
 literal, the rest quote it without producing it (skill template loaded, docs
 agent). 1.7 GB of transcripts, 9.5 s for a full grep: the state remembers the
@@ -16,15 +18,17 @@ mtime of every file read, only what moved is read again.
 
 State. `.claude/learn-state.json` (ignored by git): files read, rows extracted,
 treated ids, refused motifs. A refused motif is handed back to /learn so that it
-does not propose it again.
+does not propose it again. A state file written with the French row keys (`lot`,
+`severite`, `axe`, `ecart`, `preuve`, `correction`) loads as is and is saved back in
+English.
 
 Usage:
   cctoolkit learn-candidates                   # summary per axis
-  cctoolkit learn-candidates --axis Plan       # untreated gaps of one axis
+  cctoolkit learn-candidates --axis Plan       # untreated gaps of one axis (`--axe` accepted)
   cctoolkit learn-candidates --count           # one line, for doctor
-  cctoolkit learn-candidates --treat-axis Plan # marks the axis treated
+  cctoolkit learn-candidates --treat-axis Plan # marks the axis treated (`--treat-axe` accepted)
   cctoolkit learn-candidates --refuse "motif"  # refused motif, never proposed again
-  cctoolkit learn-candidates --memory          # mechanical defects of the memory
+  cctoolkit learn-candidates --memory          # mechanical defects of the memory (`--memoire` accepted)
 
 Memory. /learn memory audits the project auto-memory. This script delivers its
 judgement-free half: index (file indexed twice, not indexed, gone), incomplete
@@ -57,17 +61,24 @@ TRANSCRIPTS = os.environ.get("LEARN_TRANSCRIPTS") or os.path.join(
 MEMORY = os.environ.get("LEARN_MEMORY") or os.path.join(TRANSCRIPTS, "memory")
 INDEX_LINK = re.compile(r"^\s*-\s*\[[^\]]*\]\(([^)]+)\)")
 REPO_PATH = re.compile(r"^[\w.@-]+(/[\w.@-]+)+/?$")
-VERDICT = "## Verdict — GAPS"
+VERDICT = re.compile(r"^## Verdict — (?:GAPS|ECARTS)", re.M)
 AUDITORS = {"ddd-tdd-auditor", "fork"}
-SEVERITIES = {"Blocking", "Major"}
+# Severities and axes in both vocabularies, folded onto the English ones; French
+# verdicts and state files predate the translation and stay readable.
+SEVERITIES = {"Blocking": "Blocking", "Major": "Major", "Bloquant": "Blocking", "Majeur": "Major"}
 NUDGE_BATCHES = 2
-# Frozen axes of the verdict. Auditors write `Stale plan` (a classification of
-# the Plan axis) as if it were an axis, and sometimes a lowercase label: 16 rows
-# out of 131 in the source repo on 2026-10-02. Folded onto the frozen axis, otherwise one motif
-# spreads over several labels and never reaches the recurrence threshold.
-AXES = ("Correctness", "Reuse", "Simplification", "Cost", "Placement",
-        "Comments", "Test", "Plan", "Scope")
-ALIASES = {"stale plan": "Plan"}
+# Frozen axes of the verdict, (English, French). Auditors write `Stale plan` (a
+# classification of the Plan axis) as if it were an axis, and sometimes a lowercase
+# label: 16 rows out of 131 in the source repo on 2026-10-02. Folded onto the frozen
+# axis, otherwise one motif spreads over several labels and never reaches the
+# recurrence threshold.
+AXES = (("Correctness", "Correction"), ("Reuse", "Réutilisation"), ("Simplification", "Simplification"),
+        ("Cost", "Coût"), ("Placement", "Placement"), ("Comments", "Commentaires"),
+        ("Test", "Test"), ("Plan", "Plan"), ("Scope", "Périmètre"))
+ALIASES = {"stale plan": ("Plan", "Plan")}
+KEEP_PREFIXES = ("keep: ", "garder : ")
+ROW_KEYS = {"lot": "batch", "severite": "severity", "axe": "axis", "ecart": "gap",
+            "preuve": "evidence", "correction": "fix"}
 CELL = 240
 
 
@@ -79,7 +90,20 @@ def load_state():
         s = {}
     for key, empty in (("files", {}), ("rows", []), ("treated", []), ("refused", [])):
         s.setdefault(key, empty)
+    s["rows"] = [normalised(r) for r in s["rows"] if isinstance(r, dict)]
     return s
+
+
+def normalised(row):
+    """A row saved with the French keys, severity and axis, in the English ones. The id
+    is kept: it was hashed from the label as the auditor wrote it."""
+    for old, new in ROW_KEYS.items():
+        if old in row:
+            value = row.pop(old)
+            row.setdefault(new, value)
+    row["severity"] = SEVERITIES.get(row.get("severity"), row.get("severity"))
+    row["axis"] = axis(row.get("axis", ""))
+    return row
 
 
 def save_state(s):
@@ -92,7 +116,7 @@ def save_state(s):
 def verdict_texts(path):
     with open(path, encoding="utf-8") as fh:
         raw = fh.read()
-    if VERDICT not in raw:
+    if "## Verdict — " not in raw:
         return
     for line in raw.splitlines():
         try:
@@ -103,25 +127,40 @@ def verdict_texts(path):
             continue
         for b in (o.get("message") or {}).get("content") or []:
             text = b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else ""
-            if text.lstrip().startswith(VERDICT) or "\n" + VERDICT in text:
-                yield text[text.index(VERDICT):], o.get("timestamp", "")
+            body = text.lstrip()
+            found = VERDICT.search(body)
+            if found:
+                yield body[found.start():], o.get("timestamp", "")
 
 
 def fold(text):
     return "".join(c for c in unicodedata.normalize("NFD", text.lower()) if unicodedata.category(c) != "Mn")
 
 
-def axis(label):
+def axis_pair(label):
+    """(English axis, label as written in the verdict's language)."""
     folded = fold(label)
     alias = next((a for k, a in ALIASES.items() if folded.startswith(k)), None)
-    return alias or next((a for a in AXES if folded.startswith(fold(a))), label)
+    if alias:
+        return alias
+    for english, french in AXES:
+        if folded.startswith(fold(english)):
+            return english, english
+        if folded.startswith(fold(french)):
+            return english, french
+    return label, label
+
+
+def axis(label):
+    return axis_pair(label)[0]
 
 
 def rows_of(text):
     for line in text.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) >= 5 and cells[0] in SEVERITIES:
-            yield cells[0], axis(cells[1]), " | ".join(cells[2:-2]), cells[-2], cells[-1]
+            english, written = axis_pair(cells[1])
+            yield SEVERITIES[cells[0]], english, written, " | ".join(cells[2:-2]), cells[-2], cells[-1]
 
 
 def scan(s):
@@ -141,8 +180,8 @@ def scan(s):
             continue
         session = os.path.basename(os.path.dirname(os.path.dirname(path)))[:8]
         for text, ts in verdict_texts(path):
-            for sev, ax, gap, evidence, fix in rows_of(text):
-                rid = hashlib.sha1(f"{session}|{ax}|{gap}".encode()).hexdigest()[:10]
+            for sev, ax, written, gap, evidence, fix in rows_of(text):
+                rid = hashlib.sha1(f"{session}|{written}|{gap}".encode()).hexdigest()[:10]
                 if rid in known:
                     continue
                 known.add(rid)
@@ -186,6 +225,8 @@ def repo_entries():
     try:
         out = subprocess.run(["git", "-C", ROOT, "ls-files", "-co", "--exclude-standard"],
                              capture_output=True, text=True, check=True).stdout
+        out += subprocess.run(["git", "-C", ROOT, "ls-files", "-oi", "--exclude-standard", "--", ".claude"],
+                              capture_output=True, text=True, check=True).stdout
     except (OSError, subprocess.CalledProcessError):
         return set()
     entries = set()
@@ -233,7 +274,7 @@ def memory_report():
                 found.append(f"cited path missing from repo: {f} → `{p}`")
     print(f"Memory: {MEMORY} — {len(files)} entry(ies)")
     print("\n".join(f"- {line}" for line in found) if found else "No mechanical defect.")
-    kept = [m for m in load_state()["refused"] if m.startswith("keep: ")]
+    kept = [m for m in load_state()["refused"] if m.startswith(KEEP_PREFIXES)]
     if kept:
         print("\nEntries kept after refusal (never propose again):")
         print("\n".join(f"- {m}" for m in kept))
@@ -243,10 +284,10 @@ def memory_report():
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--count", action="store_true")
-    ap.add_argument("--axis")
-    ap.add_argument("--treat-axis")
+    ap.add_argument("--axis", "--axe")
+    ap.add_argument("--treat-axis", "--treat-axe")
     ap.add_argument("--refuse")
-    ap.add_argument("--memory", action="store_true")
+    ap.add_argument("--memory", "--memoire", action="store_true")
     args = ap.parse_args()
 
     if args.memory:

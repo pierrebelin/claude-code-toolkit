@@ -1,31 +1,37 @@
 export const meta = {
   name: 'run-lot',
-  description: 'FX batch under strict TDD, autonomous: design, RED/GREEN per behaviour, global green, closing, audit, next-batch review',
+  description: 'FX batch under strict TDD, autonomous: cycles from the sheet, RED/GREEN per behaviour, global green, pre-audit, audit, next-batch review and pre-design',
   whenToUse: 'Implement a plan batch without human intervention. Argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`; plan, batch and run folder are derived from it.',
   phases: [
-    { title: 'Design', detail: 'earlier audit gaps, behaviours, waves, RED and GREEN contracts, declaratives' },
-    { title: 'RED', detail: 'tdd-test-author, one wave in parallel' },
-    { title: 'GREEN', detail: 'tdd-implementer, serial, TDD tick after COST' },
-    { title: 'Global green', detail: 'whole or filtered suites per test-scope.md, beside closing' },
-    { title: 'Closing', detail: 'closing.md §1-2 then cctoolkit pre-audit, beside global green' },
+    { title: 'Design', detail: 'cycle index of the sheet; design writes the `## Cycles` block only when absent or invalid; declaratives' },
+    { title: 'RED', detail: 'tdd-test-author, waves in sequence, cycles of a wave in parallel' },
+    { title: 'GREEN', detail: 'tdd-implementer, serial, writes the cycle state and the handler CLAUDE.md' },
+    { title: 'Global green', detail: 'whole or filtered suites per test-scope.md, beside the pre-audit gate' },
+    { title: 'Closing', detail: 'cctoolkit pre-audit and what it lists, beside global green' },
     { title: 'Audit', detail: 'cctoolkit audit-capture, ddd-tdd-auditor, two retries at most' },
-    { title: 'Review', detail: 'adversarial-reviewer on the next sheet, beside the audit' },
-    { title: 'Report', detail: 'FX-report.md, written even on stop' },
+    { title: 'Review', detail: 'adversarial-reviewer and pre-design of the next sheet, beside the audit' },
+    { title: 'Arbiter', detail: 'a stop is settled by the arbiter and listed for review after the run; a question only when no decision is defensible' },
+    { title: 'Question', detail: 'human-only stop: question file, wait for the answer written from the session, same run' },
+    { title: 'Report', detail: 'run/batches/FX.md, written even on stop; run/.work/FX purged when DONE' },
   ],
 }
 
 const sheet = (typeof args === 'string' ? args : (args && args.sheet) || '').trim().replace(/^@/, '')
-const decision = (args && typeof args === 'object' && typeof args.decision === 'string' && args.decision.trim()) || ''
 const naming = /^(.*)-(F\d+)\.md$/.exec(sheet)
 if (!naming) throw new Error('expected argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`')
 const plan = `${naming[1]}.md`
 const batch = naming[2]
-const runDir = `${sheet.slice(0, sheet.lastIndexOf('/') + 1) || './'}run/${batch}`
+const runRoot = `${sheet.slice(0, sheet.lastIndexOf('/') + 1) || './'}run`
+const workDir = `${runRoot}/.work/${batch}`
+const reportPath = `${runRoot}/batches/${batch}.md`
+const baseline = `${workDir}/baseline`
 
 const BLOCKED = 'BLOCKED'
 const DONE = 'DONE'
 const GAPS = 'GAPS'
-const WAITING = 'AWAITING-ANSWER'
+const AUDIT_PENDING = 'to redo'
+const GAPS_CARRIED = 'GAPS carried'
+const TO_REVIEW = 'user decision to validate'
 
 const str = { type: 'string' }
 const int = { type: 'integer' }
@@ -38,43 +44,23 @@ const obj = (properties, optional = []) => ({
 })
 
 const CYCLE = obj({
+  id: str,
+  wave: int,
   behaviour: str,
-  refactor: bool,
   rmcu: str,
   steps: arr(str),
-  level: str,
-  skill: str,
-  testClass: str,
-  fixture: str,
-  methods: arr(str),
-  full: arr(str),
-  bounded: arr(str),
-  scenarios: str,
-  observation: str,
-  outOfScope: str,
-  toCreate: arr(str),
-  ripple: arr(str),
-  boundedGreen: arr(str),
-  elements: str,
-  appliedIds: str,
-  invariants: str,
-  expectedCost: str,
-  snapshot: str,
-  decisions: str,
-  resume: bool,
+  refactor: bool,
   guard: bool,
-}, ['snapshot', 'decisions', 'resume', 'guard'])
-
-const DESIGN = obj({
-  blocked: bool,
-  reason: str,
-  nextSheet: str,
-  declaratives: arr(str),
-  waves: arr(arr(CYCLE)),
+  methods: arr(str),
+  decisions: str,
 })
 
+const INDEX = obj({ ok: bool, missing: bool, errors: arr(str), declaratives: arr(str), cycles: arr(CYCLE) })
+
+const DESIGN = obj({ blocked: bool, reason: str, review: arr(str) }, ['review'])
+
 const RED = obj({
-  status: { type: 'string', enum: ['RED', 'BLOCKED'] },
+  status: { type: 'string', enum: ['RED', 'ALREADY_GREEN', 'BLOCKED'] },
   tests: arr(str),
   command: str,
   exit: int,
@@ -83,8 +69,9 @@ const RED = obj({
   expectedFailure: str,
   table: arr(obj({ test: str, case: str })),
   removed: arr(str),
+  unreachable: arr(obj({ method: str, site: str, why: str })),
   diagnostic: str,
-}, ['diagnostic'])
+}, ['diagnostic', 'unreachable'])
 
 const GREEN = obj({
   status: { type: 'string', enum: ['GREEN', 'BLOCKED'] },
@@ -125,17 +112,23 @@ const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str) })
 
 const REVIEW = obj({
   result: { type: 'string', enum: ['CLEAR', 'GAPS'] },
-  questions: arr(obj({ severity: { type: 'string', enum: ['Blocking', 'Major'] }, question: str, evidence: str, decidedBy: str, answer: str, options: arr(str) })),
+  questions: arr(obj({ severity: { type: 'string', enum: ['Blocking', 'Major'] }, question: str, evidence: str, decidedBy: str, answer: str, options: arr(str), humanOnly: bool }, ['humanOnly'])),
 })
 
 const REPORT = obj({ path: str })
 
-const SAVED = obj({
+const ANSWER = obj({ answered: bool, answers: arr(obj({ id: str, text: str })) })
+
+const ARBITRATION = obj({ decision: { type: 'string', enum: ['continue', 'defer', 'ask'] }, text: str, rationale: str })
+
+const LOADED = obj({
   cycles: arr(obj({ behaviour: str, rmcu: str, steps: arr(str), red: RED, green: GREEN }, ['green'])),
+  index: INDEX,
+  nextSheet: str,
 })
 
 const FRAME = [
-  `Workflow run-lot, batch ${batch}. Global plan: ${plan}. Batch sheet: ${sheet}. Run folder: ${runDir}.`,
+  `Workflow run-lot, batch ${batch}. Global plan: ${plan}. Batch sheet: ${sheet}. Scratch folder: ${workDir}.`,
   'Autonomous mode: nobody answers. Never AskUserQuestion, never a Git commit.',
   'Return the result through the structured output; prose written into repo files follows `language.docs` of `kit.config.json`.',
   '`<kit>` below = the cctoolkit plugin directory, printed by `cctoolkit root`; kit scripts run as `cctoolkit <script>`.',
@@ -145,43 +138,148 @@ const list = xs => (xs && xs.length ? xs.map(x => `\`${x}\``).join(', ') : 'none
 const fileName = line => line.replace(/`/g, '').trim().replace(/^[ MADRCU?!]{1,2}\s+/, '').split(/\s+/)[0] || ''
 const short = (text, n = 40) => (text.length > n ? text.slice(0, n - 1) + '…' : text)
 
-const history = { cycles: [], suites: null, closing: null, verdicts: [], fixes: [], review: null }
+const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], review: null, audit: null, toReview: [] }
+const toReview = (step, text, why = '') => history.toReview.push({ step, text, why })
 let reviewing = null
-let decisionUsed = false
-const decided = () => [
-  '',
-  '',
-  `User decision answering the previous stop of this batch, overriding the sheet and the contract: ${decision}`,
-  `First record it as \`Hn\` under \`## Assumptions\` of \`${sheet}\`, marked \`user decision\`, unless already there.`,
-].join('\n')
+let predesigning = null
+const USER = 'user decision'
+const WAIT_SECONDS = 450
+const WAIT_ROUNDS = 4
+const UNANSWERED = 'decided without answer after 30 min'
+const REVIEWER = 'reviewer recommendation'
+const MAX_DECISIONS = 3
+let asked = 0
 
-async function answered(launch, isStopped) {
-  const first = await launch('')
-  if (!decision || decisionUsed || !isStopped(first)) return first
-  decisionUsed = true
-  log(`user decision applied: ${short(decision, 60)}`)
-  return launch(decided())
+async function ask(kind, context, questions) {
+  await loading
+  asked += 1
+  const file = `${workDir}/questions/${batch}-${asked}.json`
+  const label = `${batch}-${asked}`
+  const payload = { batch, sheet, kind, context, questions: questions.map((q, i) => ({ id: `q${i + 1}`, ...q })) }
+  const written = await agent(
+    [
+      FRAME,
+      '',
+      `\`mkdir -p ${workDir}/questions\`, then write \`${file}\` in a single Write, content exactly the JSON below, nothing added.`,
+      `Then one call: \`command -v osascript >/dev/null && osascript -e 'display notification "${batch}: question awaiting an answer in the session" with title "run-lot"' || true\`.`,
+      '',
+      '```json',
+      JSON.stringify(payload, null, 1),
+      '```',
+    ].join('\n'),
+    { schema: OK, phase: 'Question', label: `question ${label}`, model: 'haiku', effort: 'low' },
+  ).catch(() => null)
+  if (!written || !written.ok) return null
+  log(`❓ ${label} waits for an answer in the session: ${file}`)
+  for (let round = 1; round <= WAIT_ROUNDS; round++) {
+    const r = await agent(
+      [
+        FRAME,
+        '',
+        `Run \`cctoolkit run-question wait ${file} --seconds ${WAIT_SECONDS}\` once, Bash timeout 600000, nothing else.`,
+        'Exit 0 → it printed `{"answers": [...]}`: `answered` true, `answers` = that array verbatim. Exit 3 (PENDING) or any other outcome → `answered` false, `answers` empty.',
+      ].join('\n'),
+      { schema: ANSWER, phase: 'Question', label: `wait ${label} #${round}`, model: 'haiku', effort: 'low' },
+    ).catch(() => null)
+    if (r && r.answered && r.answers.length) {
+      log(`${label} answered`)
+      return r.answers
+    }
+  }
+  const recommended = payload.questions.filter(q => String(q.recommendation || '').trim())
+  log(`${label} unanswered after ${(WAIT_ROUNDS * WAIT_SECONDS) / 60} min — ${recommended.length ? `${recommended.length} recommendation(s) applied` : 'no recommendation'}`)
+  if (!recommended.length) return null
+  for (const q of recommended) toReview(`Question ${label}`, `${UNANSWERED}: ${q.question} → ${q.recommendation.trim()}`, context)
+  return recommended.map(q => ({ id: q.id, text: q.recommendation.trim(), recommended: true }))
 }
-const stateDir = `${runDir}/cycles`
-const slug = text => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
+
+const ALLOW_TEST = /allow-test:\s*`?([^\s`,;]+)`?/g
+const ACCEPT_COST = /accept-cost\b/i
+const TESTS_AT_GREEN = 'tests modified at GREEN: '
+const GRANTED = ' — granted: '
+const COST_CLEAR = ['Infrastructure in loop or in-memory filter: none', 'Infrastructure en boucle ou filtre mémoire : aucun']
+
+const noGrants = () => ({ tests: new Set(), cost: false })
+
+function grantsFrom(text, grants = noGrants()) {
+  for (const m of String(text || '').matchAll(ALLOW_TEST)) grants.tests.add(repoPath(m[1]))
+  if (ACCEPT_COST.test(String(text || ''))) grants.cost = true
+  return grants
+}
+
+function arbitrate(step, reason, touched, earlier) {
+  return agent(
+    [
+      FRAME,
+      '',
+      `You arbitrate a stop of this autonomous batch in place of the user, who reviews every decision you take after the whole plan has run. Step: ${step}. Stop reason: ${reason}`,
+      earlier.length ? `Decisions already applied at this step, each followed by the same kind of stop: ${earlier.map(e => `« ${e.text} » then « ${e.reason} »`).join(' ; ')}. Never repeat one of them.` : '',
+      'Read only what the reason names (test lines, production lines, the sheet section), by range; never edit a file.',
+      'Decide so the batch goes on without weakening what the tests prove:',
+      `- Test files modified at GREEN (${touched.length ? touched.join(', ') : 'none listed'}): the test itself is wrong (fixture bug, expectation written against the raw value a shared helper normalizes, expected key the fixture contradicts, compile ripple of a signature the sheet changes) → grant it, text \`allow-test: <path>\` once per file. The change removes, negates or loosens an assertion of the behaviour → text tells the GREEN to restore the test and fix production instead.`,
+      '- `Cost` line flagged: the flagged call was there before this batch, or is bounded by an input the sheet fixes → text `accept-cost: <why>`. A loop the cycle wrote over an unbounded input → text tells the GREEN to rewrite it out of the loop.',
+      '- Ambiguity of the sheet or the design: pick the option the spec, the rules, the handler `CLAUDE.md` or an earlier `Hn` favour, else the smallest one that keeps every RM/CU; text = the decision, stated so the next agent applies it.',
+      '- Contract methods missing from a RED table because no caller reaches their throw site: text tells the RED to list each in `unreachable` (method, site `path:line`, why), never to write it.',
+      '- Suites red, pre-audit red, agent without result: text = the concrete instruction for the retry (what to fix, what to read first).',
+      '`defer` when the stop holds back no later batch and can be settled after the plan: a guard red on code that predates the batch, a refactor whose safety net is red, a documentation or pre-audit failure. The step is left out, the run goes on; `text` = what to settle later. Never for red suites, a GREEN or a design: later batches build on them.',
+      '`ask` only when no decision is defensible: options of comparable weight on behaviour a customer sees, data loss, security, the contract of an external system, or every option already tried above. Then `text` = your recommendation.',
+      '`text` in the docs language of `kit.config.json`, one paragraph; `rationale` = why, one sentence, citing the evidence `path:line`.',
+    ].filter(l => l !== '').join('\n'),
+    { schema: ARBITRATION, phase: 'Arbiter', label: `arbiter ${short(step, 40)}`, effort: 'medium' },
+  ).catch(() => null)
+}
+
+async function decide(step, reason, earlier = []) {
+  const atGreen = step.startsWith('GREEN')
+  const touched = reason.startsWith(TESTS_AT_GREEN) ? reason.slice(TESTS_AT_GREEN.length).split(GRANTED)[0].split(', ').filter(Boolean) : []
+  const arbitration = await arbitrate(step, reason, touched, earlier)
+  if (arbitration && arbitration.decision === 'defer') {
+    toReview(step, `deferred after the plan: ${reason} → ${arbitration.text.trim()}`, arbitration.rationale)
+    log(`${step}: deferred — ${short(reason, 60)}`)
+    return { deferred: true }
+  }
+  if (arbitration && arbitration.decision === 'continue' && arbitration.text.trim()) {
+    const text = arbitration.text.trim()
+    toReview(step, `${reason} → ${text}`, arbitration.rationale)
+    log(`${step}: arbiter — ${short(text, 60)}`)
+    return { text, by: TO_REVIEW }
+  }
+  const answers = await ask('stop', step, [{
+    severity: 'Blocking',
+    question: `${step} stopped: ${reason}. How should the batch go on?${atGreen ? ' To let the GREEN modify a test file, answer `allow-test: <path>` per file: the check then accepts it.' : ''}`,
+    evidence: arbitration ? `${reason} — ${arbitration.rationale}` : reason,
+    options: [...(arbitration && arbitration.text.trim() ? [arbitration.text.trim()] : []), ...(touched.length ? [touched.map(p => `allow-test: ${p}`).join(' ')] : []), 'STOP'],
+    recommendation: arbitration ? arbitration.text : '',
+  }])
+  const answer = answers && answers[0]
+  const text = answer ? answer.text.trim() : ''
+  if (text.toUpperCase() === 'STOP') return { stop: true }
+  return text ? { text, by: answer.recommended ? TO_REVIEW : USER } : null
+}
+
+function decided(text, grants = noGrants()) {
+  return [
+    '',
+    '',
+    `Decision answering the stop of this step, overriding the sheet and the contract: ${text}`,
+    grants.tests.size ? `Test files you may modify, granted: ${[...grants.tests].join(', ')}. List them in \`testsDiff\`.` : '',
+    grants.cost ? 'The flagged `Cost` line is accepted as is: report it verbatim.' : '',
+    'The workflow lists this decision for the user review after the plan: never copy it into the sheet.',
+  ].filter(l => l !== '').join('\n')
+}
+
+const stateDir = `${workDir}/cycles`
+const slug = text => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
+
+const contractCommand = (c, phaseFlag) => `cctoolkit sheet-cycles ${sheet} --cycle ${c.id} ${phaseFlag}`
 
 function redContract(c, declaratives) {
   return [
     FRAME,
     '',
-    'RED phase. Contract, no plan attached:',
+    `RED phase, cycle ${c.id}. Your contract, no plan attached: first call, \`${contractCommand(c, '--red')}\` — it prints the contract lines (RM/CU, behaviour, level and skill, test class and fixture, methods, \`Rewritten by you (read in full)\`, \`Read bounded (context only)\`, scenarios, expected observation). Never read the sheet itself.`,
     '',
     '```text',
-    `RM/CU: ${c.rmcu}`,
-    `Behaviour: ${c.behaviour}`,
-    `Level / skill: ${c.level} / ${c.skill}`,
-    `Test class / fixture: \`${c.testClass}\` / \`${c.fixture}\``,
-    `Methods: ${c.methods.map(m => `\`${m}\``).join(', ')}`,
-    `Rewritten by you (read in full): ${list(c.full)}`,
-    `Read bounded (context only): ${list(c.bounded)}`,
-    `Scenarios: ${c.scenarios}`,
-    `Expected observation: ${c.observation}`,
-    c.decisions ? `User decisions (override the sheet): ${c.decisions}` : '',
     ...(c.refactor ? [
       'Refactor under safety net: write no test and touch no file. Run the filtered command on the methods above, existing and unchanged.',
       'Green net (exit 0) = RED of the refactor: `status: RED`, `table` = one row per method run, `tests` = their paths, `stubs` and `productionDiff` empty. Red net = ## BLOCKED.',
@@ -191,16 +289,16 @@ function redContract(c, declaratives) {
       'A red guard = the code already breaks it: ## BLOCKED with the violations listed.',
     ] : []),
     'An existing assertion on a literal or contract this behaviour changes is listed in `Rewritten by you`: rewrite it to the new expected value, never into a negative assertion (does-not-contain, not-equal) that would pass whatever the code does.',
-    'Forbidden: any file search. A missing path comes back as ## BLOCKED.',
+    'A contract method whose throw site no caller reaches (every path to it refused earlier, an exhaustive switch, a non-nullable result) is never written: list it in `unreachable` with the site `path:line` and why; the user decides on removing the dead guard after the plan.',
+    'Behaviour already in place on disk (a stopped run went further than its saved state: the contract methods exist in the test class and production is written): run them filtered, unchanged; exit 0 → `status: ALREADY_GREEN`, `table` = the methods run, `stubs` and `productionDiff` empty. Never write a new test that passes at once to get there: a method you write must fail first.',
     ...(declaratives.length ? [
       `Declarative artefacts already written by the orchestrator (common-rules §4.5, neither yours nor stubs): ${declaratives.join(' ; ')}`,
-      'A constructor parameter, member or type your test still lacks = signature stub you write (§4.1), not a blocker.',
     ] : []),
     '```',
     '',
     'Your `## RED` report goes through the structured output: `tests` = test paths, `exit` = code of the filtered command,',
     '`productionDiff` = `src/` files you created or modified yourself, no annotation (other agents write in parallel: `git status` cannot tell you apart), `stubs` = paths only of the stubs written, no annotation, `table` = one row per method written or modified',
-    '(`test` = `Class.Method`), `removed` = tests removed because already covered. `## BLOCKED` = `status: BLOCKED` + `diagnostic` (six RTK lines at most).',
+    '(`test` = `Class.Method`), `removed` = tests removed because already covered, `unreachable` = contract methods not written, site unreachable. `## BLOCKED` = `status: BLOCKED` + `diagnostic` (six RTK lines at most).',
     `Last step before the structured output, except on ## BLOCKED: \`mkdir -p ${stateDir}\`, then write \`${stateDir}/${slug(c.behaviour)}.json\` in a single Write, content exactly \`{"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": <your report>}\`, \`<your report>\` = the object you return, same fields and values.`,
   ].filter(l => l !== '').join('\n')
 }
@@ -210,41 +308,41 @@ function greenContract(c, r) {
   return [
     FRAME,
     '',
-    'GREEN + REFACTOR phase. Contract, no plan attached:',
+    `GREEN + REFACTOR phase, cycle ${c.id}. Your contract, no plan attached: first call, \`${contractCommand(c, '--green')}\` — it prints the contract lines (out of scope, to create, production you may fill, signature ripple, read bounded, elements, applied ids, invariants, expected cost). Never read the sheet itself. The lines below complete it:`,
     '',
     '```text',
-    `RM/CU: ${c.rmcu}`,
-    `Behaviour: ${c.behaviour}`,
     c.refactor
       ? `Safety net, green and kept green — behaviour unchanged, no test touched: ${list(r.tests)} — ${redTests}`
       : `Red test: ${list(r.tests)} — ${redTests}`,
-    `Out of scope — next behaviour: ${c.outOfScope || 'none'}`,
     `Already stubbed at RED (body to fill, read in full): ${list(r.stubs)}`,
-    `To create from scratch: ${list(c.toCreate)}`,
-    `Signature ripple — also touched (read in full): ${c.ripple.length ? c.ripple.join(' ; ') : 'none'}`,
-    `Read bounded (context only): ${list(c.boundedGreen)}`,
-    `Elements: ${c.elements}`,
-    `Applied DDD/APP ids: ${c.appliedIds}`,
-    `Exploitable invariants — what they remove: ${c.invariants}`,
-    `Expected access cost: ${c.expectedCost}`,
-    c.decisions ? `User decisions (override the sheet): ${c.decisions}` : '',
-    c.snapshot ? `Snapshot (ContractTests only): ${c.snapshot}` : '',
+    `Baseline: ${baseline} — \`Cost\` line from \`cctoolkit access-cost --base ${baseline} <production files>\``,
     '```',
     '',
-    'Your `## GREEN` report goes through the structured output: `production` = paths modified or created, `exit` = code of the final filtered test,',
+    'Handler `CLAUDE.md`: a rule your code adds or changes in a handler → `<kit>/skills/implement-tdd/references/closing.md` §2, in the same message as your last production edit.',
+    '',
+    'Your `## GREEN` report goes through the structured output: `production` = paths modified or created (handler `CLAUDE.md` included), `exit` = code of the final filtered test,',
     '`testsDiff` = `tests/` files you created or modified yourself, no annotation (empty expected, `.verified.txt` snapshots accepted), `cost` = last line of `cctoolkit access-cost` verbatim,',
     '`independentOf` = the input the cost is independent of. `## BLOCKED` = `status: BLOCKED` + `diagnostic`.',
+    `Last step before the structured output, except on ## BLOCKED: write \`${stateDir}/${slug(c.behaviour)}.json\` in a single Write, content exactly \`{"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": ${JSON.stringify(r)}, "green": <your report>}\`, \`<your report>\` = the object you return, same fields and values.`,
   ].filter(l => l !== '').join('\n')
 }
 
 function checkRed(c, r, writtenBefore) {
   if (!r) return 'RED agent without result'
   if (r.status === 'BLOCKED') return `BLOCKED — ${r.diagnostic || r.expectedFailure}`
-  if (!r.table.length && r.removed.length) return null
+  if (r.status === 'ALREADY_GREEN') {
+    if (c.refactor || c.guard) return `ALREADY_GREEN on a ${c.refactor ? 'refactor' : 'guard'} cycle`
+    if (r.exit !== 0) return `ALREADY_GREEN with exit ${r.exit} on \`${r.command}\``
+    if (r.stubs.length || r.productionDiff.length) return `ALREADY_GREEN with code written: ${[...r.stubs, ...r.productionDiff].join(', ')}`
+    if (!r.table.length) return 'ALREADY_GREEN without the methods run'
+    return null
+  }
+  const unreachable = (r.unreachable || []).map(u => u.method)
+  if (!r.table.length && (r.removed.length || unreachable.length)) return null
   if (c.refactor && r.exit !== 0) return `safety net red: exit ${r.exit} on \`${r.command}\``
   if (c.guard && r.exit !== 0) return `guard red on the current code: exit ${r.exit} on \`${r.command}\``
   if (c.guard && (r.stubs.length || r.productionDiff.length)) return `guard with production code: ${[...r.stubs, ...r.productionDiff].join(', ')}`
-  if (!c.refactor && !c.guard && r.exit === 0) return `RED not observed: exit 0 on \`${r.command}\``
+  if (!c.refactor && !c.guard && r.exit === 0) return `RED not observed: exit 0 on \`${r.command}\` — already in place on disk → status ALREADY_GREEN`
   const stubs = new Set([...r.stubs.map(fileName).map(repoPath), ...writtenBefore()])
   const beyondStubs = r.productionDiff.map(fileName).map(repoPath).filter(f => f && !stubs.has(f))
   if (beyondStubs.length) return `production code beyond the stubs: ${beyondStubs.join(', ')}`
@@ -252,7 +350,8 @@ function checkRed(c, r, writtenBefore) {
   const missing = c.methods.filter(m => {
     const name = fileName(m)
     return !r.table.some(l => sameMethod(fileName(l.test), name)) &&
-      !r.removed.some(s => s.includes(name))
+      !r.removed.some(s => s.includes(name)) &&
+      !unreachable.some(u => sameMethod(fileName(u), name))
   })
   if (missing.length) return `contract methods missing from the table: ${missing.join(', ')}`
   return null
@@ -260,44 +359,85 @@ function checkRed(c, r, writtenBefore) {
 
 const repoPath = p => p.replace(/^.*?(^|\/)((src|tests)\/)/, '$2')
 
-function checkGreen(r) {
+function checkGreen(r, grants = noGrants()) {
   if (!r) return 'GREEN agent without result'
   if (r.status === 'BLOCKED') return `BLOCKED — ${r.diagnostic || r.cost}`
   if (r.exit !== 0) return `GREEN not observed: exit ${r.exit} on \`${r.command}\``
   const tests = r.testsDiff.map(fileName).filter(Boolean).map(repoPath)
-  if (tests.some(f => !f.endsWith('.verified.txt'))) return `tests modified at GREEN: ${tests.join(', ')}`
-  if (!r.cost.includes('Infrastructure in loop or in-memory filter: none')) return `Cost line malformed or flagged: ${r.cost}`
+  const forbidden = tests.filter(f => !f.endsWith('.verified.txt') && !grants.tests.has(f))
+  if (forbidden.length) return `${TESTS_AT_GREEN}${forbidden.join(', ')}${GRANTED}${grants.tests.size ? [...grants.tests].join(', ') : 'none'}`
+  if (!grants.cost && !COST_CLEAR.some(x => r.cost.includes(x))) return `Cost line malformed or flagged: ${r.cost}`
   return null
 }
 
-async function withRetry(launch, check) {
-  const attempt = suffix => launch(suffix).catch(() => null)
-  let result = await attempt('')
-  let reason = check(result)
+const ESCALATED = /^(RED|GREEN) /
+const LAST_MODEL = 'opus'
+
+function escalation(reasons, earlier, grants) {
+  return [
+    '',
+    '',
+    `Last attempt at this step, after ${reasons.length} rejected one(s). Earlier attempts may have left files on disk: Read the contract paths in one message first, keep what is right, never rewrite from scratch.`,
+    `Why each earlier attempt was rejected, in order: ${reasons.map((r, i) => `${i + 1}. ${r}`).join(' ; ')}.`,
+    earlier.length ? `Decisions applied in between, none lifted the stop: ${earlier.map(e => `« ${e.text} »`).join(' ; ')}. They stay in force.` : '',
+    grants.tests.size ? `Test files you may modify, granted: ${[...grants.tests].join(', ')}. List them in \`testsDiff\`.` : '',
+    grants.cost ? 'The flagged `Cost` line is accepted as is: report it verbatim.' : '',
+    'Diagnose the common cause of these rejections before writing, then fix that cause. Same contract, same report.',
+  ].filter(l => l !== '').join('\n')
+}
+
+async function withRetry(step, launch, check, standing = '') {
+  const grants = grantsFrom(standing)
+  const attempt = (suffix, options = {}) => launch(suffix, options).catch(() => null)
+  let result = await attempt(grants.tests.size || grants.cost ? decided(standing, grants) : '')
+  let reason = check(result, grants)
+  const reasons = reason ? [reason] : []
   if (reason && !reason.startsWith('BLOCKED')) {
-    result = await attempt(`\n\nPrevious attempt rejected by the orchestrator: ${reason}. Fix this point and return a new report.`)
-    reason = check(result)
+    result = await attempt(reason.endsWith('without result')
+      ? '\n\nPrevious attempt ended without structured output, most likely out of turns. Its files may already be on disk: before writing, Read the contract paths in one message and keep what is done, never rewrite from scratch. Finish what is missing, run the filtered command once, then return the report at once.'
+      : `\n\nPrevious attempt rejected by the orchestrator: ${reason}. Fix this point and return a new report.`)
+    reason = check(result, grants)
+    if (reason) reasons.push(reason)
   }
-  if (reason && decision && !decisionUsed) {
-    decisionUsed = true
-    log(`user decision applied: ${short(decision, 60)}`)
-    result = await attempt(decided())
-    reason = check(result)
+  const earlier = []
+  for (let n = 0; reason && n < MAX_DECISIONS; n++) {
+    const decision = await decide(step, reason, earlier)
+    if (decision && decision.deferred) return { result, reason, deferred: true }
+    if (decision && decision.stop) return { result, reason }
+    if (!decision) break
+    earlier.push({ text: decision.text, reason })
+    grantsFrom(decision.text, grants)
+    const previous = reason
+    result = await attempt(decided(decision.text, grants))
+    reason = check(result, grants)
+    if (reason) reasons.push(reason)
+    if (reason === previous && earlier.filter(e => e.reason === previous).length > 1) {
+      log(`${step}: same stop after two decisions — ${short(reason, 60)}`)
+      break
+    }
+  }
+  if (reason && ESCALATED.test(step)) {
+    log(`${step}: last attempt on ${LAST_MODEL} — ${short(reason, 60)}`)
+    result = await attempt(escalation(reasons, earlier, grants), { model: LAST_MODEL })
+    reason = check(result, grants)
   }
   return { result, reason }
 }
 
-const declarativesOf = c => c.toCreate.filter(a => /orchestrat|declarati|déclarati/i.test(a))
-
 const writtenBefore = () => new Set([
-  ...design.declaratives,
+  ...lotIndex.declaratives,
   ...history.cycles.flatMap(t => [...(t.red?.stubs ?? []), ...(t.green?.production ?? [])]),
 ].map(fileName).map(repoPath))
 
-function launchRed(c, i) {
+const redLabel = (c, model) => `RED ${c.id} w${c.wave} ${short(c.behaviour)}${model ? ` ${model}` : ''}`
+const greenLabel = (c, model) => `GREEN ${c.id} ${short(c.behaviour)}${model ? ` ${model}` : ''}`
+
+function launchRed(c) {
   const live = () => withRetry(
-    suffix => agent(redContract(c, declarativesOf(c)) + suffix, { agentType: 'cctoolkit:tdd-test-author', schema: RED, phase: 'RED', label: `RED ${i + 1} ${short(c.behaviour)}` }),
+    `RED ${short(c.behaviour, 60)}`,
+    (suffix, options) => agent(redContract(c, lotIndex.declaratives) + suffix, { agentType: 'cctoolkit:tdd-test-author', schema: RED, phase: 'RED', label: redLabel(c, options.model), ...options }),
     r => checkRed(c, r, writtenBefore),
+    c.decisions || '',
   )
   if (c.resume) {
     const state = savedOf(c)
@@ -308,37 +448,14 @@ function launchRed(c, i) {
 }
 
 function launchWave(wave, n) {
-  return parallel(wave.map((c, i) => () => launchRed(c, i).then(x => ({ ...x, cycle: c, wave: n }))))
+  return parallel(wave.map(c => () => launchRed(c).then(x => ({ ...x, cycle: c, wave: n }))))
 }
 
-const finishedCycles = new Set()
-const records = []
-
-function record(c, red, green) {
-  finishedCycles.add(c)
-  const steps = c.steps.filter(e => design.waves.flat().filter(x => x.steps.includes(e)).every(x => finishedCycles.has(x)))
-  const line = c.guard ? 'TDD: GUARD ✅' : 'TDD: RED ✅ · GREEN ✅ · COST ✅'
-  const state = { behaviour: c.behaviour, rmcu: c.rmcu, steps: c.steps, red, green }
-  records.push(agent(
-    [
-      FRAME,
-      '',
-      `\`mkdir -p ${stateDir}\`, then write \`${stateDir}/${slug(c.behaviour)}.json\` in a single Write, content exactly the JSON below, nothing added.`,
-      ...(steps.length
-        ? [`Then in the sheet \`${sheet}\`, for each step ${steps.map(e => `« ${e} »`).join(', ')}, replace its \`TDD: …\` line with \`${line}\`. One Edit per line, nothing else moves.`]
-        : []),
-      '',
-      '```json',
-      JSON.stringify(state, null, 1),
-      '```',
-    ].join('\n'),
-    { schema: OK, phase: 'GREEN', label: `tick ${short(c.behaviour)}`, model: 'haiku', effort: 'low' },
-  ).catch(() => null))
-}
-
+const NO_ACCESS = /^(Cost: 0 read \+ 0 write outside loop; Infrastructure in loop or in-memory filter: none|Coût : 0 lecture \+ 0 écriture hors boucle ; Infrastructure en boucle ou filtre mémoire : aucun)/
 const noGreen = flagged => ({ status: 'GREEN', production: [], command: '', exit: 0, testsDiff: [], cost: '', independentOf: '', removed: '', flagged })
 
 let saved = { cycles: [] }
+let lotIndex = null
 const savedOf = c => saved.cycles.find(x => x.behaviour === c.behaviour) || null
 
 const cell = text => String(text ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ').trim()
@@ -359,9 +476,9 @@ const bullets = xs => (xs.length ? xs.map(x => `- ${cell(x)}`) : ['None.'])
 function renderReport(status, reason, verdict) {
   const cycles = history.cycles
   const files = new Set([
-    ...(design?.declaratives ?? []),
+    ...(lotIndex?.declaratives ?? []),
     ...cycles.flatMap(c => [...(c.red?.tests ?? []), ...(c.red?.stubs ?? []), ...(c.red?.productionDiff ?? []), ...(c.green?.production ?? []), ...(c.green?.testsDiff ?? [])]),
-    ...(history.closing?.files ?? []),
+    ...(history.gate?.files ?? []),
     ...history.fixes.flatMap(f => f.files),
   ].map(relative).filter(Boolean))
   const prefix = sharedPrefix([...new Set([...files].map(projectOf).filter(Boolean))])
@@ -375,7 +492,7 @@ function renderReport(status, reason, verdict) {
   const gapsOf = v => v.gaps.filter(g => g.severity !== 'Minor')
   const auditGaps = history.verdicts.flatMap((v, i) => gapsOf(v).map(g =>
     `- ${g.severity} — ${g.axis} — ${cell(g.gap)} (evidence: ${cell(g.evidence)}). Fix: ${cell(g.fix)}${history.fixes[i] ? `; applied in round ${i + 1}: ${cell(history.fixes[i].fixed.join('; '))}` : '; not applied'}.`))
-  const reviews = !history.review ? [] : history.review.first ? [history.review.first, history.review.again] : [history.review]
+  const reviews = history.review ? [history.review] : []
   const tests = new Map()
   for (const c of cycles) {
     for (const t of c.red?.table ?? []) {
@@ -384,7 +501,9 @@ function renderReport(status, reason, verdict) {
       tests.set(klass, [...(tests.get(klass) ?? []), [`\`${parts[parts.length - 1]}\``, c.rmcu, short(t.case, 50)]])
     }
   }
-  const finalVerdict = verdict ? verdict.verdict : 'none'
+  const finalVerdict = history.audit === AUDIT_PENDING ? AUDIT_PENDING
+    : verdict ? (verdict.verdict === GAPS && status === DONE ? GAPS_CARRIED : verdict.verdict)
+    : 'none'
   return [
     `## STATUS — ${status}`,
     '',
@@ -402,7 +521,7 @@ function renderReport(status, reason, verdict) {
     '',
     '### Access cost per behaviour',
     '',
-    ...tableOf(['Behaviour', 'Cost', 'Independent of'], cycles.filter(c => c.green && c.green.cost).map(c => [short(c.behaviour, 60), c.green.cost, c.green.independentOf])),
+    ...tableOf(['Behaviour', 'Cost', 'Independent of'], cycles.filter(c => c.green && c.green.cost && !NO_ACCESS.test(c.green.cost)).map(c => [short(c.behaviour, 60), c.green.cost, c.green.independentOf])),
     '',
     '### Assumptions `Hn`',
     '',
@@ -432,24 +551,32 @@ function renderReport(status, reason, verdict) {
     ...(tests.size
       ? [...tests].flatMap(([klass, rows]) => [`**${klass}**`, '', ...tableOf(['Test', 'RM/CU', 'Use case verified'], rows), ''])
       : ['No test written.', '']),
+    '## To validate',
+    '',
+    ...(history.toReview.length ? history.toReview.map(x => `- ${cell(x.step)} — ${cell(x.text)}${x.why ? ` (${cell(x.why)})` : ''}`) : ['None.']),
+    '',
     '## Audit gaps',
     '',
     ...(auditGaps.length ? auditGaps : ['None.']),
     ...(status === DONE
       ? []
-      : ['', '## Resume', '', `In the session of the run: answer through AskUserQuestion, then resume this same run (\`resumeFromRunId\` + \`args.decisions\`), never a fresh relaunch. Out of the session: answer with an \`Hn\` marked \`user decision\` under \`## Assumptions\` of \`${sheet}\`, then relaunch \`/run-plan\` or \`/run-lot ${sheet}\`: cycles already through (\`${stateDir}\`) are not redone.`]),
+      : ['', '## Resume', '', `Stop after a \`STOP\` answer, a question left unanswered or a decision that did not lift the block: fix the cause, write the decision into the \`decisions\` field of the cycles it touches in the \`## Cycles\` block of \`${sheet}\` (and as \`Hn\` marked \`${USER}\` under \`## Assumptions\`), then launch a new \`/run-plan\` or \`/run-lot ${sheet}\`: cycles already through (\`${stateDir}\`) are not redone. Under \`/run-plan\`, the batch was set aside: tree put back to its start state, partial work in \`aside-${batch}.patch\` of the run folder, cycles cleared, the batch starts over.`]),
   ].join('\n') + '\n'
 }
 
 async function report(status, reason, verdict) {
-  const path = `${runDir}/${batch}-report.md`
+  const path = reportPath
   const r = await agent(
     [
       FRAME,
       '',
-      `\`mkdir -p ${runDir}\`, then write \`${path}\` in a single Write, content exactly the markdown between the \`~~~~\` fences below, nothing added, removed or reformatted.`,
+      'You are a scribe. The markdown below was rendered by the orchestrating workflow from the structured results of the agents that ran this batch (cycles, suites, audit); you are not asked to vouch for it, verify it or reproduce it, only to persist it verbatim.',
+      `\`mkdir -p ${runRoot}/batches\`, then write \`${path}\` in a single Write, content exactly the markdown between the \`~~~~\` fences below, nothing added, removed or reformatted.`,
       ...(status === DONE
-        ? [`Then delete the other run files, keeping the report: \`find ${runDir} -type f ! -name '${batch}-report.md' -delete\`.`]
+        ? [`Then in \`${plan}\`, on the heading line starting \`### Batch ${batch} \` (or \`### Lot ${batch} \`): replace a trailing \`⬜\` with \`✅ DONE ($(date +%Y-%m-%d))\`, or append \` — ✅ DONE (<that date>)\` when it carries neither; and in \`${sheet}\`, append \` — ✅ DONE (<that date>)\` to its first \`# \` line unless it already carries \`✅ DONE\`. One Edit per file, nothing else moves.`]
+        : []),
+      ...(status === DONE
+        ? [`Then delete the scratch outputs, the cycle states excepted: \`find ${workDir} -mindepth 1 -maxdepth 1 ! -name cycles -exec rm -rf {} +\`. The build/test logs, audit capture, questions and snapshot are summarised by the report; the small \`cycles/*.json\` stay as the TDD evidence a later correction of this batch resumes from. This cleanup is the intended end of every finished batch.`]
         : []),
       'Return the written path.',
       '',
@@ -458,13 +585,13 @@ async function report(status, reason, verdict) {
       '~~~~',
     ].join('\n'),
     { schema: REPORT, phase: 'Report', label: 'report', model: 'haiku', effort: 'low' },
-  )
+  ).catch(() => null)
   return r ? r.path : null
 }
 
 async function finish(status, reason, verdict) {
-  await Promise.all(records)
   if (reviewing) history.review = await reviewing
+  if (predesigning) await predesigning
   const path = await report(status, reason, verdict)
   return {
     status,
@@ -474,147 +601,203 @@ async function finish(status, reason, verdict) {
     hypotheses: verdict ? verdict.hypotheses : [],
     minors: verdict ? verdict.minors : [],
     review: history.review,
+    audit: history.audit,
+    toReview: history.toReview,
     report: path,
   }
 }
 
 phase('Design')
+const indexCommand = target => `cctoolkit sheet-cycles ${target} --index`
 const loading = agent(
   [
     FRAME,
     '',
-    `Resume state of an earlier run of this batch: \`ls ${stateDir}/*.json\`. No file → \`cycles\` empty.`,
-    'Otherwise read each file and return its JSON object as-is, one entry per file, no field changed.',
+    `First, one call: \`if [ -d ${workDir}/questions ]; then mkdir -p ${workDir}/questions-archive && mv ${workDir}/questions ${workDir}/questions-archive/$(date +%Y%m%d-%H%M%S); fi; cctoolkit batch-baseline snapshot ${baseline}\` — questions of an earlier run never answer this one, the snapshot bounds the batch diff (kept when it exists).`,
+    `Then in one message: \`ls ${stateDir}/*.json\`, \`${indexCommand(sheet)}\` and \`grep -E '^### (Batch|Lot) F[0-9]+' ${plan}\`.`,
+    '`cycles`: no state file → empty; otherwise read each file and return its JSON object as-is, one entry per file, no field changed.',
+    '`index` = the JSON line `sheet-cycles` printed, verbatim, whatever its exit code (0 valid, 1 invalid, 2 no block).',
+    `\`nextSheet\` = the first \`### Batch FY\` (or \`### Lot FY\`) heading after the one of ${batch} without \`✅ DONE\` → \`${naming[1]}-FY.md\` when that file exists; empty string otherwise.`,
   ].join('\n'),
-  { schema: SAVED, phase: 'Design', label: 'resume state', model: 'haiku', effort: 'low' },
+  { schema: LOADED, phase: 'Design', label: 'resume state', model: 'haiku', effort: 'low' },
 ).catch(() => null)
-const designing = answered(suffix => agent(
-  [
+
+const readIndex = (target, phaseName) => agent(
+  `${FRAME}\n\nRun \`${indexCommand(target)}\` once. Return the JSON line it printed, verbatim, whatever its exit code.`,
+  { schema: INDEX, phase: phaseName, label: `index ${fileName(target).split('/').pop()}`, model: 'haiku', effort: 'low' },
+).catch(() => null)
+
+function designPrompt(target, targetBatch, ahead) {
+  return [
     FRAME,
     '',
-    'You are the batch design orchestrator, without delegation: you design, other agents write tests and code.',
-    'Read `<kit>/skills/implement-tdd/SKILL.md` §1 and §2 (never §3-4), `<kit>/skills/implement-tdd/references/test-scope.md`, then apply §1 "Analysis" to the batch:',
-    'plan by sections, whole sheet, applied DDD/APP/PERF ids, invariants and what they remove.',
-    `Earlier batches, resume state and sheet paths in one call, first: \`cctoolkit plan-next-batch ${plan} --context ${batch}\` prints the \`## Audit gaps\` of the earlier batches' reports, the \`user decision\`/GAPS lines of the sheets, this batch's report status and saved cycles, and the source and test paths the sheet cites that do not exist. Never reread those reports nor grep those sheets.`,
-    'A choice an earlier audit rejected or a recorded user decision overrides a contrary line of the current sheet (test level, double, exception "carried over"): fix that line by one Edit and record `Hn` citing the source. Never design a choice already rejected.',
-    'An absent cited path is either a file the batch creates (`toCreate`) or a stale anchor: fix the stale one by one Edit, never search for it twice.',
-    'Existing tests asserting a literal or contract the batch changes (message, error code, route, response field): `grep -rln` the current literal under the test roots, paths only; each file found goes into `full` of the cycle that changes it, and its methods into `methods` — the RED rewrites them, the GREEN never may.',
-    '`guard` = true only for a step the sheet marks `TDD: GUARD ⬜` (architecture or convention guard, green at once on the current code): its RED writes and runs it green, no GREEN follows. A test the sheet expects green at once without that mark → `blocked: true`.',
-    'Sheet without `TDD:` lines → add `TDD: RED ⬜ · GREEN ⬜ · COST ⬜` to each step in one Edit. Ambiguity without scope effect → record `Hn` under `## Assumptions` of the sheet.',
-    'Ambiguity that changes scope, RM/CU or a design decision → `blocked: true` and `reason`.',
-    `Resume of a stopped run: the report status and saved cycles of \`--context\` (\`${stateDir}/*.json\`, one per cycle already through RED) say where it stopped.`,
-    'A cycle whose file carries `green` → done, never returned again. A cycle whose file has no `green` → return it with `resume: true` and `behaviour` copied verbatim from the file: its RED is reused, only GREEN runs.',
-    'A `Hn` of this sheet marked `user decision` answers the stop: it overrides the sheet and the earlier contract; copy it into `decisions` of each cycle it touches (empty string otherwise).',
+    `You are the design of batch ${targetBatch}, without delegation: you write the \`## Cycles\` block of its sheet \`${target}\`; other agents write tests and code from that block alone.`,
+    ahead ? `Batch ${batch} is still under audit beside you: never touch the source or test roots nor any file but \`${target}\`, never build nor run tests.` : '',
+    `First call: \`${indexCommand(target)}\`. Exit 0 → the block is already valid: return \`blocked: false\` at once, nothing else.`,
+    'Otherwise read, in one message: `<kit>/skills/implement-tdd/references/design.md`, `test-scope.md` and `parallelism.md` of the same folder, then analyse the batch per `design.md`.',
+    `Earlier batches and sheet paths in one call: \`cctoolkit plan-next-batch ${plan} --context ${targetBatch}\` prints the \`## Audit gaps\` of the earlier batches' reports, the \`${USER}\`/GAPS lines of the sheets, saved cycles, and the source and test paths the sheet cites that do not exist. Never reread those reports nor grep those sheets.`,
+    'A choice an earlier audit rejected or a recorded user decision overrides a contrary line of the sheet (test level, double, exception "carried over"): design per the source, one `review` line citing it. Never design a choice already rejected.',
+    'An absent cited path is either a file the batch creates (`toCreate`) or a stale anchor: fix the stale one in the block, never search for it twice.',
+    `Ambiguity → decide, never stop: the option the spec, the rules, the handler \`CLAUDE.md\` or an earlier decision favour, else the smallest one keeping every RM/CU; one line in \`review\` (question → choice → why). A choice that changes scope or an RM/CU also gets one line under \`## Decisions\`, marked \`${TO_REVIEW}\`. \`blocked: true\` only when no option is defensible (options of comparable weight on behaviour a customer sees, data loss, security, contract of an external system) or the sheet cannot be implemented at all.`,
+    `A \`${USER}\` of the sheet overriding a contract → its text in \`decisions\` of each cycle it touches.`,
+    'Saved cycles listed by `--context`: keep their `behaviour` verbatim in the block, the run reuses them by that key.',
     '',
-    'Return the end-to-end behaviours (§2), ordered Domain → Application → Infrastructure → WebAPI, grouped into waves per',
-    '`<kit>/skills/implement-tdd/references/parallelism.md`: a wave = behaviours whose test files and production code are disjoint.',
-    'Steps already `RED ✅ · GREEN ✅ · COST ✅` or `GUARD ✅` → excluded. Each cycle carries its RED and GREEN contract, paths, classes and methods copied from the sheet',
-    '(`## Ancrages`, `## TDD sequence`), never searched: missing line → one Edit adding it to the sheet.',
-    'Exploration bounded to what the sheet names: open those files by range, never `git show` nor `git log`; a repo-wide search only for a ripple the sheet does not list, `grep -rln` on the member name, paths only.',
-    '`refactor` = true only for a cycle the sheet carries as a refactor under an existing safety net (no test written): `methods` = the net methods, run unchanged at RED and kept green at GREEN.',
-    '`steps` = exact titles of the sheet steps carried by the cycle. `full` / `bounded` = RED contract paths, `boundedGreen` = GREEN contract `Read bounded` paths.',
-    '`nextSheet` = path of the sheet of the next ⬜ batch of the global plan after this one, empty string if none.',
-    'Declarative artefact (`<kit>/skills/implement-tdd/references/common-rules.md` §4 point 5, that paragraph only) a RED of any wave needs → write it yourself now: declaration and mapping only, no branch, validation or business decision, mirror the named existing file;',
-    'what the expected observation assigns to the orchestrator (enum member, discriminator property) is part of it, nothing else (no test, no signature stub). List it in the cycle `toCreate`, suffixed `— declarative, already written by the orchestrator`, and name the associated enum member or discriminator in `observation`.',
-    'At least one written → the solution build of `<kit>/skills/implement-tdd/references/test-scope.md` must compile, else `blocked: true`. `declaratives` = paths created or modified, repo-relative, no annotation; empty array when none.',
-  ].join('\n') + suffix,
-  { schema: DESIGN, phase: 'Design', label: 'design' },
-), d => !d || d.blocked)
-const [design, loaded] = await Promise.all([designing, loading])
-if (!loaded) return await finish(BLOCKED, 'resume state agent without result')
-saved = loaded
-const planned = design ? design.waves.flat().map(c => c.behaviour) : []
-for (const s of saved.cycles.filter(x => x.green && !planned.includes(x.behaviour))) {
-  history.cycles.push({ behaviour: s.behaviour, rmcu: s.rmcu, red: s.red, green: s.green, resumed: true })
+    'Write the block per `design.md` § "The `## Cycles` block": one `## Cycles` section before `## Assumptions`, one ```json fence. It replaces `## TDD sequence` and `## Ancrages`: delete those sections once their content is in the block, and the `TDD:` lines with them.',
+    'Declarative artefacts are never written by you: list them in `declaratives`, the run writes them before the first RED.',
+    `Last: \`${indexCommand(target)}\` until exit 0, fixing what it lists; still exit 1 after three rounds → \`blocked: true\`, \`reason\` = its errors.`,
+    '`review` = one line per choice made in place of the user (empty when none).',
+  ].filter(l => l !== '').join('\n')
 }
-if (!design) return await finish(BLOCKED, 'design agent without result')
-if (design.blocked) return await finish(BLOCKED, design.reason)
-log(`${design.waves.length} wave(s), ${design.waves.flat().length} behaviour(s)`)
 
-let pendingReds = design.waves.length ? launchWave(design.waves[0], 0) : null
-for (let n = 0; n < design.waves.length; n++) {
+const designAgent = (target, targetBatch, ahead, suffix = '') => agent(
+  designPrompt(target, targetBatch, ahead) + suffix,
+  { schema: DESIGN, phase: ahead ? 'Review' : 'Design', label: ahead ? `pre-design ${targetBatch}` : 'design' },
+)
+
+async function designed(suffix) {
+  const d = await designAgent(sheet, batch, false, suffix)
+  if (!d || d.blocked) return { design: d, index: null }
+  return { design: d, index: await readIndex(sheet, 'Design') }
+}
+
+const designRejected = x => (!x || !x.design ? 'design agent without result'
+  : x.design.blocked ? `BLOCKED — ${x.design.reason}`
+  : !x.index ? 'index agent without result'
+  : !x.index.ok ? `\`## Cycles\` still invalid — ${x.index.errors.join(' ; ')}: fix the block, then rerun \`${indexCommand(sheet)}\` until exit 0`
+  : null)
+
+const loaded = await loading
+saved = loaded || { cycles: [] }
+if (!loaded) log('resume state agent without result — no cycle reused')
+lotIndex = loaded ? loaded.index : null
+const nextSheet = loaded ? loaded.nextSheet.trim() : ''
+if (!lotIndex || !lotIndex.ok) {
+  log(!lotIndex ? 'cycle index unread — design writes the block' : lotIndex.missing ? 'no `## Cycles` block — design writes it' : `\`## Cycles\` invalid — design fixes it: ${short(lotIndex.errors.join(' ; '), 80)}`)
+  const { result, reason } = await withRetry('Design', designed, designRejected)
+  if (reason) return await finish(BLOCKED, `design — ${reason}`)
+  for (const line of result.design.review || []) toReview('Design', line)
+  lotIndex = result.index
+}
+
+const finishedAtStart = (c, s) => !!(s && s.red && (s.red.status === 'ALREADY_GREEN' || c.guard || !s.red.table.length ||
+  (s.green && s.green.status === 'GREEN' && s.green.exit === 0)))
+const pending = []
+for (const c of lotIndex.cycles) {
+  const s = savedOf(c)
+  if (finishedAtStart(c, s)) {
+    history.cycles.push({ behaviour: c.behaviour, rmcu: c.rmcu, red: s.red, green: s.green || noGreen('resumed without GREEN'), resumed: true })
+    continue
+  }
+  pending.push(s && s.red ? { ...c, resume: true } : c)
+}
+const waves = [...new Set(pending.map(c => c.wave))].sort((a, b) => a - b).map(w => pending.filter(c => c.wave === w))
+log(`${waves.length} wave(s), ${pending.length} behaviour(s)${history.cycles.length ? `, ${history.cycles.length} already done` : ''}`)
+
+if (lotIndex.declaratives.length) {
+  const { reason } = await withRetry(
+    'Declaratives',
+    suffix => agent(
+      [
+        FRAME,
+        '',
+        'Write the declarative artefacts below before any RED, per `<kit>/skills/implement-tdd/references/common-rules.md` §4 point 5, that paragraph only: each mirrors the existing file it names; one already on disk with that content stays as is. No test, no signature stub, no logic.',
+        ...lotIndex.declaratives.map(d => `- ${d}`),
+        'Then the solution build of `<kit>/skills/implement-tdd/references/test-scope.md` once: exit 0 → `ok: true`; otherwise fix what you wrote, at most twice, then `ok: false`, `detail` = the first error line.',
+      ].join('\n') + suffix,
+      { schema: OK, phase: 'Design', label: 'declaratives', model: 'sonnet', effort: 'low' },
+    ),
+    x => (!x ? 'declaratives agent without result' : !x.ok ? `declaratives — ${x.detail || ''}` : null),
+  )
+  if (reason) return await finish(BLOCKED, `declaratives — ${reason}`)
+}
+
+let pendingReds = waves.length ? launchWave(waves[0], 0) : null
+for (let n = 0; n < waves.length; n++) {
   const reds = await pendingReds
   pendingReds = null
-  const iRejected = reds.findIndex(x => !x || x.reason)
+  const deferrable = x => x && x.deferred && (x.cycle.guard || x.cycle.refactor)
+  for (const x of reds.filter(deferrable)) log(`${x.cycle.behaviour}: left out, settled after the plan`)
+  const iRejected = reds.findIndex(x => !x || (x.reason && !deferrable(x)))
   if (iRejected >= 0) {
     const rejected = reds[iRejected]
-    return await finish(BLOCKED, rejected ? `RED ${rejected.cycle.behaviour} — ${rejected.reason}` : `RED ${design.waves[n][iRejected].behaviour} — agent without result`)
+    return await finish(BLOCKED, rejected ? `RED ${rejected.cycle.behaviour} — ${rejected.reason}` : `RED ${waves[n][iRejected].behaviour} — agent without result`)
   }
 
+  if (n + 1 < waves.length) pendingReds = launchWave(waves[n + 1], n + 1)
   for (let i = 0; i < reds.length; i++) {
+    if (deferrable(reds[i])) continue
     const { cycle, result: red } = reds[i]
-    if (i === 0 && n + 1 < design.waves.length) pendingReds = launchWave(design.waves[n + 1], n + 1)
     const trace = { behaviour: cycle.behaviour, rmcu: cycle.rmcu, red, green: null, ...(cycle.resume ? { resumed: true } : {}) }
     history.cycles.push(trace)
+    for (const u of red.unreachable || []) toReview(`RED ${cycle.behaviour}`, `unreachable guard, test not written, removal proposed: \`${u.method}\` — ${u.site}`, u.why)
     if (!red.table.length) {
-      log(`${cycle.behaviour}: tests removed, already covered — no GREEN`)
-      trace.green = { ...noGreen(''), removed: 'tests already covered' }
-      record(cycle, red, trace.green)
+      log(`${cycle.behaviour}: no test written (already covered or unreachable) — no GREEN`)
+      trace.green = { ...noGreen(''), removed: (red.unreachable || []).length ? 'unreachable sites' : 'tests already covered' }
+      continue
+    }
+    if (red.status === 'ALREADY_GREEN') {
+      log(`${cycle.behaviour}: already in place on disk — GREEN observed, no GREEN`)
+      trace.green = noGreen('GREEN observed: behaviour already in place on disk at RED')
+      toReview(`RED ${cycle.behaviour}`, 'behaviour already in place on disk at RED: GREEN observed without a RED observed in this run', red.table.map(l => l.test).join(', '))
       continue
     }
     if (cycle.guard) {
       log(`${cycle.behaviour}: guard green at once — no GREEN`)
       trace.green = noGreen('guard green at once, no GREEN')
-      record(cycle, red, trace.green)
       continue
     }
     const { result: green, reason } = await withRetry(
-      suffix => agent(greenContract(cycle, red) + suffix, { agentType: 'cctoolkit:tdd-implementer', schema: GREEN, phase: 'GREEN', label: `GREEN ${short(cycle.behaviour)}` }),
+      `GREEN ${short(cycle.behaviour, 60)}`,
+      (suffix, options) => agent(greenContract(cycle, red) + suffix, { agentType: 'cctoolkit:tdd-implementer', schema: GREEN, phase: 'GREEN', label: greenLabel(cycle, options.model), ...options }),
       checkGreen,
+      cycle.decisions || '',
     )
     trace.green = green
     if (reason) {
       if (pendingReds) await pendingReds
       return await finish(BLOCKED, `GREEN ${cycle.behaviour} — ${reason}`)
     }
-    record(cycle, red, green)
   }
 }
-await Promise.all(records)
 
 phase('Global green')
 const runSuites = (suffix = '') => agent(
   [
     FRAME,
     '',
-    'Global green loop of the batch: `<kit>/skills/implement-tdd/SKILL.md` §3 and `<kit>/skills/implement-tdd/references/test-scope.md` §2-4.',
-    `Pick the suites the diff requires (\`git status --short\`), run them once, output to a file in \`${runDir}\`, independent suites in a single message.`,
+    'Global green loop of the batch: suites and scope per `<kit>/skills/implement-tdd/references/test-scope.md` (Runner, §2-4).',
+    `Pick the suites the diff requires (\`git status --short\`), run them once, output to a file in \`${workDir}\`, independent suites in a single message.`,
     'Red → fix production code until fully green; never weaken nor remove a test to pass.',
     'Return each suite with its exit, its scope (filter or "whole suite") and its test count.',
   ].join('\n') + suffix,
   { schema: SUITES, phase: 'Global green', label: 'suites' },
 ).catch(() => null)
 
-const runClosing = (suffix = '') => agent(
+const runGate = (suffix = '') => agent(
   [
     FRAME,
     '',
-    'Another agent runs the global green suites at the same time: never build nor run tests, never touch `src/` production code.',
-    'Read `<kit>/skills/implement-tdd/references/closing.md` and apply §1 (plan and sheet update) and §2 (handler CLAUDE.md), nothing else.',
-    'The cost line of each "Flux" section is copied from the GREEN `Cost` line below, never re-derived from the code.',
-    `Then run \`cctoolkit pre-audit ${batch} ${sheet}\`. RED → fix what it lists (closing.md §3) without touching production code, rerun; three rounds at most.`,
-    '`ok` = closing §1-2 applied, `files` = files written, `preauditGreen` = last pre-audit exit 0, `failures` = its remaining failures.',
-    '',
-    '```json',
-    JSON.stringify(history.cycles.map(c => ({ behaviour: c.behaviour, rmcu: c.rmcu, tests: c.red.table, production: c.green && c.green.production, cost: c.green && `${c.green.cost} — independent of ${c.green.independentOf}` })), null, 1),
-    '```',
+    'Another agent runs the global green suites at the same time: never build nor run tests, never touch production code under the source roots.',
+    `Run \`cctoolkit pre-audit ${batch} ${sheet}\`. RED → fix what it lists per \`<kit>/skills/implement-tdd/references/closing.md\` §3 (handler \`CLAUDE.md\` row or trait, sheet line), then rerun; three rounds at most.`,
+    'A sheet line is never added to cover a rule of the repo tests rule (`.claude/rules/tests.md`: a test calling an aggregate directly, a hand-written registry count): such a test goes into `failures`.',
+    '`ok` = pre-audit run, `files` = files written, `preauditGreen` = last pre-audit exit 0, `failures` = its remaining failures.',
   ].join('\n') + suffix,
-  { schema: CLOSING, phase: 'Closing', label: 'closing + pre-audit', model: 'sonnet' },
+  { schema: CLOSING, phase: 'Closing', label: 'pre-audit', model: 'sonnet', effort: 'low' },
 ).catch(() => null)
 
-const [suites, closing] = await Promise.all([
-  answered(runSuites, x => !x || !x.green),
-  answered(runClosing, x => !x || !x.ok || !x.preauditGreen),
+const [{ result: suites }, { result: gated }] = await Promise.all([
+  withRetry('Global green', runSuites, x => (!x ? 'suites agent without result' : !x.green ? `global green not reached — ${x.diagnostic || ''}` : null)),
+  withRetry('Closing', runGate, x => (!x ? 'pre-audit agent without result' : !x.ok ? `pre-audit not run — ${x.diagnostic || ''}` : !x.preauditGreen ? `pre-audit RED — ${x.failures.join(' ; ')}` : null)),
 ])
 history.suites = suites
-history.closing = closing
+history.gate = gated
 if (!suites || !suites.green) return await finish(BLOCKED, `global green not reached — ${suites ? suites.diagnostic || '' : 'agent without result'}`)
-if (!closing || !closing.ok) return await finish(BLOCKED, `documentation closing — ${closing ? closing.diagnostic || '' : 'agent without result'}`)
-if (!closing.preauditGreen) return await finish(BLOCKED, `pre-audit RED — ${closing.failures.join(' ; ')}`)
+if (!gated || !gated.ok) toReview('Closing', `pre-audit not run, the audit judges it: ${gated ? gated.diagnostic || '' : 'agent without result'}`)
+else if (!gated.preauditGreen) toReview('Closing', `pre-audit RED, the audit judges it: ${gated.failures.join(' ; ')}`)
 
-const capture = `${runDir}/audit-${batch}.txt`
+const capture = `${workDir}/audit-${batch}.txt`
 
-function audit(retry) {
+function audit(retry, again = false) {
   const previous = retry
     ? [
         '',
@@ -628,7 +811,7 @@ function audit(retry) {
     ? '\nThe fix changed code after the global green and ran only filtered tests: run once, in a single message, the suites `<kit>/skills/implement-tdd/references/test-scope.md` requires for the whole batch diff.'
     : [
         '',
-        'Suites the global green ran after the last production change, closing touched no code since: read these exit codes, never rerun them (verify-ddd-tdd §3); run only a suite missing here or scoped too narrowly for the diff.',
+        'Suites the global green ran after the last production change, the pre-audit gate touched no production code since: read these exit codes, never rerun them (verify-ddd-tdd §3); run only a suite missing here or scoped too narrowly for the diff.',
         history.suites.suites.map(x => `- ${x.name} — exit ${x.exit}, scope ${x.scope}, ${x.count} tests`).join('\n'),
       ].join('\n')
   return agent(
@@ -636,49 +819,66 @@ function audit(retry) {
       FRAME,
       '',
       `Read \`<kit>/skills/verify-ddd-tdd/SKILL.md\` and follow it as if the skill were invoked with the argument \`batch ${batch}${retry ? ' resume' : ''}\`, fast mode.`,
-      retry
+      retry || again
         ? `Capture: \`${capture}\` (to read). Section ${batch} of the sheet: \`${sheet}\`.`
-        : `First run \`cctoolkit audit-capture ${batch} ${sheet} ${capture}\`, then read the capture. Section ${batch} of the sheet: \`${sheet}\`.`,
+        : `First run \`cctoolkit audit-capture ${batch} ${sheet} ${capture} --base ${baseline}\`, then read the capture. Section ${batch} of the sheet: \`${sheet}\`.`,
+      again ? 'A previous attempt ended without structured output, most likely out of turns: the capture is written, never rerun it nor a suite it already holds; judge from it, then return the verdict at once.' : '',
       alreadyRun,
+      history.toReview.length ? `Decisions the run took without the user, each listed for the user review after the plan — never a \`Plan\` gap for being absent from the sheet: ${history.toReview.map(x => `${x.step}: ${x.text}`).join(' ; ')}` : '',
       previous,
       '',
       'Structured output: `block` = the markdown verdict block verbatim (fixed format of the skill), `gaps` = its Blocking/Major rows,',
       '`minors` = its minors one line each, `validations` = its Validations lines, `hypotheses` = the Hn.',
     ].join('\n'),
-    { agentType: 'cctoolkit:ddd-tdd-auditor', schema: VERDICT, phase: 'Audit', label: retry ? `audit retry ${retry.round}` : 'audit' },
-  )
+    { agentType: 'cctoolkit:ddd-tdd-auditor', schema: VERDICT, phase: 'Audit', label: `${retry ? `audit retry ${retry.round}` : 'audit'}${again ? ' again' : ''}` },
+  ).catch(() => null)
+}
+
+async function audited(retry) {
+  const verdict = await audit(retry)
+  if (verdict) return verdict
+  log('audit without result — one more attempt on the same capture')
+  return audit(retry, true)
+}
+
+function auditPending() {
+  history.audit = AUDIT_PENDING
+  toReview('Audit', `audit of batch ${batch} without result after two attempts: ${AUDIT_PENDING} (\`/verify-ddd-tdd batch ${batch}\`)`)
 }
 
 function reviewNext(label) {
   return agent(
-    `mode: next-batch ${design.nextSheet} ${sheet}\n\nReturn your questions through the structured output: \`result\` CLEAR or GAPS, each question with its severity, its evidence, \`decidedBy\` (the \`Settled by\` column, empty when none), \`answer\` (the answer the source dictates; without source, your recommendation and why) and \`options\` (without source: 2 to 4 short mutually exclusive answers, recommended first; empty otherwise).`,
+    `mode: next-batch ${nextSheet} ${sheet}\n\nReturn your questions through the structured output: \`result\` CLEAR or GAPS, each question with its severity, its evidence, \`decidedBy\` (the \`Settled by\` column, empty when none), \`answer\` (the answer the source dictates; without source, your recommendation and why), \`options\` (without source: 2 to 4 short mutually exclusive answers, recommended first; empty otherwise) and \`humanOnly\` (your \`Human only\` rule; the run applies every other answer and the user reviews it afterwards).`,
     { agentType: 'cctoolkit:adversarial-reviewer', schema: REVIEW, phase: 'Review', label },
   ).catch(() => null)
 }
 
-function amendNext(questions) {
+function amendNext(questions, gaps) {
   return agent(
     [
       FRAME,
       '',
-      `Update the next batch sheet \`${design.nextSheet}\` per the questions below, one Edit per spot. The review ran beside the audit: check each name, path and signature against the current code, audit fixes included.`,
+      `Update the next batch sheet \`${nextSheet}\` per the questions and audit gaps below, one Edit per spot, its \`## Cycles\` block included. The review and the pre-design ran beside the audit: check each name, path and signature against the current code, audit fixes included.`,
       '- Major: mechanical staleness (name, path, signature changed by batch ' + batch + '), apply the delivered value.',
-      '- Blocking: settled by the cited source; rewrite the design of the sheet per that source and `answer`, then add `Hn` under `## Assumptions` of the sheet: the question, the answer, the source, `to be validated by the user`.',
+      `- Blocking: settled by the cited source; rewrite the design of the sheet per that source and \`answer\`. A change of scope or of an RM/CU gets one line under \`## Decisions\`: the answer and its source, marked \`${USER}\` when the source is \`${USER}\`, \`${TO_REVIEW}\` otherwise. No \`Hn\`: the run lists every other answer for the user review.`,
+      `- Audit gap of batch ${batch}: apply it to the next sheet only where that sheet repeats the rejected choice.`,
+      `Last: \`${indexCommand(nextSheet)}\` until exit 0, fixing what it lists in the block; exit 2 (no block) → nothing to fix there.`,
       '',
       questions.map(q => `- ${q.severity} — ${q.question} — ${q.evidence} — source: ${q.decidedBy || '—'} — answer: ${q.answer}`).join('\n'),
+      ...gaps.map(g => `- Audit gap ${g.severity} — ${g.axis} — ${g.gap} — fix: ${g.fix}`),
     ].join('\n'),
     { schema: OK, phase: 'Review', label: 'next sheet', effort: questions.some(q => q.severity === 'Blocking') ? 'medium' : 'low' },
-  )
+  ).catch(() => null)
 }
 
-if (design.nextSheet) reviewing = reviewNext('next batch review')
+const nextBatch = (/-(F\d+)\.md$/.exec(nextSheet) || [])[1] || ''
+if (nextSheet) {
+  reviewing = reviewNext('next batch review')
+  predesigning = designAgent(nextSheet, nextBatch, true).catch(() => null)
+}
 
-phase('Audit')
-let verdict = await audit(null)
-if (!verdict) return await finish(BLOCKED, 'auditor without result')
-history.verdicts.push(verdict)
-for (let round = 1; verdict.verdict === 'GAPS' && round <= 2; round++) {
-  const fix = await agent(
+function fixGaps(verdict, round) {
+  return agent(
     [
       FRAME,
       '',
@@ -686,59 +886,78 @@ for (let round = 1; verdict.verdict === 'GAPS' && round <= 2; round++) {
       'A fix that adds a rule or a branch goes through a red test first.',
       `The batch diff is already gathered in \`${capture}\`: read the hunks a gap cites there, open only the files its \`Evidence\` names, never \`git diff\` the batch again.`,
       'Run only the filtered tests of the classes you touch (filtered command of `<kit>/skills/implement-tdd/references/test-scope.md`), never a whole suite: the audit that follows reruns the suites. Return them with exit and scope.',
-      'Minors: do not touch.',
       '',
       verdict.block,
     ].join('\n'),
     { schema: FIX, phase: 'Audit', label: `fix ${round}`, model: 'sonnet' },
-  )
-  if (!fix) return await finish(BLOCKED, `fix ${round} without result`, verdict)
-  history.fixes.push(fix)
-  const next = await audit({ verdict, fix, round })
-  if (!next) return await finish(BLOCKED, `retry audit ${round} without result`, verdict)
-  verdict = next
-  history.verdicts.push(verdict)
+  ).catch(() => null)
 }
-if (verdict.verdict === 'GAPS') return await finish(GAPS, 'two fix rounds still with gaps', verdict)
+
+const wrongProduction = v => v.gaps.some(g => g.severity === 'Blocking' && /correct/i.test(g.axis))
+
+phase('Audit')
+let verdict = await audited(null)
+if (!verdict) auditPending()
+else {
+  history.verdicts.push(verdict)
+  for (let round = 1; round <= 2 && verdict.verdict === GAPS && (round === 1 || wrongProduction(verdict)); round++) {
+    const fix = await fixGaps(verdict, round)
+    if (!fix) break
+    history.fixes.push(fix)
+    const next = await audited({ verdict, fix, round })
+    if (!next) {
+      auditPending()
+      break
+    }
+    verdict = next
+    history.verdicts.push(verdict)
+  }
+  if (verdict.verdict === GAPS) {
+    if (wrongProduction(verdict)) {
+      return await finish(GAPS, 'Blocking on the Correctness axis after the fixes: production is wrong', verdict)
+    }
+    history.audit = history.audit || GAPS_CARRIED
+    for (const g of verdict.gaps.filter(g => g.severity !== 'Minor')) toReview('Audit', `${g.severity} — ${g.axis} — ${g.gap}`, `${g.evidence} ; proposed fix: ${g.fix}`)
+  }
+}
 
 if (reviewing) {
   phase('Review')
   const review = await reviewing
   reviewing = null
   history.review = review
-  let open = []
-  if (review) {
-    const settled = q => q.severity === 'Major' || q.decidedBy.trim() !== ''
-    const fixable = review.questions.filter(settled)
-    open = review.questions.filter(q => !settled(q))
-    if (fixable.length) await amendNext(fixable)
-    if (fixable.some(q => q.severity === 'Blocking')) {
-      const again = await reviewNext('next batch re-review')
-      if (again) {
-        history.review = { first: review, again }
-        const majors = again.questions.filter(q => q.severity === 'Major')
-        if (majors.length) await amendNext(majors)
-        open = [...open, ...again.questions.filter(q => q.severity === 'Blocking')]
-      }
-    }
-  }
-  if (open.length) {
-    const nextBatch = (/-(F\d+)\.md$/.exec(design.nextSheet) || [])[1] || ''
-    const waiting = `${runDir.slice(0, runDir.lastIndexOf('/'))}/${nextBatch}/${nextBatch}-report.md`
-    await agent(
-      [
-        FRAME,
-        '',
-        `\`mkdir -p\` its folder, then write \`${waiting}\` in a single Write: first line \`## STATUS — ${WAITING}\`, then \`Reason: ${open.length} blocking question(s) raised by the review after batch ${batch}, user answer awaited\`, then one \`## \` section per question below: the question, \`Evidence:\`, \`Options:\` (recommended first), \`Recommendation:\` (its answer).`,
-        '',
-        '```json',
-        JSON.stringify(open, null, 1),
-        '```',
-      ].join('\n'),
-      { schema: OK, phase: 'Review', label: `waiting ${nextBatch}`, model: 'haiku', effort: 'low' },
+  const questions = review ? review.questions : []
+  const unsourced = q => q.severity === 'Blocking' && !q.decidedBy.trim()
+  const human = questions.filter(q => unsourced(q) && q.humanOnly)
+  const applied = questions.filter(q => !human.includes(q)).map(q => (unsourced(q) ? { ...q, decidedBy: REVIEWER } : q))
+  for (const q of applied.filter(q => q.decidedBy === REVIEWER)) toReview(`Review ${nextSheet}`, `${q.question} → ${q.answer}`, q.evidence)
+  let answeredByUser = []
+  if (human.length) {
+    phase('Question')
+    const answers = await ask(
+      'review',
+      `next batch sheet ${nextSheet}, reviewed after batch ${batch}`,
+      human.map(q => ({ severity: q.severity, question: q.question, evidence: q.evidence, options: q.options, recommendation: q.answer })),
     )
+    answeredByUser = human.map((q, i) => {
+      const a = (answers || []).find(x => x.id === `q${i + 1}`)
+      return { ...q, decidedBy: a && a.recommended ? UNANSWERED : USER, answer: a ? a.text.trim() : '' }
+    })
+  }
+  const unanswered = answeredByUser.filter(q => !q.answer || q.answer.toUpperCase() === 'STOP')
+  const settled = [...applied, ...answeredByUser.filter(q => !unanswered.includes(q))]
+  if (predesigning) {
+    const pre = await predesigning
+    predesigning = null
+    if (!pre) log(`pre-design ${nextBatch} without result — that batch designs at its start`)
+    else if (pre.blocked) toReview(`Pre-design ${nextBatch}`, `\`## Cycles\` block not written: ${pre.reason}`)
+    else for (const line of pre.review || []) toReview(`Pre-design ${nextBatch}`, line)
+  }
+  const carried = history.verdicts.flatMap(v => v.gaps).filter(g => g.severity !== 'Minor')
+  if (settled.length || carried.length) await amendNext(settled, carried)
+  if (unanswered.length) {
     const result = await finish(DONE, '—', verdict)
-    return { ...result, nextBatch, openQuestions: open, waiting }
+    return { ...result, unanswered: `${nextSheet} — ${unanswered.length} Blocking question(s) without answer` }
   }
 }
 

@@ -10,9 +10,8 @@ unset: the glob then finds the one `src/*.Application` a repo usually has.
 Files: `<repo>/.claude/kit.config.json`, and `<repo>/.claude/presets/<name>/preset.json`
 before `<kit>/presets/<name>/preset.json` — a repo's own preset wins over a shipped one
 of the same name. `<kit>` is the parent of this `lib/`: the plugin's cache directory
-once installed, the toolkit root here. `<repo>` is `project_root()`: the parent of
-`<kit>` when the kit sits in a repo's `.claude/` (eval fixtures, a manual copy), else
-`$CLAUDE_PROJECT_DIR`, else the git top level of the working directory, else the
+once installed, the toolkit root here. `<repo>` is `project_root()`: `$CLAUDE_PROJECT_DIR`, else the parent of
+`<kit>` when the kit sits in a repo's `.claude/` (eval fixtures, a manual copy), else the git top level of the working directory, else the
 working directory. Missing config file = the preset's defaults. Every path pattern is a segment glob
 relative to the repo root (`tests/*.UnitTests`: `*` stays inside one segment),
 except `layout.aggregate`, matched like a shell `case` against the full path.
@@ -20,11 +19,12 @@ except `layout.aggregate`, matched like a shell `case` against the full path.
 Callers never handle a broken setup themselves: `load()` raises `KitConfigError`,
 a hook catches it and exits 0, a script prints it and stops.
 
-CLI (hooks and shell scripts):
+CLI (hooks, shell scripts, and the skills through `cctoolkit root`):
     kit_config.py root                     # the repo root, resolved as above
     kit_config.py validate                 # one `LEVEL name detail` line per finding (tools/doctor)
     kit_config.py shell <root>             # shell assignments for scripts/pre-audit.sh, audit-capture.sh
     kit_config.py match aggregate <path>   # exit 0 when <path> is an aggregate or value object
+    kit_config.py command <name> [<suite>] # commands.<name>, {product} and {suite} expanded; empty = unset
     kit_config.py diff-comments <root>     # added comment lines under the source roots (diff on stdin)
     kit_config.py diff-interaction <root>  # added lines of the interaction suites (diff on stdin)
     kit_config.py diff-tags <root>         # tag values on added lines (diff on stdin)
@@ -71,11 +71,11 @@ def merge(base, over):
 
 def project_root():
     """The repo the kit serves — same order as lib/project-root.sh."""
-    if os.path.basename(KIT) == ".claude":
-        return os.path.dirname(KIT)
     env = os.environ.get("CLAUDE_PROJECT_DIR")
     if env:
         return os.path.abspath(env)
+    if os.path.basename(KIT) == ".claude":
+        return os.path.dirname(KIT)
     try:
         top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
     except OSError:
@@ -244,11 +244,12 @@ class Config:
             return seg.replace(self.product + ".", "")
         return seg.rsplit(".", 1)[-1]
 
-    def command(self, name):
+    def command(self, name, suite=None):
         c = self.commands.get(name, "")
         if isinstance(c, dict):
             c = c.get("run", "")
-        return self.expand(c or "")
+        c = self.expand(c or "")
+        return c.replace("{suite}", suite) if suite else c
 
 
 def load(root=None):
@@ -320,6 +321,10 @@ def validate(root):
             re.compile(at["when"])
         except re.error as e:
             out.append(("FAIL", "commands.architectureTest.when", f"invalid regex: {e}"))
+    ig = c.layout.get("integrationGuard")
+    if ig is not None and not (isinstance(ig, dict) and all(
+            isinstance(ig.get(k), list) and ig[k] and all(isinstance(p, str) for p in ig[k]) for k in ("sources", "tests"))):
+        out.append(("FAIL", "layout.integrationGuard", "expects {\"sources\": [\"<glob>\"], \"tests\": [\"<glob>\"]}"))
     # The layout against the repo: a root that matches nothing makes the traceability silent.
     uc = c.dirs(c.use_case_roots)
     if not uc:
@@ -377,6 +382,11 @@ def _cli(argv):
             path = argv[3]
             pats = c.aggregate if argv[2] == "aggregate" else []
             return 0 if any(fnmatch.fnmatchcase(path, p) for p in pats) else 1
+        if cmd == "command":
+            run = load().command(argv[2], argv[3] if len(argv) > 3 else None)
+            if run:
+                print(run)
+            return 0
         c = load(argv[2])
     except KitConfigError as e:
         print(f"kit.config.json: {e}", file=sys.stderr)
@@ -401,7 +411,7 @@ def _cli(argv):
         for k, v in vals.items():
             print(f"{k}={shlex.quote(v)}")
         return 0
-    diff = sys.stdin.read()
+    diff = sys.stdin.buffer.read().decode("utf-8", errors="replace")
     if cmd == "diff-comments":
         for f, n, text in added_lines(diff):
             mark = c.comment_of(f)

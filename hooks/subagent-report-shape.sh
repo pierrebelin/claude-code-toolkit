@@ -12,8 +12,13 @@
 #
 # Channel: `decision: block` + `reason`, documented for Stop and SubagentStop. `stop_hook_active`
 # closes the loop — a second pass never blocks again, whatever the report still lacks.
-# A message carrying neither `## RED` nor `## GREEN` (`## BLOCKED`, Explore, auditor) passes
-# untouched: the hook recognises the two contracts it knows, never polices the others.
+# A message carrying neither `## RED` nor `## GREEN` (`## BLOCKED`, or `## BLOQUÉ` of an
+# agent written before the switch, Explore, auditor) passes untouched: the hook recognises
+# the two contracts it knows, never polices the others.
+#
+# Each bullet label is read in English and in French (`Command` / `Commande`): an agent
+# started before the switch answers in French labels and must not be sent back for them.
+# The reason is always written in English, with the English labels.
 
 # The heredoc is python's own stdin, so the payload travels through the environment.
 INPUT=$(cat)
@@ -39,13 +44,17 @@ if not heading:
     sys.exit(0)
 kind = heading.group(1)
 
-# Bullet labels of `agents/tdd-test-author.md` and `agents/tdd-implementer.md`,
-# Compared on the fold so casing and accents never decide whether a report is complete.
+# Bullet labels of `agents/tdd-test-author.md` and `agents/tdd-implementer.md`, as
+# (English, French). Compared on the fold so casing and accents never decide whether a
+# report is complete.
 REQUIRED = {
-    "RED": ["Tests", "Command", "Production diff", "Expected failure"],
-    "GREEN": ["Production", "Command", "Tests diff", "Cost",
-              "Deleted at REFACTOR", "Reported without fixing"],
+    "RED": [("Tests", "Tests"), ("Command", "Commande"), ("Production diff", "Diff production"),
+            ("Expected failure", "Échec attendu")],
+    "GREEN": [("Production", "Production"), ("Command", "Commande"), ("Tests diff", "Diff tests"),
+              ("Cost", "Coût"), ("Deleted at REFACTOR", "Supprimé au REFACTOR"),
+              ("Reported without fixing", "Signalé sans correction")],
 }
+CASE_COVERED = ("Case covered", "Cas couvert")
 
 
 def fold(s):
@@ -57,14 +66,14 @@ def fold(s):
 body = msg[heading.end():]
 labels = {fold(m.group(1).strip()) for m in re.finditer(r"^\s*[-*]\s*([^:\n]+?)\s*:", body, re.M)}
 
-missing = [lb for lb in REQUIRED[kind] if fold(lb) not in labels]
+missing = [names[0] for names in REQUIRED[kind] if not any(fold(n) in labels for n in names)]
 
 issues = []
 if missing:
     issues.append("missing lines: " + ", ".join(f"`- {lb}:`" for lb in missing))
 
-# `exit N` sits on the `Command` line: without it the orchestrator cannot tick RED or GREEN
-# on observed evidence, and asks for it every time.
+# `exit N` sits on the `Command` line (`Commande`): without it the orchestrator cannot tick
+# RED or GREEN on observed evidence, and asks for it every time. "commande" holds "command".
 cmd_line = next((l for l in body.splitlines()
                  if re.match(r"^\s*[-*]\s*", l) and fold("Command") in fold(l)), "")
 if cmd_line and not re.search(r"exit\s+\d+", cmd_line, re.I):
@@ -73,7 +82,7 @@ if cmd_line and not re.search(r"exit\s+\d+", cmd_line, re.I):
 if kind == "RED":
     rows = [l for l in body.splitlines() if l.strip().startswith("|")]
     data = [l for l in rows if not re.match(r"^\s*\|[\s|:-]+\|\s*$", l)]
-    header = any(fold("Case covered") in fold(l) for l in rows)
+    header = any(fold(n) in fold(l) for l in rows for n in CASE_COVERED)
     if not header or len(data) < 2:
         issues.append("`| Test | Case covered |` table missing or holding no test row — "
                       "one row per method written, `ClassTests.Method`")

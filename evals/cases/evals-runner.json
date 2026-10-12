@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {
+      "name": "a repo's own case file runs from that repo's root, not the kit's",
+      "cmd": "R=$(mktemp -d /tmp/claude-evalrepo-XXXXXX)/er-{{SID}}\nrm -rf $R\nmkdir -p $R/.claude/evals/cases\nprintf '{\"cases\":[{\"name\":\"cwd\",\"cmd\":\"pwd\",\"expect\":{\"stdout\":\"er-{{SID}}\"}}]}' > $R/.claude/evals/cases/c.json\nbash {{KIT}}/evals/run.sh $R/.claude/evals/cases/c.json | grep passed\nrm -rf $(dirname $R)",
+      "expect": {"exit": 0, "stdout": "1 passed, 0 failed"}
+    }
+  ]
+}

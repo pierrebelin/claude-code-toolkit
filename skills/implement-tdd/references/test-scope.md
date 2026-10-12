@@ -1,26 +1,32 @@
 # Test scope — which level to write, which scope to run
 
-Single source for `/implement-tdd` and `/verify-ddd-tdd`.
+Single source for the `run-lot` agents and `/verify-ddd-tdd`.
 
 ## Runner
 
-Microsoft.Testing.Platform (xUnit v3). `--project <csproj>` mandatory, always `--no-build --no-restore`.
-Filters `--filter-class` / `--filter-method`, `*` wildcards, **repeatable** — values unioned.
-VSTest syntax `--filter "FullyQualifiedName~..."` doesn't exist here.
+The build and test commands are the repo's, never written here: `commands.build` and `commands.test` of `.claude/kit.config.json` (the preset's when the repo sets none). `{suite}` is the suite's name — `UnitTests`, `IntegrationTests`… under the `clean-architecture` preset. Resolve once per session, then run the printed command **literally**:
 
 ```bash
-rtk dotnet build --no-restore
+python3 "$(cctoolkit root)/lib/kit_config.py" command build
+python3 "$(cctoolkit root)/lib/kit_config.py" command test UnitTests
+```
+
+Never `eval "$(…)"` it: the guards and the `rtk` rewrite read the command text. Nothing printed = the key is unset: no run, report `Not run: [suite] — commands.test unset`.
+
+Narrowing to a class or a method appends the runner's own filter. Illustration, `clean-architecture` preset — Microsoft.Testing.Platform (xUnit v3): `--project <csproj>` mandatory, always `--no-build --no-restore`; filters `--filter-class` / `--filter-method`, `*` wildcards, **repeatable** — values unioned; VSTest syntax `--filter "FullyQualifiedName~..."` doesn't exist there.
+
+```bash
+rtk dotnet build {{PRODUCT}}.sln --no-restore
 rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore
 rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore --filter-class "*CreateProductTests"
 ```
 
 RTK compacts logs, never replaces an exit code. No suite green without exit `0`. Distinguish a test not run, skipped, failed.
 
-**Suite run from the main agent writes its output to a file, never to context.** Orchestrator's global green loop (`/implement-tdd` §3) and any audit re-run:
+**Suite run from the main agent writes its output to a file, never to context.** The global green agent of `run-lot` and any audit re-run — whole suites once per batch, independent suites in one message:
 
 ```bash
-rtk dotnet test --project tests/{{PRODUCT}}.<Suite>/{{PRODUCT}}.<Suite>.csproj \
-  --no-build --no-restore > "$SCRATCH/test-<Suite>.txt" 2>&1; echo "exit=$?"; tail -15 "$SCRATCH/test-<Suite>.txt"
+<commands.test, {suite}=<Suite>> > "$SCRATCH/test-<Suite>.txt" 2>&1; echo "exit=$?"; tail -15 "$SCRATCH/test-<Suite>.txt"
 ```
 
 `$SCRATCH` = session scratchpad. On exit `0` the tail is the whole evidence — stop there. On failure only, open the file, take at most six useful lines. A green suite's full log is otherwise carried by every later turn. Does **not** apply to subagents: they run one filtered test in their own context, discarded on return.
@@ -60,17 +66,16 @@ Batch touching Infrastructure with no integration test and no written waiver = *
 
 A whole integration suite rebuilds every fixture and re-seeds the database: cost proportional to test count, not just container startup. Here the full suite exceeds 4 minutes where the impacted context fits in one.
 
-Build the filter from the **production folders touched**, not from the batch:
+Build the filter from the **production folders touched**, not from the batch. Illustration, `clean-architecture` preset — another runner takes the same union of namespaces in its own filter syntax:
 
 ```bash
-APP_TEST_MODE=true rtk dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj \
-  --no-build --no-restore \
+APP_TEST_MODE=true <commands.test, {suite}=IntegrationTests> \
   --filter-class "*.Studio.Diagrams.*" \
   --filter-class "*.Studio.ModuleDiagrams.Save.*" \
-  --filter-class "*.Catalog.Products.Save.*"
+  --filter-class "*.Catalog.Products.Save.*" > "$SCRATCH/test-integration.txt" 2>&1; echo "exit=$?"; tail -15 "$SCRATCH/test-integration.txt"
 ```
 
-Namespace roots under `{{PRODUCT}}.IntegrationTests`: `Catalog`, `Database`, `Scripting`, `Studio`, `Files`, `Http`, `Import`, `Performance`.
+`APP_TEST_MODE` stands for the integration suite's test-mode variable: use the name the repo documents for it (typically in the suite's own `CLAUDE.md`). Namespace roots = the first-level folders of `{{PRODUCT}}.IntegrationTests` (`ls`), never a remembered list.
 
 **Selection rule**: modified repository → its aggregate's namespace **and** that of any aggregate whose persistence test builds it. One level deeper (`*.Catalog.Products.Save.*` rather than `*.Catalog.Products.*`) as soon as the touched method is identified; one level up only when a shared signature changes. Doubt about scope → widen one level, never run everything.
 
@@ -78,7 +83,7 @@ Namespace roots under `{{PRODUCT}}.IntegrationTests`: `Catalog`, `Database`, `Sc
 
 **State the scope chosen and what it leaves out.** A filtered suite presented as "tests green" without saying what didn't run reads as full coverage, which it is not.
 
-Format expected everywhere — batch sheet, `/implement-tdd` summary, `Validations` line of a verdict:
+Format expected everywhere — batch sheet, run report, `Validations` line of a verdict:
 
 ```
 [command] — exit N, scope [filter applied or "whole suite"], [n] tests
@@ -87,7 +92,7 @@ Not run: [suite] — [reason]
 
 ## 5. Handler test policy
 
-Absolute, shared by writing (`/implement-tdd`) and audit (`/verify-ddd-tdd`).
+Absolute, shared by writing (`run-lot`) and audit (`/verify-ddd-tdd`).
 
 - **Never test an aggregate directly.** A Domain behaviour (factory `Create()`, method `SetDefault()`, …) is tested through the handler/service calling it; domain events are side effects observed at handler level. No handler yet for that behaviour → test not written. No orphan test on an aggregate.
 - **Query handler**: the double supplies the data, the test asserts on the returned result.

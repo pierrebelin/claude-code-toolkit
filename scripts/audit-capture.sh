@@ -15,21 +15,26 @@ set -uo pipefail
 # the diff makes it mandatory.
 #
 # Usage:
-#   cctoolkit audit-capture <batch> <sheet.md> <output>
+#   cctoolkit audit-capture <batch> <sheet.md> <output> [--base <dir>]
+#
+# --base: snapshot taken by `cctoolkit batch-baseline snapshot` when the batch started.
+# The diff is then the batch's own, not every uncommitted earlier batch: a diff three
+# batches wide reached the auditor at 6802 lines, truncated to 1200.
 #
 # Example:
 #   cctoolkit audit-capture F1 todo/<feature>/PLAN-F1.md \
 #        "$SCRATCHPAD/audit-F1.txt"
 # ══════════════════════════════════════════════════════════════════════════════
 
-if [[ $# -ne 3 ]]; then
-    echo "Usage: cctoolkit audit-capture <batch> <sheet.md> <output>" >&2
+if [[ $# -ne 3 && ! ( $# -eq 5 && "$4" == "--base" ) ]]; then
+    echo "Usage: cctoolkit audit-capture <batch> <sheet.md> <output> [--base <dir>]" >&2
     exit 2
 fi
 
 BATCH="$1"
 SHEET="$2"
 OUT="$3"
+BASE="${5:-}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # kit_config.py beside scripts/ (plugin, toolkit); under .claude/lib/ in a copy
 # predating the plugin, where scripts/ sat at the repo root.
@@ -106,21 +111,41 @@ batch_diff() {
         git diff --no-index -- /dev/null "$f" 2>/dev/null
     done
 }
-DIFF_FILE="$(mktemp)"
-batch_diff >"$DIFF_FILE"
+DIFF_FILE="${OUT%.txt}.diff"
+if [[ -n "$BASE" ]]; then
+    python3 "$SCRIPTS"/batch-baseline.py diff "$BASE" --code >"$DIFF_FILE" 2>/dev/null
+else
+    batch_diff >"$DIFF_FILE"
+fi
 DIFF_LINES=$(wc -l <"$DIFF_FILE" | tr -d ' ')
 
 section "changed files"
-{ git diff --name-only; git ls-files --others --exclude-standard -- "${CODE_DIRS[@]}"; } >>"$OUT" 2>&1
+if [[ -n "$BASE" ]]; then
+    python3 "$SCRIPTS"/batch-baseline.py diff "$BASE" --name-only >>"$OUT" 2>&1
+else
+    { git diff --name-only; git ls-files --others --exclude-standard -- "${CODE_DIRS[@]}"; } >>"$OUT" 2>&1
+fi
 printf '\n[diff below: code of the source and test folders only; .md, *.verified.* and anything outside them are listed here, read them targeted when an axis needs it]\n' >>"$OUT"
 
+# Never truncated: a cut diff was audited on a sample. Past DIFF_MAX the diff stays
+# in its own file and the capture carries an index, one line per file with its line
+# range, so the auditor reads every file by range.
 section "batch diff ($DIFF_LINES lines)"
 if [[ "$DIFF_LINES" -gt "$DIFF_MAX" ]]; then
-    head -"$DIFF_MAX" "$DIFF_FILE" >>"$OUT"
-    printf '\n[diff truncated at %s lines out of %s — read the rest targeted and bounded]\n' \
-        "$DIFF_MAX" "$DIFF_LINES" >>"$OUT"
+    printf 'full diff: %s — read it file by file, ranges below (Read offset/limit), no file skipped\n\n' "$DIFF_FILE" >>"$OUT"
+    awk '/^\+\+\+ /{ if (f) printf "%s: lines %d-%d\n", f, s, NR-2; f=$2; s=NR-1 } END { if (f) printf "%s: lines %d-%d\n", f, s, NR }' "$DIFF_FILE" >>"$OUT"
 else
     cat "$DIFF_FILE" >>"$OUT"
+fi
+
+# TDD evidence of a sheet with a `## Cycles` block: one line per cycle, read off the
+# state files the RED and GREEN agents wrote. Such a sheet carries no ticks; the
+# `Plan` axis judges RED observed before GREEN from this section.
+STATE_DIR="$(dirname "$SHEET")/run/.work/$BATCH/cycles"
+python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --index >/dev/null 2>&1
+if [[ $? -ne 2 ]]; then
+    section "TDD cycles (scripts/sheet-cycles.py --summary)"
+    python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --summary "$STATE_DIR" >>"$OUT" 2>&1
 fi
 
 section "RM/CU coverage — rules with no test"
@@ -169,5 +194,5 @@ run here: their scope is an audit decision. Build the filter from the production
 folders touched, see implement-tdd/references/test-scope.md §2.
 EOF
 
-rm -f "$DIFF_FILE"
+[[ "$DIFF_LINES" -gt "$DIFF_MAX" ]] || rm -f "$DIFF_FILE"
 printf '\nCapture written: %s (%s bytes)\n' "$OUT" "$(wc -c <"$OUT" | tr -d ' ')"
