@@ -12,6 +12,8 @@ const idx = { ok: true, missing: false, errors: [], declaratives: variant === 'b
 const agent = async (prompt, o) => {
   labels.push(o.label)
   const l = o.label
+  if (l === 'resume state' && !prompt.includes('cctoolkit batch-baseline snapshot todo/x/run/.work/F3/baseline')) console.log('WARN no batch snapshot')
+  if (l === 'resume state' && !prompt.includes('--states todo/x/run/.work/F3/cycles')) console.log('WARN saved states not read through sheet-cycles --states')
   if (l === 'resume state') return { cycles: variant === 'resume' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { status: 'RED', exit: 1, table: [{ test: 'A.ShouldX_WhenY', case: '' }], tests: [], stubs: [], productionDiff: [], removed: [], expectedFailure: '', command: 'x' }, green: { status: 'GREEN', exit: 0 } }] : [], index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : idx, nextSheet: 'todo/x/X-PLAN-F4.md' }
   if (l.startsWith('index')) return idx
   if (l === 'design' || l.startsWith('pre-design')) return { blocked: false, reason: '', review: ['choice x'] }
@@ -20,11 +22,10 @@ const agent = async (prompt, o) => {
   if (l.startsWith('GREEN')) return { status: 'GREEN', exit: 0, command: 'x', production: ['src/X.cs'], testsDiff: [], cost: 'Cost: 0 read + 0 write outside loop; Infrastructure in loop or in-memory filter: none', independentOf: 'x', removed: '', flagged: '' }
   if (l === 'suites') return { green: true, suites: [{ name: 'UnitTests', exit: 0, scope: 'whole suite', count: 1 }], fixes: [] }
   if (l === 'pre-audit') return { ok: true, files: [], preauditGreen: true, failures: [] }
-  if (l === 'resume state' && !prompt.includes('cctoolkit batch-baseline snapshot todo/x/run/.work/F3/baseline')) console.log('WARN no batch snapshot')
   if (l.startsWith('audit')) { if (!prompt.includes('--base todo/x/run/.work/F3/baseline')) console.log('WARN audit capture without base'); if (!prompt.includes('Decisions the run took')) console.log('WARN audit without decisions'); return { verdict: 'VALID', gaps: [], minors: [], validations: [], hypotheses: [], block: '## Verdict — VALID' } }
   if (l === 'next batch review') return { result: 'GAPS', questions: [{ severity: 'Major', question: 'q', evidence: 'e', decidedBy: 'x', answer: 'a', options: [] }] }
   if (l === 'next sheet') return { ok: true }
-  if (l === 'report') { if (!prompt.includes('## To validate')) console.log('WARN report without To validate'); if (!prompt.includes('! -name cycles')) console.log('WARN cycle states not kept'); if (!prompt.includes('run/batches/F3.md')) console.log('WARN report not under run/batches'); return { path: 'todo/x/run/batches/F3.md' } }
+  if (l === 'report') { if (!prompt.includes('## To validate')) console.log('WARN report without To validate'); if (!prompt.includes('--pack todo/x/run/.work/F3/cycles') || !prompt.includes('! -name cycles.jsonl')) console.log('WARN cycle states not packed'); if (!prompt.includes('run/batches/F3.md')) console.log('WARN report not under run/batches'); return { path: 'todo/x/run/batches/F3.md' } }
   console.log('UNHANDLED', l); return null
 }
 const fn = new (Object.getPrototypeOf(async function () {}).constructor)('args', 'agent', 'log', 'phase', 'parallel', 'workflow', src)

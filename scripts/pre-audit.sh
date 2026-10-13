@@ -64,6 +64,19 @@ ok()   { printf '  ✓ %s\n' "$1"; }
 ko()   { printf '  ✗ %s\n' "$1"; RED=1; }
 note() { printf '      %s\n' "$1"; }
 
+# Reads test method names on stdin, prints those absent from the test roots.
+# One pass restricted to the source extensions: a grep per method over the whole
+# roots walked the build output (1 GB) at 16 s each — 8 min for 31 methods on a
+# 2026-10-13 run, paid again on every re-run after a fix.
+missing_methods() {
+    local wanted found
+    wanted="$(grep -v '^$' | sort -u)"
+    [[ -z "$wanted" ]] && return 0
+    # shellcheck disable=SC2086 # test roots are segment globs, expanded here
+    found="$(grep -rhowF "${SOURCE_INCLUDES[@]}" -f <(printf '%s\n' "$wanted") -- $KIT_TEST_DIRS 2>/dev/null | sort -u)"
+    comm -23 <(printf '%s\n' "$wanted") <(printf '%s\n' "$found") | grep -v '^$'
+}
+
 # `git diff` ignores untracked files, and a batch's new handler and new tests
 # are exactly that: each one is appended as a /dev/null → file patch.
 batch_diff() {
@@ -155,6 +168,26 @@ if [[ -z "$STALE" ]]; then
 else
     ko "RM traits inconsistent with the handler rules tables (\`kit:rules\`) — update the handler CLAUDE.md or write the rule's test before the audit"
     while IFS= read -r l; do note "$l"; done <<<"$STALE"
+    # A dead reference is a rule the tests wrote and the table never received. On a
+    # 2026-10-13 run the fixing agent retargeted 12 traits to existing rules and
+    # deleted 4: green, and traceability lost. The draft rows point the other way.
+    DEAD_IDS="$(sed -nE 's/.*(DEAD REFERENCE|RÉFÉRENCE MORTE): ([^ ]+).*/\2/p' <<<"$STALE" | sort -u)"
+    if [[ -n "$DEAD_IDS" ]]; then
+        note "draft rows for the handler tables — reword the rule, keep the trait as it is:"
+        while IFS= read -r id; do
+            # shellcheck disable=SC2086 # test roots are segment globs, expanded here
+            grep -rnwF "${SOURCE_INCLUDES[@]}" -- "$id" $KIT_TEST_DIRS 2>/dev/null | while IFS=: read -r f n _; do
+                awk -v from="$n" -v id="${id##*/}" -v loc="$f:$n" '
+                    NR <= from { next }
+                    NR > from + 40 { exit }
+                    !t && match($0, /(Should|should_|test_|Test)[A-Za-z0-9_]*/) { t = substr($0, RSTART, RLENGTH); next }
+                    t && match($0, /(Should|should_|test_|Test)[A-Za-z0-9_]*/) { exit }
+                    t && !e && match($0, /[A-Z][A-Za-z0-9]*(Exception|Error)/) { e = substr($0, RSTART, RLENGTH) }
+                    END { printf "| %s | <rule — %s> | `%s` |   (%s)\n", id, t, (e ? e : "<result>"), loc }
+                ' "$f"
+            done
+        done <<<"$DEAD_IDS" | while IFS= read -r l; do note "  $l"; done
+    fi
 fi
 
 # ── 5. Every cycle reached its final state ───────────────────────────────────
@@ -180,12 +213,7 @@ if [[ $HAS_BLOCK -eq 1 ]]; then
         ko "cycles without a final state (RED or GREEN not observed) in $STATE_DIR"
         while IFS= read -r l; do [[ -n "$l" ]] && note "$l"; done <<<"$OPEN_CYCLES"
     fi
-    MISSING=""
-    while IFS= read -r t; do
-        [[ -z "$t" ]] && continue
-        # shellcheck disable=SC2086 # test roots are segment globs, expanded here
-        grep -rqw -- "$t" $KIT_TEST_DIRS 2>/dev/null || MISSING+="$t"$'\n'
-    done < <(python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --methods "$STATE_DIR" 2>/dev/null | sort -u)
+    MISSING="$(python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --methods "$STATE_DIR" 2>/dev/null | missing_methods)"
     if [[ -z "$MISSING" ]]; then
         ok "tests of \`## Cycles\`: all present under ${KIT_TEST_DIRS}"
     else
@@ -202,19 +230,14 @@ fi
 # Sheets kept citing tests a correction removed or never wrote, steps ticked RED ✅
 # over them. The first `Should…` of the Test cell of each row of the TDD sequence.
 if [[ $HAS_BLOCK -eq 0 ]]; then
-    MISSING=""
-    while IFS= read -r t; do
-        [[ -z "$t" ]] && continue
-        # shellcheck disable=SC2086 # test roots are segment globs, expanded here
-        grep -rqw -- "$t" $KIT_TEST_DIRS 2>/dev/null || MISSING+="$t"$'\n'
-    done < <(awk '
+    MISSING="$(awk '
         /^## / { in_tdd = ($0 ~ /kit:tdd-sequence/ || $0 ~ /^## (TDD sequence|Deroulement TDD|Déroulement TDD)/) }
         in_tdd && /^\| *[0-9]+ *\|/ {
             split($0, c, "|")
             if (match(c[3], /`Should[A-Za-z0-9_]+(\(\))?`/)) {
                 t = substr(c[3], RSTART + 1, RLENGTH - 2); sub(/\(\)$/, "", t); print t
             }
-        }' "$SHEET" | sort -u)
+        }' "$SHEET" | missing_methods)"
     if [[ -z "$MISSING" ]]; then
         ok "tests of the sheet: all present under ${KIT_TEST_DIRS}"
     else

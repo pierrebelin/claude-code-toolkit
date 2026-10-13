@@ -10,11 +10,11 @@
       }
     },
     {
-      "name": "run-lot checks: an unanswered question takes its recommendation after 30 min, an exhausted RED/GREEN gets one last attempt on opus, a deferred step never escalates",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -E 'FAIL|ERR|30 min|on opus|never escalates' | tr '\\n' ';'",
+      "name": "run-lot checks: an unanswered question takes its recommendation after 10 min, an exhausted RED/GREEN gets one last attempt on opus, a deferred step never escalates",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -E 'FAIL|ERR|10 min|on opus|never escalates' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "ok   question waits 30 min at most;ok   GREEN stopped twice the same way after its decisions gets one last attempt on opus;ok   deferred step never escalates;"
+        "stdout": "ok   question waits 10 min at most;ok   GREEN stopped twice the same way after its decisions gets one last attempt on opus;ok   deferred step never escalates;"
       }
     },
     {

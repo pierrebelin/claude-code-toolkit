@@ -181,7 +181,7 @@ TDD contract of the batch, read by `run-lot` through `cctoolkit sheet-cycles <sh
 
 ## Assumptions <!-- kit:assumptions -->
 
-_Empty when the plan is written. The run never writes here: its decisions go to `TO-VALIDATE.md`; a decision that changes the scope goes under `## Decisions`._
+_Empty when the plan is written. The run never writes here: its decisions go to `## To validate` of the run report; a decision that changes the scope goes under `## Decisions`._
 
 | # | Assumption | To be validated by |
 |---|------------|--------------------|

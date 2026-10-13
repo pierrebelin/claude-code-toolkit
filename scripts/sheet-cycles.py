@@ -23,6 +23,14 @@ batch's audit) and checked here without any model.
     cctoolkit sheet-cycles <sheet> --methods STATE_DIR       method names expected on disk, one per line
     cctoolkit sheet-cycles <sheet> --done STATE_DIR          every cycle reached its final state
     cctoolkit sheet-cycles <sheet> --summary STATE_DIR       one line per cycle: RED/GREEN exits (audit capture)
+    cctoolkit sheet-cycles <sheet> --states STATE_DIR        every saved cycle state, one JSON array (run-lot resume)
+    cctoolkit sheet-cycles <sheet> --pack STATE_DIR          fold the state files into STATE_DIR.jsonl, remove STATE_DIR
+
+STATE_DIR holds one `<behaviour slug>.json` per cycle while the batch runs: concurrent RED
+and GREEN agents each write their own file. A finished batch packs them into one
+`STATE_DIR.jsonl`, one state per line, so a done batch leaves one file instead of one per
+cycle. Every mode reading STATE_DIR reads the packed lines first, then the files, a file
+replacing the line of its behaviour: a later correction of a done batch writes files again.
 
 Paths count as code when they sit under the source or test roots of kit.config.json
 (`src/`, `tests/` without one). A cycle rewrites test files of one test project at
@@ -32,9 +40,11 @@ most, 4 test files and 8 production files at most; test files under
 Exit 0 ok, 1 invalid or not done, 2 no `## Cycles` block (callers fall back to the old sheet).
 """
 import fnmatch
+import functools
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import unicodedata
@@ -239,15 +249,46 @@ def contract(c, phase):
     return "\n".join(lines)
 
 
+@functools.lru_cache(maxsize=None)
+def states(state_dir):
+    found = {}
+    packed = state_dir.rstrip("/") + ".jsonl"
+    if os.path.isfile(packed):
+        with open(packed, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    state = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(state, dict) and isinstance(state.get("behaviour"), str):
+                    found[slug(state["behaviour"]) + ".json"] = state
+    if os.path.isdir(state_dir):
+        for name in sorted(os.listdir(state_dir)):
+            if not name.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(state_dir, name), encoding="utf-8") as f:
+                    found[name] = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+    return found
+
+
 def state_of(state_dir, c):
-    p = os.path.join(state_dir, slug(c["behaviour"]) + ".json")
-    if not os.path.exists(p):
-        return None
-    try:
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
+    return states(state_dir).get(slug(c["behaviour"]) + ".json")
+
+
+def pack(state_dir):
+    found = states(state_dir.rstrip("/"))
+    packed = state_dir.rstrip("/") + ".jsonl"
+    if found:
+        with open(packed + ".tmp", "w", encoding="utf-8") as f:
+            for name in sorted(found):
+                f.write(json.dumps(found[name], ensure_ascii=False, separators=(",", ":")) + "\n")
+        os.replace(packed + ".tmp", packed)
+    shutil.rmtree(state_dir, ignore_errors=True)
+    print(f"{len(found)} cycle state(s) in {packed}" if found else "no cycle state to pack")
+    return 0
 
 
 def skipped(red):
@@ -292,6 +333,15 @@ def main(argv):
     if not os.path.isfile(sheet):
         print(f"sheet not found: {sheet}", file=sys.stderr)
         return 1
+    if mode in ("--pack", "--states") and not arg:
+        print(f"{mode} needs STATE_DIR", file=sys.stderr)
+        return 1
+    if mode == "--pack":
+        return pack(arg)
+    if mode == "--states":
+        found = states(arg.rstrip("/"))
+        print(json.dumps([found[name] for name in sorted(found)], ensure_ascii=False))
+        return 0
     data, errors = load(sheet)
     if data is None:
         missing = errors == ["no `## Cycles` block"]

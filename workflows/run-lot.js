@@ -12,7 +12,7 @@ export const meta = {
     { title: 'Review', detail: 'adversarial-reviewer and pre-design of the next sheet, beside the audit' },
     { title: 'Arbiter', detail: 'a stop is settled by the arbiter and listed for review after the run; a question only when no decision is defensible' },
     { title: 'Question', detail: 'human-only stop: question file, wait for the answer written from the session, same run' },
-    { title: 'Report', detail: 'run/batches/FX.md, written even on stop; run/.work/FX purged when DONE' },
+    { title: 'Report', detail: 'run/batches/FX.md, written even on stop; run/.work/FX reduced to cycles.jsonl when DONE' },
   ],
 }
 
@@ -143,9 +143,9 @@ const toReview = (step, text, why = '') => history.toReview.push({ step, text, w
 let reviewing = null
 let predesigning = null
 const USER = 'user decision'
-const WAIT_SECONDS = 450
-const WAIT_ROUNDS = 4
-const UNANSWERED = 'decided without answer after 30 min'
+const WAIT_SECONDS = 300
+const WAIT_ROUNDS = 2
+const UNANSWERED = 'decided without answer after 10 min'
 const REVIEWER = 'reviewer recommendation'
 const MAX_DECISIONS = 3
 let asked = 0
@@ -319,6 +319,7 @@ function greenContract(c, r) {
     '```',
     '',
     'Handler `CLAUDE.md`: a rule your code adds or changes in a handler → `<kit>/skills/implement-tdd/references/closing.md` §2, in the same message as your last production edit.',
+    'Every `RM` trait id the tests of this cycle cite is a row of its handler table before you report: an id absent from it → add the row, even when your code only refines an existing behaviour (a dedicated error code is a rule).',
     '',
     'Your `## GREEN` report goes through the structured output: `production` = paths modified or created (handler `CLAUDE.md` included), `exit` = code of the final filtered test,',
     '`testsDiff` = `tests/` files you created or modified yourself, no annotation (empty expected, `.verified.txt` snapshots accepted), `cost` = last line of `cctoolkit access-cost` verbatim,',
@@ -576,7 +577,7 @@ async function report(status, reason, verdict) {
         ? [`Then in \`${plan}\`, on the heading line starting \`### Batch ${batch} \` (or \`### Lot ${batch} \`): replace a trailing \`⬜\` with \`✅ DONE ($(date +%Y-%m-%d))\`, or append \` — ✅ DONE (<that date>)\` when it carries neither; and in \`${sheet}\`, append \` — ✅ DONE (<that date>)\` to its first \`# \` line unless it already carries \`✅ DONE\`. One Edit per file, nothing else moves.`]
         : []),
       ...(status === DONE
-        ? [`Then delete the scratch outputs, the cycle states excepted: \`find ${workDir} -mindepth 1 -maxdepth 1 ! -name cycles -exec rm -rf {} +\`. The build/test logs, audit capture, questions and snapshot are summarised by the report; the small \`cycles/*.json\` stay as the TDD evidence a later correction of this batch resumes from. This cleanup is the intended end of every finished batch.`]
+        ? [`Then delete the scratch outputs, the cycle states packed first: \`cctoolkit sheet-cycles ${sheet} --pack ${stateDir} && find ${workDir} -mindepth 1 -maxdepth 1 ! -name cycles.jsonl -exec rm -rf {} +\`. The build/test logs, audit capture, questions and snapshot are summarised by the report; \`cycles.jsonl\`, one line per cycle state, stays as the TDD evidence a later correction of this batch resumes from. This cleanup is the intended end of every finished batch.`]
         : []),
       'Return the written path.',
       '',
@@ -614,8 +615,8 @@ const loading = agent(
     FRAME,
     '',
     `First, one call: \`if [ -d ${workDir}/questions ]; then mkdir -p ${workDir}/questions-archive && mv ${workDir}/questions ${workDir}/questions-archive/$(date +%Y%m%d-%H%M%S); fi; cctoolkit batch-baseline snapshot ${baseline}\` — questions of an earlier run never answer this one, the snapshot bounds the batch diff (kept when it exists).`,
-    `Then in one message: \`ls ${stateDir}/*.json\`, \`${indexCommand(sheet)}\` and \`grep -E '^### (Batch|Lot) F[0-9]+' ${plan}\`.`,
-    '`cycles`: no state file → empty; otherwise read each file and return its JSON object as-is, one entry per file, no field changed.',
+    `Then in one message: \`cctoolkit sheet-cycles ${sheet} --states ${stateDir}\`, \`${indexCommand(sheet)}\` and \`grep -E '^### (Batch|Lot) F[0-9]+' ${plan}\`.`,
+    '`cycles` = the JSON array `--states` printed, each object as-is, no field changed (`[]` when no cycle was saved).',
     '`index` = the JSON line `sheet-cycles` printed, verbatim, whatever its exit code (0 valid, 1 invalid, 2 no block).',
     `\`nextSheet\` = the first \`### Batch FY\` (or \`### Lot FY\`) heading after the one of ${batch} without \`✅ DONE\` → \`${naming[1]}-FY.md\` when that file exists; empty string otherwise.`,
   ].join('\n'),
@@ -779,6 +780,8 @@ const runGate = (suffix = '') => agent(
     '',
     'Another agent runs the global green suites at the same time: never build nor run tests, never touch production code under the source roots.',
     `Run \`cctoolkit pre-audit ${batch} ${sheet}\`. RED → fix what it lists per \`<kit>/skills/implement-tdd/references/closing.md\` §3 (handler \`CLAUDE.md\` row or trait, sheet line), then rerun; three rounds at most.`,
+    'A `DEAD REFERENCE` is fixed in the handler table only: add the row from the draft the pre-audit prints, reworded as a rule. Never retarget, rename nor delete an `RM` trait, never edit a test file to turn the gate green.',
+    'Run the pre-audit in the foreground: it takes seconds, never poll a background output.',
     'A sheet line is never added to cover a rule of the repo tests rule (`.claude/rules/tests.md`: a test calling an aggregate directly, a hand-written registry count): such a test goes into `failures`.',
     '`ok` = pre-audit run, `files` = files written, `preauditGreen` = last pre-audit exit 0, `failures` = its remaining failures.',
   ].join('\n') + suffix,

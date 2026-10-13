@@ -4,7 +4,7 @@
 
 ## 1. Sheet and plan
 
-The batch sheet is never updated at closing: the cycle state files (`run/.work/FX/cycles/*.json`) are the TDD evidence, the run's decisions go to `TO-VALIDATE.md`, and the report marks the sheet title and the plan heading `✅ DONE`. A correction changing an RM/CU → update the source spec too: the spec is the business source of truth.
+The batch sheet is never updated at closing: the cycle states (`run/.work/FX/cycles/*.json`, packed into `cycles.jsonl` once the batch is done) are the TDD evidence, the run's decisions go to `## To validate` of the reports, and the report marks the sheet title and the plan heading `✅ DONE`. A correction changing an RM/CU → update the source spec too: the spec is the business source of truth.
 
 ## 2. Handler documentation
 
@@ -16,7 +16,7 @@ Handler modified or created → **update the `CLAUDE.md` of the handler folder**
 
 ## 3. Gate and audit fixes
 
-`cctoolkit pre-audit FX <sheet>` fails on: unclassified DDD/APP/PERF ids, modified file outside batch the sheet doesn't name, trait or unbound test in touched test class, cycle without final state, test named by the sheet absent, whitespace error, interaction assertion in a handler test, French literal added under the source roots (only when `layout.sources.languageGuard` is set in `kit.config.json`). Comments added under `src/` listed, not failed: check each says what code cannot. **RED** → fix what it lists (handler `CLAUDE.md` row, trait, sheet line naming a file), rerun.
+`cctoolkit pre-audit FX <sheet>` fails on: unclassified DDD/APP/PERF ids, modified file outside batch the sheet doesn't name, trait or unbound test in touched test class, cycle without final state, test named by the sheet absent, whitespace error, interaction assertion in a handler test, French literal added under the source roots (only when `layout.sources.languageGuard` is set in `kit.config.json`). Comments added under `src/` listed, not failed: check each says what code cannot. **RED** → fix what it lists (handler `CLAUDE.md` row, trait, sheet line naming a file), rerun. `DEAD REFERENCE` → add the row the pre-audit drafts to the handler table; never retarget, rename nor delete the trait: that turns the gate green and loses the rule.
 
 Verdict `GAPS` → fix the Blocking and Major gaps, rerun the affected validations. **Minor** deviations carried over as is, neither fixed nor hidden: user decides. An adjacent bug or pre-existing dead code the verdict reports stays untouched. A fix never writes `Hn` into the sheet: the run lists it in `TO-VALIDATE.md`.
 

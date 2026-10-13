@@ -56,7 +56,7 @@ English, verbatim, whatever `language`.
 | `## Review — GAPS`, `## Review — CLEAR` | `adversarial-reviewer` output, read by the three callers |
 | `### Batch execution`, columns `Batch` / `Depends on` / `Repo`, `### Batch FX — … — ✅ DONE` | `cctoolkit plan-next-batch` |
 | `## STATUS — DONE\|BLOCKED\|GAPS` first line, `Verdict:` (`VALID`, `GAPS`, `GAPS carried`, `to redo`, `none`), `Reason:`, `## To validate` of `run/batches/FX.md`; `Workflow run-lot, batch FX.` first line of every run-lot prompt | `run-plan` gate, `run-lot-pane` mod |
-| Run files: `REPORT.md` and `TO-VALIDATE.md` of `run/<YYYY-MM-DD-HHMM>/`, `aside-FX.patch` beside them, `run/batches/FX.md`, scratch folder `run/.work/`; markers `user decision to validate` (taken without the user) and `user decision` (made by the user) | `run-plan`, `cctoolkit plan-next-batch --context`, `cctoolkit run-question`, `run-lot-pane` mod |
+| Run files: `run/<YYYY-MM-DD-HHMM>.md` (sections `## To validate`, `## Minor`, `## Final check`, `## Journal`), `run/<YYYY-MM-DD-HHMM>-aside-FX.patch`, `run/batches/FX.md`, scratch folder `run/.work/` (`.work/FX/cycles.jsonl` once the batch is done); markers `user decision to validate` (taken without the user) and `user decision` (made by the user) | `run-plan`, `cctoolkit plan-next-batch --context`, `cctoolkit run-question`, `run-lot-pane` mod |
 | `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names and the JSON's first-level keys | `scripts/quality-report-check.py`, the whole report history and any viewer built on it |
 | `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/pre-audit.sh` and `skills/implement-tdd/references/closing.md` |
 
@@ -66,7 +66,7 @@ A repo that started in French keeps its deliverables as they are: specs, plans a
 
 | English | French alias |
 |---|---|
-| `REPORT.md`, `TO-VALIDATE.md`, `run/.work/`, `run/batches/FX.md` | `RAPPORT.md`, `A-VALIDER.md`, `run/.travail/`, `run/lots/FX.md` |
+| `REPORT.md`, `TO-VALIDATE.md` (older `run/<stamp>/` folders), `run/.work/`, `run/batches/FX.md` | `RAPPORT.md`, `A-VALIDER.md`, `run/.travail/`, `run/lots/FX.md` |
 | `## STATUS — DONE\|BLOCKED\|GAPS`, `Verdict:`, `Reason:`, `## To validate` | `## STATUT — TERMINÉ\|BLOQUÉ\|ECARTS`, `Verdict :`, `Raison :`, `## À valider` |
 | `Verdict:` values `VALID`, `GAPS`, `GAPS carried`, `to redo`, `none` | `VALIDE`, `ECARTS`, `ECARTS reportés`, `à refaire`, `aucun` |
 | `user decision to validate`, `user decision` | `décision user à valider`, `décision utilisateur` |

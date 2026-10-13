@@ -15,6 +15,13 @@
       "expect": {"decision": "deny", "reason": "filter-class"}
     },
     {
+      "name": "IntegrationTests whole under the run-plan final check marker passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
+        "tool_input": {"command": "nohup sh -c 'KIT_FINAL_CHECK=1 APP_TEST_MODE=true dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore > /tmp/final-IntegrationTests.txt 2>&1; echo $? > /tmp/final-IntegrationTests.exit' >/dev/null 2>&1 &"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
       "name": "IntegrationTests with --filter-class passes (rtk rewrite applies)",
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",

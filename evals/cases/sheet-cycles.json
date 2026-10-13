@@ -229,6 +229,22 @@
         "exit": 0,
         "stdout": "{\"ok\": true"
       }
+    },
+    {
+      "name": "--pack folds the state files into STATE_DIR.jsonl, the done batch stays done",
+      "cmd": "d=$(mktemp -d); cp -r {{FIX}}/sc/st $d/st; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --pack $d/st >/dev/null; printf '%s|' $(ls $d); python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done $d/st --root {{FIX}}/sc; echo \"done=$?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "st.jsonl|done=0"
+      }
+    },
+    {
+      "name": "a state file written after the pack replaces the packed line of its behaviour",
+      "cmd": "d=$(mktemp -d); cp -r {{FIX}}/sc/st-red $d/st; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --pack $d/st >/dev/null; mkdir $d/st; cp {{FIX}}/sc/st/*.json $d/st/; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done $d/st --root {{FIX}}/sc; echo \"done=$?\"; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --states $d/st | python3 -c 'import json,sys; print(\"states=%d\" % len(json.load(sys.stdin)))'",
+      "expect": {
+        "exit": 0,
+        "stdout": "done=0\nstates=1"
+      }
     }
   ]
 }

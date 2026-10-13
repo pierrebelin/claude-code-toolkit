@@ -1,6 +1,6 @@
 // Checks of run-lot.js the orchestrator applies without any agent: grants passed by value (a
 // module-level Set lost them under workflow('run-lot')), a behaviour already on disk, the cost line, the
-// 30 min answer timeout and the last attempt on another model.
+// 10 min answer timeout and the last attempt on another model.
 // The preamble before phase('Design') only declares; it runs here with stubbed globals.
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
@@ -36,7 +36,7 @@ const run = async () => {
   let waits = 0
   agent = async (prompt, o) => (o.label.startsWith('wait') ? (waits++, { answered: false, answers: [] }) : o.label.startsWith('question') ? { ok: true } : null)
   const applied = await ask('stop', 'GREEN x', [{ severity: 'Blocking', question: 'q ?', evidence: 'e', options: [], recommendation: 'do X' }])
-  assert(waits === WAIT_ROUNDS && WAIT_ROUNDS * WAIT_SECONDS <= 1800, 'question waits 30 min at most')
+  assert(waits === WAIT_ROUNDS && WAIT_ROUNDS * WAIT_SECONDS <= 600, 'question waits 10 min at most')
   assert(applied && applied[0].text === 'do X' && applied[0].recommended, 'unanswered question takes its recommendation')
   assert(history.toReview.some(x => x.text.startsWith(UNANSWERED)), 'recommendation applied without answer listed for review')
   assert(await ask('stop', 'GREEN y', [{ severity: 'Blocking', question: 'q ?', evidence: 'e', options: [], recommendation: '' }]) === null, 'unanswered question without recommendation stays unanswered')

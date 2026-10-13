@@ -4,8 +4,8 @@ import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput, TurnStepChunk,
 
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
-  aheadLotOf, isPredesigning, lotDetailOf, PREDESIGN_GLYPH, waveOf, currentShapeSamples, cycleProgressOf, cyclesDirOf, cyclesDirsOf, cycleSlugOf, isSheetDone, parseCycles, questionsDirsOf,
-  alertOf, argumentOf, childWorkflowOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, questionsDirOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
+  aheadLotOf, figuresKeyOf, lotFiguresFrom, lotFiguresOf, packedStatesOf, isPredesigning, lotDetailOf, PREDESIGN_GLYPH, waveOf, currentShapeSamples, cycleProgressOf, cyclesDirOf, cyclesDirsOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles, questionsDirsOf,
+  alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, questionsDirOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
   liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, weightOf, withFile, withSamples,
@@ -807,9 +807,9 @@ test('agent view: structured verdict as outcome, every call in order, recovered 
   expect(await ui.find({ type: 'Text', text: /Activity · 3 calls/ })).toBeDefined()
   const rows = (await ui.findAll({ type: 'Text', text: /^ {2} +\d+:\d{2} [✓✗]/ })).map(row => row.text)
   expect(rows).toHaveLength(3)
-  expect(rows[0]).toMatch(/✗ Bash +Find the handlers$/)
+  expect(rows[0]).toMatch(/✓ StructuredOutput/)
   expect(rows[1]).toMatch(/✓ Read +src\/A\.cs$/)
-  expect(rows[2]).toMatch(/✓ StructuredOutput/)
+  expect(rows[2]).toMatch(/✗ Bash +Find the handlers$/)
   await ui.unmount()
 })
 
@@ -1214,11 +1214,49 @@ const lotPrompt = (lot: string) =>
 const LOT_SHEET = (lot: string) => `# CAT-PLAN-${lot} — Lot\n\n## Déroulement TDD\n\n### Étape 1 — Créer\n\nTDD : RED ✅ · GREEN ⬜ · COUT ⬜\n`
 
 describe('batch plan through run-plan', () => {
+  test('child script resolved in the plugin install folder before the repo', () => {
+    const installed = JSON.stringify({
+      version: 2,
+      plugins: {
+        'cctoolkit@cctoolkit': [
+          { scope: 'project', projectPath: '/other', installPath: '/h/.claude/plugins/cache/cctoolkit/cctoolkit/1.7.0' },
+          { scope: 'project', projectPath: '/repo', installPath: '/h/.claude/plugins/cache/cctoolkit/cctoolkit/1.8.0' },
+        ],
+        'run-lot-pane@cctoolkit': [{ scope: 'user', installPath: '/h/pane' }],
+      },
+    })
+    expect(installPathOf(installed, 'cctoolkit', '/repo')).toBe('/h/.claude/plugins/cache/cctoolkit/cctoolkit/1.8.0')
+    expect(installPathOf(installed, 'cctoolkit', '/elsewhere')).toBeNull()
+    expect(installPathOf(installed, 'run-lot-pane', '/elsewhere')).toBe('/h/pane')
+    expect(installPathOf('not json', 'cctoolkit', '/repo')).toBeNull()
+    expect(claudeHomeOf('/h/.claude/projects/-repo/s1/subagents/workflows/wf_1')).toBe('/h/.claude')
+    expect(claudeHomeOf(undefined)).toBeNull()
+    expect(childScriptPathsOf('run-lot', '/repo', '/k')).toEqual(['/k/workflows/run-lot.js', '/repo/.claude/workflows/run-lot.js'])
+    expect(childScriptPathsOf('run-lot', '/repo', null)).toEqual(['/repo/.claude/workflows/run-lot.js'])
+  })
+
+  test('batch figures: counted from its agents, keyed by project and sheet, read back only when well formed', () => {
+    const agent = (id: string, startedAt: number, endedAt: number | null, cost: number) => ({
+      ...blankAgent(id, startedAt, id, 'Sonnet', 'x', 'p', startedAt), endedAt, lastActiveAt: startedAt + 50, tokens: 100, cost,
+    })
+    expect(lotFiguresOf([agent('a', 1_000, 4_000, 0.5), agent('b', 2_000, null, 0.25)])).toEqual({ agents: 2, durationMs: 3_000, tokens: 200, cost: 0.75, endedAt: 4_000 })
+    expect(lotFiguresOf([])).toBeNull()
+    expect(figuresKeyOf(DIR, 'todo/cat/CAT-PLAN-F1.md')).toBe('lot:p:CAT-F1')
+    expect(figuresKeyOf(DIR, '/repo/todo/cat/CAT-PLAN-F1.md')).toBe('lot:p:CAT-F1')
+    expect(figuresKeyOf(null, 'todo/cat/CAT-PLAN-F1.md')).toBe('lot::CAT-F1')
+    expect(figuresKeyOf(DIR, 'todo/cat/CAT-PLAN.md')).toBeNull()
+    expect(lotFiguresFrom({ agents: 3, durationMs: 9, tokens: 1, cost: 0.1, endedAt: 2 })).toEqual({ agents: 3, durationMs: 9, tokens: 1, cost: 0.1, endedAt: 2 })
+    expect(lotFiguresFrom({ agents: '3' })).toBeNull()
+    expect(lotFiguresFrom(undefined)).toBeNull()
+  })
+
   test('child call, plan as argument, batch read from the agent prompt', () => {
     expect(childWorkflowOf("const r = await workflow('run-lot', b.sheet)")).toBe('run-lot')
     expect(childWorkflowOf('await agent("x")')).toBeNull()
     expect(childWorkflowOf("await workflow({ scriptPath: `${pre.kit}/workflows/run-lot.js` }, b.sheet)")).toBe('run-lot')
     expect(childWorkflowOf("await workflow('cctoolkit:run-lot', s)")).toBe('run-lot')
+    expect(childPluginOf("await workflow('cctoolkit:run-lot', s)")).toBe('cctoolkit')
+    expect(childPluginOf("await workflow('run-lot', s)")).toBeNull()
     expect(promptLotOf('mode: next-batch /r/X-PLAN-F3.md /r/X-PLAN-F2.md')).toEqual({ lot: 'F2', sheet: '/r/X-PLAN-F2.md' })
     expect(planPathOf('todo/cat/CAT-PLAN.md --only F2')).toBe('todo/cat/CAT-PLAN.md')
     expect(planPathOf('todo/cat/CAT-PLAN-F2.md')).toBeNull()
@@ -1268,6 +1306,13 @@ describe('batch plan through run-plan', () => {
     expect(reasonLines('GREEN refus — exit 1', 40)).toEqual([{ text: 'exit 1', kind: 'cause' }, { text: 'GREEN refus', kind: 'context' }])
     const many = reasonLines(`list: ${Array.from({ length: 10 }, (_, i) => `m${i}`).join(', ')}`, 40)
     expect(many.at(-1)).toEqual({ text: '  … 2 more', kind: 'item' })
+    const prose = `Run-plan not launched: the user's request was only to fetch the latest version ("J'ai fait des modifs, récupère la version"), which does not cover the run-plan steps (build, doctor, suites, run folder). Done instead: git fetch origin succeeded.`
+    const proseShown = reasonLines(prose, 40)
+    expect(proseShown.every(one => one.kind === 'cause' && one.text.length <= 40 && !one.text.startsWith('•'))).toBe(true)
+    expect(proseShown.map(one => one.text).join(' ')).toBe(prose)
+    expect(proseShown.find(one => one.text.startsWith('Done instead'))).toBeDefined()
+    expect(reasonLines('missing: Foo.Bar (int, string), Baz', 40).filter(one => one.kind === 'item').map(one => one.text)).toEqual(['• Foo.Bar (int, string)', '• Baz'])
+    expect(reasonLines(`list: ${'word '.repeat(5).trim()}, x`, 12).filter(one => one.kind === 'item').map(one => one.text)).toEqual(['• word word', '  word word', '  word', '• x'])
     expect(withoutRepeated(`F2 — BLOQUÉ — ${lot}`, [lot])).toBe('F2 — BLOQUÉ')
     expect(withoutRepeated('F2 — BLOQUÉ — other', [lot])).toBe('F2 — BLOQUÉ — other')
   })
@@ -1368,6 +1413,12 @@ const result = await workflow('run-lot', b.sheet)
     [`${DIR}/agent-a4.meta.json`]: JSON.stringify({ workflowPhase: '▸ run-lot' }),
   }
   const clock = world(on, files, { workflowName: 'run-plan' })
+  const kept: Record<string, unknown> = {}
+  on('store.set', async (_, e) => {
+    kept[e.key] = e.value
+    return { value: undefined }
+  })
+  on('store.get', async (_, e) => ({ value: kept[e.key] }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($, `${RUN_PLAN_PATH} --until F3`)
   await $.agent.spawn(spawn('preflight', 1, 'Workflow run-plan, supervisor step.'))
@@ -1401,6 +1452,38 @@ const result = await workflow('run-lot', b.sheet)
 
   await ui.press({ key: 'plan' })
   expect(await ui.find({ type: 'Text', text: /LOTS/ })).toBeDefined()
+  expect(lotFiguresFrom(kept['lot:p:CAT-F1'])?.agents).toBe(2)
+  await ui.unmount()
+})
+
+test('run-plan pane: a batch done before this run shows the figures kept when it ended', async ($, on) => {
+  const files: Record<string, string> = {
+    [`${SESSION}/workflows/scripts/run-lot-${RUN}.js`]: `export const meta = {
+  name: 'run-plan',
+  description: 'Plan',
+  phases: [{ title: 'Preflight' }, { title: 'Batch' }, { title: 'Gate' }, { title: 'Report' }],
+}
+const result = await workflow('run-lot', b.sheet)
+`,
+    '/repo/.claude/workflows/run-lot.js': SCRIPT,
+    [RUN_PLAN_PATH]: RUN_PLAN.replace('### Lot F1 — Création — ⬜', '### Lot F1 — Création — ✅ DONE (2026-10-12)'),
+    '/repo/todo/cat/CAT-PLAN-F2.md': LOT_SHEET('F2'),
+    [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ workflowPhase: 'Preflight' }),
+    [`${DIR}/agent-a2.meta.json`]: JSON.stringify({ workflowPhase: 'Design' }),
+  }
+  const clock = world(on, files, { workflowName: 'run-plan' })
+  mock.store(on, { 'lot:p:CAT-F1': { agents: 17, durationMs: 3_723_000, tokens: 900_000, cost: 12.5, endedAt: 1 } })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await launch($, RUN_PLAN_PATH)
+  await $.agent.spawn(spawn('preflight', 1, 'Workflow run-plan, supervisor step.'))
+  await $.turn.complete(complete('a1'))
+  await $.agent.spawn(spawn('design', 2, lotPrompt('F2')))
+  await clock.advance(2_000)
+
+  const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  expect(await ui.find({ type: 'Text', text: / done before this run$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ *17 *$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /\$12\.5/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -1466,6 +1549,11 @@ describe('sheet-driven cycles', () => {
     ])
   })
 
+  test('packed cycle states: one line per state, keyed like the state file of its behaviour', () => {
+    const line = JSON.stringify({ behaviour: 'Refus sans catalogue', red: { status: 'RED' } })
+    expect(packedStatesOf(`${line}\nnot json\n{"red":{}}\n`)).toEqual({ 'refus-sans-catalogue.json': line })
+  })
+
   test('cycle progress: done on GREEN exit 0 or when no GREEN is due, red otherwise, unreachable methods listed', () => {
     const [plain, , guard] = parseCycles(CYCLES_SHEET)!
     const red = { status: 'RED', exit: 1, table: [{ test: 'A.Create' }], unreachable: [] }
@@ -1480,6 +1568,17 @@ describe('sheet-driven cycles', () => {
     const sheet = parseSheet(CYCLES_SHEET, SHEET_PATH)
     expect(isSheetDone(sheet)).toBe(false)
     expect(isSheetDone({ ...sheet, cycles: sheet.cycles!.map(one => ({ ...one, state: 'done' as const })) })).toBe(true)
+  })
+
+  test('live cycles: a state written by a still running agent is not counted until the agent returns', () => {
+    const sheet = parseSheet(CYCLES_SHEET, SHEET_PATH)
+    const done = { ...sheet, cycles: sheet.cycles!.map(one => ({ ...one, state: 'done' as const })) }
+    const [first, second] = done.cycles
+    const agent = (label: string, state: WorkflowAgent['state']) => ({ label, state }) as WorkflowAgent
+    const live = withLiveCycles(done, [agent(`GREEN ${first!.id} x`, 'running'), agent(`RED ${second!.id} w1 x`, 'running'), agent(`GREEN ${second!.id} x`, 'done')])
+    expect(live.cycles!.map(one => one.state).slice(0, 2)).toEqual(['red', 'pending'])
+    expect(isSheetDone(live)).toBe(false)
+    expect(withLiveCycles(done, [agent(`GREEN ${first!.id} x`, 'done')]).cycles).toEqual(done.cycles)
   })
 
   test('history: samples of the phases the new labels reshaped dropped from earlier journals, kept while every journal is earlier', () => {
@@ -1636,4 +1735,15 @@ test('pane counts cycles from the cycle states, flags unreachable methods, tags 
   expect((await after.find({ type: 'Text', text: /^3\/3 cycles$/ }))?.props.color).toBe('success')
   expect(await after.find({ type: 'Text', text: /unreachable/ })).toBeUndefined()
   await after.unmount()
+
+  const packed = ['creer-le-produit.json', 'refus-sans-catalogue.json'].map(name => JSON.stringify(JSON.parse(files[`${CYCLES_DIR}/${name}`]!))).join('\n')
+  for (const name of dirs[CYCLES_DIR]!.map(entry => entry.name)) delete files[`${CYCLES_DIR}/${name}`]
+  dirs[CYCLES_DIR] = []
+  files[`${CYCLES_DIR}.jsonl`] = `${packed}\n`
+  stamps[`${CYCLES_DIR}.jsonl`] = 3
+  await clock.advance(2_000)
+  const done = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  expect(await done.find({ type: 'Text', text: /^2\/3 cycles$/ })).toBeDefined()
+  expect(await done.find({ type: 'Text', text: /✓ X2 Refus sans catalogue/ })).toBeDefined()
+  await done.unmount()
 })

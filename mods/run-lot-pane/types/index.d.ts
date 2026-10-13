@@ -86,7 +86,9 @@ export type SheetCycle = { id: string; behaviour: string; wave: number; guard: b
 
 export type Sheet = { lot: string; name: string; isDone: boolean; steps: Step[]; hypotheses: number; cycles?: SheetCycle[] }
 
-export type ChildWorkflow = { name: string; phases: string[]; details: Record<string, string>; labels: Record<string, string> }
+export type ChildWorkflow = { name: string; phases: string[]; details: Record<string, string>; labels: Record<string, string>; script?: string | null }
+
+export type LotFigures = { agents: number; durationMs: number; tokens: number; cost: number; endedAt: number }
 
 export type PlanLot = {
   lot: string
@@ -97,6 +99,7 @@ export type PlanLot = {
   audit: AuditVerdict | null
   view: Sheet | null
   asking?: number
+  past?: LotFigures | null
 }
 
 export type WorkflowRun = {

@@ -8,14 +8,9 @@ const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta
 const head = src.slice(0, src.indexOf("phase('Preflight')"))
 const tests = `
 const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 1 } else console.log('ok  ', m) }
-const start = [{ name: 'UnitTests', exit: 2, failed: ['failed Ns.A.B (12 ms)'] }, { name: 'ContractTests', exit: 7, failed: [] }]
-const suite = (name, exit, failed = []) => ({ name, exit, failed })
-assert(newFailures(0, [suite('UnitTests', 2, ['Ns.A.B']), suite('ContractTests', 7), suite('ArchitectureTests', 0)], start).length === 0, 'failures present at start never fail the gate')
-assert(newFailures(0, [suite('UnitTests', 2, ['Ns.A.B', '[FAIL] Ns.A.C(x: 1)'])], start).join() === 'UnitTests Ns.A.C', 'a new failing test fails the gate, named')
-assert(newFailures(0, [suite('ArchitectureTests', 1)], start).join() === 'ArchitectureTests exit=1', 'a suite red without named test and green at start fails the gate')
-assert(newFailures(3, [], start).join() === 'build=3', 'a red build fails the gate')
-const en = { statusLine: '## STATUS — DONE', verdictLine: 'Verdict: GAPS carried', planDone: true, build: 0, suites: [] }
-const fr = { statusLine: '## STATUT — TERMINÉ', verdictLine: 'Verdict : ECARTS reportés', planDone: true, build: 0, suites: [] }
+assert(newFailures(3).join() === 'build=3' && newFailures(0).length === 0, 'the gate fails on a red build only, never on a test suite')
+const en = { statusLine: '## STATUS — DONE', verdictLine: 'Verdict: GAPS carried', planDone: true, build: 0 }
+const fr = { statusLine: '## STATUT — TERMINÉ', verdictLine: 'Verdict : ECARTS reportés', planDone: true, build: 0 }
 assert(gateFailure(en) === null, 'English report: finished batch with carried gaps passes')
 assert(gateFailure(fr) === null, 'French report: finished batch with carried gaps passes')
 assert(gateFailure({ ...en, verdictLine: 'Verdict: VALID' }) === null && gateFailure({ ...en, verdictLine: 'Verdict: to redo' }) === null, 'English report: VALID and audit to redo pass')

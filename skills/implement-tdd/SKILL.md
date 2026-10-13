@@ -35,6 +35,6 @@ The run decides by itself and asks only when no decision is defensible; it waits
 
 ## End
 
-Relay the workflow result: status, reason, verdict, report path (`run/batches/FX.md`; for a plan, `run/<stamp>/REPORT.md` and `TO-VALIDATE.md`, the decisions taken without the user, to read after the plan). `BLOCKED` → fix the cause, record `Hn` marked `user decision` in the sheet, launch a new run.
+Relay the workflow result: status, reason, verdict, report path (`run/batches/FX.md`; for a plan, `run/<stamp>.md`, its `## To validate` first: the decisions taken without the user, to read after the plan). `BLOCKED` → fix the cause, record `Hn` marked `user decision` in the sheet, launch a new run.
 
 Batch run `DONE` → end with `→ Batch FX complete — manual validation required. Run /clear before any other batch.`

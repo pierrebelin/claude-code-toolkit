@@ -3,7 +3,7 @@ import type { EngineInterface, FsEntry, ModelUsage, Register, TurnStepChunk } fr
 
 import type {
   AuditVerdict, ChildWorkflow, Journal, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet,
-  PlanLot, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun,
+  LotFigures, PlanLot, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun,
 } from '../types'
 
 const PANE = 'run-lot-pane'
@@ -34,10 +34,12 @@ const DONE = '✅'
 const COUNT_WIDTH = 6
 const TIME_WIDTH = 7
 const COST_WIDTH = 7
+const PANE_COLUMNS = 100
 const MODEL_WIDTH = 14
 const WIDE_COLUMNS = 56
 const SHEET_PATTERN = /-PLAN-(F\d+)\.md$/
 const LOT_PATTERN = /(?:^|\/)([^/]+?)-PLAN-(F\d+)\.md$/
+const CHILD_PLUGIN = /\bworkflow\(\s*['"]([\w-]+):[\w.-]+['"]/
 const CHILD_CALL = /\bworkflow\(\s*(?:['"](?:[\w-]+:)?([\w.-]+)['"]|\{\s*scriptPath:[^)]*?\/([\w.-]+)\.js)/
 const PROMPT_LOT = /Workflow run-lot, batch (F\d+)\.[\s\S]*?Batch sheet: (\S+?\.md)\./
 const REVIEW_LOT = /^mode: (?:lot-suivant|next-batch) \S+ (\S*?-PLAN-(F\d+)\.md)/
@@ -132,6 +134,27 @@ export const totalsOf = (agents: WorkflowAgent[]): Totals => {
     tokens: agents.reduce((sum, agent) => sum + agent.tokens, 0),
     cost: agents.reduce((sum, agent) => sum + agent.cost, 0),
   }
+}
+
+export const lotFiguresOf = (agents: WorkflowAgent[]): LotFigures | null => {
+  if (agents.length === 0) return null
+  const startedAt = Math.min(...agents.map(agent => agent.startedAt))
+  const endedAt = Math.max(...agents.map(agent => agent.endedAt ?? agent.lastActiveAt))
+  const totals = totalsOf(agents)
+  return { agents: agents.length, durationMs: endedAt - startedAt, tokens: totals.tokens, cost: totals.cost, endedAt }
+}
+
+export const lotFiguresFrom = (value: unknown): LotFigures | null => {
+  if (typeof value !== 'object' || value === null) return null
+  const fields = value as Record<string, unknown>
+  return ['agents', 'durationMs', 'tokens', 'cost', 'endedAt'].every(key => typeof fields[key] === 'number') ? (fields as LotFigures) : null
+}
+
+export const figuresKeyOf = (transcriptDir: string | null, sheet: string | null): string | null => {
+  const found = lotOf(sheet)
+  if (found === null) return null
+  const project = /\/projects\/([^/]+)\//.exec(transcriptDir ?? '')?.[1] ?? ''
+  return `lot:${project}:${found.code}-${found.lot}`
 }
 
 export const figuresLine = (totals: Totals): string =>
@@ -476,6 +499,33 @@ export const childWorkflowOf = (script: string): string | null => {
   return found?.[1] ?? found?.[2] ?? null
 }
 
+export const childPluginOf = (script: string): string | null => CHILD_PLUGIN.exec(script)?.[1] ?? null
+
+export const claudeHomeOf = (path: string | null | undefined): string | null => {
+  const at = path?.indexOf('/projects/') ?? -1
+  return at > 0 ? path!.slice(0, at) : null
+}
+
+type Installed = { scope?: string; projectPath?: string; installPath?: string }
+
+export const installPathOf = (installed: string, plugin: string, root: string): string | null => {
+  try {
+    const plugins = (JSON.parse(installed) as { plugins?: Record<string, Installed[]> }).plugins ?? {}
+    const entries = Object.entries(plugins)
+      .filter(([key]) => key.startsWith(`${plugin}@`))
+      .flatMap(([, list]) => list)
+    const chosen = entries.find(one => one.projectPath === root) ?? entries.find(one => one.scope === 'user')
+    return chosen?.installPath ?? null
+  } catch {
+    return null
+  }
+}
+
+export const childScriptPathsOf = (name: string, root: string, installPath: string | null): string[] => [
+  ...(installPath === null ? [] : [`${installPath}/workflows/${name}.js`]),
+  `${root}/.claude/workflows/${name}.js`,
+]
+
 export const planPathOf = (argument: string | null): string | null => {
   const path = argument?.trim().split(/\s+/)[0] ?? ''
   return /-PLAN\.md$/.test(path) ? path.replace(/^@/, '') : null
@@ -551,6 +601,15 @@ export const cyclesDirsOf = (sheet: string, lot: string): string[] => [
   ...WORK_DIRS.map(dir => `${runRootOf(sheet)}/${dir}/${lot}/cycles`),
   `${runRootOf(sheet)}/${lot}/cycles`,
 ]
+
+export const packedStatesOf = (text: string): Record<string, string> =>
+  Object.fromEntries(
+    text.split('\n').flatMap(line => {
+      const state = jsonOf(line)
+      const behaviour = typeof state === 'object' && state !== null ? (state as { behaviour?: unknown }).behaviour : undefined
+      return typeof behaviour === 'string' ? [[`${cycleSlugOf(behaviour)}.json`, line]] : []
+    }),
+  )
 
 export const aheadLotOf = (label: string): string | null => AHEAD_LABEL.exec(label)?.[1] ?? null
 
@@ -1041,6 +1100,16 @@ export const cycleProgressOf = (cycle: SheetCycle, saved: string | null): SheetC
   return { ...cycle, state: isGreen || needsNoGreen ? 'done' : 'red', unreachable }
 }
 
+export const withLiveCycles = (sheet: Sheet, agents: WorkflowAgent[]): Sheet => {
+  if (sheet.cycles === undefined) return sheet
+  const running = agents.filter(agent => agent.state === 'running').map(agent => agent.label)
+  const isRunning = (phase: string, id: string) => running.some(label => label.startsWith(`${phase} ${id} `))
+  const cycles = sheet.cycles.map((one): SheetCycle =>
+    isRunning('RED', one.id) && one.state !== 'pending' ? { ...one, state: 'pending' } : isRunning('GREEN', one.id) && one.state === 'done' ? { ...one, state: 'red' } : one,
+  )
+  return { ...sheet, cycles }
+}
+
 export const isSheetDone = (sheet: Sheet): boolean =>
   sheet.isDone || (sheet.cycles !== undefined && sheet.cycles.every(one => one.state === 'done'))
 
@@ -1200,6 +1269,51 @@ export type ReasonLine = { text: string; kind: 'cause' | 'item' | 'context' }
 
 const REASON_CONTEXT_LINES = 2
 const REASON_ITEMS = 8
+const REASON_CAUSE_LINES = 8
+const LIST_ITEM_WORDS = 6
+
+const OPENING = '([{«“'
+const CLOSING = ')]}»”'
+
+const topLevelItems = (text: string): string[] => {
+  const items: string[] = []
+  let depth = 0
+  let quoted = false
+  let current = ''
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]!
+    if (char === '"') quoted = !quoted
+    else if (OPENING.includes(char)) depth++
+    else if (CLOSING.includes(char)) depth = Math.max(0, depth - 1)
+    if (depth === 0 && !quoted && char === ',' && text[i + 1] === ' ') {
+      items.push(current.trim())
+      current = ''
+      i++
+      continue
+    }
+    current += char
+  }
+  return [...items, current.trim()].filter(one => one !== '')
+}
+
+const isList = (items: string[]): boolean =>
+  items.length >= 2 && items.every(item => item.split(' ').length <= LIST_ITEM_WORDS && !/[.;:]\s/.test(item))
+
+const capped = (lines: string[], max: number, width: number): string[] => {
+  if (lines.length <= max) return lines
+  const shown = lines.slice(0, max)
+  const last = shown[max - 1]!
+  shown[max - 1] = `${last.length < width ? last : last.slice(0, width - 1)}…`
+  return shown
+}
+
+const proseLines = (text: string, width: number): string[] =>
+  text
+    .split(/(?<=[.!?])\s+(?=[A-Z])/)
+    .flatMap(sentence => wrapWords(sentence, width))
+
+const itemLines = (item: string, width: number): string[] =>
+  wrapWords(item, width - 2).map((text, i) => `${i === 0 ? '• ' : '  '}${text}`)
 
 export const reasonLines = (reason: string, width: number): ReasonLine[] => {
   const segments = oneLine(reason).split(' — ').filter(one => one !== '')
@@ -1207,21 +1321,15 @@ export const reasonLines = (reason: string, width: number): ReasonLine[] => {
   const cause = segments[segments.length - 1]!
   const context = segments.slice(0, -1).join(' — ')
   const listed = /^([^:]{1,80}):\s+(.+)$/.exec(cause)
-  const items = listed === null ? [] : listed[2]!.split(/,\s+/).filter(one => one !== '')
-  const head: ReasonLine[] =
-    items.length >= 2
-      ? [
-          ...wrapWords(`${listed![1]}:`, width).map(text => ({ text, kind: 'cause' as const })),
-          ...items.slice(0, REASON_ITEMS).map(item => ({ text: fit(`• ${item}`, width), kind: 'item' as const })),
-          ...(items.length > REASON_ITEMS ? [{ text: `  … ${items.length - REASON_ITEMS} more`, kind: 'item' as const }] : []),
-        ]
-      : wrapWords(cause, width).map(text => ({ text, kind: 'cause' as const }))
-  const wrapped = wrapWords(context, width)
-  const shown = wrapped.slice(0, REASON_CONTEXT_LINES)
-  if (wrapped.length > REASON_CONTEXT_LINES) {
-    const last = shown[shown.length - 1]!
-    shown[shown.length - 1] = `${last.length < width ? last : last.slice(0, width - 1)}…`
-  }
+  const items = listed === null ? [] : topLevelItems(listed[2]!)
+  const head: ReasonLine[] = isList(items)
+    ? [
+        ...wrapWords(`${listed![1]}:`, width).map(text => ({ text, kind: 'cause' as const })),
+        ...items.slice(0, REASON_ITEMS).flatMap(item => itemLines(item, width).map(text => ({ text, kind: 'item' as const }))),
+        ...(items.length > REASON_ITEMS ? [{ text: `  … ${items.length - REASON_ITEMS} more`, kind: 'item' as const }] : []),
+      ]
+    : capped(proseLines(cause, width), REASON_CAUSE_LINES, width).map(text => ({ text, kind: 'cause' as const }))
+  const shown = capped(wrapWords(context, width), REASON_CONTEXT_LINES, width)
   return [...head, ...shown.map(text => ({ text, kind: 'context' as const }))]
 }
 
@@ -1598,7 +1706,7 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
       child: { name: 'run-lot', phases: childPhases, details: childDetails, labels: {} },
       plan: 'todo/product-archiving/PRD-ARCH-PLAN.md',
       lots: [lot('F1', [], done('F1')), lot('F2', ['F1'], isFinished ? done('F2') : null), lot('F3', ['F1'], isFinished ? done('F3') : null), lot('F4', ['F2', 'F3'], null)],
-      outcome: isFinished ? { label: 'DONE', reason: 'F1, F2, F3 done, stopped at --until F3', report: 'todo/product-archiving/run/2026-10-10-0912/REPORT.md' } : null,
+      outcome: isFinished ? { label: 'DONE', reason: 'F1, F2, F3 done, stopped at --until F3', report: 'todo/product-archiving/run/2026-10-10-0912.md' } : null,
       audit: null,
       sheet: null,
       agents: [...supervisors, ...f1, ...f2, ...f3].sort((a, b) => a.index - b.index),
@@ -1607,7 +1715,7 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
 }
 
 async function openPane($: EngineInterface): Promise<void> {
-  await $.ui.open({ id: PANE, title: 'Workflow' }).catch(() => undefined)
+  await $.ui.open({ id: PANE, title: 'Workflow', columns: PANE_COLUMNS }).catch(() => undefined)
 }
 
 async function readText($: EngineInterface, path: string): Promise<string | null> {
@@ -1616,6 +1724,24 @@ async function readText($: EngineInterface, path: string): Promise<string | null
   } catch {
     return null
   }
+}
+
+async function childScriptOf(
+  $: EngineInterface,
+  script: string,
+  name: string,
+  root: string,
+  sessionPath: string | undefined,
+): Promise<{ path: string; text: string } | null> {
+  const plugin = childPluginOf(script)
+  const home = claudeHomeOf(sessionPath)
+  const installed = plugin === null || home === null ? null : await readText($, `${home}/plugins/installed_plugins.json`)
+  const installPath = installed === null ? null : installPathOf(installed, plugin!, root)
+  for (const path of childScriptPathsOf(name, root, installPath)) {
+    const text = await readText($, path)
+    if (text !== null) return { path, text }
+  }
+  return null
 }
 
 async function metaPhase($: EngineInterface, transcriptDir: string, agentId: string): Promise<string | null> {
@@ -1684,8 +1810,11 @@ async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> 
   const views: Record<string, Sheet> = {}
   const outcomes: Record<string, Outcome> = {}
   const askings: Record<string, number> = {}
+  const pasts: Record<string, LotFigures | null> = {}
   for (const entry of run.lots) {
     const agents = run.agents.filter(agent => agent.lot === entry.lot)
+    const sheet = entry.sheet ?? (run.plan === null ? null : run.plan.replace(/\.md$/, `-${entry.lot}.md`))
+    if (run.transcriptDir !== null && sheet !== null && agents.length === 0 && entry.isDone && entry.past === undefined) pasts[entry.lot] = await pastFiguresOf($, run, sheet)
     if (entry.sheet === null || agents.length === 0) continue
     const asking = await askingOf($, entry.sheet, entry.lot)
     if (asking !== (entry.asking ?? 0)) askings[entry.lot] = asking
@@ -1700,20 +1829,42 @@ async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> 
         const outcome = report === null ? null : reportOutcomeOf(report, path)
         if (outcome !== null) {
           outcomes[entry.lot] = outcome
+          if (LOT_DONE.includes(outcome.label)) await keepFigures($, run, entry.sheet, agents)
           break
         }
       }
     }
   }
-  if (planned === null && Object.keys(views).length === 0 && Object.keys(outcomes).length === 0 && Object.keys(askings).length === 0) return
+  if (planned === null && [views, outcomes, askings, pasts].every(found => Object.keys(found).length === 0)) return
   await update($, runs, stored =>
     stored.map(one => {
       if (one.runId !== run.runId) return one
       const kept = completeRun(one)
       const lots = planned === null ? kept.lots : mergeLots(kept.lots, planned)
-      return { ...kept, lots: lots.map(entry => ({ ...entry, view: views[entry.lot] ?? entry.view, outcome: outcomes[entry.lot] ?? entry.outcome, asking: askings[entry.lot] ?? entry.asking })) }
+      return { ...kept, lots: lots.map(entry => ({ ...entry, view: views[entry.lot] ?? entry.view, outcome: outcomes[entry.lot] ?? entry.outcome, asking: askings[entry.lot] ?? entry.asking, past: entry.lot in pasts ? pasts[entry.lot] : entry.past })) }
     }),
   )
+}
+
+async function pastFiguresOf($: EngineInterface, run: WorkflowRun, sheet: string): Promise<LotFigures | null> {
+  const key = figuresKeyOf(run.transcriptDir, sheet)
+  if (key === null) return null
+  try {
+    return lotFiguresFrom(await $.store.get(key))
+  } catch {
+    return null
+  }
+}
+
+async function keepFigures($: EngineInterface, run: WorkflowRun, sheet: string | null, agents: WorkflowAgent[]): Promise<void> {
+  const key = figuresKeyOf(run.transcriptDir, sheet)
+  const figures = lotFiguresOf(agents)
+  if (key === null || figures === null || run.runId.startsWith(DEMO)) return
+  try {
+    await $.store.set(key, figures)
+  } catch {
+    return
+  }
 }
 
 async function poll($: EngineInterface): Promise<void> {
@@ -1761,6 +1912,9 @@ async function poll($: EngineInterface): Promise<void> {
         }
       }),
     )
+    if (settled !== null && run.child === null && settled.outcome !== null && LOT_DONE.includes(settled.outcome.label)) {
+      await keepFigures($, run, sheetPathOf(run.argument ?? settled.argument), run.agents)
+    }
     if (settled !== null) await announce($, run.runId)
   }
 }
@@ -1827,14 +1981,17 @@ async function withCycleProgress($: EngineInterface, sheet: Sheet, path: string,
     dir = candidate
     if (entries.length > 0) break
   }
-  const signature = entries.map(entry => `${entry.name}@${entry.mtimeMs}`).sort().join('|')
+  const packedPath = `${cyclesDirOf(path, lot)}.jsonl`
+  const packedStat = entries.length > 0 ? null : await $.fs.stat(packedPath).catch(() => null)
+  const signature = packedStat !== null ? `${packedPath}@${packedStat.mtimeMs}` : entries.map(entry => `${entry.name}@${entry.mtimeMs}`).sort().join('|')
   if (!isFresh && seenCycles.get(dir) === signature) return null
   seenCycles.set(dir, signature)
   const names = new Set(entries.map(entry => entry.name))
+  const packed = packedStat === null ? {} : packedStatesOf((await readText($, packedPath)) ?? '')
   const cycles: SheetCycle[] = []
   for (const cycle of sheet.cycles) {
     const name = `${cycleSlugOf(cycle.behaviour)}.json`
-    cycles.push(cycleProgressOf(cycle, names.has(name) ? await readText($, `${dir}/${name}`) : null))
+    cycles.push(cycleProgressOf(cycle, packed[name] ?? (names.has(name) ? await readText($, `${dir}/${name}`) : null)))
   }
   return { ...sheet, cycles }
 }
@@ -1946,7 +2103,7 @@ export const register: Register = on => {
     $.clock.every(TICK_MS, () => void tick($))
     for (const run of await read($, runs)) {
       if (run.child === null || run.child.labels !== undefined) continue
-      const childScript = await readText($, `${e.cwd}/.claude/workflows/${run.child.name}.js`)
+      const childScript = await readText($, run.child.script ?? `${e.cwd}/.claude/workflows/${run.child.name}.js`)
       const labels = childScript === null ? {} : labelPhasesOf(childScript)
       await update($, runs, list => list.map(one => (one.runId === run.runId && one.child !== null ? { ...one, child: { ...one.child, labels } } : one)))
     }
@@ -2034,7 +2191,8 @@ export const register: Register = on => {
     const script = launched.scriptPath === undefined ? null : await readText($, launched.scriptPath)
     const declared = script === null ? [] : parsePhases(script)
     const childName = script === null ? null : childWorkflowOf(script)
-    const childScript = childName === null || root === null ? null : await readText($, `${root}/.claude/workflows/${childName}.js`)
+    const childFound = childName === null || root === null ? null : await childScriptOf($, script!, childName, root, launched.transcriptDir ?? launched.scriptPath)
+    const childScript = childFound?.text ?? null
     const childPhases = childScript === null ? [] : parsePhases(childScript)
     const child: ChildWorkflow | null =
       childName === null
@@ -2044,6 +2202,7 @@ export const register: Register = on => {
             phases: childPhases.map(phase => phase.title),
             details: detailsOf(childPhases),
             labels: childScript === null ? {} : labelPhasesOf(childScript),
+            script: childFound?.path ?? null,
           }
     const plan = child === null ? null : planPathOf(argument)
     const planText = plan === null ? null : await readText($, plan)
@@ -2204,8 +2363,8 @@ export const register: Register = on => {
           {line.text}
         </Text>
       ))
-    const row = (key: string, left: JSX.Element, right?: JSX.Element | JSX.Element[]) => (
-      <Box key={key} height={1}>
+    const row = (key: string, left: JSX.Element, right?: JSX.Element | JSX.Element[], wraps = false) => (
+      <Box key={key} {...(wraps ? { minHeight: 1 } : { height: 1 })}>
         <Box flexGrow={1} flexShrink={1}>
           {left}
         </Box>
@@ -2439,10 +2598,10 @@ export const register: Register = on => {
           )}
           {section('tools', `Activity · ${agent.tools} call${agent.tools > 1 ? 's' : ''}`, [
             line('summary', agent.tools === 0 ? 'none yet' : toolSummary(agent.toolCounts), 'inactive'),
+            ...[...agent.calls].reverse().flatMap(call => callRows(agent, call, toolWidth)),
             ...(agent.tools > agent.calls.length && agent.calls.length > 0
               ? [line('dropped', `… ${agent.tools - agent.calls.length} earlier calls not kept`, 'inactive')]
               : []),
-            ...agent.calls.flatMap(call => callRows(agent, call, toolWidth)),
           ])}
         </Box>
       )
@@ -2507,7 +2666,7 @@ export const register: Register = on => {
     const runTotals = totalsOf(current.agents)
     const lot = lotOf(current.argument)
     const outcome = current.outcome
-    const sheet = current.sheet
+    const sheet = current.sheet === null ? null : withLiveCycles(current.sheet, current.agents)
     const isWide = columns >= WIDE_COLUMNS
     const figuresWidth = COUNT_WIDTH + TIME_WIDTH + COST_WIDTH
     const agentsRightWidth = figuresWidth + (isWide ? MODEL_WIDTH : 0)
@@ -2878,7 +3037,7 @@ export const register: Register = on => {
               const agents = planRun.agents.filter(agent => agent.lot === entry.lot)
               const view = agents.length > 0 ? lotRun(planRun, entry.lot) : null
               const left = (
-                <Text key={`plan-lot-text-${entry.lot}`} wrap="truncate-end">
+                <Text key={`plan-lot-text-${entry.lot}`} wrap="wrap">
                   {'  '}
                   <Text color={lotMark(planRun, entry, state).tone}>{lotMark(planRun, entry, state).glyph} </Text>
                   <Text bold={state === 'running'}>{entry.lot}</Text>
@@ -2895,13 +3054,16 @@ export const register: Register = on => {
                   </Button>
                 ),
                 view === null
-                  ? figureCells(`plan-lot-${entry.lot}`, '', '', '')
+                  ? state === 'done' && entry.past
+                    ? figureCells(`plan-lot-${entry.lot}`, `${entry.past.agents}`, duration(entry.past.durationMs), dollars(entry.past.cost))
+                    : figureCells(`plan-lot-${entry.lot}`, '', '', '')
                   : figureCells(
                       `plan-lot-${entry.lot}`,
                       `${agents.length}`,
                       duration(view.durationMs ?? at - view.startedAt),
                       dollars(totalsOf(agents).cost),
                     ),
+                true,
               )
             })}
           </Box>
@@ -2928,7 +3090,6 @@ export const register: Register = on => {
           </Text>,
           close,
         )}
-        {lotBar}
         <Text wrap="truncate-end">
           {'  '}
           <Text bold color={tone}>
@@ -2961,6 +3122,7 @@ export const register: Register = on => {
             </Text>
           </Text>
         )}
+        {lotBar}
         {outcome !== null && (
           <Box
             key="outcome"

@@ -60,6 +60,8 @@ Batch touching Infrastructure with no integration test and no written waiver = *
 | `ContractTests` | **whole** | as soon as an endpoint, an HTTP contract or an `Abstractions.Models` type changes |
 | `IntegrationTests` | **filtered** | as soon as the diff touches `src/{{PRODUCT}}.Infrastructure/`. **Never the whole suite**, `full` mode included |
 
+The one whole run of every suite, `IntegrationTests` included, is run-plan's final check, once per plan after its last batch, under the `KIT_FINAL_CHECK=1` marker; never inside a batch.
+
 **Scope is decided, not endured.** A suite run whole where a filter would have done proves nothing more and costs minutes.
 
 ## 3. Filtering integration tests

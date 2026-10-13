@@ -36,8 +36,9 @@ its build output and its test containers, whatever the plan says.
               `FX launched — <sheet>` to J
 --context FX  design context of FX for run-lot: `## Audit gaps` of the earlier batches'
               run/batches/FY.md, `user decision`/GAPS lines of the sheets, FX's stopped
-              report and saved cycles (run/.work/FX/cycles), source and test paths the
-              sheet cites that do not exist
+              report and saved cycles (run/.work/FX/cycles, packed into
+              cycles.jsonl once done), source and test paths the sheet cites
+              that do not exist
 --root        directory `Repo` paths resolve against (default: git toplevel of the plan)
 """
 import argparse
@@ -216,7 +217,15 @@ def design_context(plan, batches, target, sheet, repo):
             out.append(f"cycle {c.name}: {state.get('behaviour', '?')} — {'green' if state.get('green') else 'no green'}")
         except ValueError:
             out.append(f"cycle {c.name}: unreadable")
-    if not cycles:
+    packed = run / (CYCLE_DIRS[0].format(b=target) + ".jsonl")
+    lines = packed.read_text(encoding="utf-8").splitlines() if not cycles and packed.is_file() else []
+    for n, line in enumerate(lines, 1):
+        try:
+            state = json.loads(line)
+            out.append(f"cycle {packed.name}:{n}: {state.get('behaviour', '?')} — {'green' if state.get('green') else 'no green'}")
+        except ValueError:
+            out.append(f"cycle {packed.name}:{n}: unreadable")
+    if not cycles and not lines:
         out.append("cycles: none")
     out.append("\n## Cited paths that do not exist")
     config = kit_config.load(str(repo))
