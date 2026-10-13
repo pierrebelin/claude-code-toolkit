@@ -61,19 +61,19 @@
       "content": "# S\n\n## TDD sequence\n"
     },
     {
-      "path": "sc/st/une-creation-refusee.json",
+      "path": "sc/st.jsonl",
       "kind": "text",
-      "content": "{\"behaviour\": \"Une création refusée\", \"red\": {\"status\": \"RED\", \"exit\": 1, \"table\": [{\"test\": \"ATests.ShouldRefuse_WhenNameIsEmpty\", \"case\": \"c\"}]}, \"green\": {\"status\": \"GREEN\", \"exit\": 0}}"
+      "content": "{\"kind\":\"cycle\",\"batch\":\"\",\"slug\":\"une-creation-refusee\",\"state\":{\"behaviour\":\"Une création refusée\",\"red\":{\"status\":\"RED\",\"exit\":1,\"table\":[{\"test\":\"ATests.ShouldRefuse_WhenNameIsEmpty\",\"case\":\"c\"}]},\"green\":{\"status\":\"GREEN\",\"exit\":0}}}\n"
     },
     {
-      "path": "sc/st-red/une-creation-refusee.json",
+      "path": "sc/st-red.jsonl",
       "kind": "text",
-      "content": "{\"behaviour\": \"Une création refusée\", \"red\": {\"status\": \"RED\", \"exit\": 1, \"table\": [{\"test\": \"ATests.ShouldRefuse_WhenNameIsEmpty\", \"case\": \"c\"}]}}"
+      "content": "{\"kind\":\"cycle\",\"batch\":\"\",\"slug\":\"une-creation-refusee\",\"state\":{\"behaviour\":\"Une création refusée\",\"red\":{\"status\":\"RED\",\"exit\":1,\"table\":[{\"test\":\"ATests.ShouldRefuse_WhenNameIsEmpty\",\"case\":\"c\"}]}}}\n"
     },
     {
-      "path": "sc/st-gone/one.json",
+      "path": "sc/st-gone.jsonl",
       "kind": "text",
-      "content": "{\"behaviour\": \"One\", \"red\": {\"status\": \"RED\", \"exit\": 1, \"table\": [], \"unreachable\": [{\"method\": \"ATests.ShouldA_WhenB\", \"site\": \"src/P/H.cs:1\", \"why\": \"w\"}]}}"
+      "content": "{\"kind\":\"cycle\",\"batch\":\"\",\"slug\":\"one\",\"state\":{\"behaviour\":\"One\",\"red\":{\"status\":\"RED\",\"exit\":1,\"table\":[],\"unreachable\":[{\"method\":\"ATests.ShouldA_WhenB\",\"site\":\"src/P/H.cs:1\",\"why\":\"w\"}]}}}\n"
     },
     {
       "path": "sc/mark-en.md",
@@ -84,6 +84,11 @@
       "path": "sc/mark-fr.md",
       "kind": "text",
       "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\", \"src/P/Ghost.cs (à créer)\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/st-other.jsonl",
+      "kind": "text",
+      "content": "{\"kind\":\"cycle\",\"batch\":\"F9\",\"slug\":\"une-creation-refusee\",\"state\":{\"behaviour\":\"Une création refusée\",\"red\":{\"status\":\"RED\",\"exit\":1,\"table\":[{\"test\":\"ATests.ShouldRefuse_WhenNameIsEmpty\",\"case\":\"c\"}]},\"green\":{\"status\":\"GREEN\",\"exit\":0}}}\n"
     }
   ],
   "cases": [
@@ -185,14 +190,14 @@
     },
     {
       "name": "cycle with green state is done",
-      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done {{FIX}}/sc/st --root {{FIX}}/sc",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done {{FIX}}/sc/st.jsonl --root {{FIX}}/sc",
       "expect": {
         "exit": 0
       }
     },
     {
       "name": "cycle with a RED only is not done",
-      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done {{FIX}}/sc/st-red --root {{FIX}}/sc",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done {{FIX}}/sc/st-red.jsonl --root {{FIX}}/sc",
       "expect": {
         "exit": 1,
         "stdout": "C1"
@@ -200,7 +205,7 @@
     },
     {
       "name": "an unreachable method is not expected on disk, its cycle is done",
-      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/anchored.md --methods {{FIX}}/sc/st-gone --root {{FIX}}/sc | wc -l | tr -d ' '; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/anchored.md --done {{FIX}}/sc/st-gone --root {{FIX}}/sc; echo done=$?",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/anchored.md --methods {{FIX}}/sc/st-gone.jsonl --root {{FIX}}/sc | wc -l | tr -d ' '; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/anchored.md --done {{FIX}}/sc/st-gone.jsonl --root {{FIX}}/sc; echo done=$?",
       "expect": {
         "exit": 0,
         "stdout": "0\ndone=0"
@@ -208,7 +213,7 @@
     },
     {
       "name": "summary line per cycle for the audit capture",
-      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --summary {{FIX}}/sc/st --root {{FIX}}/sc",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --summary {{FIX}}/sc/st.jsonl --root {{FIX}}/sc",
       "expect": {
         "exit": 0,
         "stdout": "C1 — RED RED exit 1 — GREEN GREEN exit 0"
@@ -231,19 +236,19 @@
       }
     },
     {
-      "name": "--pack folds the state files into STATE_DIR.jsonl, the done batch stays done",
-      "cmd": "d=$(mktemp -d); cp -r {{FIX}}/sc/st $d/st; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --pack $d/st >/dev/null; printf '%s|' $(ls $d); python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done $d/st --root {{FIX}}/sc; echo \"done=$?\"",
-      "expect": {
-        "exit": 0,
-        "stdout": "st.jsonl|done=0"
-      }
-    },
-    {
-      "name": "a state file written after the pack replaces the packed line of its behaviour",
-      "cmd": "d=$(mktemp -d); cp -r {{FIX}}/sc/st-red $d/st; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --pack $d/st >/dev/null; mkdir $d/st; cp {{FIX}}/sc/st/*.json $d/st/; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done $d/st --root {{FIX}}/sc; echo \"done=$?\"; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --states $d/st | python3 -c 'import json,sys; print(\"states=%d\" % len(json.load(sys.stdin)))'",
+      "name": "the last cycle line of a behaviour wins: a GREEN appended after its RED makes the cycle done, one state per behaviour",
+      "cmd": "W=$(mktemp); { cat {{FIX}}/sc/st-red.jsonl; echo; cat {{FIX}}/sc/st.jsonl; } > $W; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done $W --root {{FIX}}/sc; echo \"done=$?\"; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --states $W | python3 -c 'import json,sys; print(\"states=%d\" % len(json.load(sys.stdin)))'",
       "expect": {
         "exit": 0,
         "stdout": "done=0\nstates=1"
+      }
+    },
+    {
+      "name": "cycle lines of another batch are not this sheet's: its cycle stays open",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done {{FIX}}/sc/st-other.jsonl --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "C1"
       }
     }
   ]

@@ -17,7 +17,7 @@ Complete business story on real stack: Aspire, database, auth, API, SDK. Complem
 
 ## Non-negotiable rules
 
-- Test covering rule of handler's rules table (`kit:rules`) carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]`. Trait read in every suite — rule proven only here stops counting untested. No documented rule → no trait.
+- No `[Trait("RM", …)]`: an E2E test proves a journey, never a single row of a handler's rules table; the rule is proven, and traced, by the handler test (`.claude/rules/tests.md`).
 - One test = complete journey: `create → update → delete`, `create → activate → deactivate`, `initialize → create → get → delete`.
 - Forbidden: `Create`, `Get`, `Compile`, `Delete` alone — those are contract/integration tests.
 - Zero mocks, zero direct database seeding, zero raw `HttpClient`: client SDK only.
@@ -29,7 +29,7 @@ Complete business story on real stack: Aspire, database, auth, API, SDK. Complem
 
 1. Check lifecycle retained in sheet; otherwise no E2E test.
 2. Find existing lifecycle file, extend it.
-3. Create dependencies through SDK, run every operation, verify API responses, clean up through API.
+3. Create dependencies through SDK, run every operation, verify API responses. No cleanup step: what the journey generated stays.
 4. Run only targeted E2E test or project.
 
 ## Template
@@ -60,6 +60,6 @@ public sealed class [Feature]LifecycleTests(ApiApplicationFixture fixture)
 ## Verification
 
 - [ ] `commands.test` with `{suite}` = `E2ETests`, narrowed to `*[Feature]LifecycleTests` (`implement-tdd/references/test-scope.md` § Runner), green, or justified Skip
-- [ ] Lifecycle selected, ≥2 operations, API cleanup
+- [ ] Lifecycle selected, ≥2 operations, no cleanup step, no `RM` trait
 - [ ] Real SDK + Aspire; no mock, no database seeding, no secret, no isolated endpoint
 - [ ] Existing file extended, existing fixture reused

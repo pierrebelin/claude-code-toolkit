@@ -29,7 +29,7 @@ One command modifies, saves **single aggregate** (DDD-08). External read targete
 | Bounded list | `IReadOnlyList<T>` |
 | Single read | aggregate or its response — never `null`: repository `Get` throws `{Entity}NotFoundException` |
 
-**Never `Result<T>`** — absent from codebase.
+**Never `Result<T>` as a handler payload** — handlers throw; a `Result<T>` may live only inside services facing an upstream system.
 
 Paginated list as `IReadOnlyList<T>` loses page total: use `Paging<T>`.
 
@@ -77,7 +77,7 @@ As Domain: commands, queries, repository signatures take no convenience `null`. 
 
 Done checklist unsatisfied until:
 
-1. **Handler or its tests modified** → update handler folder `CLAUDE.md`, `[Trait("RM", "…")]` on every test written
+1. **Handler or its tests modified** → update handler folder `CLAUDE.md`, `[Trait("RM", "…")]` on every handler unit test written and on each integration test proving a documented rule; contract and E2E tests carry none
 
 ### Fixed shape of a handler `CLAUDE.md`
 

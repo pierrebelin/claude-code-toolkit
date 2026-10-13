@@ -1,0 +1,167 @@
+{
+  "fixtures": [
+    {
+      "path": "rw/run/.work/2026-10-13-0826/journal.md",
+      "kind": "text",
+      "content": "start\n"
+    },
+    {
+      "path": "rw/run/.work/2026-10-13-0826/baseline-F7/manifest.txt",
+      "kind": "text",
+      "content": "src/a.cs\n"
+    },
+    {
+      "path": "rw/run/.work/2026-10-13-0835/journal.md",
+      "kind": "text",
+      "content": "start\n"
+    },
+    {
+      "path": "rw/run/.work/2026-10-13-0928/journal.md",
+      "kind": "text",
+      "content": "start\n"
+    },
+    {
+      "path": "rw/run/.work/F7/cycles/seven.json",
+      "kind": "text",
+      "content": "{\"behaviour\": \"Seven\", \"red\": {\"status\": \"RED\"}}"
+    },
+    {
+      "path": "rw/run/.work/F7/baseline/manifest.txt",
+      "kind": "text",
+      "content": "src/a.cs\n"
+    },
+    {
+      "path": "rw/run/.work/F7/build.txt",
+      "kind": "text",
+      "content": "build log\n"
+    },
+    {
+      "path": "rw/run/.work/F7/audit-F7.diff",
+      "kind": "text",
+      "content": "diff\n"
+    },
+    {
+      "path": "rw/run/.work/F8/cycles.jsonl",
+      "kind": "text",
+      "content": "{\"behaviour\": \"Eight\", \"red\": {\"status\": \"RED\"}, \"green\": {\"status\": \"GREEN\", \"exit\": 0}}\n"
+    },
+    {
+      "path": "rw/run/.travail/F6/cycles/six.json",
+      "kind": "text",
+      "content": "{\"behaviour\": \"Six\", \"red\": {\"status\": \"RED\"}}"
+    },
+    {
+      "path": "rw/run/.travail/2026-10-12-1743/baseline-F6/manifest.txt",
+      "kind": "text",
+      "content": "src/b.cs\n"
+    },
+    {
+      "path": "rw/run/lots/F1.md",
+      "kind": "text",
+      "content": "## STATUT — TERMINÉ\n"
+    },
+    {
+      "path": "rw/run/lots/F8.md",
+      "kind": "text",
+      "content": "## STATUT — BLOQUÉ\n"
+    },
+    {
+      "path": "rw/run/batches/F8.md",
+      "kind": "text",
+      "content": "## STATUS — DONE\n"
+    },
+    {
+      "path": "rw/run/2026-10-13-0826/aside-F7.patch",
+      "kind": "text",
+      "content": "--- a/src/a.cs\n"
+    },
+    {
+      "path": "rw/run/2026-10-13-0826/TO-VALIDATE.md",
+      "kind": "text",
+      "content": "x\n"
+    },
+    {
+      "path": "rw/run/2026-10-13-0835/TO-VALIDATE.md",
+      "kind": "text",
+      "content": "x\n"
+    },
+    {
+      "path": "rw/run/2026-10-12-1000.md",
+      "kind": "text",
+      "content": "old run\n"
+    },
+    {
+      "path": "rw/run/2026-10-11-1000.md",
+      "kind": "text",
+      "content": "older run\n"
+    },
+    {
+      "path": "rw/run/2026-10-11-1000-aside-F2.patch",
+      "kind": "text",
+      "content": "old patch\n"
+    },
+    {
+      "path": "rw-open/run/.work.jsonl",
+      "kind": "text",
+      "content": "{\"kind\":\"preexisting\",\"batch\":\"F3\",\"files\":{\"src/u.cs\":\"abc\"},\"at\":100}\n{\"kind\":\"cycle\",\"batch\":\"F3\",\"slug\":\"three\",\"state\":{\"behaviour\":\"Three\"},\"at\":100}\n{\"kind\":\"question\",\"batch\":\"F3\",\"id\":\"F3-1\",\"payload\":{},\"at\":100}\n{\"kind\":\"answer\",\"batch\":\"F3\",\"id\":\"F3-1\",\"answers\":[],\"at\":101}\n{\"kind\":\"journal\",\"run\":\"2026-10-13-0900\",\"text\":\"older run line\",\"at\":100}\n{\"kind\":\"journal\",\"run\":\"2026-10-13-1200\",\"text\":\"current run line\",\"at\":100}\n"
+    }
+  ],
+  "cases": [
+    {
+      "name": "purge migrates the older layouts and keeps one work file: aside batch dropped, done batch cycles kept, stopped batch kept, lots/ reports moved without overwriting batches/, 3 runs kept",
+      "cmd": "R={{FIX}}/rw/run; python3 {{KIT}}/scripts/run-work.py purge $R 2026-10-13-1200 >/dev/null && echo \"$(ls -A $R | tr '\\n' ' ')|$(ls $R/batches | tr '\\n' ' ')|$(head -1 $R/batches/F8.md)|$(python3 -c 'import json,sys,collections; c=collections.Counter(); [c.update([(r[\"kind\"]+\" \"+r.get(\"batch\",r.get(\"run\",\"\")))]) for r in map(json.loads, open(sys.argv[1]))]; print(\" \".join(f\"{k}={v}\" for k,v in sorted(c.items())))' $R/.work.jsonl)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": ".work.jsonl 2026-10-13-0826 2026-10-13-0835 batches |F1.md F8.md |## STATUS — DONE|cycle F6=1 cycle F8=1"
+      }
+    },
+    {
+      "name": "purge: a batch DONE in the plan without its report (run cut) is done, its older aside patch removed, an empty run folder removed",
+      "cmd": "R={{FIX}}/rw-cut-{{SID}}/run; rm -rf $(dirname $R); mkdir -p $R/2026-10-13-0835 $R/2026-10-13-0826 && printf 'p\\n' > $R/2026-10-13-0826/aside-F7.patch && printf 'x\\n' > $R/2026-10-13-0826/TO-VALIDATE.md && sleep 1 && printf '# P\\n\\n### Lot F7 — Core — ✅ DONE (2026-10-13)\\n' > $(dirname $R)/P-PLAN.md && printf '{\"kind\": \"cycle\", \"batch\": \"F7\", \"slug\": \"s\", \"state\": {}, \"at\": 1}\\n{\"kind\": \"preexisting\", \"batch\": \"F7\", \"files\": {}, \"at\": 1}\\n' > $R/.work.jsonl && python3 {{KIT}}/scripts/run-work.py purge $R >/dev/null && echo \"$(ls -A $R | tr '\\n' ' ')|$(ls $R/2026-10-13-0826 | tr '\\n' ' ')|$(cut -c1-30 $R/.work.jsonl)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": ".work.jsonl 2026-10-13-0826 |TO-VALIDATE.md |{\"kind\":\"cycle\",\"batch\":\"F7\""
+      }
+    },
+    {
+      "name": "purge keeps every line a stopped batch needs to resume and the journal of the current run only; questions and answers never survive",
+      "cmd": "R={{FIX}}/rw-open/run; python3 {{KIT}}/scripts/run-work.py purge $R 2026-10-13-1200 && python3 -c 'import json,sys,collections; c=collections.Counter(); [c.update([(r[\"kind\"]+\" \"+r.get(\"batch\",r.get(\"run\",\"\")))]) for r in map(json.loads, open(sys.argv[1]))]; print(\" \".join(f\"{k}={v}\" for k,v in sorted(c.items())))' $R/.work.jsonl",
+      "expect": {
+        "exit": 0,
+        "stdout": "purged: 3 line(s)\ncycle F3=1 journal 2026-10-13-1200=1 preexisting F3=1"
+      }
+    },
+    {
+      "name": "purge of a run folder holding nothing removes the empty work file",
+      "cmd": "R={{FIX}}/rw-empty-{{SID}}/run; mkdir -p $R && printf '' > $R/.work.jsonl && python3 {{KIT}}/scripts/run-work.py purge $R && ls -A $R | wc -l | tr -d ' '",
+      "expect": {
+        "exit": 0,
+        "stdout": "0"
+      }
+    },
+    {
+      "name": "append gives a cycle without slug the slug of its behaviour, journal appends then reads a run's lines, drop removes by batch and kind",
+      "cmd": "W={{FIX}}/rw-append-{{SID}}.jsonl; rm -f $W; echo '{\"kind\": \"cycle\", \"batch\": \"F1\", \"state\": {\"behaviour\": \"Une création refusée\"}}' | python3 {{KIT}}/scripts/run-work.py append $W && python3 {{KIT}}/scripts/run-work.py journal $W S1 start of S1 && python3 {{KIT}}/scripts/run-work.py journal $W S1 && python3 {{KIT}}/scripts/run-work.py drop $W --batch F1 --kind cycle && grep -c une-creation-refusee $W",
+      "expect": {
+        "exit": 1,
+        "stdout": "appended cycle F1\nstart of S1\ndropped 1 line(s)\n0"
+      }
+    },
+    {
+      "name": "append refuses a line of an unknown kind",
+      "cmd": "echo '{\"kind\": \"draft\"}' | python3 {{KIT}}/scripts/run-work.py append {{FIX}}/rw-bad-{{SID}}.jsonl",
+      "expect": {
+        "exit": 1,
+        "stderr": "kind must be one of"
+      }
+    },
+    {
+      "name": "tmp hands out the same folder of the system temp directory on every call, never under the run folder",
+      "cmd": "a=$(python3 {{KIT}}/scripts/run-work.py tmp F1) && b=$(python3 {{KIT}}/scripts/run-work.py tmp F1) && [ \"$a\" = \"$b\" ] && [ -d \"$a\" ] && case \"$a\" in */cctoolkit-run/*/F1) echo same;; esac",
+      "expect": {
+        "exit": 0,
+        "stdout": "same"
+      }
+    }
+  ]
+}

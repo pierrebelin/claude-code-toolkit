@@ -4,7 +4,7 @@
 
 ## 1. Sheet and plan
 
-The batch sheet is never updated at closing: the cycle states (`run/.work/FX/cycles/*.json`, packed into `cycles.jsonl` once the batch is done) are the TDD evidence, the run's decisions go to `## To validate` of the reports, and the report marks the sheet title and the plan heading `✅ DONE`. A correction changing an RM/CU → update the source spec too: the spec is the business source of truth.
+The batch sheet is never updated at closing: the cycle states (`cycle` lines of `run/.work.jsonl`, kept once the batch is done) are the TDD evidence, the run's decisions go to `## To validate` of the reports, and the report marks the sheet title and the plan heading `✅ DONE`. A correction changing an RM/CU → update the source spec too: the spec is the business source of truth.
 
 ## 2. Handler documentation
 

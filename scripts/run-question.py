@@ -1,53 +1,63 @@
 #!/usr/bin/env python3
 """Questions a running run-lot / run-plan workflow asks the user, answered in the session.
 
-The workflow writes `run/.work/<FX>/questions/<FX>-<n>.json`, then polls for its answer file
-`<FX>-<n>.answer.json`; the session watches the run folder, asks through AskUserQuestion
-and writes the answer. The run never stops nor resumes: it waits.
+The workflow appends a `question` line to the run work file `run/.work.jsonl`
+(lib/work_file.py), then polls for the `answer` line of the same id; the session watches
+the run folder, asks through AskUserQuestion and appends the answer. The run never stops
+nor resumes: it waits.
 
-    run-question.py wait <question.json> [--seconds N]
-        workflow side: exit 0 printing the answer JSON as soon as an answer file at least
-        as recent as the question exists, exit 3 printing PENDING after N seconds
-        (default 540). An older answer file is a leftover of an earlier run: ignored.
-    run-question.py watch <dir> [--since EPOCH] [--seconds N]
-        session side: exit 0 printing `QUESTION <path> since=<epoch> next=<epoch>` for the
-        first unanswered question under <dir> modified after EPOCH (default: start time),
-        exit 3 printing `TIMEOUT since=<epoch>` after N seconds (default 0 = never).
-        Re-arm with `--since <next>`: the question being answered never fires twice.
-    run-question.py pending <dir>
-        unanswered questions under <dir>, one path per line
-    run-question.py answer <question.json> <answers-json>
-        writes the answer file atomically; <answers-json> = [{"id": "q1", "text": "..."}]
-        or {"answers": [...]} (the shape `wait` prints), one entry per question id,
+    run-question.py ask <work> FX
+        workflow side: appends the question JSON read on stdin as `FX-<n>`, n the next
+        number of FX, and prints that id
+    run-question.py wait <work> <id> [--seconds N]
+        workflow side: exit 0 printing `{"answers": [...]}` as soon as an answer to <id> at
+        least as recent as the question exists, exit 3 printing PENDING after N seconds
+        (default 540). An older answer is a leftover of an earlier run: ignored.
+    run-question.py watch <run folder|work> [--since EPOCH] [--seconds N]
+        session side: exit 0 printing `QUESTION <work> <id> since=<epoch> next=<epoch>`
+        then the question JSON on the next line, for the first unanswered question asked
+        after EPOCH (default: start time); exit 3 printing `TIMEOUT since=<epoch>` after N
+        seconds (default 0 = never). Re-arm with `--since <next>`: the question being
+        answered never fires twice.
+    run-question.py pending <run folder|work>
+        unanswered question ids, one per line
+    run-question.py answer <work> <id> <answers-json>
+        appends the answer; <answers-json> = [{"id": "q1", "text": "..."}] or
+        {"answers": [...]} (the shape `wait` prints), one entry per question id,
         `STOP` as text stops the batch
 
-Question file: {"batch", "sheet", "kind": "stop"|"review", "context",
+Question: {"batch", "sheet", "kind": "stop"|"review", "context",
 "questions": [{"id", "severity", "question", "evidence", "options", "recommendation"}]}.
 """
 import json
-import os
 import sys
 import time
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent.parent
+for _lib in (HERE / "lib", HERE / ".claude" / "lib"):
+    sys.path.insert(0, str(_lib))
+import work_file  # noqa: E402
+
 POLL = 2.0
 
 
-def answer_path(question: Path) -> Path:
-    return question.with_name(question.name[: -len(".json")] + ".answer.json")
+def work_of(target: Path) -> Path:
+    return work_file.work_path(target) if target.is_dir() else target
 
 
-def is_question(path: Path) -> bool:
-    return path.parent.name == "questions" and path.name.endswith(".json") and not path.name.endswith(".answer.json")
+def answer_of(records: list[dict], question: dict) -> dict | None:
+    return next((r for r in reversed(work_file.of(records, "answer"))
+                 if r.get("id") == question["id"] and r.get("at", 0) >= question.get("at", 0)), None)
 
 
-def fresh(question: Path, answer: Path) -> bool:
-    return answer.exists() and question.exists() and answer.stat().st_mtime >= question.stat().st_mtime
+def unanswered(work: Path, since: float = 0.0) -> list[dict]:
+    records = work_file.read(work)
+    return [q for q in work_file.of(records, "question") if q.get("at", 0) >= since and not answer_of(records, q)]
 
 
-def unanswered(root: Path, since: float = 0.0) -> list[Path]:
-    found = [p for p in root.rglob("*.json") if is_question(p) and not fresh(p, answer_path(p))]
-    return sorted((p for p in found if p.stat().st_mtime >= since), key=lambda p: p.stat().st_mtime)
+def question_of(work: Path, qid: str) -> dict | None:
+    return next((q for q in reversed(work_file.of(work_file.read(work), "question")) if q.get("id") == qid), None)
 
 
 def option(args: list[str], name: str, default: float) -> float:
@@ -56,33 +66,52 @@ def option(args: list[str], name: str, default: float) -> float:
     return default
 
 
-def wait(question: Path, seconds: float) -> int:
+def ask(work: Path, batch: str) -> int:
+    try:
+        payload = json.loads(sys.stdin.read())
+    except json.JSONDecodeError as error:
+        print(f"question is not JSON: {error}", file=sys.stderr)
+        return 1
+    n = len(work_file.of(work_file.read(work), "question", batch)) + 1
+    qid = f"{batch}-{n}"
+    work_file.append(work, {"kind": "question", "batch": batch, "id": qid, "payload": payload})
+    print(qid)
+    return 0
+
+
+def wait(work: Path, qid: str, seconds: float) -> int:
     deadline = time.monotonic() + seconds
-    target = answer_path(question)
     while time.monotonic() < deadline:
-        if fresh(question, target):
-            print(target.read_text(encoding="utf-8"))
+        question = question_of(work, qid)
+        found = question and answer_of(work_file.read(work), question)
+        if found:
+            print(json.dumps({"answers": found["answers"]}, ensure_ascii=False))
             return 0
         time.sleep(POLL)
     print("PENDING")
     return 3
 
 
-def watch(root: Path, since: float, seconds: float) -> int:
+def watch(work: Path, since: float, seconds: float) -> int:
     deadline = time.monotonic() + seconds if seconds > 0 else None
     while deadline is None or time.monotonic() < deadline:
-        if root.exists():
-            pending = unanswered(root, since)
-            if pending:
-                print(f"QUESTION {pending[0]} since={since:.0f} next={pending[0].stat().st_mtime + 0.001:.3f}")
-                return 0
+        pending = unanswered(work, since)
+        if pending:
+            q = pending[0]
+            print(f"QUESTION {work} {q['id']} since={since:.0f} next={q['at'] + 0.001:.3f}")
+            print(json.dumps(q["payload"], ensure_ascii=False))
+            return 0
         time.sleep(POLL)
     print(f"TIMEOUT since={since:.0f}")
     return 3
 
 
-def answer(question: Path, raw: str) -> int:
-    asked = {q["id"] for q in json.loads(question.read_text(encoding="utf-8"))["questions"]}
+def answer(work: Path, qid: str, raw: str) -> int:
+    question = question_of(work, qid)
+    if not question:
+        print(f"no question {qid} in {work}", file=sys.stderr)
+        return 1
+    asked = {q["id"] for q in question["payload"]["questions"]}
     try:
         answers = json.loads(raw)
     except json.JSONDecodeError as error:
@@ -97,11 +126,8 @@ def answer(question: Path, raw: str) -> int:
     if given != asked:
         print(f"answers must cover exactly {sorted(asked)}, got {sorted(given)}", file=sys.stderr)
         return 1
-    target = answer_path(question)
-    tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text(json.dumps({"answers": answers}, ensure_ascii=False, indent=1), encoding="utf-8")
-    os.replace(tmp, target)
-    print(target)
+    work_file.append(work, {"kind": "answer", "batch": question.get("batch", ""), "id": qid, "answers": answers})
+    print(f"{qid} answered")
     return 0
 
 
@@ -109,17 +135,19 @@ def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print(__doc__, file=sys.stderr)
         return 2
-    command, target, rest = argv[0], Path(argv[1]), argv[2:]
-    if command == "wait":
-        return wait(target, option(rest, "--seconds", 540))
+    command, work, rest = argv[0], work_of(Path(argv[1])), argv[2:]
+    if command == "ask" and rest:
+        return ask(work, rest[0])
+    if command == "wait" and rest:
+        return wait(work, rest[0], option(rest, "--seconds", 540))
     if command == "watch":
-        return watch(target, option(rest, "--since", time.time()), option(rest, "--seconds", 0))
+        return watch(work, option(rest, "--since", time.time()), option(rest, "--seconds", 0))
     if command == "pending":
-        for path in unanswered(target):
-            print(path)
+        for q in unanswered(work):
+            print(q["id"])
         return 0
-    if command == "answer" and rest:
-        return answer(target, rest[0])
+    if command == "answer" and len(rest) >= 2:
+        return answer(work, rest[0], rest[1])
     print(__doc__, file=sys.stderr)
     return 2
 

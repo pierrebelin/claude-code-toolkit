@@ -30,11 +30,11 @@ assert(checkRed(two, red('RED', 1), () => new Set()).includes('A.Dead'), 'contra
 assert(checkRed(two, red('RED', 1, { unreachable: [{ method: 'A.Dead', site: 'src/X.cs:3', why: 'w' }] }), () => new Set()) === null, 'unreachable contract method accepted, no retry loop')
 assert(checkRed(two, red('RED', 1, { table: [], unreachable: [{ method: 'A.B', site: 's', why: 'w' }, { method: 'A.Dead', site: 's', why: 'w' }] }), () => new Set()) === null, 'every method unreachable: no test, no GREEN')
 assert(contractCommand({ id: 'X1' }, '--red') === 'cctoolkit sheet-cycles todo/x/X-PLAN-F3.md --cycle X1 --red', 'RED reads its contract from the sheet block')
-assert(workDir === 'todo/x/run/.work/F3' && reportPath === 'todo/x/run/batches/F3.md' && baseline.startsWith(workDir), 'scratch under run/.work/FX, report in run/batches/FX.md')
+assert(workFile === 'todo/x/run/.work.jsonl' && reportPath === 'todo/x/run/batches/F3.md' && commitAtEnd, 'one work file run/.work.jsonl, report in run/batches/FX.md, standalone batch commits itself')
 const loading = null
 const run = async () => {
   let waits = 0
-  agent = async (prompt, o) => (o.label.startsWith('wait') ? (waits++, { answered: false, answers: [] }) : o.label.startsWith('question') ? { ok: true } : null)
+  agent = async (prompt, o) => (o.label.startsWith('wait') ? (waits++, { answered: false, answers: [] }) : o.label.startsWith('question') ? { ok: true, id: 'F3-1' } : null)
   const applied = await ask('stop', 'GREEN x', [{ severity: 'Blocking', question: 'q ?', evidence: 'e', options: [], recommendation: 'do X' }])
   assert(waits === WAIT_ROUNDS && WAIT_ROUNDS * WAIT_SECONDS <= 600, 'question waits 10 min at most')
   assert(applied && applied[0].text === 'do X' && applied[0].recommended, 'unanswered question takes its recommendation')

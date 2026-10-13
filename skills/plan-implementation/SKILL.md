@@ -33,7 +33,7 @@ Plan split by feature, not layer:
    The section is found by its anchor, or by the title of a spec written before the anchors (`## 12. Questions ouvertes`, severity `Bloquant`). Any line → **stop**: list them, end with `→ Open blocking questions: /business-spec to settle them.` No plan while a `Blocking` is open — same contract as `## BLOCKED` in a batch, moved before design.
 1. Read spec fully.
 2. Read `references/ddd-rules.md` + `references/architecture-rules.md`. Each id → applied in the owning batch sheet (`## Design`), or listed once in global plan `1. Scope` as `N/A — reason`. `references/ddd-examples.md` only if id ambiguous.
-3. Inventory the bounded context by delegation: a `Read` under `src/` or `tests/` attaches layer rules to every later turn. `graphify explain "<Aggregate>"` first, then one `Explore` subagent (`model: haiku`):
+3. Inventory the bounded context by delegation: a `Read` under `src/` or `tests/` attaches layer rules to every later turn. `graphify explain "<Aggregate>"` first, then one `Explore` subagent (`model: sonnet`, the inventory includes local conventions):
 
    ```text
    Bounded context: … — spec: [path] — need: [one sentence]

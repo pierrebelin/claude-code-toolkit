@@ -11,8 +11,8 @@ export const meta = {
     { title: 'Audit', detail: 'cctoolkit audit-capture, ddd-tdd-auditor, two retries at most' },
     { title: 'Review', detail: 'adversarial-reviewer and pre-design of the next sheet, beside the audit' },
     { title: 'Arbiter', detail: 'a stop is settled by the arbiter and listed for review after the run; a question only when no decision is defensible' },
-    { title: 'Question', detail: 'human-only stop: question file, wait for the answer written from the session, same run' },
-    { title: 'Report', detail: 'run/batches/FX.md, written even on stop; run/.work/FX reduced to cycles.jsonl when DONE' },
+    { title: 'Question', detail: 'human-only stop: question line in run/.work.jsonl, wait for the answer appended from the session, same run' },
+    { title: 'Report', detail: 'run/batches/FX.md, written even on stop; DONE: batch committed, its lines reduced to the cycle states' },
   ],
 }
 
@@ -22,9 +22,11 @@ if (!naming) throw new Error('expected argument: path of the batch sheet, `todo/
 const plan = `${naming[1]}.md`
 const batch = naming[2]
 const runRoot = `${sheet.slice(0, sheet.lastIndexOf('/') + 1) || './'}run`
-const workDir = `${runRoot}/.work/${batch}`
+const workFile = `${runRoot}/.work.jsonl`
 const reportPath = `${runRoot}/batches/${batch}.md`
-const baseline = `${workDir}/baseline`
+const commitAtEnd = !(args && typeof args === 'object' && args.commit === false)
+const tmpCommand = `cctoolkit run-work tmp ${batch}`
+const TMP = `\`<tmp>\` = the folder \`${tmpCommand}\` prints (system temp, never under run/)`
 
 const BLOCKED = 'BLOCKED'
 const DONE = 'DONE'
@@ -115,9 +117,10 @@ const REVIEW = obj({
   questions: arr(obj({ severity: { type: 'string', enum: ['Blocking', 'Major'] }, question: str, evidence: str, decidedBy: str, answer: str, options: arr(str), humanOnly: bool }, ['humanOnly'])),
 })
 
-const REPORT = obj({ path: str })
+const REPORT = obj({ path: str, commit: str }, ['commit'])
 
 const ANSWER = obj({ answered: bool, answers: arr(obj({ id: str, text: str })) })
+const ASKED = obj({ ok: bool, id: str })
 
 const ARBITRATION = obj({ decision: { type: 'string', enum: ['continue', 'defer', 'ask'] }, text: str, rationale: str })
 
@@ -128,8 +131,8 @@ const LOADED = obj({
 })
 
 const FRAME = [
-  `Workflow run-lot, batch ${batch}. Global plan: ${plan}. Batch sheet: ${sheet}. Scratch folder: ${workDir}.`,
-  'Autonomous mode: nobody answers. Never AskUserQuestion, never a Git commit.',
+  `Workflow run-lot, batch ${batch}. Global plan: ${plan}. Batch sheet: ${sheet}. Run work file: ${workFile}.`,
+  'Autonomous mode: nobody answers. Never AskUserQuestion, never a Git command that writes: the batch commit is `cctoolkit batch-baseline commit`, run only where a step gives it.',
   'Return the result through the structured output; prose written into repo files follows `language.docs` of `kit.config.json`.',
   '`<kit>` below = the cctoolkit plugin directory, printed by `cctoolkit root`; kit scripts run as `cctoolkit <script>`.',
 ].join('\n')
@@ -153,30 +156,30 @@ let asked = 0
 async function ask(kind, context, questions) {
   await loading
   asked += 1
-  const file = `${workDir}/questions/${batch}-${asked}.json`
   const label = `${batch}-${asked}`
   const payload = { batch, sheet, kind, context, questions: questions.map((q, i) => ({ id: `q${i + 1}`, ...q })) }
   const written = await agent(
     [
       FRAME,
       '',
-      `\`mkdir -p ${workDir}/questions\`, then write \`${file}\` in a single Write, content exactly the JSON below, nothing added.`,
+      `One call, the JSON below verbatim between the heredoc markers: \`cctoolkit run-question ask ${workFile} ${batch} <<'QUESTION_JSON'\` … \`QUESTION_JSON\`. \`id\` = the id it printed.`,
       `Then one call: \`command -v osascript >/dev/null && osascript -e 'display notification "${batch}: question awaiting an answer in the session" with title "run-lot"' || true\`.`,
       '',
       '```json',
       JSON.stringify(payload, null, 1),
       '```',
     ].join('\n'),
-    { schema: OK, phase: 'Question', label: `question ${label}`, model: 'haiku', effort: 'low' },
+    { schema: ASKED, phase: 'Question', label: `question ${label}`, model: 'haiku', effort: 'low' },
   ).catch(() => null)
-  if (!written || !written.ok) return null
-  log(`❓ ${label} waits for an answer in the session: ${file}`)
+  if (!written || !written.ok || !written.id) return null
+  const qid = written.id.trim()
+  log(`❓ ${qid} waits for an answer in the session: ${workFile}`)
   for (let round = 1; round <= WAIT_ROUNDS; round++) {
     const r = await agent(
       [
         FRAME,
         '',
-        `Run \`cctoolkit run-question wait ${file} --seconds ${WAIT_SECONDS}\` once, Bash timeout 600000, nothing else.`,
+        `Run \`cctoolkit run-question wait ${workFile} ${qid} --seconds ${WAIT_SECONDS}\` once, Bash timeout 600000, nothing else.`,
         'Exit 0 → it printed `{"answers": [...]}`: `answered` true, `answers` = that array verbatim. Exit 3 (PENDING) or any other outcome → `answered` false, `answers` empty.',
       ].join('\n'),
       { schema: ANSWER, phase: 'Question', label: `wait ${label} #${round}`, model: 'haiku', effort: 'low' },
@@ -268,7 +271,6 @@ function decided(text, grants = noGrants()) {
   ].filter(l => l !== '').join('\n')
 }
 
-const stateDir = `${workDir}/cycles`
 const slug = text => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
 
 const contractCommand = (c, phaseFlag) => `cctoolkit sheet-cycles ${sheet} --cycle ${c.id} ${phaseFlag}`
@@ -299,7 +301,7 @@ function redContract(c, declaratives) {
     'Your `## RED` report goes through the structured output: `tests` = test paths, `exit` = code of the filtered command,',
     '`productionDiff` = `src/` files you created or modified yourself, no annotation (other agents write in parallel: `git status` cannot tell you apart), `stubs` = paths only of the stubs written, no annotation, `table` = one row per method written or modified',
     '(`test` = `Class.Method`), `removed` = tests removed because already covered, `unreachable` = contract methods not written, site unreachable. `## BLOCKED` = `status: BLOCKED` + `diagnostic` (six RTK lines at most).',
-    `Last step before the structured output, except on ## BLOCKED: \`mkdir -p ${stateDir}\`, then write \`${stateDir}/${slug(c.behaviour)}.json\` in a single Write, content exactly \`{"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": <your report>}\`, \`<your report>\` = the object you return, same fields and values.`,
+    `Last step before the structured output, except on ## BLOCKED: one call, \`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` then the line \`{"kind": "cycle", "batch": "${batch}", "slug": "${slug(c.behaviour)}", "state": {"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": <your report>}}\` then \`CYCLE_STATE\`, \`<your report>\` = the object you return, same fields and values.`,
   ].filter(l => l !== '').join('\n')
 }
 
@@ -315,7 +317,7 @@ function greenContract(c, r) {
       ? `Safety net, green and kept green — behaviour unchanged, no test touched: ${list(r.tests)} — ${redTests}`
       : `Red test: ${list(r.tests)} — ${redTests}`,
     `Already stubbed at RED (body to fill, read in full): ${list(r.stubs)}`,
-    `Baseline: ${baseline} — \`Cost\` line from \`cctoolkit access-cost --base ${baseline} <production files>\``,
+    `\`Cost\` line from \`cctoolkit access-cost --base ${workFile} ${batch} <production files>\`: lines this batch added flagged, earlier ones listed pre-existing`,
     '```',
     '',
     'Handler `CLAUDE.md`: a rule your code adds or changes in a handler → `<kit>/skills/implement-tdd/references/closing.md` §2, in the same message as your last production edit.',
@@ -324,7 +326,7 @@ function greenContract(c, r) {
     'Your `## GREEN` report goes through the structured output: `production` = paths modified or created (handler `CLAUDE.md` included), `exit` = code of the final filtered test,',
     '`testsDiff` = `tests/` files you created or modified yourself, no annotation (empty expected, `.verified.txt` snapshots accepted), `cost` = last line of `cctoolkit access-cost` verbatim,',
     '`independentOf` = the input the cost is independent of. `## BLOCKED` = `status: BLOCKED` + `diagnostic`.',
-    `Last step before the structured output, except on ## BLOCKED: write \`${stateDir}/${slug(c.behaviour)}.json\` in a single Write, content exactly \`{"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": ${JSON.stringify(r)}, "green": <your report>}\`, \`<your report>\` = the object you return, same fields and values.`,
+    `Last step before the structured output, except on ## BLOCKED: one call, \`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` then the line \`{"kind": "cycle", "batch": "${batch}", "slug": "${slug(c.behaviour)}", "state": {"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": ${JSON.stringify(r)}, "green": <your report>}}\` then \`CYCLE_STATE\`, \`<your report>\` = the object you return, same fields and values.`,
   ].filter(l => l !== '').join('\n')
 }
 
@@ -561,7 +563,7 @@ function renderReport(status, reason, verdict) {
     ...(auditGaps.length ? auditGaps : ['None.']),
     ...(status === DONE
       ? []
-      : ['', '## Resume', '', `Stop after a \`STOP\` answer, a question left unanswered or a decision that did not lift the block: fix the cause, write the decision into the \`decisions\` field of the cycles it touches in the \`## Cycles\` block of \`${sheet}\` (and as \`Hn\` marked \`${USER}\` under \`## Assumptions\`), then launch a new \`/run-plan\` or \`/run-lot ${sheet}\`: cycles already through (\`${stateDir}\`) are not redone. Under \`/run-plan\`, the batch was set aside: tree put back to its start state, partial work in \`aside-${batch}.patch\` of the run folder, cycles cleared, the batch starts over.`]),
+      : ['', '## Resume', '', `Stop after a \`STOP\` answer, a question left unanswered or a decision that did not lift the block: fix the cause, write the decision into the \`decisions\` field of the cycles it touches in the \`## Cycles\` block of \`${sheet}\` (and as \`Hn\` marked \`${USER}\` under \`## Assumptions\`), then launch a new \`/run-plan\` or \`/run-lot ${sheet}\`: cycles already through (\`cycle\` lines of \`${workFile}\`) are not redone. Under \`/run-plan\`, the batch was set aside: tree put back to its start state, partial work in \`<stamp>-aside-${batch}.patch\` of the run folder, cycles cleared, the batch starts over.`]),
   ].join('\n') + '\n'
 }
 
@@ -577,8 +579,10 @@ async function report(status, reason, verdict) {
         ? [`Then in \`${plan}\`, on the heading line starting \`### Batch ${batch} \` (or \`### Lot ${batch} \`): replace a trailing \`⬜\` with \`✅ DONE ($(date +%Y-%m-%d))\`, or append \` — ✅ DONE (<that date>)\` when it carries neither; and in \`${sheet}\`, append \` — ✅ DONE (<that date>)\` to its first \`# \` line unless it already carries \`✅ DONE\`. One Edit per file, nothing else moves.`]
         : []),
       ...(status === DONE
-        ? [`Then delete the scratch outputs, the cycle states packed first: \`cctoolkit sheet-cycles ${sheet} --pack ${stateDir} && find ${workDir} -mindepth 1 -maxdepth 1 ! -name cycles.jsonl -exec rm -rf {} +\`. The build/test logs, audit capture, questions and snapshot are summarised by the report; \`cycles.jsonl\`, one line per cycle state, stays as the TDD evidence a later correction of this batch resumes from. This cleanup is the intended end of every finished batch.`]
-        : []),
+        ? [commitAtEnd
+            ? `Then one call: \`cctoolkit batch-baseline commit ${workFile} ${batch} --sheet ${sheet} && cctoolkit run-work drop ${workFile} --batch ${batch} --kind preexisting,question,answer; rm -rf "$(${tmpCommand})"\`. \`commit\` = the line the commit printed (stderr included on failure). The commit holds the files of the batch only, the user's earlier changes left out; the \`cycle\` lines stay as the TDD evidence a later correction resumes from. This is the intended end of every finished batch.`
+            : `Then one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; rm -rf "$(${tmpCommand})"\`. The run-plan gate commits the batch after its build check. \`commit\` empty.`]
+        : [`Then one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer\`: the \`preexisting\` and \`cycle\` lines stay for the resume.`]),
       'Return the written path.',
       '',
       '~~~~markdown',
@@ -587,13 +591,13 @@ async function report(status, reason, verdict) {
     ].join('\n'),
     { schema: REPORT, phase: 'Report', label: 'report', model: 'haiku', effort: 'low' },
   ).catch(() => null)
-  return r ? r.path : null
+  return r || null
 }
 
 async function finish(status, reason, verdict) {
   if (reviewing) history.review = await reviewing
   if (predesigning) await predesigning
-  const path = await report(status, reason, verdict)
+  const written = await report(status, reason, verdict)
   return {
     status,
     reason,
@@ -604,7 +608,8 @@ async function finish(status, reason, verdict) {
     review: history.review,
     audit: history.audit,
     toReview: history.toReview,
-    report: path,
+    report: written ? written.path : null,
+    commit: written && written.commit ? written.commit : null,
   }
 }
 
@@ -614,8 +619,8 @@ const loading = agent(
   [
     FRAME,
     '',
-    `First, one call: \`if [ -d ${workDir}/questions ]; then mkdir -p ${workDir}/questions-archive && mv ${workDir}/questions ${workDir}/questions-archive/$(date +%Y%m%d-%H%M%S); fi; cctoolkit batch-baseline snapshot ${baseline}\` — questions of an earlier run never answer this one, the snapshot bounds the batch diff (kept when it exists).`,
-    `Then in one message: \`cctoolkit sheet-cycles ${sheet} --states ${stateDir}\`, \`${indexCommand(sheet)}\` and \`grep -E '^### (Batch|Lot) F[0-9]+' ${plan}\`.`,
+    `First, one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit batch-baseline snapshot ${workFile} ${batch}\` — questions of an earlier run never answer this one; the snapshot records the files already modified, left out of the batch diff and commit (kept when it exists).`,
+    `Then in one message: \`cctoolkit sheet-cycles ${sheet} --states ${workFile}\`, \`${indexCommand(sheet)}\` and \`grep -E '^### (Batch|Lot) F[0-9]+' ${plan}\`.`,
     '`cycles` = the JSON array `--states` printed, each object as-is, no field changed (`[]` when no cycle was saved).',
     '`index` = the JSON line `sheet-cycles` printed, verbatim, whatever its exit code (0 valid, 1 invalid, 2 no block).',
     `\`nextSheet\` = the first \`### Batch FY\` (or \`### Lot FY\`) heading after the one of ${batch} without \`✅ DONE\` → \`${naming[1]}-FY.md\` when that file exists; empty string otherwise.`,
@@ -767,7 +772,7 @@ const runSuites = (suffix = '') => agent(
     FRAME,
     '',
     'Global green loop of the batch: suites and scope per `<kit>/skills/implement-tdd/references/test-scope.md` (Runner, §2-4).',
-    `Pick the suites the diff requires (\`git status --short\`), run them once, output to a file in \`${workDir}\`, independent suites in a single message.`,
+    `Pick the suites the diff requires (\`cctoolkit batch-baseline diff ${workFile} ${batch} --name-only\`), run them once, output to a file in \`<tmp>\`, independent suites in a single message. ${TMP}.`,
     'Red → fix production code until fully green; never weaken nor remove a test to pass.',
     'Return each suite with its exit, its scope (filter or "whole suite") and its test count.',
   ].join('\n') + suffix,
@@ -798,7 +803,7 @@ if (!suites || !suites.green) return await finish(BLOCKED, `global green not rea
 if (!gated || !gated.ok) toReview('Closing', `pre-audit not run, the audit judges it: ${gated ? gated.diagnostic || '' : 'agent without result'}`)
 else if (!gated.preauditGreen) toReview('Closing', `pre-audit RED, the audit judges it: ${gated.failures.join(' ; ')}`)
 
-const capture = `${workDir}/audit-${batch}.txt`
+const capture = `<tmp>/audit-${batch}.txt`
 
 function audit(retry, again = false) {
   const previous = retry
@@ -823,8 +828,8 @@ function audit(retry, again = false) {
       '',
       `Read \`<kit>/skills/verify-ddd-tdd/SKILL.md\` and follow it as if the skill were invoked with the argument \`batch ${batch}${retry ? ' resume' : ''}\`, fast mode.`,
       retry || again
-        ? `Capture: \`${capture}\` (to read). Section ${batch} of the sheet: \`${sheet}\`.`
-        : `First run \`cctoolkit audit-capture ${batch} ${sheet} ${capture} --base ${baseline}\`, then read the capture. Section ${batch} of the sheet: \`${sheet}\`.`,
+        ? `Capture: \`${capture}\` (to read), ${TMP}. Section ${batch} of the sheet: \`${sheet}\`.`
+        : `First run \`cctoolkit audit-capture ${batch} ${sheet} "$(${tmpCommand})/audit-${batch}.txt" --base ${workFile}\`, then read the capture \`${capture}\`, ${TMP}. Section ${batch} of the sheet: \`${sheet}\`.`,
       again ? 'A previous attempt ended without structured output, most likely out of turns: the capture is written, never rerun it nor a suite it already holds; judge from it, then return the verdict at once.' : '',
       alreadyRun,
       history.toReview.length ? `Decisions the run took without the user, each listed for the user review after the plan — never a \`Plan\` gap for being absent from the sheet: ${history.toReview.map(x => `${x.step}: ${x.text}`).join(' ; ')}` : '',
@@ -887,7 +892,7 @@ function fixGaps(verdict, round) {
       '',
       'Fix the Blocking and Major gaps of the verdict below, per `<kit>/skills/implement-tdd/references/closing.md` §3 (verdict GAPS).',
       'A fix that adds a rule or a branch goes through a red test first.',
-      `The batch diff is already gathered in \`${capture}\`: read the hunks a gap cites there, open only the files its \`Evidence\` names, never \`git diff\` the batch again.`,
+      `The batch diff is already gathered in \`${capture}\` (${TMP}): read the hunks a gap cites there, open only the files its \`Evidence\` names, never \`git diff\` the batch again.`,
       'Run only the filtered tests of the classes you touch (filtered command of `<kit>/skills/implement-tdd/references/test-scope.md`), never a whole suite: the audit that follows reruns the suites. Return them with exit and scope.',
       '',
       verdict.block,

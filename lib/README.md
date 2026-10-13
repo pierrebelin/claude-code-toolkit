@@ -9,6 +9,7 @@ What the [hooks](../hooks/README.md) call but the harness never invokes directly
 | `project-root.sh` | the repo the kit serves: `$CLAUDE_PROJECT_DIR`, else the git top level of the working directory — never the kit's own location |
 | `kit_config.py` | `kit.config.json` resolved over its preset — the one reader every hook and script goes through ([`presets/README.md`](../presets/README.md)) |
 | `kit_testtag.py` | the `testTag` adapters: xUnit, pytest, JUnit, Jest |
+| `work_file.py` | the run work file `run/.work.jsonl` of run-lot and run-plan: one JSON line per event, appended and rewritten under `flock`; read by `batch-baseline`, `run-work`, `run-question`, `sheet-cycles`, `plan-next-batch` |
 
 ## Modules
 

@@ -10,7 +10,6 @@ namespace {{PRODUCT}}.ContractTests.[Feature];
 public class Create[Entity]Tests : BaseEndpointTests
 {
     [Fact]
-    [Trait("RM", "Create[Entity]/RM-01")]
     public async Task ShouldCreate[Entity]_WhenRequestIsValid()
     {
         var request = new Create[Entity]Request { Name = "Test" };

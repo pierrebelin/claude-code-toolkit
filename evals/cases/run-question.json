@@ -1,27 +1,69 @@
 {
   "fixtures": [
-    { "path": "a/questions/F1-1.json", "kind": "text", "content": "{\"batch\":\"F1\",\"sheet\":\"x\",\"kind\":\"stop\",\"context\":\"x\",\"questions\":[{\"id\":\"q1\",\"severity\":\"Bloquant\",\"question\":\"x ?\",\"evidence\":\"x\",\"options\":[],\"recommendation\":\"\"}]}" },
-    { "path": "a/questions/F1-1.answer.json", "kind": "text", "content": "{\"answers\":[{\"id\":\"q1\",\"text\":\"réponse d un run précédent\"}]}" },
-    { "path": "b/questions/F1-1.json", "kind": "text", "content": "{\"batch\":\"F1\",\"sheet\":\"x\",\"kind\":\"stop\",\"context\":\"x\",\"questions\":[{\"id\":\"q1\",\"severity\":\"Bloquant\",\"question\":\"x ?\",\"evidence\":\"x\",\"options\":[],\"recommendation\":\"\"}]}" },
-    { "path": "c/questions/F1-1.json", "kind": "text", "content": "{\"batch\":\"F1\",\"sheet\":\"x\",\"kind\":\"stop\",\"context\":\"x\",\"questions\":[{\"id\":\"q1\",\"severity\":\"Bloquant\",\"question\":\"x ?\",\"evidence\":\"x\",\"options\":[],\"recommendation\":\"\"}]}" },
-    { "path": "c/questions/F1-1.answer.json", "kind": "text", "content": "{\"answers\":[{\"id\":\"q1\",\"text\":\"réponse d un run précédent\"}]}" },
-    { "path": "d/run/.work/F1/questions/F1-1.json", "kind": "text", "content": "{\"batch\":\"F1\",\"sheet\":\"x\",\"kind\":\"stop\",\"context\":\"x\",\"questions\":[{\"id\":\"q1\",\"severity\":\"Bloquant\",\"question\":\"x ?\",\"evidence\":\"x\",\"options\":[],\"recommendation\":\"\"}]}" }
+    {
+      "path": "a/.work.jsonl",
+      "kind": "text",
+      "content": "{\"kind\":\"question\",\"batch\":\"F1\",\"id\":\"F1-1\",\"at\":200,\"payload\":{\"batch\":\"F1\",\"sheet\":\"x\",\"kind\":\"stop\",\"context\":\"x\",\"questions\":[{\"id\":\"q1\",\"severity\":\"Bloquant\",\"question\":\"x ?\",\"evidence\":\"x\",\"options\":[],\"recommendation\":\"\"}]}}\n{\"kind\":\"answer\",\"batch\":\"F1\",\"id\":\"F1-1\",\"at\":100,\"answers\":[{\"id\":\"q1\",\"text\":\"réponse d un run précédent\"}]}\n"
+    },
+    {
+      "path": "c/.work.jsonl",
+      "kind": "text",
+      "content": "{\"kind\":\"question\",\"batch\":\"F1\",\"id\":\"F1-1\",\"at\":100,\"payload\":{\"batch\":\"F1\",\"sheet\":\"x\",\"kind\":\"stop\",\"context\":\"x\",\"questions\":[{\"id\":\"q1\",\"severity\":\"Bloquant\",\"question\":\"x ?\",\"evidence\":\"x\",\"options\":[],\"recommendation\":\"\"}]}}\n{\"kind\":\"answer\",\"batch\":\"F1\",\"id\":\"F1-1\",\"at\":200,\"answers\":[{\"id\":\"q1\",\"text\":\"réponse d un run précédent\"}]}\n"
+    },
+    {
+      "path": "d/run/.work.jsonl",
+      "kind": "text",
+      "content": "{\"kind\":\"cycle\",\"batch\":\"F1\",\"slug\":\"s\",\"state\":{}}\n{\"kind\":\"question\",\"batch\":\"F1\",\"id\":\"F1-1\",\"at\":100,\"payload\":{\"batch\":\"F1\",\"sheet\":\"x\",\"kind\":\"stop\",\"context\":\"x\",\"questions\":[{\"id\":\"q1\",\"severity\":\"Bloquant\",\"question\":\"x ?\",\"evidence\":\"x\",\"options\":[],\"recommendation\":\"\"}]}}\n"
+    }
   ],
   "cases": [
-    { "name": "an answer older than its question is a leftover of an earlier run: wait ignores it",
-      "cmd": "touch -t 202001010000 {{FIX}}/a/questions/F1-1.answer.json && python3 {{KIT}}/scripts/run-question.py wait {{FIX}}/a/questions/F1-1.json --seconds 1",
-      "expect": { "exit": 3, "stdout": "PENDING" } },
-    { "name": "the same leftover keeps the question visible to watch, with the since to re-arm",
-      "cmd": "python3 {{KIT}}/scripts/run-question.py watch {{FIX}}/a --since 0 --seconds 3",
-      "expect": { "exit": 0, "stdout": "next=" } },
-    { "name": "answer accepts the object wait prints, then wait returns it",
-      "cmd": "python3 {{KIT}}/scripts/run-question.py answer {{FIX}}/b/questions/F1-1.json '{\"answers\": [{\"id\": \"q1\", \"text\": \"oui\"}]}' >/dev/null && python3 {{KIT}}/scripts/run-question.py wait {{FIX}}/b/questions/F1-1.json --seconds 1",
-      "expect": { "exit": 0, "stdout": "oui" } },
-    { "name": "an answer written after its question is returned",
-      "cmd": "touch {{FIX}}/c/questions/F1-1.answer.json && python3 {{KIT}}/scripts/run-question.py wait {{FIX}}/c/questions/F1-1.json --seconds 1",
-      "expect": { "exit": 0, "stdout": "run précédent" } },
-    { "name": "watch walks the hidden scratch folder of the run",
+    {
+      "name": "an answer older than its question is a leftover of an earlier run: wait ignores it",
+      "cmd": "python3 {{KIT}}/scripts/run-question.py wait {{FIX}}/a/.work.jsonl F1-1 --seconds 1",
+      "expect": {
+        "exit": 3,
+        "stdout": "PENDING"
+      }
+    },
+    {
+      "name": "the same leftover keeps the question visible to watch, with the since to re-arm",
+      "cmd": "python3 {{KIT}}/scripts/run-question.py watch {{FIX}}/a/.work.jsonl --since 0 --seconds 3",
+      "expect": {
+        "exit": 0,
+        "stdout": "next="
+      }
+    },
+    {
+      "name": "ask appends the question as FX-n, answer accepts the object wait prints, then wait returns it",
+      "cmd": "W={{FIX}}/b-{{SID}}.jsonl; rm -f $W; echo '{\"batch\": \"F1\", \"sheet\": \"x\", \"kind\": \"stop\", \"context\": \"x\", \"questions\": [{\"id\": \"q1\", \"severity\": \"Bloquant\", \"question\": \"x ?\", \"evidence\": \"x\", \"options\": [], \"recommendation\": \"\"}]}' | python3 {{KIT}}/scripts/run-question.py ask $W F1 && echo '{\"batch\": \"F1\", \"sheet\": \"x\", \"kind\": \"stop\", \"context\": \"x\", \"questions\": [{\"id\": \"q1\", \"severity\": \"Bloquant\", \"question\": \"x ?\", \"evidence\": \"x\", \"options\": [], \"recommendation\": \"\"}]}' | python3 {{KIT}}/scripts/run-question.py ask $W F1 && python3 {{KIT}}/scripts/run-question.py answer $W F1-1 '{\"answers\": [{\"id\": \"q1\", \"text\": \"oui\"}]}' >/dev/null && python3 {{KIT}}/scripts/run-question.py wait $W F1-1 --seconds 1 && python3 {{KIT}}/scripts/run-question.py pending $W",
+      "expect": {
+        "exit": 0,
+        "stdout": "F1-1\nF1-2\n{\"answers\": [{\"id\": \"q1\", \"text\": \"oui\"}]}\nF1-2"
+      }
+    },
+    {
+      "name": "an answer appended after its question is returned",
+      "cmd": "python3 {{KIT}}/scripts/run-question.py wait {{FIX}}/c/.work.jsonl F1-1 --seconds 1",
+      "expect": {
+        "exit": 0,
+        "stdout": "run précédent"
+      }
+    },
+    {
+      "name": "watch takes the run folder, reads its work file and prints the question JSON on the next line",
       "cmd": "python3 {{KIT}}/scripts/run-question.py watch {{FIX}}/d/run --since 0 --seconds 3",
-      "expect": { "exit": 0, "stdout": ".work/F1/questions/F1-1.json" } }
+      "expect": {
+        "exit": 0,
+        "stdout": ".work.jsonl F1-1 since=0 next=100.001\n{\"batch\": \"F1\""
+      }
+    },
+    {
+      "name": "answer refuses answers that do not cover exactly the question ids",
+      "cmd": "python3 {{KIT}}/scripts/run-question.py answer {{FIX}}/d/run/.work.jsonl F1-1 '[{\"id\": \"q2\", \"text\": \"x\"}]'",
+      "expect": {
+        "exit": 1,
+        "stderr": "answers must cover exactly ['q1']"
+      }
+    }
   ]
 }

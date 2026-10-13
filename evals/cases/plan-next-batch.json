@@ -51,16 +51,16 @@
       }
     },
     {
-      "name": "--next returns the batch of the current repo as JSON and journals its launch",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --next $d/j.md | grep -o '\"outsideBatch\": \"F2\", \"outsidePaths\": \\[\\]' | tr '\\n' ';'; cut -d' ' -f1-2 $d/j.md",
+      "name": "--next returns the batch of the current repo as JSON and journals its launch in the run work file",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --next $d/w.jsonl --run S1 | grep -o '\"outsideBatch\": \"F2\", \"outsidePaths\": \\[\\]' | tr '\\n' ';'; grep -o '\"run\":\"S1\",\"text\":\"F2 launched' $d/w.jsonl",
       "expect": {
         "exit": 0,
-        "stdout": "\"outsideBatch\": \"F2\", \"outsidePaths\": [];F2 launched"
+        "stdout": "\"outsideBatch\": \"F2\", \"outsidePaths\": [];\"run\":\"S1\",\"text\":\"F2 launched"
       }
     },
     {
       "name": "--next lists the out-of-batch paths and journals nothing",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/docs; echo y > $d/docs/y.md; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --next $d/j.md | grep -o '\"outsidePaths\": \\[\"docs/y.md\"\\]' | tr '\\n' ';'; test -e $d/j.md && echo journal || echo no-journal",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/docs; echo y > $d/docs/y.md; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --next $d/w.jsonl --run S1 | grep -o '\"outsidePaths\": \\[\"docs/y.md\"\\]' | tr '\\n' ';'; test -e $d/w.jsonl && echo journal || echo no-journal",
       "expect": {
         "exit": 0,
         "stdout": "\"outsidePaths\": [\"docs/y.md\"];no-journal"
@@ -68,7 +68,7 @@
     },
     {
       "name": "--context gathers earlier audit gaps, user decisions and absent cited paths",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/todo/x/run/F1 $d/src/A; printf '## STATUS — DONE\\n\\n## Audit gaps\\n\\n- Major — rejected choice X\\n\\n## End\\n' > $d/todo/x/run/F1/F1-report.md; printf '\\n| H1 | user decision: Y |\\n`src/A/B.cs` `src/A/C.cs` `src/**/*.cs`\\n' >> $d/todo/x/X-PLAN-F2.md; touch $d/src/A/C.cs; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --context F2 | grep -E '^- Major|user decision|^src/|^cycles' | tr '\\n' ';'",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/todo/x/run/batches $d/src/A; printf '## STATUS — DONE\\n\\n## Audit gaps\\n\\n- Major — rejected choice X\\n\\n## End\\n' > $d/todo/x/run/batches/F1.md; printf '\\n| H1 | user decision: Y |\\n`src/A/B.cs` `src/A/C.cs` `src/**/*.cs`\\n' >> $d/todo/x/X-PLAN-F2.md; touch $d/src/A/C.cs; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --context F2 | grep -E '^- Major|user decision|^src/|^cycles' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
         "stdout": "- Major — rejected choice X;X-PLAN-F2.md:2: | H1 | user decision: Y |;cycles: none;src/A/B.cs;"
@@ -84,10 +84,10 @@
     },
     {
       "name": "--next reads a French plan and journals the launch in English",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/Y-PLAN.md {{FIX}}/Y-PLAN-F2.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/Y-PLAN.md --next $d/j.md | grep -o '\"kind\": \"BATCHES\"' | tr '\\n' ';'; cut -d' ' -f1-2 $d/j.md",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/Y-PLAN.md {{FIX}}/Y-PLAN-F2.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/Y-PLAN.md --next $d/w.jsonl --run S1 | grep -o '\"kind\": \"BATCHES\"' | tr '\\n' ';'; grep -o '\"run\":\"S1\",\"text\":\"F2 launched' $d/w.jsonl",
       "expect": {
         "exit": 0,
-        "stdout": "\"kind\": \"BATCHES\";F2 launched"
+        "stdout": "\"kind\": \"BATCHES\";\"run\":\"S1\",\"text\":\"F2 launched"
       }
     },
     {
@@ -107,19 +107,19 @@
       }
     },
     {
-      "name": "--context reads the French run layout: run/lots/FY.md with « Écarts d'audit », « décision utilisateur », run/.travail cycles",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/Y-PLAN.md {{FIX}}/Y-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/todo/x/run/lots $d/todo/x/run/.travail/F2/cycles; printf '## STATUT — TERMINÉ\\n\\n## Écarts d'\"'\"'audit\\n\\n- Majeur — choix X rejeté\\n\\n## Fin\\n' > $d/todo/x/run/lots/F1.md; printf '{\"behaviour\": \"One\", \"green\": true}' > $d/todo/x/run/.travail/F2/cycles/a.json; printf '\\n| H1 | décision utilisateur : Y |\\n| H2 | décision user à valider : Z |\\n' >> $d/todo/x/Y-PLAN-F2.md; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/Y-PLAN.md --context F2 | grep -E '^- Majeur|décision|^cycle' | tr '\\n' ';'",
+      "name": "--context reads French report wording: run/batches/FY.md with « Écarts d'audit », « décision utilisateur », cycle lines of run/.work.jsonl",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/Y-PLAN.md {{FIX}}/Y-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/todo/x/run/batches; printf '## STATUT — TERMINÉ\\n\\n## Écarts d'\"'\"'audit\\n\\n- Majeur — choix X rejeté\\n\\n## Fin\\n' > $d/todo/x/run/batches/F1.md; printf '{\"kind\": \"cycle\", \"batch\": \"F2\", \"slug\": \"a\", \"state\": {\"behaviour\": \"One\", \"green\": true}}\\n' > $d/todo/x/run/.work.jsonl; printf '\\n| H1 | décision utilisateur : Y |\\n| H2 | décision user à valider : Z |\\n' >> $d/todo/x/Y-PLAN-F2.md; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/Y-PLAN.md --context F2 | grep -E '^- Majeur|décision|^cycle' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "- Majeur — choix X rejeté;Y-PLAN-F2.md:2: | H1 | décision utilisateur : Y |;Y-PLAN-F2.md:3: | H2 | décision user à valider : Z |;cycle a.json: One — green;"
+        "stdout": "- Majeur — choix X rejeté;Y-PLAN-F2.md:2: | H1 | décision utilisateur : Y |;Y-PLAN-F2.md:3: | H2 | décision user à valider : Z |;cycle a: One — green;"
       }
     },
     {
-      "name": "--context reads the English run layout: run/batches/FY.md with « Audit gaps », « user decision », run/.work cycles",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/todo/x/run/batches $d/todo/x/run/.work/F2/cycles; printf '## STATUS — DONE\\n\\n## Audit gaps\\n\\n- Major — rejected choice X\\n\\n## End\\n' > $d/todo/x/run/batches/F1.md; printf '{\"behaviour\": \"One\", \"green\": true}' > $d/todo/x/run/.work/F2/cycles/a.json; printf '\\n| H1 | user decision: Y |\\n| H2 | user decision to validate: Z |\\n' >> $d/todo/x/X-PLAN-F2.md; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --context F2 | grep -E '^- Major|user decision|^cycle' | tr '\\n' ';'",
+      "name": "--context reads the run layout: run/batches/FY.md with « Audit gaps », « user decision », cycle lines of run/.work.jsonl",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; mkdir -p $d/todo/x/run/batches; printf '## STATUS — DONE\\n\\n## Audit gaps\\n\\n- Major — rejected choice X\\n\\n## End\\n' > $d/todo/x/run/batches/F1.md; printf '{\"kind\": \"cycle\", \"batch\": \"F2\", \"slug\": \"a\", \"state\": {\"behaviour\": \"One\", \"green\": true}}\\n' > $d/todo/x/run/.work.jsonl; printf '\\n| H1 | user decision: Y |\\n| H2 | user decision to validate: Z |\\n' >> $d/todo/x/X-PLAN-F2.md; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --context F2 | grep -E '^- Major|user decision|^cycle' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "- Major — rejected choice X;X-PLAN-F2.md:2: | H1 | user decision: Y |;X-PLAN-F2.md:3: | H2 | user decision to validate: Z |;cycle a.json: One — green;"
+        "stdout": "- Major — rejected choice X;X-PLAN-F2.md:2: | H1 | user decision: Y |;X-PLAN-F2.md:3: | H2 | user decision to validate: Z |;cycle a: One — green;"
       }
     },
     {
@@ -140,7 +140,7 @@
     },
     {
       "name": "--next with --skip names the held batches and what holds them",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/Z-PLAN.md {{FIX}}/Z-PLAN-F3.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/Z-PLAN.md --skip F2 --next $d/j.md | grep -o '\"kind\": \"END\"\\|\"held\": \\[{\"batch\": \"F3\", \"by\": \\[\"F2\"\\]}\\]' | tr '\\n' ';'",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/Z-PLAN.md {{FIX}}/Z-PLAN-F3.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/Z-PLAN.md --skip F2 --next $d/w.jsonl --run S1 | grep -o '\"kind\": \"END\"\\|\"held\": \\[{\"batch\": \"F3\", \"by\": \\[\"F2\"\\]}\\]' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
         "stdout": "\"kind\": \"END\";\"held\": [{\"batch\": \"F3\", \"by\": [\"F2\"]}];"
@@ -156,7 +156,7 @@
     },
     {
       "name": "--next with --skip on a French plan names the held batches",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/W-PLAN.md {{FIX}}/W-PLAN-F3.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/W-PLAN.md --skip F2 --next $d/j.md | grep -o '\"held\": \\[{\"batch\": \"F3\", \"by\": \\[\"F2\"\\]}\\]' | tr '\\n' ';'",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/W-PLAN.md {{FIX}}/W-PLAN-F3.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/W-PLAN.md --skip F2 --next $d/w.jsonl --run S1 | grep -o '\"held\": \\[{\"batch\": \"F3\", \"by\": \\[\"F2\"\\]}\\]' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
         "stdout": "\"held\": [{\"batch\": \"F3\", \"by\": [\"F2\"]}];"

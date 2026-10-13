@@ -28,16 +28,16 @@ its build output and its test containers, whatever the plan says.
 --outside FX  modified paths of FX's repo that `cctoolkit pre-audit` will flag as outside
               the batch (not under the source or test roots of kit.config.json, .claude/,
               todo/, basename absent from the sheet); exit 1 when any
---next J      next batch, out-of-batch check and journal in one JSON line for run-plan:
+--next WORK   next batch, out-of-batch check and journal in one JSON line for run-plan:
               `kind` END|WAITING|BATCHES, `line` = the text output, `batches`, `held` = the
               pending batches --skip holds back with the skipped batches they depend on
               (`[{"batch", "by"}]`), then for the launchable batch of the current repository
-              `outsideBatch` and `outsidePaths`; when nothing is outside, appends
-              `FX launched — <sheet>` to J
+              `outsideBatch` and `outsidePaths`; when nothing is outside, appends the
+              journal line `FX launched — <sheet>` of run --run STAMP to the run work file WORK
 --context FX  design context of FX for run-lot: `## Audit gaps` of the earlier batches'
               run/batches/FY.md, `user decision`/GAPS lines of the sheets, FX's stopped
-              report and saved cycles (run/.work/FX/cycles, packed into
-              cycles.jsonl once done), source and test paths the sheet cites
+              report and saved cycles (`cycle` lines of run/.work.jsonl), source and
+              test paths the sheet cites
               that do not exist
 --root        directory `Repo` paths resolve against (default: git toplevel of the plan)
 """
@@ -53,6 +53,7 @@ HERE = Path(__file__).resolve().parent.parent
 for lib in (HERE / "lib", HERE / ".claude" / "lib"):
     sys.path.insert(0, str(lib))
 import kit_config  # noqa: E402
+import work_file  # noqa: E402
 
 DONE = re.compile(r"^### (?:Batch|Lot) (F\d+)\b.*✅ DONE", re.M)
 SECTION = "### Batch execution"
@@ -65,8 +66,7 @@ COLUMN_REPO = {"repo", "depot"}
 AUDIT_GAPS = {"## audit gaps", "## ecarts d'audit"}
 DECISION_MARKS = re.compile(r"user decision|décision user|décision utilisateur|GAPS|ECARTS")
 # Run files, newest layout first; the earlier layouts stay readable.
-REPORTS = ("batches/{b}.md", "lots/{b}.md", "{b}/{b}-report.md", "{b}/{b}-rapport.md")
-CYCLE_DIRS = (".work/{b}/cycles", ".travail/{b}/cycles", "{b}/cycles")
+REPORTS = ("batches/{b}.md",)
 
 
 def fold(text):
@@ -209,23 +209,10 @@ def design_context(plan, batches, target, sheet, repo):
     report = report_of(target)
     first = report.read_text(encoding="utf-8").splitlines()[:1] if report else []
     out.append(f"report: {first[0] if first else 'none'}")
-    cycles_dir = first_existing(run, CYCLE_DIRS, target, Path.is_dir)
-    cycles = sorted(cycles_dir.glob("*.json")) if cycles_dir else []
-    for c in cycles:
-        try:
-            state = json.loads(c.read_text(encoding="utf-8"))
-            out.append(f"cycle {c.name}: {state.get('behaviour', '?')} — {'green' if state.get('green') else 'no green'}")
-        except ValueError:
-            out.append(f"cycle {c.name}: unreadable")
-    packed = run / (CYCLE_DIRS[0].format(b=target) + ".jsonl")
-    lines = packed.read_text(encoding="utf-8").splitlines() if not cycles and packed.is_file() else []
-    for n, line in enumerate(lines, 1):
-        try:
-            state = json.loads(line)
-            out.append(f"cycle {packed.name}:{n}: {state.get('behaviour', '?')} — {'green' if state.get('green') else 'no green'}")
-        except ValueError:
-            out.append(f"cycle {packed.name}:{n}: unreadable")
-    if not cycles and not lines:
+    states = work_file.cycle_states(work_file.read(work_file.work_path(run)), target)
+    for key, state in sorted(states.items()):
+        out.append(f"cycle {key}: {state.get('behaviour', '?')} — {'green' if state.get('green') else 'no green'}")
+    if not states:
         out.append("cycles: none")
     out.append("\n## Cited paths that do not exist")
     config = kit_config.load(str(repo))
@@ -295,6 +282,7 @@ def main():
     parser.add_argument("--exclude", dest="excluded", default="")
     parser.add_argument("--skip", default="")
     parser.add_argument("--next", dest="journal")
+    parser.add_argument("--run", default="")
     parser.add_argument("--context")
     args = parser.parse_args()
 
@@ -358,8 +346,7 @@ def main():
         result["outsideBatch"] = mine["batch"]
         result["outsidePaths"] = outside_batch(here, plan, Path(mine["sheet"]))
         if not result["outsidePaths"]:
-            with open(args.journal, "a", encoding="utf-8") as journal:
-                journal.write(f"{mine['batch']} launched — {mine['sheet']}\n")
+            work_file.append(args.journal, {"kind": "journal", "run": args.run, "text": f"{mine['batch']} launched — {mine['sheet']}"})
     print(json.dumps(result, ensure_ascii=False))
 
 if __name__ == "__main__":

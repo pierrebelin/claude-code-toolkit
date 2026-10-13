@@ -38,13 +38,13 @@ flowchart LR
 |---|---|---|
 | Command | `/cctoolkit:run-plan <plan>` | `/cctoolkit:run-lot <sheet>` |
 | Runs | every batch, in dependency order | one batch |
-| You step in | once, at the end | after each batch: review, commit, `/clear`, next |
+| You step in | once, at the end | after each batch: review, `/clear`, next |
 | Stops | a batch that cannot pass is set aside, only its dependents wait | the batch comes back `DONE`, or with what needs your eyes |
 | Fits | a plan you trust, a run over lunch or overnight | a new plan, a tricky batch, a team that reviews every commit |
 
 **Whole plan** runs `run-lot` on each batch the plan's dependency table allows, then checks each result from disk before going on. A stop is settled by an arbiter agent, not by a question: what it decided without you lands at the top of the run report, to read after the plan. A batch that still cannot pass is set aside, its partial work saved as a patch, and the batches that do not depend on it carry on. A question reaches you only when no decision is defensible: arm `cctoolkit run-question watch <plan folder>/run` in the background, answer through AskUserQuestion, the run goes on. It never commits, so you review the batches together at the end, with one report per run, `run/<stamp>.md`, and the patch of every batch set aside. `--until F3` stops after a given batch, `--only F2` runs just one.
 
-**Batch by batch** keeps you in the loop: each batch ends on a report, you read the diff, commit and start the next one with a clean context.
+**Batch by batch** keeps you in the loop: each batch ends on a report and its own commit, you read it and start the next one with a clean context.
 
 On a new plan, or a batch you are unsure of, go batch by batch until the first ones come back clean.
 
@@ -92,7 +92,7 @@ This kit encodes one way of working. It will:
 - write the test before the code, every time;
 - keep changes surgical — no drive-by refactors;
 - tie every business rule to the tests that cover it;
-- **never commit** — you decide when.
+- **one commit per `DONE` batch, nothing else** — the workflow commits the batch files only (`<type>(<plan folder>): lot FX — <title>`), your earlier changes stay out; never a push.
 
 If your team works differently, half of it will feel like noise. Full list: [`skills/README.md`](skills/README.md#what-the-kit-imposes-on-the-repo).
 

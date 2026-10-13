@@ -42,7 +42,7 @@ Pick the narrowest owner. One motif → one destination.
 | Sheet written incomplete (ids unclassified, anchors missing, assumptions untraced) | kit: `skills/plan-implementation/` template or checklist |
 | Mistake the coding agents keep making | kit: `skills/implement-tdd/references/common-rules.md` |
 | Auditor misses or misjudges it | kit: axis table of `skills/verify-ddd-tdd/SKILL.md` |
-| Checkable without judgement | `ArchitectureTests`, or kit: `scripts/pre-audit.sh` gate, hook + case under `evals/cases/` |
+| Checkable without judgement | `ArchitectureTests`, or kit: `cctoolkit pre-audit` gate, hook + case under `evals/cases/` |
 
 Prefer a mechanical check when both fit: prose is read, a check fails.
 
@@ -61,7 +61,7 @@ Read where the motif lands: grep the key term in the destination, then that sect
 
 Every kept motif also retires what it makes useless. In the section just read, flag as `retire`:
 
-- prose line a check now enforces — the motif's own check, or an existing one (`scripts/pre-audit.sh`, hook, `ArchitectureTests`);
+- prose line a check now enforces — the motif's own check, or an existing one (`cctoolkit pre-audit`, hook, `ArchitectureTests`);
 - line the motif's `refines` or `replaces` leaves duplicated or contradicted.
 
 Quote the exact line. `retire` comes only from these two cases, not from sweeping a file for lines that merely look old.
@@ -83,7 +83,7 @@ Prose in the `language.docs` of `.claude/kit.config.json`. Per axis, one table, 
 ```markdown
 | Motif | Batches | Status | Decision | Destination | Δ lines |
 |-------|---------|--------|----------|-------------|---------|
-| DDD ids left unclassified in the sheet | 9 | new | added | `scripts/pre-audit.sh` | +1 |
+| DDD ids left unclassified in the sheet | 9 | new | added | `cctoolkit pre-audit` | +1 |
 | Classify the DDD ids (prose) | — | retire | deleted | `skills/plan-implementation/SKILL.md` | −1 |
 | … | 3 | refines | refused | — | 0 |
 ```

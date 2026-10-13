@@ -51,7 +51,7 @@ Backstop — handlers throw, exception propagates here (`WebAPI/GlobalExceptionH
 | `NotFoundException` | 404 |
 | `ConflictException` | 409 |
 | `ForbiddenException` | 403 |
-| `ValidationException` (FluentValidation), `DomainException`, `ArgumentException`, `Gridify*Exception` | 400 |
+| `ValidationException`, `DomainException`, `Gridify*Exception` | 400 |
 | `ValidationFailedException` | 422 |
 | `BadHttpRequestException { InnerException: InvalidDataException }` | 413 |
 | `SecurityContextUnavailableException` | 503 |

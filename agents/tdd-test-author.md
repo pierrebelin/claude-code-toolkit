@@ -30,7 +30,7 @@ Delegation *is* context contract: no re-read of plan or batch sheet. Take only R
 
 **Paths come with delegation — never search.** No `Glob`, no `Grep`, by design; no `find`, `ls`, `grep` through `Bash` either. Orchestrator just read the sheet, hands exact paths. Path missing or wrong: not yours to repair by searching → `## BLOCKED` naming what is missing.
 
-**Every test carries its rule**, right under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder name under `src/{{PRODUCT}}.Application/**/`, id = one delegation hands you. Two rules → two attributes. Ties test to handler documentation; `## RED` table keeps its two columns.
+**Every unit test carries its rule; an integration test carries it when it proves a documented rule; contract and E2E tests carry none.** Right under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder name under `src/{{PRODUCT}}.Application/**/`, id = one delegation hands you. Two rules → two attributes. Ties test to handler documentation; `## RED` table keeps its two columns.
 
 Load the test skill of the requested level with `Skill`, by name — that one only, level is orchestrator's choice. Then files contract names, one `Read` each. Shared doubles and builders (`layout.tests.shared`): extend, never grow a parallel set in the current suite.
 
@@ -62,4 +62,4 @@ No plan, no code excerpt, no raw log. End exactly with:
 
 Table lists every test method written or modified in this delegation — one row per method, `ClassTests.Method` exactly as handler documentation consumes it, no wildcard, no class name alone. No `RM/CU` column: orchestrator holds the id, pairs itself. Deleted test (covered elsewhere) not in table: say it on a line above. Table relayed to user, feeds handler documentation — missing method = test nobody can trace.
 
-Compilation or discovery blocker: replace heading with `## BLOCKED`, add at most six lines of useful RTK diagnostics.
+Compilation or discovery blocker: replace heading with `## BLOCKED`, add at most six useful lines of the command output.

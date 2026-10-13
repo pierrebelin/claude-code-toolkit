@@ -19,7 +19,7 @@ Behaviour through real handler/service. Mock Infrastructure only (repositories, 
 ## Non-negotiable rules
 
 - Test/class naming → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
-- Every test carries its rule (`UnitTests` bind every test, `.claude/rules/tests.md`) under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its `kit:rules` table. Two rules → two attributes. The attribute is the traceability: the table has no test column, a rule with no trait counts untested (`scripts/rules-coverage.py`).
+- Every test carries its rule (`UnitTests` bind every test, `.claude/rules/tests.md`) under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its `kit:rules` table. Two rules → two attributes. The attribute is the traceability: the table has no test column, a rule with no trait counts untested (`cctoolkit rules-coverage`).
 - Aggregate factory/method tested only through its handler/service, no direct aggregate test.
 - No interaction observation: no spy, counter, `CallCount`, `Called`, `Received`, `Verify`, call count — not even for cost.
 - Builders, seeds, DSL, JSON, payloads, business data → fixture. Test class = facts + fixture calls.

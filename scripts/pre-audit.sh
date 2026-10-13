@@ -196,24 +196,19 @@ fi
 # the block names must exist under the test roots (a method a RED reported
 # unreachable or already covered excepted). Older sheets keep their `TDD:` ticks and
 # the tests named by their TDD sequence.
-# Cycle states sit under run/.work/; a run started before that layout keeps them under
-# run/.travail/ or run/<batch>/.
-RUN_DIR="$(dirname "$SHEET")/run"
-STATE_DIR="$RUN_DIR/.work/$BATCH/cycles"
-for d in "$RUN_DIR/.work/$BATCH/cycles" "$RUN_DIR/.travail/$BATCH/cycles" "$RUN_DIR/$BATCH/cycles"; do
-    if [[ -d "$d" ]]; then STATE_DIR="$d"; break; fi
-done
+# Cycle states are the `cycle` lines of the run work file (lib/work_file.py).
+STATE_DIR="$(dirname "$SHEET")/run/.work.jsonl"
 python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --index >/dev/null 2>&1
 HAS_BLOCK=$([[ $? -eq 2 ]] && echo 0 || echo 1)
 if [[ $HAS_BLOCK -eq 1 ]]; then
-    OPEN_CYCLES="$(python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --done "$STATE_DIR" 2>&1)"
+    OPEN_CYCLES="$(python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --done "$STATE_DIR" --batch "$BATCH" 2>&1)"
     if [[ $? -eq 0 ]]; then
         ok "cycles: every cycle of \`## Cycles\` has its final state in $STATE_DIR"
     else
         ko "cycles without a final state (RED or GREEN not observed) in $STATE_DIR"
         while IFS= read -r l; do [[ -n "$l" ]] && note "$l"; done <<<"$OPEN_CYCLES"
     fi
-    MISSING="$(python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --methods "$STATE_DIR" 2>/dev/null | missing_methods)"
+    MISSING="$(python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --methods "$STATE_DIR" --batch "$BATCH" 2>/dev/null | missing_methods)"
     if [[ -z "$MISSING" ]]; then
         ok "tests of \`## Cycles\`: all present under ${KIT_TEST_DIRS}"
     else

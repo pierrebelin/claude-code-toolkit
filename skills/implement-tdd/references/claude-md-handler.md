@@ -8,7 +8,7 @@ Two levels, never mixed:
 
 **Documentary tone** — these files are a produced artefact, read by the team. Name the exact types (`ProductItemEntity`, `ReadLimits.MAX_UNPAGINATED_RESULTS`): this is developer documentation, not a business spec.
 
-The three `##` headings are found by their anchor (`<!-- kit:rules -->`, `<!-- kit:flow -->`, `<!-- kit:events -->`) by `hooks/handler-claude-md-check.sh` and `scripts/rules-coverage.py`. The title is prose in `language.docs`; the anchor never moves.
+The three `##` headings are found by their anchor (`<!-- kit:rules -->`, `<!-- kit:flow -->`, `<!-- kit:events -->`) by `hooks/handler-claude-md-check.sh` and `cctoolkit rules-coverage`. The title is prose in `language.docs`; the anchor never moves.
 
 ---
 

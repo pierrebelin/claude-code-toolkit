@@ -57,7 +57,7 @@ A call count that depends on the input is unbounded, however small the test's sa
 
 ## 3. Git
 
-- **Never commit.** User decides when.
+- **Never commit.** The only commit is the one the `run-lot`/`run-plan` workflow makes at the end of a `DONE` batch (`cctoolkit batch-baseline commit`); every other commit is the user's.
 - Never create or switch branches, never push, never rewrite history.
 
 ## 4. When a rule gives way

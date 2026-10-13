@@ -23,6 +23,6 @@ Observe, never fix. No write tool: deviation goes in verdict. Fixing belongs to 
 
 `Bash` only to read repo state (`git status`, `git diff`), query the graph (`graphify explain` / `graphify affected`) and run the repo's configured build and test commands (`commands.build`, `commands.test` — `skills/implement-tdd/references/test-scope.md` § Runner). Never write, move, delete a file, nor apply fix via redirection or in-place editing. Never commit.
 
-Caller's capture (`scripts/audit-capture.sh`) already holds status, diff, RM/CU and DDD/APP/PERF coverage, access cost per modified file (`access-cost.py --diff`), build, `ArchitectureTests`. Open once, bounded. Re-establishing any = turn paid for nothing.
+Caller's capture (`cctoolkit audit-capture`) already holds status, diff, RM/CU and DDD/APP/PERF coverage, access cost per modified file (`cctoolkit access-cost --diff`), build, `ArchitectureTests`. Open once, bounded. Re-establishing any = turn paid for nothing.
 
 Workflow, verdict format, log budget → `/verify-ddd-tdd` skill.

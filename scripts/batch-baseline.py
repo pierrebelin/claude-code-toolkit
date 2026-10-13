@@ -1,36 +1,46 @@
 #!/usr/bin/env python3
-"""Snapshot of the working tree when a batch starts, so the batch diff excludes the
-earlier uncommitted batches.
+"""The files of one batch: what it changed since it started, its diff, its commit, its undo.
 
-Nothing is committed between batches: `git diff` against HEAD carries every earlier
-batch of the plan. The audit then judged a diff several batches wide, truncated, and
-the GREEN `Cost` line flagged loops an earlier batch wrote. The snapshot copies every
-file modified or untracked under the source and test roots (`kit.config.json`
-`layout.sources.roots` and `layout.tests.roots`) at batch start; the batch diff of a
-file compares it with that copy, or with HEAD when the file was clean at start.
+Every batch is committed when it ends, so `HEAD` is the end of the previous batch and
+`git diff HEAD` is the batch's own diff — except for the files the user had already
+modified when the batch started. `snapshot` records those as a `preexisting` line of the
+run work file (`run/.work.jsonl`, lib/work_file.py): path and blob hash only, computed
+with `git hash-object` without `-w`, so no content is copied anywhere. A file of the batch
+is then a file modified or untracked now, outside the run folder, that was either clean
+at the start or has changed since.
 
-    cctoolkit batch-baseline snapshot <dir>
-        copies the dirty files under <dir>/files/ and lists them in <dir>/manifest.txt.
-        Kept when <dir>/manifest.txt already exists: a resumed batch keeps the snapshot
-        of its first start.
-    cctoolkit batch-baseline diff <dir> [--code] [--name-only]
-        unified diff of the tree against the snapshot, `a/` and `b/` prefixes as git.
-        --code: `.md` and `*.verified.*` left out. --name-only: paths only.
-    cctoolkit batch-baseline base <dir> <path>
-        prints the content <path> had at batch start (empty for a file created since).
-    cctoolkit batch-baseline restore <dir> [--save <patch>]
-        sets a blocked batch aside: --save first writes the batch diff (every file) to
-        <patch>, then every file under the source and test roots goes back to its
-        batch-start content (snapshot copy, else HEAD through `git show`, never
-        checkout/restore/stash), files created since are deleted, and the snapshot is
-        removed: it is consumed.
+    cctoolkit batch-baseline snapshot <work> FX
+        records the preexisting files of FX. Kept when FX already has one: a resumed
+        batch keeps the snapshot of its first start.
+    cctoolkit batch-baseline diff <work> FX [--code] [--name-only]
+        unified diff against HEAD of the batch files under the source and test roots,
+        `a/` and `b/` prefixes as git. --code: `.md` and `*.verified.*` left out.
+        --name-only: paths only.
+    cctoolkit batch-baseline base <work> FX <path>
+        prints the content <path> had at the batch start (HEAD; empty for a file the
+        batch created).
+    cctoolkit batch-baseline restore <work> FX [--save <patch>]
+        sets a blocked batch aside: --save first writes the diff of the files it puts
+        back, then every batch file under the source and test roots goes back to HEAD
+        (`git show`, never checkout/restore/stash) and the files it created are deleted.
+        A preexisting file the batch also modified is left as is and listed.
+    cctoolkit batch-baseline commit <work> FX --sheet <sheet>
+        commits the batch files (whole repo, run folder excluded) and nothing else, the
+        index the user staged before left out (`git commit --only`). Message
+        `<type>(<plan folder>): lot FX — <sheet title>`, type `refactor` when every cycle
+        of the sheet is a refactor, `fix` when the title starts with fix/corrig, else
+        `feat`. A preexisting file the batch also modified is committed whole and listed.
+        The one commit the kit makes: `lib/guard-git.sh` still denies `git commit` typed
+        in a Bash command.
 
---root DIR    repository the snapshot covers (default: the repo `kit_config.project_root()` resolves).
+--root DIR    repository the batch covers (default: the repo `kit_config.project_root()` resolves).
 
-Exit 0, exit 2 on usage error, missing snapshot or unreadable kit.config.json.
+Exit 0, exit 2 on usage error, missing snapshot or unreadable kit.config.json, exit 1
+when git refuses the commit.
 """
 import difflib
-import shutil
+import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -39,9 +49,11 @@ HERE = Path(__file__).resolve().parent.parent
 for _lib in (HERE / "lib", HERE / ".claude" / "lib"):
     sys.path.insert(0, str(_lib))
 import kit_config  # noqa: E402
+import work_file  # noqa: E402
 
 ROOT = Path(kit_config.project_root()).resolve()
 SCOPE: list[str] = []
+RUN_DIR = ""
 
 
 def git(*args: str) -> str:
@@ -49,42 +61,43 @@ def git(*args: str) -> str:
 
 
 def dirty() -> list[str]:
-    changed = git("diff", "--name-only", "HEAD", "--", *SCOPE).split("\n")
-    untracked = git("ls-files", "--others", "--exclude-standard", "--", *SCOPE).split("\n")
-    return sorted({p for p in changed + untracked if p})
+    out = subprocess.run(["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+                         capture_output=True, cwd=ROOT).stdout.decode("utf-8", errors="replace")
+    entries = out.split("\0")
+    paths, i = set(), 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        paths.add(entry[3:])
+        if entry[0] in "RC":
+            paths.add(entries[i])
+            i += 1
+    return sorted(p for p in paths if not (RUN_DIR and (p + "/").startswith(RUN_DIR)))
 
 
-def manifest(base: Path) -> set[str]:
-    return {line for line in (base / "manifest.txt").read_text(encoding="utf-8").split("\n") if line}
+def hashes(paths: list[str]) -> dict[str, str]:
+    present = [p for p in paths if (ROOT / p).is_file()]
+    found = dict.fromkeys(paths, "")
+    if present:
+        out = subprocess.run(["git", "hash-object", "--no-filters", "--stdin-paths"], input="\n".join(present) + "\n",
+                             capture_output=True, text=True, cwd=ROOT).stdout.split()
+        found.update(zip(present, out))
+    return found
 
 
-def snapshot(base: Path) -> int:
-    if (base / "manifest.txt").exists():
-        print(f"snapshot kept: {base / 'manifest.txt'}")
-        return 0
-    paths = dirty()
-    for p in paths:
-        source = ROOT / p
-        if source.is_file():
-            target = base / "files" / p
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
-    base.mkdir(parents=True, exist_ok=True)
-    (base / "manifest.txt").write_text("\n".join(paths) + "\n", encoding="utf-8")
-    print(f"snapshot: {len(paths)} file(s) -> {base}")
-    return 0
+def in_scope(path: str) -> bool:
+    return any(path == root or path.startswith(root.rstrip("/") + "/") for root in SCOPE)
 
 
-def at_start(base: Path, known: set[str], path: str) -> str:
-    if path in known:
-        copy = base / "files" / path
-        return copy.read_text(encoding="utf-8", errors="replace") if copy.exists() else ""
-    return subprocess.run(["git", "show", f"HEAD:{path}"], capture_output=True, text=True, cwd=ROOT).stdout
-
-
-def now(path: str) -> str:
-    current = ROOT / path
-    return current.read_text(encoding="utf-8", errors="replace") if current.is_file() else ""
+def batch_files(work: Path, batch: str) -> tuple[list[str], list[str]]:
+    """(files of the batch, preexisting files among them)."""
+    before = work_file.preexisting(work_file.read(work), batch) or {}
+    now = dirty()
+    current = hashes([p for p in now if p in before])
+    files = [p for p in now if p not in before or current.get(p) != before[p]]
+    return files, [p for p in files if p in before]
 
 
 def head(path: str) -> bytes | None:
@@ -92,21 +105,63 @@ def head(path: str) -> bytes | None:
     return shown.stdout if shown.returncode == 0 else None
 
 
-def restore(base: Path, patch: Path | None) -> int:
-    known = manifest(base)
+def text(content: bytes | None) -> str:
+    return content.decode("utf-8", errors="replace") if content else ""
+
+
+def now(path: str) -> str:
+    current = ROOT / path
+    return current.read_text(encoding="utf-8", errors="replace") if current.is_file() else ""
+
+
+def code(path: str) -> bool:
+    return not path.endswith(".md") and ".verified." not in path
+
+
+def write_diff(paths: list[str], only_code: bool, names: bool, out) -> None:
+    for path in paths:
+        if only_code and not code(path):
+            continue
+        before, after = text(head(path)), now(path)
+        if before == after:
+            continue
+        if names:
+            out.write(path + "\n")
+            continue
+        out.writelines(difflib.unified_diff(
+            before.splitlines(keepends=True), after.splitlines(keepends=True),
+            fromfile=f"a/{path}" if before else "/dev/null", tofile=f"b/{path}" if after else "/dev/null", n=3,
+        ))
+        if after and not after.endswith("\n"):
+            out.write("\n")
+
+
+def snapshot(work: Path, batch: str) -> int:
+    if work_file.preexisting(work_file.read(work), batch) is not None:
+        print(f"snapshot kept: {batch} in {work}")
+        return 0
+    files = hashes(dirty())
+    work_file.append(work, {"kind": "preexisting", "batch": batch, "files": files})
+    print(f"snapshot: {len(files)} preexisting file(s) -> {work}")
+    return 0
+
+
+def prune(folder: Path) -> None:
+    while len(folder.relative_to(ROOT).parts) > 1 and folder.is_dir() and not any(folder.iterdir()):
+        folder.rmdir()
+        folder = folder.parent
+
+
+def restore(work: Path, batch: str, patch: Path | None) -> int:
+    files, kept = batch_files(work, batch)
+    back = [p for p in files if in_scope(p) and p not in kept]
     if patch:
         patch.parent.mkdir(parents=True, exist_ok=True)
         with open(patch, "w", encoding="utf-8") as out:
-            stdout, sys.stdout = sys.stdout, out
-            try:
-                diff(base, False, False)
-            finally:
-                sys.stdout = stdout
+            write_diff(back, False, False, out)
     restored = deleted = 0
-    for path in sorted(known | set(dirty())):
-        copy = base / "files" / path
-        start = copy.read_bytes() if path in known and copy.is_file() else None if path in known else head(path)
-        target = ROOT / path
+    for path in back:
+        start, target = head(path), ROOT / path
         if start is None:
             if target.is_file():
                 target.unlink()
@@ -117,48 +172,52 @@ def restore(base: Path, patch: Path | None) -> int:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(start)
             restored += 1
-    shutil.rmtree(base)
-    print(f"restored: {restored} file(s), deleted: {deleted}{f', patch: {patch}' if patch else ''}")
+    left = [p for p in kept if in_scope(p)]
+    print(f"restored: {restored} file(s), deleted: {deleted}"
+          f"{f', left (modified before the batch): {', '.join(left)}' if left else ''}"
+          f"{f', patch: {patch}' if patch else ''}")
     return 0
 
 
-def prune(folder: Path) -> None:
-    while len(folder.relative_to(ROOT).parts) > 1 and folder.is_dir() and not any(folder.iterdir()):
-        folder.rmdir()
-        folder = folder.parent
+def message(batch: str, sheet: Path) -> str:
+    first = next((l for l in sheet.read_text(encoding="utf-8").splitlines() if l.startswith("# ")), f"# {batch}")
+    title = re.sub(r"\s+—\s+✅ DONE.*$", "", first[2:]).strip()
+    title = re.sub(rf"^.*?-{batch}\s+—\s+", "", title)
+    index = subprocess.run([sys.executable, str(HERE / "scripts" / "sheet-cycles.py"), str(sheet), "--index", "--root", str(ROOT)],
+                           capture_output=True, text=True, cwd=ROOT).stdout
+    try:
+        cycles = json.loads(index).get("cycles", [])
+    except ValueError:
+        cycles = []
+    kind = ("refactor" if cycles and all(c.get("refactor") for c in cycles)
+            else "fix" if re.match(r"(fix|corrig)", title, re.I) else "feat")
+    return f"{kind}({sheet.resolve().parent.name}): lot {batch} — {title}"
 
 
-def code(path: str) -> bool:
-    return not path.endswith(".md") and ".verified." not in path
-
-
-def diff(base: Path, only_code: bool, names: bool) -> int:
-    known = manifest(base)
-    for path in sorted(known | set(dirty())):
-        if only_code and not code(path):
-            continue
-        before, after = at_start(base, known, path), now(path)
-        if before == after:
-            continue
-        if names:
-            print(path)
-            continue
-        sys.stdout.writelines(difflib.unified_diff(
-            before.splitlines(keepends=True), after.splitlines(keepends=True),
-            fromfile=f"a/{path}" if before else "/dev/null", tofile=f"b/{path}" if after else "/dev/null", n=3,
-        ))
-        if after and not after.endswith("\n"):
-            print()
+def commit(work: Path, batch: str, sheet: Path) -> int:
+    files, whole = batch_files(work, batch)
+    if not files:
+        print("nothing to commit")
+        return 0
+    added = subprocess.run(["git", "add", "-A", "--", *files], capture_output=True, text=True, cwd=ROOT)
+    done = added.returncode == 0 and subprocess.run(
+        ["git", "commit", "-q", "--only", "-m", message(batch, sheet), "--", *files],
+        capture_output=True, text=True, cwd=ROOT)
+    if not done or done.returncode != 0:
+        print((done.stderr if done else added.stderr).strip() or "git refused the commit", file=sys.stderr)
+        return 1
+    print(f"committed {git('rev-parse', '--short', 'HEAD').strip()}: {len(files)} file(s)"
+          f"{f', committed whole with changes made before the batch: {', '.join(whole)}' if whole else ''}")
     return 0
 
 
 def main(argv: list[str]) -> int:
-    global ROOT
+    global ROOT, RUN_DIR
     if "--root" in argv:
         i = argv.index("--root")
         ROOT = Path(argv[i + 1]).resolve()
         argv = argv[:i] + argv[i + 2:]
-    if len(argv) < 2:
+    if len(argv) < 3:
         print(__doc__, file=sys.stderr)
         return 2
     try:
@@ -167,21 +226,27 @@ def main(argv: list[str]) -> int:
         print(f"kit.config.json: {e} — cctoolkit doctor", file=sys.stderr)
         return 2
     SCOPE[:] = list(dict.fromkeys(config.source_roots + config.test_roots))
-    command, base = argv[0], Path(argv[1])
-    if not base.is_absolute():
-        base = ROOT / base
+    command, work, batch = argv[0], Path(argv[1]), argv[2]
+    work = (work if work.is_absolute() else Path.cwd() / work).resolve()
+    try:
+        RUN_DIR = str(work.parent.relative_to(ROOT)) + "/"
+    except ValueError:
+        RUN_DIR = ""
     if command == "snapshot":
-        return snapshot(base)
-    if not (base / "manifest.txt").exists():
-        print(f"no snapshot under {base}", file=sys.stderr)
+        return snapshot(work, batch)
+    if work_file.preexisting(work_file.read(work), batch) is None:
+        print(f"no snapshot of {batch} in {work}", file=sys.stderr)
         return 2
     if command == "diff":
-        return diff(base, "--code" in argv, "--name-only" in argv)
-    if command == "restore":
-        return restore(base, Path(argv[argv.index("--save") + 1]).resolve() if "--save" in argv else None)
-    if command == "base" and len(argv) == 3:
-        sys.stdout.write(at_start(base, manifest(base), argv[2]))
+        write_diff([p for p in batch_files(work, batch)[0] if in_scope(p)], "--code" in argv, "--name-only" in argv, sys.stdout)
         return 0
+    if command == "restore":
+        return restore(work, batch, Path(argv[argv.index("--save") + 1]).resolve() if "--save" in argv else None)
+    if command == "base" and len(argv) == 4:
+        sys.stdout.write(text(head(argv[3])))
+        return 0
+    if command == "commit" and "--sheet" in argv:
+        return commit(work, batch, Path(argv[argv.index("--sheet") + 1]))
     print(__doc__, file=sys.stderr)
     return 2
 

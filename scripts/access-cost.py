@@ -16,8 +16,8 @@ Usage:
     cctoolkit access-cost <file.cs> [...]   # files the implementer touched
     cctoolkit access-cost --diff            # every .cs modified under the source roots,
                                             # added lines flagged (audit)
-    cctoolkit access-cost --base <dir> [<file.cs> ...]
-        # lines added since the `batch-baseline snapshot <dir>` flagged, the others
+    cctoolkit access-cost --base <work> FX [<file.cs> ...]
+        # lines added by batch FX (`batch-baseline`, run work file <work>) flagged, the others
         # listed "(pre-existing)"; no file = every .cs of the batch diff under the
         # source roots. A loop an earlier batch wrote never blocks the current GREEN.
 
@@ -101,7 +101,7 @@ def added_lines(path):
 
 def added_since(base, path):
     before = subprocess.run(
-        [sys.executable, BASELINE, "base", base, path, "--root", ROOT],
+        [sys.executable, BASELINE, "base", *base, path, "--root", ROOT],
         capture_output=True, text=True, cwd=ROOT,
     ).stdout.splitlines()
     with open(os.path.join(ROOT, path), encoding="utf-8", errors="replace") as f:
@@ -208,12 +208,12 @@ def main(argv):
     if not binary:
         print("ast-grep missing — brew install ast-grep — cost not checked mechanically, state it by hand")
         return 3
-    base = argv[1] if len(argv) >= 2 and argv[0] == "--base" else None
+    base = (argv[1], argv[2]) if len(argv) >= 3 and argv[0] == "--base" else None
     if base:
-        argv = argv[2:]
+        argv = argv[3:]
         if not argv:
             out = subprocess.run(
-                [sys.executable, BASELINE, "diff", base, "--name-only", "--root", ROOT],
+                [sys.executable, BASELINE, "diff", *base, "--name-only", "--root", ROOT],
                 capture_output=True, text=True, cwd=ROOT,
             ).stdout
             argv = cs_files(out.split(), kit())

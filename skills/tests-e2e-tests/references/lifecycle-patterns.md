@@ -11,7 +11,7 @@ Assert.NotEmpty(categories.Value!.Categories);
 var categoryId = categories.Value.Categories[0].Id;
 ```
 
-Read reference data, don't modify it. Mutable data the test creates is deleted at the end of the journey.
+Read reference data, don't modify it. Mutable data the test creates stays after the journey: no cleanup step; the only deletions are operations the lifecycle itself exercises.
 
 ## API dependencies
 

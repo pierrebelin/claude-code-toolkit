@@ -15,11 +15,11 @@ set -uo pipefail
 # the diff makes it mandatory.
 #
 # Usage:
-#   cctoolkit audit-capture <batch> <sheet.md> <output> [--base <dir>]
+#   cctoolkit audit-capture <batch> <sheet.md> <output> [--base <work>]
 #
-# --base: snapshot taken by `cctoolkit batch-baseline snapshot` when the batch started.
-# The diff is then the batch's own, not every uncommitted earlier batch: a diff three
-# batches wide reached the auditor at 6802 lines, truncated to 1200.
+# --base: the run work file holding the `batch-baseline snapshot` of the batch. The diff
+# is then the batch's own, files the user had modified before the batch left out: a diff
+# three batches wide once reached the auditor at 6802 lines, truncated to 1200.
 #
 # Example:
 #   cctoolkit audit-capture F1 todo/<feature>/PLAN-F1.md \
@@ -27,7 +27,7 @@ set -uo pipefail
 # ══════════════════════════════════════════════════════════════════════════════
 
 if [[ $# -ne 3 && ! ( $# -eq 5 && "$4" == "--base" ) ]]; then
-    echo "Usage: cctoolkit audit-capture <batch> <sheet.md> <output> [--base <dir>]" >&2
+    echo "Usage: cctoolkit audit-capture <batch> <sheet.md> <output> [--base <work>]" >&2
     exit 2
 fi
 
@@ -113,7 +113,7 @@ batch_diff() {
 }
 DIFF_FILE="${OUT%.txt}.diff"
 if [[ -n "$BASE" ]]; then
-    python3 "$SCRIPTS"/batch-baseline.py diff "$BASE" --code >"$DIFF_FILE" 2>/dev/null
+    python3 "$SCRIPTS"/batch-baseline.py diff "$BASE" "$BATCH" --code >"$DIFF_FILE" 2>/dev/null
 else
     batch_diff >"$DIFF_FILE"
 fi
@@ -121,7 +121,7 @@ DIFF_LINES=$(wc -l <"$DIFF_FILE" | tr -d ' ')
 
 section "changed files"
 if [[ -n "$BASE" ]]; then
-    python3 "$SCRIPTS"/batch-baseline.py diff "$BASE" --name-only >>"$OUT" 2>&1
+    python3 "$SCRIPTS"/batch-baseline.py diff "$BASE" "$BATCH" --name-only >>"$OUT" 2>&1
 else
     { git diff --name-only; git ls-files --others --exclude-standard -- "${CODE_DIRS[@]}"; } >>"$OUT" 2>&1
 fi
@@ -139,13 +139,13 @@ else
 fi
 
 # TDD evidence of a sheet with a `## Cycles` block: one line per cycle, read off the
-# state files the RED and GREEN agents wrote. Such a sheet carries no ticks; the
+# `cycle` lines the RED and GREEN agents appended to the run work file. Such a sheet carries no ticks; the
 # `Plan` axis judges RED observed before GREEN from this section.
-STATE_DIR="$(dirname "$SHEET")/run/.work/$BATCH/cycles"
+STATE_DIR="$(dirname "$SHEET")/run/.work.jsonl"
 python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --index >/dev/null 2>&1
 if [[ $? -ne 2 ]]; then
     section "TDD cycles (scripts/sheet-cycles.py --summary)"
-    python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --summary "$STATE_DIR" >>"$OUT" 2>&1
+    python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --summary "$STATE_DIR" --batch "$BATCH" >>"$OUT" 2>&1
 fi
 
 section "RM/CU coverage — rules with no test"
@@ -157,8 +157,13 @@ python3 "$SCRIPTS"/rules-coverage.py --ids "$SHEET" >>"$OUT" 2>&1
 # Awaited Infrastructure calls per modified file, read off the syntax tree;
 # loop, lambda and in-memory filter flagged, added lines told from pre-existing
 # ones. The `Cost` axis judges this section instead of re-opening the handlers.
-section "access cost (scripts/access-cost.py --diff)"
-python3 "$SCRIPTS"/access-cost.py --diff >>"$OUT" 2>&1 || true
+if [[ -n "$BASE" ]]; then
+    section "access cost (scripts/access-cost.py --base)"
+    python3 "$SCRIPTS"/access-cost.py --base "$BASE" "$BATCH" >>"$OUT" 2>&1 || true
+else
+    section "access cost (scripts/access-cost.py --diff)"
+    python3 "$SCRIPTS"/access-cost.py --diff >>"$OUT" 2>&1 || true
+fi
 
 # `commands.build` covers the whole solution; a red build makes every verdict
 # below it meaningless, so it runs first and unconditionally when code moved.

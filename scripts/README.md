@@ -16,14 +16,15 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | `migrate-anchors` | one-shot: appends the `<!-- kit:… -->` anchors to documents written before them — dry run by default, `--apply` writes |
 | `turn-batching-check` | tool-call batching, context fill per tool, `read-bounds` denials and forcings followed by an edit — main chain, then subagents (`<session>/subagents/`); `--save-baseline` / `--compare` |
 | `quality-report-check` | checks a `docs/metrics/quality-report-*` pair |
-| `audit-capture` | the deterministic audit material in one file, so `/verify-ddd-tdd` opens it once; `--base <dir>` (a `batch-baseline` snapshot) limits the diff to the batch's own |
+| `audit-capture` | the deterministic audit material in one file, so `/verify-ddd-tdd` opens it once; `--base <work>` (the run work file) limits the diff to the batch's own files |
 | `pre-audit` | the mechanical gate before `/verify-ddd-tdd` — red means no fork. Gate 8 (opt-in, `layout.sources.languageGuard`) lists French sentences added to production literals |
-| `access-cost` | awaited Infrastructure calls read off the syntax tree with ast-grep; C# only; `--base <dir>` flags only the lines added since the `batch-baseline` snapshot |
+| `access-cost` | awaited Infrastructure calls read off the syntax tree with ast-grep; C# only; `--base <work> FX` flags only the lines the batch added against `HEAD` |
 | `install-git-hooks` | links `settings.local.json` into new worktrees, for a plugin enabled at local scope |
 | `plan-next-batch` | `run-plan`'s scheduler: next runnable batch of a plan's `### Batch execution` table, `--check`, `--next`, `--outside`, `--exclude`, `--skip FX,FY` (batches set aside by the run — read as not done, never launched, nor their dependents; `--next` lists them as `held`), `--context` |
 | `sheet-cycles` | the `## Cycles` json block of a batch sheet: `--index` validates it (names, paths, one test project, 4 test / 8 production files per cycle, disjoint waves; exit 2 = no block), `--cycle ID --red\|--green` prints one cycle's contract, `--done`/`--methods`/`--summary` read the cycle states for `pre-audit` and `audit-capture` |
-| `run-question` | questions a running `run-lot`/`run-plan` asks: `wait` (workflow side), `watch`/`pending`/`answer` (session side) |
-| `batch-baseline` | snapshot of the files modified under the source and test roots when a batch starts: `snapshot <dir>`, `diff <dir> [--code] [--name-only]`, `base <dir> <path>`, `restore <dir> [--save <patch>]` sets a blocked batch aside; `audit-capture` and `access-cost` take `--base <dir>` to see the batch alone |
+| `run-question` | questions a running `run-lot`/`run-plan` asks, as lines of `run/.work.jsonl`: `ask`/`wait` (workflow side), `watch`/`pending`/`answer` (session side) |
+| `run-work` | the run work file `run/.work.jsonl`: `append`, `journal`, `drop`, `tmp` (temp folder for logs, never under `run/`), `purge` (every run: lines no run needs dropped, 3 runs kept) and `migrate` (older `.work/`, `.travail/`, `lots/` layouts folded in once) |
+| `batch-baseline` | the files of one batch against `HEAD`, the files the user had already modified at batch start left out (a `preexisting` line of hashes in `run/.work.jsonl`, no content): `snapshot <work> FX`, `diff <work> FX [--code] [--name-only]`, `base <work> FX <path>`, `restore <work> FX [--save <patch>]` sets a blocked batch aside, `commit <work> FX --sheet <sheet>` is the batch commit, the kit's only one |
 | `batch-wallclock` | wall clock of an `/implement-tdd` batch |
 | `kit-diff <repo>` | a manual copy against the kit: MISSING / ADDED / DRIFT / MERGED, plus anonymisation alerts — the migration's first step |
 | `remove-copy` | the migration's deletion: DELETE the files the kit ships, KEEP the repo's own skills and scripts, MOVE a file added inside a kit skill, ORPHAN the repo's eval cases — dry run, `--apply` deletes |

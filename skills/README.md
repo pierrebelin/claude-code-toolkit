@@ -53,9 +53,9 @@ Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-plan <
 
 **Comments only for what the code cannot say** — a constraint, a decision, a workaround — at the file's own density; naming carries the rest. `pre-audit.sh` lists every added comment, the audit's `Comments` axis judges each. Useless comments are removed only within the lines you touch.
 
-**Rules ↔ tests traceability** — every use-case folder carries a rule sheet (`CLAUDE.md`) with a rules table (`kit:rules`), and every test declares the rule it covers on itself, value `{HandlerFolder}/{RM|RL-xx}` in the carrier of its framework (`testTag`; xUnit: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`). `hooks/handler-claude-md-check.sh` checks both directions; `cctoolkit rules-coverage` gives the repo-wide count.
+**Rules ↔ tests traceability** — every use-case folder carries a rule sheet (`CLAUDE.md`) with a rules table (`kit:rules`), and every handler unit test (and each integration test proving a documented rule) declares the rule it covers on itself — contract and E2E tests carry none — value `{HandlerFolder}/{RM|RL-xx}` in the carrier of its framework (`testTag`; xUnit: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`). `hooks/handler-claude-md-check.sh` checks both directions; `cctoolkit rules-coverage` gives the repo-wide count.
 
-**Never commit to Git.** The user decides when to commit. `lib/guard-git.sh` makes the instruction deterministic.
+**Never commit to Git.** The user decides when to commit, except the batch commit the `run-lot`/`run-plan` workflow makes at the end of a `DONE` batch through `cctoolkit batch-baseline commit`. `lib/guard-git.sh` makes the instruction deterministic: a Git commit typed in a Bash command is always denied.
 
 **Symbol discovery** — `grep`s for a symbol give way to `graphify explain` when the AST graph actually answers.
 

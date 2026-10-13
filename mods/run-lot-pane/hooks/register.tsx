@@ -50,7 +50,6 @@ const LOT_DONE = ['TERMINÉ', 'DONE']
 const WAITING_TONE = 'cyan'
 const REPORT_NAMES = ['rapport', 'report']
 const BATCH_REPORT_DIRS = ['batches', 'lots']
-const WORK_DIRS = ['.work', '.travail']
 const WAVE_LABEL = /^RED \S+ w(\d+)\b/
 const LAUNCHED_PHASE = 'Review'
 const REPORT_PHASE = 'Report'
@@ -409,6 +408,22 @@ const forwardedValuesOf = (script: string, lines: string[], at: number, paramete
   )
 }
 
+const calledPrefixesOf = (script: string, expression: string): string[] => {
+  const name = /^\s*(\w+)\s*\(/.exec(expression)?.[1]
+  if (name === undefined) return []
+  const definition = new RegExp(
+    `\\b(?:const|let)\\s+${name}\\s*=\\s*(?:async\\s*)?\\([^)]*\\)\\s*=>\\s*|\\bfunction\\s+${name}\\s*\\([^)]*\\)\\s*\\{\\s*return\\s+`,
+  ).exec(script)
+  if (definition === null) return []
+  const body = script.slice(definition.index + definition[0].length)
+  return (body[0] ?? '') in OPENERS ? literalPrefixesOf(body.slice(0, closingOf(body, 0) + 1)) : []
+}
+
+const labelPrefixesOf = (script: string, expression: string): string[] => {
+  const literal = literalPrefixesOf(expression)
+  return literal.length > 0 ? literal : calledPrefixesOf(script, expression)
+}
+
 const optionOf = (text: string, key: string): string | null => {
   const start = text.search(new RegExp(`\\b${key}\\s*:`))
   return start < 0 ? null : (text.slice(start).replace(new RegExp(`^${key}\\s*:`), '').split(/,\s*\w+\s*:/)[0] ?? '')
@@ -443,9 +458,9 @@ export const labelPhasesOf = (script: string): Record<string, string> => {
       if (phases.length > 1) {
         const branches = expression === null || forwarded !== null ? null : branchesOf(expression.trim())
         if (branches === null || branches.length !== phases.length) return []
-        return branches.flatMap((branch, index) => literalPrefixesOf(branch).map(label => [label, phases[index] ?? '']))
+        return branches.flatMap((branch, index) => labelPrefixesOf(script, branch).map(label => [label, phases[index] ?? '']))
       }
-      const labels = forwarded !== null ? forwardedValuesOf(script, lines, at, forwarded) : literalPrefixesOf(expression ?? '')
+      const labels = forwarded !== null ? forwardedValuesOf(script, lines, at, forwarded) : labelPrefixesOf(script, expression ?? '')
       return labels.map(label => [label, phases[0] ?? ''])
     }),
   )
@@ -588,36 +603,27 @@ export const reportPathsOf = (sheet: string, lot: string): string[] => [
   ...REPORT_NAMES.map(name => `${runRootOf(sheet)}/${lot}/${lot}-${name}.md`),
 ]
 
-export const questionsDirOf = (sheet: string, lot: string): string => `${runRootOf(sheet)}/${lot}/questions`
+export const workFileOf = (sheet: string): string => `${runRootOf(sheet)}/.work.jsonl`
 
-export const questionsDirsOf = (sheet: string, lot: string): string[] => [
-  questionsDirOf(sheet, lot),
-  ...WORK_DIRS.map(dir => `${runRootOf(sheet)}/${dir}/${lot}/questions`),
-]
+type WorkLine = { kind?: unknown; batch?: unknown; id?: unknown; slug?: unknown; state?: unknown }
 
-export const cyclesDirOf = (sheet: string, lot: string): string => `${runRootOf(sheet)}/${WORK_DIRS[0]}/${lot}/cycles`
+export const workLinesOf = (text: string): WorkLine[] =>
+  text.split('\n').flatMap(line => {
+    const record = jsonOf(line)
+    return typeof record === 'object' && record !== null && !Array.isArray(record) ? [record as WorkLine] : []
+  })
 
-export const cyclesDirsOf = (sheet: string, lot: string): string[] => [
-  ...WORK_DIRS.map(dir => `${runRootOf(sheet)}/${dir}/${lot}/cycles`),
-  `${runRootOf(sheet)}/${lot}/cycles`,
-]
-
-export const packedStatesOf = (text: string): Record<string, string> =>
+export const cycleStatesOf = (lines: WorkLine[], lot: string): Record<string, string> =>
   Object.fromEntries(
-    text.split('\n').flatMap(line => {
-      const state = jsonOf(line)
-      const behaviour = typeof state === 'object' && state !== null ? (state as { behaviour?: unknown }).behaviour : undefined
-      return typeof behaviour === 'string' ? [[`${cycleSlugOf(behaviour)}.json`, line]] : []
-    }),
+    lines.flatMap(line => (line.kind === 'cycle' && line.batch === lot && typeof line.slug === 'string' ? [[line.slug, JSON.stringify(line.state ?? null)]] : [])),
   )
 
 export const aheadLotOf = (label: string): string | null => AHEAD_LABEL.exec(label)?.[1] ?? null
 
-export const pendingQuestionsOf = (entries: FsEntry[]): string[] =>
-  entries
-    .filter(entry => entry.kind === 'file' && entry.name.endsWith('.json') && !entry.name.endsWith('.answer.json'))
-    .filter(entry => !entries.some(other => other.name === entry.name.replace(/\.json$/, '.answer.json')))
-    .map(entry => entry.name)
+export const pendingQuestionsOf = (lines: WorkLine[], lot: string): string[] => {
+  const answered = new Set(lines.flatMap(line => (line.kind === 'answer' ? [String(line.id)] : [])))
+  return lines.flatMap(line => (line.kind === 'question' && line.batch === lot && !answered.has(String(line.id)) ? [String(line.id)] : []))
+}
 
 export const reportOutcomeOf = (text: string, path: string): Outcome | null => {
   const status = REPORT_STATUS.exec(text.split('\n')[0] ?? '')?.[1]
@@ -915,7 +921,7 @@ export const isSlow = (agent: WorkflowAgent, typical: number | null, at: number)
   typical !== null && (agent.endedAt ?? at) - agent.startedAt > SLOW_FACTOR * typical
 
 export const throughputOf = (agent: WorkflowAgent): number | null => {
-  if (agent.streamKind === null || agent.firstChunkAt === null || agent.lastChunkAt === null) return null
+  if (agent.streamKind === null || agent.firstChunkAt === null || agent.lastChunkAt === null || agent.streamChars === 0) return null
   const span = agent.lastChunkAt - agent.firstChunkAt
   return span < 1000 ? null : agent.streamChars / CHARS_PER_TOKEN / (span / 1000)
 }
@@ -962,6 +968,7 @@ export const activityOf = (agent: WorkflowAgent, at: number): string | null => {
   if (agent.openCalls > 0 && agent.toolSince !== null) return `tool ${agent.lastTool ?? '?'} ${elapsed(at - agent.toolSince)}`
   if (agent.waitingSince !== null) return `○ waiting model ${elapsed(at - agent.waitingSince)}`
   if (agent.streamKind === null) return null
+  if (agent.streamChars === 0) return `● ${STREAM_LABELS[agent.streamKind]}${agent.firstChunkAt === null ? '' : ` · ${elapsed(at - agent.firstChunkAt)}`}`
   const rate = throughputOf(agent)
   return `● ${STREAM_LABELS[agent.streamKind]} · ${characters(agent.streamChars)}${rate === null ? '' : ` · ${Math.round(rate)} tok/s`}`
 }
@@ -1789,9 +1796,7 @@ async function changedText($: EngineInterface, path: string): Promise<string | n
 }
 
 async function askingOf($: EngineInterface, sheet: string, lot: string): Promise<number> {
-  let asking = 0
-  for (const dir of questionsDirsOf(sheet, lot)) asking += pendingQuestionsOf(await listDirectory($, dir)).length
-  return asking
+  return pendingQuestionsOf(workLinesOf((await readText($, workFileOf(sheet))) ?? ''), lot).length
 }
 
 async function refreshAsking($: EngineInterface, run: WorkflowRun): Promise<void> {
@@ -1974,26 +1979,14 @@ const seenCycles = new Map<string, string>()
 
 async function withCycleProgress($: EngineInterface, sheet: Sheet, path: string, lot: string, isFresh: boolean): Promise<Sheet | null> {
   if (sheet.cycles === undefined) return isFresh ? sheet : null
-  let dir = cyclesDirOf(path, lot)
-  let entries: FsEntry[] = []
-  for (const candidate of cyclesDirsOf(path, lot)) {
-    entries = (await listDirectory($, candidate)).filter(entry => entry.kind === 'file' && entry.name.endsWith('.json'))
-    dir = candidate
-    if (entries.length > 0) break
-  }
-  const packedPath = `${cyclesDirOf(path, lot)}.jsonl`
-  const packedStat = entries.length > 0 ? null : await $.fs.stat(packedPath).catch(() => null)
-  const signature = packedStat !== null ? `${packedPath}@${packedStat.mtimeMs}` : entries.map(entry => `${entry.name}@${entry.mtimeMs}`).sort().join('|')
-  if (!isFresh && seenCycles.get(dir) === signature) return null
-  seenCycles.set(dir, signature)
-  const names = new Set(entries.map(entry => entry.name))
-  const packed = packedStat === null ? {} : packedStatesOf((await readText($, packedPath)) ?? '')
-  const cycles: SheetCycle[] = []
-  for (const cycle of sheet.cycles) {
-    const name = `${cycleSlugOf(cycle.behaviour)}.json`
-    cycles.push(cycleProgressOf(cycle, packed[name] ?? (names.has(name) ? await readText($, `${dir}/${name}`) : null)))
-  }
-  return { ...sheet, cycles }
+  const work = workFileOf(path)
+  const stat = await $.fs.stat(work).catch(() => null)
+  const key = `${work}#${lot}`
+  const signature = stat === null ? 'none' : String(stat.mtimeMs)
+  if (!isFresh && seenCycles.get(key) === signature) return null
+  seenCycles.set(key, signature)
+  const states = stat === null ? {} : cycleStatesOf(workLinesOf((await readText($, work)) ?? ''), lot)
+  return { ...sheet, cycles: sheet.cycles.map(cycle => cycleProgressOf(cycle, states[cycleSlugOf(cycle.behaviour)] ?? null)) }
 }
 
 async function refreshUsage($: EngineInterface): Promise<void> {

@@ -1,20 +1,69 @@
 {
   "fixtures": [],
   "cases": [
-    { "name": "batch baseline restore, on a throwaway repo: patch saved, files back to batch start (snapshot copy or HEAD), created files deleted, snapshot consumed",
-      "cmd": "R={{FIX}}/restore-{{SID}}; B=$R.bl; rm -rf $R $B; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && printf 'v0\\n' > src/A/clean.cs && printf 'v0\\n' > src/A/dirty.cs && printf 'v0\\n' > tests/T/gone.cs && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && printf 'start\\n' > src/A/dirty.cs && printf 'early\\n' > src/A/early.cs && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $B --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/clean.cs && printf 'batch\\n' >> $R/src/A/dirty.cs && printf 'batch\\n' > $R/src/A/early.cs && mkdir -p $R/src/New && printf 'new\\n' > $R/src/New/made.cs && rm $R/tests/T/gone.cs && python3 {{KIT}}/scripts/batch-baseline.py restore $B --root $R --save $R.patch >/dev/null && echo \"$(cat $R/src/A/clean.cs)|$(cat $R/src/A/dirty.cs)|$(cat $R/src/A/early.cs)|$(cat $R/tests/T/gone.cs)|$(test -e $R/src/New && echo kept || echo pruned)|$(test -e $B && echo snapshot || echo consumed)|$(grep -c '^+batch' $R.patch)|$(grep -c '^+++ b/src/New/made.cs' $R.patch)\"",
-      "expect": { "exit": 0, "stdout": "v0|start|early|v0|pruned|consumed|3|1" } },
-    { "name": "batch baseline restore without a snapshot exits 2 and touches nothing",
-      "cmd": "python3 {{KIT}}/scripts/batch-baseline.py restore {{FIX}}/absent-{{SID}}",
-      "expect": { "exit": 2, "stderr": "no snapshot" } },
-    { "name": "batch baseline diff names every changed path, --code leaves .md and .verified out, base prints the batch-start content (empty for a file created since)",
-      "cmd": "R={{FIX}}/diff-{{SID}}; B=$R.bl; rm -rf $R $B; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && printf 'v0\\n' > src/A/a.cs && printf 'v0\\n' > src/A/notes.md && printf 'v0\\n' > src/A/Snap.verified.txt && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && printf 'start\\n' > src/A/a.cs && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $B --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/a.cs && printf 'x\\n' >> $R/src/A/notes.md && printf 'x\\n' >> $R/src/A/Snap.verified.txt && printf 'new\\n' > $R/tests/T/n.cs && echo \"$(python3 {{KIT}}/scripts/batch-baseline.py diff $B --root $R --name-only | tr '\\n' ',')|$(python3 {{KIT}}/scripts/batch-baseline.py diff $B --root $R --name-only --code | tr '\\n' ',')|$(python3 {{KIT}}/scripts/batch-baseline.py base $B src/A/a.cs --root $R)|$(python3 {{KIT}}/scripts/batch-baseline.py base $B tests/T/n.cs --root $R | wc -c | tr -d ' ')|$(python3 {{KIT}}/scripts/batch-baseline.py diff $B --root $R --code | grep -c '^+++ b/')\"",
-      "expect": { "exit": 0, "stdout": "src/A/Snap.verified.txt,src/A/a.cs,src/A/notes.md,tests/T/n.cs,|src/A/a.cs,tests/T/n.cs,|start|0|2" } },
-    { "name": "batch baseline scope comes from the kit.config.json roots, not from a fixed pair of folders",
-      "cmd": "R={{FIX}}/scope-{{SID}}; B=$R.bl; rm -rf $R $B; mkdir -p $R/app $R/spec $R/src $R/.claude && cd $R && git init -q && printf '{\"layout\": {\"sources\": {\"roots\": [\"app\"]}, \"tests\": {\"roots\": [\"spec\"]}}}\\n' > .claude/kit.config.json && printf 'v0\\n' > app/seed.cs && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && printf 'x\\n' > app/x.cs && printf 'y\\n' > spec/y.cs && printf 'z\\n' > src/z.cs && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $B --root $R >/dev/null && tr '\\n' ',' < $B/manifest.txt",
-      "expect": { "exit": 0, "stdout": "app/x.cs,spec/y.cs," } },
-    { "name": "batch baseline with an unreadable kit.config.json exits 2",
-      "cmd": "R={{FIX}}/badconf-{{SID}}; rm -rf $R; mkdir -p $R/.claude && printf '{ not json' > $R/.claude/kit.config.json && python3 {{KIT}}/scripts/batch-baseline.py snapshot $R.bl --root $R",
-      "expect": { "exit": 2, "stderr": "kit.config.json" } }
+    {
+      "name": "batch baseline restore, on a throwaway repo: patch saved, batch files back to HEAD, created files deleted, a file modified before the batch left as is and listed",
+      "cmd": "R={{FIX}}/restore-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/clean.cs && printf 'v0\\n' > src/A/dirty.cs && printf 'v0\\n' > tests/T/gone.cs && git add -A && git commit -qm init && printf 'start\\n' > src/A/dirty.cs && printf 'early\\n' > src/A/early.cs && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/clean.cs && printf 'batch\\n' > $R/src/A/early.cs && mkdir -p $R/src/New && printf 'new\\n' > $R/src/New/made.cs && rm $R/tests/T/gone.cs && out=$(python3 {{KIT}}/scripts/batch-baseline.py restore $W F1 --root $R --save $R.patch) && echo \"$(cat $R/src/A/clean.cs)|$(cat $R/src/A/dirty.cs)|$(cat $R/src/A/early.cs)|$(cat $R/tests/T/gone.cs)|$(test -e $R/src/New && echo kept || echo pruned)|$(grep -c '^+batch' $R.patch)|$(grep -c '^+++ b/src/New/made.cs' $R.patch)|$out\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "v0|start|batch|v0|pruned|1|1|restored: 2 file(s), deleted: 1, left (modified before the batch): src/A/early.cs"
+      }
+    },
+    {
+      "name": "batch baseline restore without a snapshot of the batch exits 2 and touches nothing",
+      "cmd": "python3 {{KIT}}/scripts/batch-baseline.py restore {{FIX}}/absent-{{SID}}.jsonl F1",
+      "expect": {
+        "exit": 2,
+        "stderr": "no snapshot of F1"
+      }
+    },
+    {
+      "name": "batch baseline diff: batch files only (an untouched file dirty before the batch left out), --code leaves .md and .verified out, base prints HEAD (empty for a created file)",
+      "cmd": "R={{FIX}}/diff-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/a.cs && printf 'v0\\n' > src/A/notes.md && printf 'v0\\n' > src/A/Snap.verified.txt && printf 'v0\\n' > src/A/p.cs && git add -A && git commit -qm init && printf 'start\\n' > src/A/a.cs && printf 'user\\n' > src/A/p.cs && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/a.cs && printf 'x\\n' >> $R/src/A/notes.md && printf 'x\\n' >> $R/src/A/Snap.verified.txt && printf 'new\\n' > $R/tests/T/n.cs && echo \"$(python3 {{KIT}}/scripts/batch-baseline.py diff $W F1 --root $R --name-only | tr '\\n' ',')|$(python3 {{KIT}}/scripts/batch-baseline.py diff $W F1 --root $R --name-only --code | tr '\\n' ',')|$(python3 {{KIT}}/scripts/batch-baseline.py base $W F1 src/A/a.cs --root $R)|$(python3 {{KIT}}/scripts/batch-baseline.py base $W F1 tests/T/n.cs --root $R | wc -c | tr -d ' ')|$(python3 {{KIT}}/scripts/batch-baseline.py diff $W F1 --root $R --code | grep -c '^+++ b/')\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "src/A/Snap.verified.txt,src/A/a.cs,src/A/notes.md,tests/T/n.cs,|src/A/a.cs,tests/T/n.cs,|v0|0|2"
+      }
+    },
+    {
+      "name": "batch baseline diff scope comes from the kit.config.json roots, not from a fixed pair of folders",
+      "cmd": "R={{FIX}}/scope-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/app $R/spec $R/src $R/.claude && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf '{\"layout\": {\"sources\": {\"roots\": [\"app\"]}, \"tests\": {\"roots\": [\"spec\"]}}}\\n' > .claude/kit.config.json && printf 'v0\\n' > app/seed.cs && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && printf 'x\\n' > $R/app/x.cs && printf 'y\\n' > $R/spec/y.cs && printf 'z\\n' > $R/src/z.cs && python3 {{KIT}}/scripts/batch-baseline.py diff $W F1 --root $R --name-only | tr '\\n' ','",
+      "expect": {
+        "exit": 0,
+        "stdout": "app/x.cs,spec/y.cs,"
+      }
+    },
+    {
+      "name": "batch baseline snapshot stores hashes only, never a file content, and a second snapshot of the batch keeps the first",
+      "cmd": "R={{FIX}}/snap-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/a.cs && git add -A && git commit -qm init && printf 'secret-user-content\\n' > src/a.cs && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R && echo \"content=$(grep -c secret-user-content $W)|lines=$(wc -l < $W | tr -d ' ')\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "content=0|lines=1"
+      }
+    },
+    {
+      "name": "batch baseline commit: the batch files and the sheet DONE mark only, the user's earlier untracked file and staged index left out, run folder never committed, message from the plan folder and the sheet title",
+      "cmd": "R={{FIX}}/commit-{{SID}}; rm -rf $R; mkdir -p $R/src/A $R/todo/x && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/c.cs && printf '# X-PLAN-F1 — Ajout du registre\\n' > todo/x/X-PLAN-F1.md && printf 'v0\\n' > s.cs && git add -A && git commit -qm init && printf 'user\\n' > u.cs && printf 'staged\\n' >> s.cs && git add s.cs && W=$R/todo/x/run/.work.jsonl && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/c.cs && printf 'new\\n' > $R/src/A/b.cs && printf '# X-PLAN-F1 — Ajout du registre — ✅ DONE (2026-10-13)\\n' > $R/todo/x/X-PLAN-F1.md && mkdir -p $R/todo/x/run/batches && printf '## STATUS — DONE\\n' > $R/todo/x/run/batches/F1.md && python3 {{KIT}}/scripts/batch-baseline.py commit $W F1 --sheet $R/todo/x/X-PLAN-F1.md --root $R >/dev/null && cd $R && echo \"$(git log -1 --format=%s)|$(git show --name-only --format= HEAD | tr '\\n' ',')|$(git status --porcelain | tr '\\n' ',')\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "feat(x): lot F1 — Ajout du registre|src/A/b.cs,src/A/c.cs,todo/x/X-PLAN-F1.md,|M  s.cs,?? todo/x/run/,?? u.cs,"
+      }
+    },
+    {
+      "name": "batch baseline commit lists a file modified before the batch that the batch also changed: committed whole; fix type from the title",
+      "cmd": "R={{FIX}}/whole-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src $R/todo/y && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/a.cs && printf '# Y-PLAN-F2 — Corriger le calcul\\n' > todo/y/Y-PLAN-F2.md && git add -A && git commit -qm init && printf 'user\\n' >> src/a.cs && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F2 --root $R >/dev/null && printf 'batch\\n' >> $R/src/a.cs && python3 {{KIT}}/scripts/batch-baseline.py commit $W F2 --sheet $R/todo/y/Y-PLAN-F2.md --root $R && git -C $R log -1 --format=%s",
+      "expect": {
+        "exit": 0,
+        "stdout": "committed whole with changes made before the batch: src/a.cs\nfix(y): lot F2 — Corriger le calcul"
+      }
+    },
+    {
+      "name": "batch baseline with an unreadable kit.config.json exits 2",
+      "cmd": "R={{FIX}}/badconf-{{SID}}; rm -rf $R; mkdir -p $R/.claude && printf '{ not json' > $R/.claude/kit.config.json && python3 {{KIT}}/scripts/batch-baseline.py snapshot $R.jsonl F1 --root $R",
+      "expect": {
+        "exit": 2,
+        "stderr": "kit.config.json"
+      }
+    }
   ]
 }

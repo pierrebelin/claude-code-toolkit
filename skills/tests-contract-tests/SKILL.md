@@ -33,7 +33,6 @@ Freeze nominal HTTP contract: method, route, status, headers, body. Batch suppli
 public sealed class Create[Entity]Tests : BaseEndpointTests
 {
     [Fact]
-    [Trait("RM", "Create[Entity]/RM-01")]
     public async Task ShouldCreate[Entity]_WhenRequestIsValid()
     {
         var request = Create[Entity]Fixture.CreateRequest();

@@ -4,11 +4,11 @@ import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput, TurnStepChunk,
 
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
-  aheadLotOf, figuresKeyOf, lotFiguresFrom, lotFiguresOf, packedStatesOf, isPredesigning, lotDetailOf, PREDESIGN_GLYPH, waveOf, currentShapeSamples, cycleProgressOf, cyclesDirOf, cyclesDirsOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles, questionsDirsOf,
-  alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, questionsDirOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
+  aheadLotOf, figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, isPredesigning, lotDetailOf, PREDESIGN_GLYPH, waveOf, currentShapeSamples, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles,
+  alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
-  liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, weightOf, withFile, withSamples,
+  activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, weightOf, withFile, withSamples,
 } from '../hooks/register'
 
 const SESSION = '/home/u/.claude/projects/p/s1'
@@ -285,11 +285,14 @@ describe('reading the run', () => {
     expect([headlineOf('failed', null).text, headlineOf('completed', outcome('TERMINÉ')).text, headlineOf('running', outcome('BLOQUÉ')).text]).toEqual(['failed', 'completed', 'running'])
   })
 
-  test('pending questions: question files of the batch run folder without their answer file', () => {
-    expect(questionsDirOf('todo/x/X-PLAN-F2.md', 'F2')).toBe('todo/x/run/F2/questions')
-    const file = (name: string) => ({ name, kind: 'file' as const, mtimeMs: 0 })
-    expect(pendingQuestionsOf([file('F2-1.json'), file('F2-1.answer.json'), file('F2-2.json'), { name: 'sub', kind: 'dir' as const, mtimeMs: 0 }])).toEqual(['F2-2.json'])
-    expect(pendingQuestionsOf([])).toEqual([])
+  test('pending questions: question lines of the batch in the run work file without their answer line', () => {
+    expect(workFileOf('todo/x/X-PLAN-F2.md')).toBe('todo/x/run/.work.jsonl')
+    const lines = workLinesOf([
+      { kind: 'question', batch: 'F2', id: 'F2-1' }, { kind: 'answer', batch: 'F2', id: 'F2-1' }, { kind: 'question', batch: 'F2', id: 'F2-2' },
+      { kind: 'question', batch: 'F3', id: 'F3-1' }, { kind: 'cycle', batch: 'F2', slug: 's' },
+    ].map(line => JSON.stringify(line)).join('\n') + '\nnot json\n')
+    expect(pendingQuestionsOf(lines, 'F2')).toEqual(['F2-2'])
+    expect(pendingQuestionsOf([], 'F2')).toEqual([])
   })
 
   test('current step: last running phase, else first pending, none once the run ends', () => {
@@ -428,6 +431,9 @@ describe('history, estimated end, stall, cost and alert', () => {
     expect(liveSignalOf(streaming(1_600, 60_000), 60_000)).toBeNull()
     expect(liveSignalOf(streaming(36_600, 61_000), 61_000)).toBeNull()
     expect(liveSignalOf(streaming(1_600, 61_000), 121_001)).toBe('idle 1m')
+    expect(throughputOf(streaming(0, 100_000))).toBeNull()
+    expect(liveSignalOf(streaming(0, 61_000), 61_000)).toBeNull()
+    expect(activityOf(running({ streamKind: 'thinking', streamChars: 0, firstChunkAt: 0, lastChunkAt: 31_000 }), 31_000)).toBe('● thinking · 31 s')
     expect(liveSignalOf(running({ waitingSince: 0 }), 120_000)).toBeNull()
     expect(liveSignalOf(running({ waitingSince: 0 }), 120_001)).toBe('waiting')
     expect(liveSignalOf(running({ openCalls: 1, toolSince: 0 }), 300_000)).toBeNull()
@@ -1336,6 +1342,15 @@ describe('batch plan through run-plan', () => {
     expect(labelPhasesOf(script)).toEqual({ 'audit retry ': 'Audit', audit: 'Audit', 'RED ': 'RED', 'arbiter ': 'Arbiter' })
   })
 
+  test('label built by a helper call: prefix read from the helper body', () => {
+    const script = "const redLabel = (c, model) => `RED ${c.id} w${c.wave} ${short(c.behaviour)}${model ? ` ${model}` : ''}`\n" +
+      "function greenLabel(c, model) { return `GREEN ${c.id}` }\n" +
+      "const tone = done ? 'green' : 'red'\n" +
+      "await agent(p, { schema: RED, phase: 'RED', label: redLabel(c, options.model), ...options })\n" +
+      "await agent(p, { schema: GREEN, phase: 'GREEN', label: greenLabel(cycle, options.model), ...options })\n"
+    expect(labelPhasesOf(script)).toEqual({ 'RED ': 'RED', 'GREEN ': 'GREEN' })
+  })
+
   test('plan journal: nested agents sampled under their batch phase, span per batch call', () => {
     const entry = (label: string, phaseTitle: string, startedAt: number, durationMs: number) =>
       ({ type: 'workflow_agent', state: 'done', label, phaseTitle, startedAt, durationMs })
@@ -1526,8 +1541,10 @@ const CYCLES_SHEET = `# CAT-CYCLE-PLAN-F4 — Cycle de vie
 H1 — le verrou est posé à la création
 `
 
-const CYCLES_DIR = cyclesDirOf(SHEET_PATH, 'F4')
+const WORK_FILE = workFileOf(SHEET_PATH)
 const cycleState = (behaviour: string, red: object, green?: object) => JSON.stringify({ behaviour, rmcu: 'RM1', steps: ['Etape 1'], red, ...(green === undefined ? {} : { green }) })
+const cycleLine = (lot: string, behaviour: string, red: object, green?: object) =>
+  JSON.stringify({ kind: 'cycle', batch: lot, slug: cycleSlugOf(behaviour), state: JSON.parse(cycleState(behaviour, red, green)) })
 
 describe('sheet-driven cycles', () => {
   test('cycles block: parsed from the json fence under ## Cycles, absent without a block, slug of the state file', () => {
@@ -1540,18 +1557,14 @@ describe('sheet-driven cycles', () => {
     expect(parseSheet(CYCLES_SHEET, SHEET_PATH).cycles).toHaveLength(3)
     expect(cycleSlugOf("Refus sans catalogue — l'archivage échoue")).toBe('refus-sans-catalogue-l-archivage-echoue')
     expect(cycleSlugOf('x'.repeat(80))).toHaveLength(60)
-    expect(CYCLES_DIR).toBe('todo/cycle-vie-produit-catalogue/run/.work/F4/cycles')
-    expect(cyclesDirsOf(SHEET_PATH, 'F4')).toEqual([
-      'todo/cycle-vie-produit-catalogue/run/.work/F4/cycles', 'todo/cycle-vie-produit-catalogue/run/.travail/F4/cycles', 'todo/cycle-vie-produit-catalogue/run/F4/cycles',
-    ])
-    expect(questionsDirsOf(SHEET_PATH, 'F4')).toEqual([
-      'todo/cycle-vie-produit-catalogue/run/F4/questions', 'todo/cycle-vie-produit-catalogue/run/.work/F4/questions', 'todo/cycle-vie-produit-catalogue/run/.travail/F4/questions',
-    ])
+    expect(WORK_FILE).toBe('todo/cycle-vie-produit-catalogue/run/.work.jsonl')
   })
 
-  test('packed cycle states: one line per state, keyed like the state file of its behaviour', () => {
-    const line = JSON.stringify({ behaviour: 'Refus sans catalogue', red: { status: 'RED' } })
-    expect(packedStatesOf(`${line}\nnot json\n{"red":{}}\n`)).toEqual({ 'refus-sans-catalogue.json': line })
+  test('cycle states: the cycle lines of the batch keyed by slug, the last line of a slug wins', () => {
+    const red = cycleLine('F4', 'Refus sans catalogue', { status: 'RED' })
+    const green = cycleLine('F4', 'Refus sans catalogue', { status: 'RED' }, { status: 'GREEN', exit: 0 })
+    const other = cycleLine('F5', 'Autre', { status: 'RED' })
+    expect(cycleStatesOf(workLinesOf(`${red}\nnot json\n${other}\n${green}\n`), 'F4')).toEqual({ 'refus-sans-catalogue': JSON.stringify(JSON.parse(green).state) })
   })
 
   test('cycle progress: done on GREEN exit 0 or when no GREEN is due, red otherwise, unreachable methods listed', () => {
@@ -1700,13 +1713,14 @@ test('pane counts cycles from the cycle states, flags unreachable methods, tags 
     [`${SESSION}/workflows/scripts/run-lot-${RUN}.js`]: SCRIPT,
     [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ description: 'pre-design F5', workflowPhase: 'Review' }),
     [SHEET_PATH]: CYCLES_SHEET,
-    [`${CYCLES_DIR}/creer-le-produit.json`]: cycleState('Créer le produit', { status: 'RED', exit: 1, table: [{ test: 'A.Create' }], unreachable: [] }, { status: 'GREEN', exit: 0 }),
-    [`${CYCLES_DIR}/refus-sans-catalogue.json`]: cycleState('Refus sans catalogue', { status: 'RED', exit: 1, table: [{ test: 'A.Refuse' }], unreachable: [{ method: 'A.Unreachable', site: 'A.cs:9', why: 'switch' }] }),
+    [WORK_FILE]: [
+      cycleLine('F4', 'Créer le produit', { status: 'RED', exit: 1, table: [{ test: 'A.Create' }], unreachable: [] }, { status: 'GREEN', exit: 0 }),
+      cycleLine('F4', 'Refus sans catalogue', { status: 'RED', exit: 1, table: [{ test: 'A.Refuse' }], unreachable: [{ method: 'A.Unreachable', site: 'A.cs:9', why: 'switch' }] }),
+      cycleLine('F3', 'Garde d\'architecture', { status: 'RED', exit: 0, table: [{ test: 'G.Rule' }], unreachable: [] }),
+    ].join('\n') + '\n',
   }
-  const dirs: Directory = {
-    [CYCLES_DIR]: [{ name: 'creer-le-produit.json', kind: 'file', mtimeMs: 1 }, { name: 'refus-sans-catalogue.json', kind: 'file', mtimeMs: 1 }],
-  }
-  const clock = world(on, files, { stamps, dirs })
+  stamps[WORK_FILE] = 1
+  const clock = world(on, files, { stamps })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   await $.agent.spawn(spawn('pre-design F5', 1))
@@ -1723,24 +1737,19 @@ test('pane counts cycles from the cycle states, flags unreachable methods, tags 
   expect(await ui.find({ type: 'Button', text: /pre-.* · next batch$/ })).toBeDefined()
   await ui.unmount()
 
-  files[`${CYCLES_DIR}/refus-sans-catalogue.json`] = cycleState('Refus sans catalogue', { status: 'RED', exit: 1, table: [{ test: 'A.Refuse' }], unreachable: [] }, { status: 'GREEN', exit: 0 })
-  files[`${CYCLES_DIR}/garde-d-architecture.json`] = cycleState("Garde d'architecture", { status: 'RED', exit: 0, table: [{ test: 'G.Rule' }], unreachable: [] })
-  dirs[CYCLES_DIR] = [
-    { name: 'creer-le-produit.json', kind: 'file', mtimeMs: 1 },
-    { name: 'refus-sans-catalogue.json', kind: 'file', mtimeMs: 2 },
-    { name: 'garde-d-architecture.json', kind: 'file', mtimeMs: 2 },
-  ]
+  files[WORK_FILE] += [
+    cycleLine('F4', 'Refus sans catalogue', { status: 'RED', exit: 1, table: [{ test: 'A.Refuse' }], unreachable: [] }, { status: 'GREEN', exit: 0 }),
+    cycleLine('F4', "Garde d'architecture", { status: 'RED', exit: 0, table: [{ test: 'G.Rule' }], unreachable: [] }),
+  ].join('\n') + '\n'
+  stamps[WORK_FILE] = 2
   await clock.advance(2_000)
   const after = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect((await after.find({ type: 'Text', text: /^3\/3 cycles$/ }))?.props.color).toBe('success')
   expect(await after.find({ type: 'Text', text: /unreachable/ })).toBeUndefined()
   await after.unmount()
 
-  const packed = ['creer-le-produit.json', 'refus-sans-catalogue.json'].map(name => JSON.stringify(JSON.parse(files[`${CYCLES_DIR}/${name}`]!))).join('\n')
-  for (const name of dirs[CYCLES_DIR]!.map(entry => entry.name)) delete files[`${CYCLES_DIR}/${name}`]
-  dirs[CYCLES_DIR] = []
-  files[`${CYCLES_DIR}.jsonl`] = `${packed}\n`
-  stamps[`${CYCLES_DIR}.jsonl`] = 3
+  files[WORK_FILE] = files[WORK_FILE]!.split('\n').filter(line => !line.includes('garde-d-architecture')).join('\n')
+  stamps[WORK_FILE] = 3
   await clock.advance(2_000)
   const done = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await done.find({ type: 'Text', text: /^2\/3 cycles$/ })).toBeDefined()

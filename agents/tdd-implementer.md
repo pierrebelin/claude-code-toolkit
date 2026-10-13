@@ -60,7 +60,7 @@ Fix compilation errors, re-run until green. No green without exit `0`. With fina
 
 ## Access cost
 
-`scripts/access-cost.py` lists, from the syntax tree, every awaited Infrastructure call of your files (repository, service, wrapper, client, provider, unit of work), flags the ones inside a loop or a lambda and the in-memory filters on an awaited result, and prints the `Cost` line. Copy it verbatim, then add which input the count is independent of. Receivers under `to classify` — naming heuristic does not know them: decide yourself; an Infrastructure one raises your count, an in-memory validator or a stream does not.
+`cctoolkit access-cost` lists, from the syntax tree, every awaited Infrastructure call of your files (repository, service, wrapper, client, provider, unit of work), flags the ones inside a loop or a lambda and the in-memory filters on an awaited result, and prints the `Cost` line. Copy it verbatim, then add which input the count is independent of. Receivers under `to classify` — naming heuristic does not know them: decide yourself; an Infrastructure one raises your count, an in-memory validator or a stream does not.
 
 With `--base`, calls already there when the batch started are marked `(pre-existing)` and never flag: list them under `Reported without fixing` when the behaviour leans on them. Exit `2` — a flagged line you wrote: do not deliver. `## BLOCKED` quoting the flagged line — design defect, back to orchestrator. Symptom/fix table → `skills/implement-tdd/references/conventions.md` § "Data access". Exit `3` (ast-grep missing): state cost by hand, say so on the line.
 
@@ -78,4 +78,4 @@ No plan, no code excerpt, no raw log. End exactly with:
 - Reported without fixing: `pre-existing dead code or adjacent bug` — `path:line` — or "nothing"
 ```
 
-Blocker — test impossible to green without modifying, cost unboundable, design ambiguity, compilation failure unsolvable in scope: replace heading with `## BLOCKED`, cause in one line, at most six lines of useful RTK diagnostics. No workaround.
+Blocker — test impossible to green without modifying, cost unboundable, design ambiguity, compilation failure unsolvable in scope: replace heading with `## BLOCKED`, cause in one line, at most six useful lines of the command output. No workaround.

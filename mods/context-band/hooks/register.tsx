@@ -316,8 +316,6 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const at = await read($, now)
     const tokens = state.readings[state.readings.length - 1] ?? 0
-    const previous = state.readings[state.readings.length - 2]
-    const delta = previous === undefined ? 0 : tokens - previous
     const percent = state.window > 0 ? Math.round((tokens * 100) / state.window) : null
     const color = tokenColor(tokens)
     const cache = e.props.isWorking ? null : cacheState(state.lastTurnAt, at, tokens)
@@ -352,7 +350,6 @@ export const register: Register = on => {
                 {percent !== null && <Text color={meterColor(percent)}>{meter(percent)} </Text>}
                 <Text color={color} bold={color !== undefined}>{kilo(tokens)}</Text>
                 {state.window > 0 && <Text dimColor>/{kilo(state.window)}</Text>}
-                {delta !== 0 && <Text dimColor> ({delta > 0 ? '+' : '−'}{kilo(Math.abs(delta))} this turn)</Text>}
                 {limit !== null && <Text dimColor>{GROUP}Lim 5h </Text>}
                 {limit !== null && <Text color={meterColor(limit.percent)}>{meter(limit.percent)}</Text>}
                 {limit !== null && <Text dimColor> {Math.round(limit.percent)}%{resetIn === null ? '' : ` ${resetIn}`}</Text>}
