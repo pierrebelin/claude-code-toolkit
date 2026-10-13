@@ -1,6 +1,6 @@
 # Batch design — the `## Cycles` block
 
-Read by the `run-lot` design agent, with `test-scope.md` and `parallelism.md`, when a sheet has no valid `## Cycles` block — at the start of its batch, or during the previous batch's audit (pre-design). It designs once, into the sheet; `tdd-test-author` and `tdd-implementer` then work from the contract `cctoolkit sheet-cycles <sheet> --cycle <id> --red|--green` prints, never from the sheet. `/plan-implementation` writes the same block when it drafts the sheet.
+Read by the `run-lot` design agent, with `test-scope.md` and `parallelism.md`, when a sheet has no valid `## Cycles` block, at the start of its batch. It designs once, into the sheet; `tdd-test-author` and `tdd-implementer` then work from the contract `cctoolkit sheet-cycles <sheet> --cycle <id> --red|--green` prints, never from the sheet. `/plan-implementation` writes the same block when it drafts the sheet.
 
 ## Analysis
 
@@ -28,7 +28,7 @@ One `## Cycles` section before `## Assumptions`, holding one ```json fence: `{"d
 | `behaviour` | one sentence in the docs language of `kit.config.json`, unique; kept verbatim once a run saved the cycle (its state file is named after it) |
 | `rmcu`, `steps` | RM/CU ids; exact titles of the sheet steps the cycle carries |
 | `refactor`, `guard` (optional, false) | refactor under an existing safety net (`methods` = the net, run unchanged); architecture or convention guard green at once on the current code (its RED writes and runs it, no GREEN) |
-| `level`, `skill` | `UT`/`IT`/`contract`/`E2E`; the test skill name |
+| `level`, `skill` | `UT`/`IT`/`contract`/`E2E`; the test skill name, bare (`tests-unit-tests`: the repo's skill, `rules/cctoolkit.md`) |
 | `testClass`, `fixture`, `methods` | final names; `methods` = `Class.Method`, one per scenario, in the order of `scenarios` — never an ellipsis, placeholder nor open `When` |
 | `full`, `bounded` | RED paths: files it rewrites (test file, fixture, existing tests above, marked `(to create)` when new); context only (handler or aggregate under test, shared doubles and builders under `layout.tests.shared`) |
 | `scenarios`, `observation` | the scenarios in one line; what the test observes |

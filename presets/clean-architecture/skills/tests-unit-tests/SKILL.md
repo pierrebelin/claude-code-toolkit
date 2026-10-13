@@ -16,10 +16,10 @@ Behaviour through real handler/service. Mock Infrastructure only (repositories, 
 3. One red test at a time, then minimal code via `/implement-tdd`.
 4. Run targeted test. Green only on exit code `0`.
 
-## Non-negotiable rules
+## Rules
 
 - Test/class naming → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
-- Every test carries its rule (`UnitTests` bind every test, `.claude/rules/tests.md`) under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its `kit:rules` table. Two rules → two attributes. The attribute is the traceability: the table has no test column, a rule with no trait counts untested (`cctoolkit rules-coverage`).
+- Every test covering a documented rule carries it (`UnitTests` bind every test, `.claude/rules/tests.md`) under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its rules table (`kit:rules`). Two rules → two attributes. The attribute is the traceability: the table has no test column, a rule with no trait counts untested (`cctoolkit rules-coverage`).
 - Aggregate factory/method tested only through its handler/service, no direct aggregate test.
 - No interaction observation: no spy, counter, `CallCount`, `Called`, `Received`, `Verify`, call count — not even for cost.
 - Builders, seeds, DSL, JSON, payloads, business data → fixture. Test class = facts + fixture calls.
@@ -34,9 +34,9 @@ tests/{{PRODUCT}}.CoreTests/
 └── DataBuilder/[Entity]Builder.cs   (shared builders)
 
 tests/{{PRODUCT}}.UnitTests/
-└── [BoundedContext]/[Feature]/[Action][Entity]/
-    ├── [Action][Entity]Tests.cs
-    └── [Action][Entity]Fixture.cs
+└── [BoundedContext]/[Feature]/[Handler]/
+    ├── [Handler]Tests.cs
+    └── [Handler]Fixture.cs
 ```
 
 `CoreTests` = shared test infrastructure (doubles, builders, assets) referenced by `UnitTests`, not a suite. A double exists for nearly every repository — extend it rather than creating a local `Doubles/` inside `UnitTests`. Follow local names where they exist; the template doesn't justify a parallel file or fixture.
@@ -128,6 +128,6 @@ public sealed class Mock[Entity]Repository : I[Entity]Repository
 
 ## Verification
 
-- [ ] `commands.test` with `{suite}` = `UnitTests`, narrowed to `*[Action][Entity]Tests` (`implement-tdd/references/test-scope.md` § Runner), green
+- [ ] `commands.test` with `{suite}` = `UnitTests`, narrowed to `*[Handler]Tests` (`skills/implement-tdd/references/test-scope.md` § Runner), green
 - [ ] Real handler under test; Infrastructure mocks only
 - [ ] Query by result, command by `SavedEvents`

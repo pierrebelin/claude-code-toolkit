@@ -1,7 +1,7 @@
 # Common rules — implementation skills (.NET)
 
 Read by `tdd-test-author` and `tdd-implementer`; the `run-lot` design reads §4 point 5 only.
-Test rules → `/tests-unit-tests`, `/tests-integration-tests`, `/tests-contract-tests`.
+Test rules → the repo's skills `/tests-unit-tests`, `/tests-integration-tests`, `/tests-contract-tests` (copied from the preset by `/cctoolkit:kit-init`, `rules/cctoolkit.md`).
 Per-layer DDD conventions (naming, base classes, structure, pitfalls) → `.claude/rules/*.md`, auto-loaded. Code pattern → an existing file of the same kind in the repo.
 
 ## 1. Coding rules

@@ -15,8 +15,8 @@ A batch sheet carries its TDD cycles as one fenced ```json block under `## Cycle
 Why. An Opus design agent used to rebuild these contracts from prose sections
 (`TDD sequence`, `Ancrages`) at the start of every batch: 8 to 13 min per batch, and
 sheets grown to 87-126 KB by every step re-reading and re-writing them. The block is
-written once (plan, or the design fallback, or the pre-design during the previous
-batch's audit) and checked here without any model.
+written once (plan, or the design fallback at the start of its batch) and checked
+here without any model.
 
     cctoolkit sheet-cycles <sheet> --index [--root DIR]      validate, print the compact index as JSON
     cctoolkit sheet-cycles <sheet> --cycle ID --red|--green  print the RED or GREEN contract of one cycle

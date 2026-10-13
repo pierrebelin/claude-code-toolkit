@@ -1,12 +1,12 @@
 ---
 name: kit-init
-description: "Use once per repo after enabling the cctoolkit plugin, or to reconfigure it: detects the stack, proposes a layout preset, asks the documents' language, writes .claude/kit.config.json, installs the rules, settings and statusline the plugin cannot ship, drafts layer rules from the code when no preset fits, then runs the doctor. Also migrates a repo holding a manual copy of the kit."
+description: "Use once per repo after enabling the cctoolkit plugin, or to reconfigure it: detects the stack, proposes a layout preset, asks the documents' language, writes .claude/kit.config.json, installs the rules, preset skills, settings and statusline the plugin cannot ship, drafts layer rules from the code when no preset fits, then runs the doctor. Also migrates a repo holding a manual copy of the kit."
 argument-hint: "[optional preset name]"
 ---
 
 # Set up cctoolkit in this repo
 
-A plugin ships skills, agents and hooks — never rules, settings or config. This skill writes the repo's side: `.claude/kit.config.json`, `.claude/rules/`, the merged `.claude/settings.json`, `.claude/statusline-command.sh`, `.claude/.gitignore`, and on request `.caveman.json`. Nothing else.
+A plugin ships skills, agents and hooks — never rules, settings or config, nor a skill bound to one layout. This skill writes the repo's side: `.claude/kit.config.json`, `.claude/rules/`, the preset's `.claude/skills/`, the merged `.claude/settings.json`, `.claude/statusline-command.sh`, `.claude/.gitignore`, and on request `.caveman.json`. Nothing else.
 
 $ARGUMENTS
 
@@ -37,7 +37,7 @@ A copy made before the plugin runs beside it: every guard fires twice, bare skil
 
 One AskUserQuestion call, up to four questions:
 
-- **Preset** — `presets` in their order, the first marked `(Recommended)` when `useCaseFolders > 0`; each option's description: `useCaseFolders` + two `sample` paths + `rulePack: true` → "ships layer rules". Argument naming a preset → preselect it. `fits: false` → first option `None fits — draft rules from the code (Recommended)`, then the presets.
+- **Preset** — `presets` in their order, the first marked `(Recommended)` when `useCaseFolders > 0`; each option's description: `useCaseFolders` + two `sample` paths + `rulePack: true` → "ships layer rules", `skillPack: true` → "ships test skills". Argument naming a preset → preselect it. `fits: false` → first option `None fits — draft rules from the code (Recommended)`, then the presets.
 - **Documents' language** (`language.docs`) — specs, plans, batch sheets, handler sheets, reports. Options: `fr`, `en`; Other for any code.
 - **Code language** (`language.code`) — test names, comments: `en` (Recommended), `fr`.
 - **Product** — only when `product` is null or `productCandidates` has several: candidates as options. It expands `{product}` in paths and `{{PRODUCT}}` in the kit's commands.
@@ -77,6 +77,12 @@ Into `.claude/rules/`, `{{PRODUCT}}` replaced by `product` in every copied line 
    - Write `.claude/rules/<layer>.md`: frontmatter `paths:` = `<dir>/**/*<ext>`; first line `<!-- draft by /cctoolkit:kit-init <date> — review before trusting -->`; sections `Role`, `Naming`, `Dependencies`, `Patterns`, `Tests`, each line backed by a cited file. A convention seen in one file only is not written. English: rules are instruction files.
    - Use cases not recognised by any marker → AskUserQuestion: "Which folder is one use case (one handler, command or endpoint)?" with the two likeliest `layers` paths as options. Its handler file's name pattern and class/function signature become `layout.useCase.marker` (`file` glob, `contains` regex) and its parent `layout.useCase.roots` in `kit.config.json`; re-run `validate`: `layout.useCase.roots` must turn `ok`.
 
+## 5b. Preset skills — chosen preset has `skillPack` only
+
+The test-authoring skills (`tests-*`) follow the layout and the test stack, so they ship with the preset, not the plugin: `$(cctoolkit root)/presets/<preset>/skills/<name>/` into `.claude/skills/<name>/`, every file, `{{PRODUCT}}` replaced as in §5. Once copied they are the repo's own, invoked by their bare name (`rules/cctoolkit.md`).
+
+A target folder that exists → compare file by file after substitution (`diff -ru <substituted copy> .claude/skills/<name>`); identical → kept, nothing asked. Different → the per-file question of **Never overwrite**, in the same call as the rules': the three lines show the differing lines' count and the first hunk; merge = bring the kit's hunks the user picks into the local file, never the reverse. A local file the preset lacks stays.
+
 ## 6. Settings, statusline, ignore
 
 Source: `$(cctoolkit root)/templates/`. Edit with the Edit tool, never a script: the auto-mode classifier refuses scripts on settings files.
@@ -97,6 +103,7 @@ Then `cctoolkit doctor`. Then one summary:
 |---|---|
 | `.claude/kit.config.json` | written / kept / merged — keys set |
 | `.claude/rules/…` | copied / drafted / kept, one row each |
+| `.claude/skills/tests-*` | copied / kept / replaced / merged, one row each |
 | anchors | `migrate-anchors`: n written across m files / none needed / skipped |
 | copy removed | folders and settings keys deleted (§2), mods to re-enable |
 | `.claude/settings.json`, statusline, `.gitignore` | merged / created / kept |

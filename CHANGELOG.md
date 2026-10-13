@@ -2,7 +2,25 @@
 
 One section per release, newest first, headed `## <version> — <date>`: `cctoolkit` and its mods share one version since 1.6.0, each entry names the plugin it changes. Older sections, headed `## <plugin> <version>`, date from per-plugin versions.
 
-A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
+A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
+
+## 1.9.1 — 2026-10-13
+
+- `cctoolkit` `implement-tdd` `references/test-scope.md`: the runner illustration no longer repeats the preset's `rtk dotnet` commands; it shows the filters appended to the resolved `commands.test`.
+- `cctoolkit`: the test skills `tests-unit-tests`, `tests-integration-tests`, `tests-contract-tests`, `tests-e2e-tests` leave the plugin for the `clean-architecture` preset (`presets/clean-architecture/skills/`). A repo holding its own copy had two skills of the same name, the plugin's under `cctoolkit:` and its own; there is now one, the repo's. `/cctoolkit:kit-init` copies them into `.claude/skills/` (new step §5b, `{{PRODUCT}}` substituted, a differing local copy shown file by file and kept by default); `detect-stack` reports `skillPack` per preset and no longer takes a `.claude/skills/` folder for a manual copy of the kit unless it holds a skill the plugin ships. `rules/cctoolkit.md`, `tdd-test-author`, `implement-tdd` references and `plan-implementation` name them bare, as the repo's.
+- `cctoolkit` `run-lot` / `run-plan`: the temp folders are removed by `cctoolkit run-work rm-tmp <name>…` instead of `rm -rf "$(cctoolkit run-work tmp <name>)"`. Claude Code's guard held that `rm` for confirmation (target unresolvable statically) and denied it after two minutes in an unattended session, taking down the whole call — `run-work drop` included — at the end of every batch. `rm-tmp` refuses an empty name, a `/` or `..`.
+- `cctoolkit` `run-lot`: no more pre-design of the next sheet beside the audit. It only saved the Opus design time, and cost a batch held open until it ended (report and commit included), two agents writing the next sheet and a design made on code the audit fixes still changed. The next batch designs its `## Cycles` block at its own start when absent; the next-sheet review still runs beside the audit. `docs/TOOLING.md`, `implement-tdd`, `references/design.md`, `adversarial-reviewer` and `sheet-cycles` follow.
+- `run-lot-pane`: pre-design display removed (◐ `pre-design (by FX)` row, `waiting pre-design FY`, `next batch` tag); `pre-design` samples of earlier runs no longer weigh in the estimated end.
+- `cctoolkit` `quality-report`: headings lose their `Absolute rule` label (`docs/` is out of scope, No trending in the report, Writing tone); content unchanged.
+
+**Rules changed**
+
+- `rules/cctoolkit.md`: a bare `tests-*` name designates the repo's skill, invoked without prefix; `skills/tests-*` listed among what belongs to the repo.
+- `presets/clean-architecture/rules/tests.md`: contract tests, one happy path per route, are named `Should{Action}()`.
+
+**Skills changed**
+
+- `presets/clean-architecture/skills/tests-*`: new location, content realigned on the reference repo's copy — unit tests foldered per handler (`[Handler]Tests`); integration builders under the suite's `Core/DataBuilder/`; contract snapshot through the base class `VerifyResponse(response)` (method, path, request body, `Location`, status, body), its shape in `references/examples.md`; statuses per verb quoted from `webapi-endpoints.md`. Kit paths written `skills/implement-tdd/…`. `## Non-negotiable rules` headings become `## Rules`.
 
 ## 1.9.0 — 2026-10-13
 

@@ -12,19 +12,17 @@ Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-plan <
 | `plan-implementation` | validated spec → DDD plan split into batches, tracing RM/CU and decisions; refuses to start while the spec carries a `Blocking` open question, ends with an `adversarial-reviewer` pass |
 | `implement-tdd` | launches the `run-lot` workflow on a batch sheet (`run-plan` on a plan) and answers its questions from the session; the chain delegates RED to `tdd-test-author`, GREEN and REFACTOR to `tdd-implementer` |
 | `verify-ddd-tdd` | audits the batch before moving to the next one; runs in a fork on `ddd-tdd-auditor`. `full` widens to the touched boundaries, `resume` re-audits only the deviations of a previous verdict |
-| `tests-unit-tests` | handlers/services: business rules, query results, command events |
-| `tests-integration-tests` | repositories / persistence, Testcontainers |
-| `tests-contract-tests` | public HTTP contract, Verify snapshots |
-| `tests-e2e-tests` | lifecycle of at least two operations, never an isolated endpoint |
-| `kit-init` | once per repo, after installing the plugin: stack detection, preset, language, `kit.config.json`, rules (copied or drafted from the code), settings, statusline, doctor; also removes a manual copy of the kit |
+| `kit-init` | once per repo, after installing the plugin: stack detection, preset, language, `kit.config.json`, rules (copied or drafted from the code), the preset's test skills, settings, statusline, doctor; also removes a manual copy of the kit |
 | `quality-report` | monthly quality snapshot: tests, coverage, SonarQube, Stryker, git activity — .NET or JS/TS |
 | `learn` | when doctor prints `NOTE learn` (gaps untreated across at least two batches): groups the gaps recurring in past verdicts (≥ 3 batches, at most 3 motifs per axis) into motifs, writes each accepted one into a rule, an audit criterion or a mechanical check and retires the lines it makes useless; `/learn memory` audits the auto-memory for stale, duplicated or contradictory entries |
+
+The test-authoring skills — `tests-unit-tests` (handlers/services: business rules, query results, command events), `tests-integration-tests` (repositories / persistence, Testcontainers), `tests-contract-tests` (public HTTP contract, Verify snapshots), `tests-e2e-tests` (lifecycle of at least two operations, never an isolated endpoint) — follow the layout and the test stack: they ship with the preset (`presets/<preset>/skills/`), `kit-init` copies them into the repo's `.claude/skills/`, and they are invoked without prefix ([`presets/README.md`](../presets/README.md)).
 
 ## Agents (`agents/`)
 
 | Agent | Role |
 |-------|------|
-| `tdd-test-author` | writes the RED tests — test files only, applies `/tests-unit-tests`, `-integration`, `-contract` or `-e2e` |
+| `tdd-test-author` | writes the RED tests — test files only, applies the repo's `/tests-unit-tests`, `-integration`, `-contract` or `-e2e` |
 | `tdd-implementer` | writes the production code in GREEN and REFACTOR — test files are read-only |
 | `ddd-tdd-auditor` | audits a batch, read-only, for `/verify-ddd-tdd` |
 | `adversarial-reviewer` | tries to refute a spec, a plan or the next batch sheet before any code, read-only; returns closed questions ranked `Blocking` / `Major` |

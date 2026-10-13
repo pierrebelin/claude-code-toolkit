@@ -34,11 +34,11 @@
       }
     },
     {
-      "name": "run-lot flow: a valid cycle block runs no design, unreachable methods go to review, pre-design of the next sheet beside the audit",
+      "name": "run-lot flow: a valid cycle block runs no design, unreachable methods go to review, next sheet reviewed beside the audit, never designed",
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js block | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Pre-design F4;AGENTS resume state | declaratives | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites | pre-audit | next batch review | pre-design F4 | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two;AGENTS resume state | declaratives | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites | pre-audit | next batch review | audit | next sheet | report;"
       }
     },
     {

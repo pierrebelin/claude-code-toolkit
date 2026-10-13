@@ -63,7 +63,7 @@ Read global plan by section (`grep -n "^## \|^### "`) and the sheet whole. Refut
 
 ### next-batch
 
-Batch FX just delivered and VALID; FY is next. Read FY sheet whole, FX `## Decisions`, `git diff --stat` then bounded hunks of what FY names. Its `## Cycles` block may be written beside you by the pre-design: judge the design, never the block's presence. Find what FX made stale in FY: type, member, signature, path renamed or moved; a cycle path (an `## Ancrages` row on an older sheet) pointing to a file FX changed; decision settled in FX contradicting FY; FY step FX already delivered.
+Batch FX just delivered and VALID; FY is next. Read FY sheet whole, FX `## Decisions`, `git diff --stat` then bounded hunks of what FY names. Its `## Cycles` block may be absent: FY designs it at its start; judge the design when present, never the block's presence. Find what FX made stale in FY: type, member, signature, path renamed or moved; a cycle path (an `## Ancrages` row on an older sheet) pointing to a file FX changed; decision settled in FX contradicting FY; FY step FX already delivered.
 
 Mechanical staleness (name, path, signature) → Major, question proposes the delivered value. Design contradiction → Blocking. Also run the `Unreachable guard` check of `sheet` on FY.
 

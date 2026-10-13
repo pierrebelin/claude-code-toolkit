@@ -51,12 +51,11 @@ const WAITING_TONE = 'cyan'
 const REPORT_NAMES = ['rapport', 'report']
 const BATCH_REPORT_DIRS = ['batches', 'lots']
 const WAVE_LABEL = /^RED \S+ w(\d+)\b/
-const LAUNCHED_PHASE = 'Review'
 const REPORT_PHASE = 'Report'
 const CYCLES_SECTION = '## Cycles'
-const AHEAD_LABEL = /^pre-design (F\d+)\b/
 const RETIRED_LABELS = [/^tick /, /^closing \+ pre-audit$/]
-const INTRODUCED_LABELS = [/^index /, /^declaratives$/, /^pre-design /, /^pre-audit$/]
+const INTRODUCED_LABELS = [/^index /, /^declaratives$/, /^pre-audit$/]
+const DROPPED_LABELS = [/^pre-design /]
 
 type Launched = { status?: string; runId?: string; scriptPath?: string; workflowName?: string; transcriptDir?: string }
 
@@ -618,7 +617,6 @@ export const cycleStatesOf = (lines: WorkLine[], lot: string): Record<string, st
     lines.flatMap(line => (line.kind === 'cycle' && line.batch === lot && typeof line.slug === 'string' ? [[line.slug, JSON.stringify(line.state ?? null)]] : [])),
   )
 
-export const aheadLotOf = (label: string): string | null => AHEAD_LABEL.exec(label)?.[1] ?? null
 
 export const pendingQuestionsOf = (lines: WorkLine[], lot: string): string[] => {
   const answered = new Set(lines.flatMap(line => (line.kind === 'answer' ? [String(line.id)] : [])))
@@ -647,10 +645,8 @@ export const waveOf = (run: WorkflowRun): Wave | null => {
   return { wave, total: Math.max(wave, indexed) }
 }
 
-const isAhead = (agent: WorkflowAgent): boolean => aheadLotOf(agent.label) !== null
-
 export const lotStateOf = (run: WorkflowRun, entry: PlanLot): LotState => {
-  const agents = run.agents.filter(agent => agent.lot === entry.lot && !isAhead(agent))
+  const agents = run.agents.filter(agent => agent.lot === entry.lot)
   if ((entry.asking ?? 0) > 0 && entry.outcome === null) return 'waiting'
   if (entry.outcome !== null && USER_WAITING.includes(entry.outcome.label)) {
     return agents.some(agent => agent.state === 'running') ? 'running' : 'waiting'
@@ -658,27 +654,18 @@ export const lotStateOf = (run: WorkflowRun, entry: PlanLot): LotState => {
   if (entry.outcome !== null) return LOT_DONE.includes(entry.outcome.label) ? 'completed' : 'failed'
   if (agents.length === 0) return entry.isDone ? 'done' : 'pending'
   if (agents.some(agent => agent.state === 'running')) return 'running'
-  const latest = [...run.agents].filter(agent => agent.lot !== null && !isAhead(agent)).sort((a, b) => b.index - a.index)[0]?.lot
+  const latest = [...run.agents].filter(agent => agent.lot !== null).sort((a, b) => b.index - a.index)[0]?.lot
   if (latest !== entry.lot) return 'completed'
   return run.status
 }
-
-export const PREDESIGN_GLYPH = '◐'
-
-const aheadOf = (run: WorkflowRun, lot: string): WorkflowAgent[] => run.agents.filter(agent => agent.lot === lot && isAhead(agent))
-
-export const isPredesigning = (run: WorkflowRun, entry: PlanLot, state: LotState): boolean =>
-  state === 'pending' && aheadOf(run, entry.lot).some(agent => agent.state === 'running')
 
 export const lotDetailOf = (run: WorkflowRun, entry: PlanLot, state: LotState, at: number): string => {
   if (entry.outcome !== null) return [entry.outcome.label, oneLine(entry.outcome.reason ?? '')].filter(one => one !== '').join(' · ')
   if (state === 'running') {
     const active = [...run.agents]
-      .filter(agent => agent.lot === entry.lot && !isAhead(agent) && agent.state === 'running')
+      .filter(agent => agent.lot === entry.lot && agent.state === 'running')
       .sort((a, b) => b.index - a.index)[0]
     if (active !== undefined) return `${active.phase ?? NO_PHASE} · ${active.label}`
-    const awaited = launchedBy(run, entry.lot).find(agent => agent.state === 'running')
-    if (awaited !== undefined) return `waiting ${awaited.label}`
     const rows = phaseRows(lotRun(run, entry.lot), at)
     const reached = rows.map(row => row.mark !== 'pending').lastIndexOf(true)
     const step = rows.slice(reached + 1).find(row => !CONDITIONAL_PHASES.includes(row.title))
@@ -686,12 +673,6 @@ export const lotDetailOf = (run: WorkflowRun, entry: PlanLot, state: LotState, a
   }
   if (state === 'waiting') return 'question awaiting an answer'
   if (state === 'done') return 'done before this run'
-  const ahead = aheadOf(run, entry.lot)
-  if (state === 'pending' && ahead.length > 0) {
-    const launcher = ahead.map(agent => launcherOf(run, agent)).find(one => one !== null)
-    const by = launcher === undefined ? '' : ` (by ${launcher})`
-    return isPredesigning(run, entry, state) ? `pre-design${by}` : `pre-designed${by}`
-  }
   if (state === 'pending') return entry.deps.length > 0 ? `after ${entry.deps.join(', ')}` : 'pending'
   return state
 }
@@ -710,22 +691,13 @@ export const placedInPhases = (agents: WorkflowAgent[], phases: string[]): Workf
   return agents.map(agent => ({ ...agent, phase: placed.get(agent.id) ?? agent.phase }))
 }
 
-export const launcherOf = (run: WorkflowRun, agent: WorkflowAgent): string | null =>
-  [...run.agents]
-    .filter(other => other.lot !== null && !isAhead(other) && other.index < agent.index)
-    .sort((a, b) => b.index - a.index)[0]?.lot ?? null
-
-export const launchedBy = (run: WorkflowRun, lot: string): WorkflowAgent[] =>
-  run.agents.filter(agent => isAhead(agent) && agent.lot !== lot && launcherOf(run, agent) === lot)
-
 export const lotRun = (run: WorkflowRun, lot: string): WorkflowRun => {
   const entry = run.lots.find(one => one.lot === lot) ?? blankLot(lot)
   const phases = run.child?.phases ?? []
   const resolved = run.agents
     .filter(agent => agent.lot === lot)
-    .map(agent => ({ ...agent, phase: isAhead(agent) ? (phases[0] ?? agent.phase) : nestedPhaseOf(run.child, agent.label, agent.phase) }))
-  const launched = launchedBy(run, lot).map(agent => ({ ...agent, phase: phases.includes(LAUNCHED_PHASE) ? LAUNCHED_PHASE : agent.phase }))
-  const agents = [...placedInPhases(resolved, phases), ...launched]
+    .map(agent => ({ ...agent, phase: nestedPhaseOf(run.child, agent.label, agent.phase) }))
+  const agents = placedInPhases(resolved, phases)
   const state = lotStateOf(run, entry)
   const asking = entry.outcome === null ? (entry.asking ?? 0) : 0
   const status: RunStatus = state === 'waiting' && asking > 0 ? 'running' : state === 'pending' || state === 'done' || state === 'waiting' ? 'completed' : state
@@ -862,7 +834,8 @@ const spansOf = (samples: Sample[]): { phase: string; ms: number }[] => {
 
 const labelled = (patterns: RegExp[], sample: Sample): boolean => patterns.some(pattern => pattern.test(sample.label ?? ''))
 
-export const currentShapeSamples = (journals: Sample[][]): Sample[][] => {
+export const currentShapeSamples = (shaped: Sample[][]): Sample[][] => {
+  const journals = shaped.map(samples => samples.filter(one => !labelled(DROPPED_LABELS, one)))
   const isRecent = (samples: Sample[]): boolean => samples.some(one => labelled(INTRODUCED_LABELS, one))
   const recent = journals.filter(isRecent)
   if (recent.length === 0) return journals
@@ -1112,7 +1085,11 @@ export const withLiveCycles = (sheet: Sheet, agents: WorkflowAgent[]): Sheet => 
   const running = agents.filter(agent => agent.state === 'running').map(agent => agent.label)
   const isRunning = (phase: string, id: string) => running.some(label => label.startsWith(`${phase} ${id} `))
   const cycles = sheet.cycles.map((one): SheetCycle =>
-    isRunning('RED', one.id) && one.state !== 'pending' ? { ...one, state: 'pending' } : isRunning('GREEN', one.id) && one.state === 'done' ? { ...one, state: 'red' } : one,
+    isRunning('RED', one.id)
+      ? { ...one, state: 'pending', live: 'RED' }
+      : isRunning('GREEN', one.id)
+        ? { ...one, state: one.state === 'done' ? 'red' : one.state, live: 'GREEN' }
+        : one,
   )
   return { ...sheet, cycles }
 }
@@ -1555,7 +1532,7 @@ export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
     'Global green': 'whole or filtered suites per test-scope.md, beside the pre-audit gate',
     Closing: 'pre-audit.sh and what it lists, beside global green',
     Audit: 'audit-capture.sh, ddd-tdd-auditor, two retries at most',
-    Review: 'adversarial-reviewer and pre-design of the next sheet, beside the audit',
+    Review: 'adversarial-reviewer on the next sheet, beside the audit',
     Report: 'run/batches/FX.md, written even on stop',
   }
   const agent = (
@@ -1586,7 +1563,6 @@ export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
     agent('c', 8, 'pre-audit', 'Closing', t(12, 5), t(13), 'done', 'Sonnet'),
     agent('a1', 9, 'audit', 'Audit', t(13, 50), t(15, 40), 'done', 'Opus', { type: 'ddd-tdd-auditor' }),
     agent('rv', 10, 'next batch review', 'Review', t(13, 50), t(16, 20), 'done', 'Opus', { type: 'adversarial-reviewer' }),
-    agent('pd', 16, 'pre-design F5', 'Review', t(16, 25), t(18, 40), 'done', 'Opus'),
     agent('f1', 11, 'fix 1', 'Audit', t(15, 45), t(17, 45), 'done', 'Sonnet', { type: 'tdd-implementer' }),
     agent('a2', 12, 'audit retry 1', 'Audit', t(17, 50), t(19), 'done', 'Opus', { type: 'ddd-tdd-auditor' }),
     agent('rp', 13, 'report', 'Report', t(19, 5), total, 'done', 'Haiku'),
@@ -2283,7 +2259,7 @@ export const register: Register = on => {
     const label = e.description || e.subagentType
     const agent = {
       ...blankAgent(agentId, agentIndex, label, shortModel(spawned.model), e.subagentType, e.prompt, at),
-      lot: found === null ? null : (aheadLotOf(label) ?? found.lot),
+      lot: found?.lot ?? null,
     }
     await update($, runs, list =>
       withRun(list, runId, at, run => ({
@@ -2451,8 +2427,6 @@ export const register: Register = on => {
       state === 'running' ? 'claude' : state === 'completed' ? 'success' : state === 'killed' ? 'warning' : state === 'failed' ? 'error' : state === 'waiting' ? WAITING_TONE : 'inactive'
     const lotGlyph = (state: LotState) =>
       state === 'running' ? spin : state === 'completed' || state === 'done' ? '✓' : state === 'pending' ? '○' : state === 'killed' ? '⏹' : state === 'waiting' ? '?' : '✗'
-    const lotMark = (run: WorkflowRun, entry: PlanLot, state: LotState) =>
-      isPredesigning(run, entry, state) ? { glyph: PREDESIGN_GLYPH, tone: 'claude' } : { glyph: lotGlyph(state), tone: lotTone(state) }
     const openLot = (lot: string | null) => go({ lot, screen: 'run', phase: null, agentId: null, toggled: [] })
     const lotBar =
       planRun === null ? null : (
@@ -2464,7 +2438,7 @@ export const register: Register = on => {
             const state = lotStateOf(planRun, entry)
             const label = (
               <Text key={`label-${entry.lot}`}>
-                <Text color={lotMark(planRun, entry, state).tone}>{lotMark(planRun, entry, state).glyph} </Text>
+                <Text color={lotTone(state)}>{lotGlyph(state)} </Text>
                 <Text bold={entry.lot === lotInView} color={entry.lot === lotInView ? undefined : 'inactive'}>
                   {entry.lot}
                 </Text>
@@ -2705,8 +2679,7 @@ export const register: Register = on => {
       const labelColor =
         agent.state === 'error' ? 'error' : isSlowAgent || stalls.length > 0 ? 'warning' : agent.state === 'running' ? undefined : 'inactive'
       const retry = attempt > 1 ? ` ↻ ${attempt}` : ''
-      const ahead = isAhead(agent) ? ' · next batch' : ''
-      const labelWidth = columns - 7 - agentsRightWidth - retry.length - ahead.length - 1
+      const labelWidth = columns - 7 - agentsRightWidth - retry.length - 1
       const live = [
         activityOf(agent, at) ?? '',
         agent.lastTool === null ? '' : `${agent.lastTool} (${agent.tools})`,
@@ -2721,7 +2694,6 @@ export const register: Register = on => {
               <Button key={`open-${agent.id}`} plain onPress={go({ screen: 'agent', agentId: agent.id, back: 'run' })}>
                 <Text color={agentTone(agent)}>{agentGlyph(agent)} </Text>
                 <Text color={labelColor}>{fit(agent.label, labelWidth)}</Text>
-                {ahead !== '' && <Text color={WAITING_TONE}>{ahead}</Text>}
                 {retry !== '' && <Text color="warning">{retry}</Text>}
               </Button>
             </Box>,
@@ -2876,7 +2848,11 @@ export const register: Register = on => {
             <Text key={label}>
               {index > 0 ? '  ' : ''}
               {isWide && <Text color="inactive">{label} </Text>}
-              <Text color={isReached ? 'success' : 'inactive'}>{isReached ? '✓' : '·'}</Text>
+              {cycle.live === label ? (
+                <Text color="claude">{spin}</Text>
+              ) : (
+                <Text color={isReached ? 'success' : 'inactive'}>{isReached ? '✓' : '·'}</Text>
+              )}
             </Text>
           ))}
         </Text>
@@ -3032,7 +3008,7 @@ export const register: Register = on => {
               const left = (
                 <Text key={`plan-lot-text-${entry.lot}`} wrap="wrap">
                   {'  '}
-                  <Text color={lotMark(planRun, entry, state).tone}>{lotMark(planRun, entry, state).glyph} </Text>
+                  <Text color={lotTone(state)}>{lotGlyph(state)} </Text>
                   <Text bold={state === 'running'}>{entry.lot}</Text>
                   <Text color={state === 'failed' ? 'error' : 'inactive'}> {lotDetailOf(planRun, entry, state, at)}</Text>
                 </Text>

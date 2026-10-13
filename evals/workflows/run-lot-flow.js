@@ -1,7 +1,7 @@
 // Whole run-lot body driven by schema-shaped fake agents: a sheet with a valid `## Cycles` block runs no
 // design, a sheet without it runs the design once, a resumed cycle carrying `green` is not redone, an
 // unreachable method is listed for review instead of retried, the audit is handed the run's decisions,
-// the next sheet is pre-designed beside the audit.
+// the next sheet is reviewed beside the audit, never designed by this batch.
 // Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
@@ -16,7 +16,7 @@ const agent = async (prompt, o) => {
   if (l === 'resume state' && !prompt.includes('--states todo/x/run/.work.jsonl')) console.log('WARN saved states not read through sheet-cycles --states')
   if (l === 'resume state') return { cycles: variant === 'resume' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { status: 'RED', exit: 1, table: [{ test: 'A.ShouldX_WhenY', case: '' }], tests: [], stubs: [], productionDiff: [], removed: [], expectedFailure: '', command: 'x' }, green: { status: 'GREEN', exit: 0 } }] : [], index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : idx, nextSheet: 'todo/x/X-PLAN-F4.md' }
   if (l.startsWith('index')) return idx
-  if (l === 'design' || l.startsWith('pre-design')) return { blocked: false, reason: '', review: ['choice x'] }
+  if (l === 'design') return { blocked: false, reason: '', review: ['choice x'] }
   if (l === 'declaratives') return { ok: true }
   if (l.startsWith('RED')) return { status: 'RED', exit: 1, command: 'x', tests: ['t.cs'], stubs: [], productionDiff: [], table: [{ test: 'A.ShouldX_WhenY', case: '' }], removed: [], unreachable: [{ method: 'A.ShouldDead_WhenZ', site: 'src/X.cs:3', why: 'never reached' }], expectedFailure: '' }
   if (l.startsWith('GREEN')) return { status: 'GREEN', exit: 0, command: 'x', production: ['src/X.cs'], testsDiff: [], cost: 'Cost: 0 read + 0 write outside loop; Infrastructure in loop or in-memory filter: none', independentOf: 'x', removed: '', flagged: '' }

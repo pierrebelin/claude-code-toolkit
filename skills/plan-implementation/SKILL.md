@@ -18,7 +18,7 @@ Plan split by feature, not layer:
 2. Per element: name, role, public signature, pseudo-code bullets, exact path — existing or new.
 3. Classify + trace DDD/Architecture rules: owning aggregate, invariants, consistency, events, boundaries, access cost.
 4. Test scenarios + RM + level (unit: handlers; integration: repositories; contract: endpoints; E2E: lifecycle) + anchors: test class file, fixture, shared builders, doubles.
-5. Respect the conventions of `run-lot` (`implement-tdd` `references/`) + `/tests-*` skills.
+5. Respect the conventions of `run-lot` (`implement-tdd` `references/`) + the repo's `/tests-*` skills (`rules/cctoolkit.md`).
 
 ## Workflow
 

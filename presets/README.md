@@ -1,6 +1,6 @@
-# Presets, `kit.config.json` and rules
+# Presets, `kit.config.json`, rules and test skills
 
-Everything a repo has of its own lives in `<repo>/.claude/kit.config.json` or `<repo>/.claude/rules/`; the core files stay identical to the kit's. Both are written by `/cctoolkit:kit-init`.
+Everything a repo has of its own lives in `<repo>/.claude/kit.config.json`, `<repo>/.claude/rules/` or the preset's skills in `<repo>/.claude/skills/`; the core files stay identical to the kit's. All are written by `/cctoolkit:kit-init`.
 
 ## Presets
 
@@ -8,11 +8,11 @@ One folder per layout. `preset.json` pre-fills `layout`, `testTag` and `commands
 
 | Preset | Shape |
 |--------|-------|
-| `clean-architecture` | the default, the kit's original shape: projects per layer. Ships a layer pack in `rules/`: `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests` |
+| `clean-architecture` | the default, the kit's original shape: projects per layer. Ships a layer pack in `rules/`: `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests`, and the test skills in `skills/`: `tests-unit-tests`, `tests-integration-tests`, `tests-contract-tests`, `tests-e2e-tests` |
 | `vertical-slices` | one folder per feature under `src/Features`, holding handler, sheet and unit tests; markers for C#, Python, Java/Kotlin, TypeScript |
 | `hexagonal` | `src/domain`, `src/application`, `src/adapters`; same markers |
 
-Only `clean-architecture` ships a layer pack today. A repo's own preset goes in `<repo>/.claude/presets/<name>/` and wins over a shipped one of the same name.
+Only `clean-architecture` ships a layer pack and test skills today. A repo's own preset goes in `<repo>/.claude/presets/<name>/` and wins over a shipped one of the same name.
 
 ## Rules
 
@@ -24,6 +24,10 @@ Only `clean-architecture` ships a layer pack today. A repo's own preset goes in 
 A plugin cannot load rules: `/cctoolkit:kit-init` copies them with `{{PRODUCT}}` substituted, rewrites a `paths:` glob that matches nothing from `layout` — or, when no preset fits, drafts one `.claude/rules/<layer>.md` per code folder from what the files actually share, to review. Once copied, `.claude/rules/` is the repo's own: rewritten freely, never parsed by the core. They are the single source of the layer conventions — naming tables live in the rule of the layer that owns the artefact, nowhere else.
 
 `rules/` holds no README: `/cctoolkit:kit-init` copies every `rules/*.md` into the repo.
+
+## Test skills
+
+`presets/<preset>/skills/<name>/` holds the skills that write tests (xUnit, Verify, Testcontainers, Aspire for `clean-architecture`): bound to a layout and a test stack, they cannot ship in the plugin, which every repo shares. `/cctoolkit:kit-init` copies each folder into `.claude/skills/<name>/`, `{{PRODUCT}}` substituted; a local copy that differs is shown file by file and kept unless the user picks replace or merge. Once copied they are the repo's own, invoked without prefix (`rules/cctoolkit.md`): the sheets' `skill` field and `tdd-test-author` name them bare. Their examples use neutral names (`ApiApplicationFixture`, `DatabaseContainerPool`); the runner goes through `commands.test`.
 
 ## `kit.config.json`
 
@@ -94,7 +98,7 @@ src/{{PRODUCT}}.Domain/          namespace {{PRODUCT}}.Application.Catalog.Produ
 tests/{{PRODUCT}}.UnitTests/     dotnet test --project tests/{{PRODUCT}}.UnitTests/…
 ```
 
-Hooks, `lib/` and `scripts/` read it from `kit.config.json` `product` and carry no placeholder. The skills, agents and references keep it — they live in the plugin cache, shared by every repo — and the universal rule `cctoolkit.md` tells the model to read `{{PRODUCT}}` as `product`. Only the rules copied into a repo by `/cctoolkit:kit-init` have it substituted.
+Hooks, `lib/` and `scripts/` read it from `kit.config.json` `product` and carry no placeholder. The skills, agents and references keep it — they live in the plugin cache, shared by every repo — and the universal rule `cctoolkit.md` tells the model to read `{{PRODUCT}}` as `product`. Only the rules and test skills copied into a repo by `/cctoolkit:kit-init` have it substituted.
 
 `cctoolkit kit-diff` replays that substitution before comparing a manual copy, so it is not a drift. Before a change flows back from a repo into the kit, the same script flags any line naming the repo's product or vocabulary (use-case folders and their parents, aggregate and value-object names read through its `layout`).
 

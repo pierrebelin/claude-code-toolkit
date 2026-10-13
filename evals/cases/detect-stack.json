@@ -47,6 +47,14 @@
         "exit": 0,
         "stdout": "lib,scripts,mods"
       }
+    },
+    {
+      "name": "a .claude/skills/ holding only the repo's and the preset's skills is no copy; a skill the plugin ships is",
+      "cmd": "R={{FIX}}/ds-{{SID}}\nmkdir -p $R/.claude/skills/tests-unit-tests $R/.claude/skills/sonar\nA=$(python3 {{KIT}}/scripts/detect-stack.py $R | jq -r '.existing.legacyCopy | join(\",\")')\nmkdir -p $R/.claude/skills/implement-tdd\nB=$(python3 {{KIT}}/scripts/detect-stack.py $R | jq -r '.existing.legacyCopy | join(\",\")')\necho \"[$A][$B]\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "[][skills]"
+      }
     }
   ]
 }

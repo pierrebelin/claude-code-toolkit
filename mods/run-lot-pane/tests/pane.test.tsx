@@ -4,7 +4,7 @@ import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput, TurnStepChunk,
 
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
-  aheadLotOf, figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, isPredesigning, lotDetailOf, PREDESIGN_GLYPH, waveOf, currentShapeSamples, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles,
+  figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, currentShapeSamples, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles,
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
@@ -887,7 +887,7 @@ test('finished demo: verdict on the Audit row, outcome in a coloured box, slow a
   await $.command.run({ command: 'run-lot-pane', args: 'demo end' } as Parameters<typeof $.command.run>[0])
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...paneAt(62) })
-    expect(await ui.find({ type: 'Text', text: /✓ completed\s+19m35\s+15\/15 agents/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /✓ completed\s+19m35\s+14\/14 agents/ })).toBeDefined()
     const verdict = await ui.find({ type: 'Text', text: /GAPS · 1 blocking · 2 major/ })
     expect(verdict?.props.color).toBe('error')
     const outcome = await ui.find({ key: 'outcome' })
@@ -899,7 +899,6 @@ test('finished demo: verdict on the Audit row, outcome in a coloured box, slow a
     expect(await colorOf(ui, 'agent-demo-g2b-time')).toBe('warning')
     expect(await ui.find({ type: 'Button', text: /GREEN X3 lock ↻ 2/ })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: /^5\/5 cycles$/ }))?.props.color).toBe('success')
-    expect(await ui.find({ type: 'Button', text: /pre-.* · next batch$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /○ Audit · Review · Report/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /ETA/ })).toBeUndefined()
     await ui.unmount()
@@ -1590,20 +1589,21 @@ describe('sheet-driven cycles', () => {
     const agent = (label: string, state: WorkflowAgent['state']) => ({ label, state }) as WorkflowAgent
     const live = withLiveCycles(done, [agent(`GREEN ${first!.id} x`, 'running'), agent(`RED ${second!.id} w1 x`, 'running'), agent(`GREEN ${second!.id} x`, 'done')])
     expect(live.cycles!.map(one => one.state).slice(0, 2)).toEqual(['red', 'pending'])
+    expect(live.cycles!.map(one => one.live).slice(0, 3)).toEqual(['GREEN', 'RED', undefined])
     expect(isSheetDone(live)).toBe(false)
     expect(withLiveCycles(done, [agent(`GREEN ${first!.id} x`, 'done')]).cycles).toEqual(done.cycles)
   })
 
-  test('history: samples of the phases the new labels reshaped dropped from earlier journals, kept while every journal is earlier', () => {
+  test('history: samples of the phases the new labels reshaped dropped from earlier journals, kept while every journal is earlier; pre-design samples dropped everywhere', () => {
     const sample = (phase: string, label: string, ms: number) => ({ phase, label, ms, tools: null, startedAt: null })
     const earlier = [sample('Design', 'design', 600_000), sample('RED', 'RED 1 a', 60_000), sample('GREEN', 'GREEN a', 60_000), sample('GREEN', 'tick a', 10_000), sample('Closing', 'closing + pre-audit', 120_000), sample('Review', 'next batch review', 90_000)]
-    const recent = [sample('Design', 'index S-PLAN-F2.md', 20_000), sample('RED', 'RED 1 b', 40_000), sample('Closing', 'pre-audit', 30_000), sample('Review', 'pre-design F3', 200_000)]
+    const recent = [sample('Design', 'index S-PLAN-F2.md', 20_000), sample('RED', 'RED 1 b', 40_000), sample('Closing', 'pre-audit', 30_000), sample('Review', 'pre-design F3', 200_000), sample('Review', 'next batch review', 70_000)]
     expect(currentShapeSamples([earlier])).toEqual([earlier])
     const [kept, mine] = currentShapeSamples([earlier, recent])
-    expect(kept?.map(one => one.label)).toEqual(['RED 1 a'])
-    expect(mine).toEqual(recent)
+    expect(kept?.map(one => one.label)).toEqual(['RED 1 a', 'next batch review'])
+    expect(mine).toEqual(recent.filter(one => one.label !== 'pre-design F3'))
     const known = currentShapeSamples([earlier, recent]).reduce(withSamples, {})
-    expect([known.Design?.total, known.Closing?.total, known.RED?.count]).toEqual([20_000, 30_000, 2])
+    expect([known.Design?.total, known.Closing?.total, known.RED?.count, known.Review?.total]).toEqual([20_000, 30_000, 2, 160_000])
   })
 
   test('phase of a label: ternary paired branch by branch, parameter resolved at its call sites', () => {
@@ -1636,24 +1636,7 @@ describe('sheet-driven cycles', () => {
     expect(phaseRows(quiet, 60).map(row => row.title)).toEqual(['Design', 'RED', 'Arbiter', 'Question', 'Report'])
   })
 
-  test('pre-design of the next batch: own batch, ignored for the current batch state, placed in the first phase of its batch view', () => {
-    expect([aheadLotOf('pre-design F5'), aheadLotOf('design'), aheadLotOf('next sheet')]).toEqual(['F5', null, null])
-    const agent = (id: string, index: number, label: string, lot: string, state: WorkflowAgent['state'], phase: string) => ({
-      ...blankAgent(id, index, label, 'Opus', 'x', 'p', index * 1000), lot, state, phase, endedAt: state === 'running' ? null : index * 1000 + 500,
-    })
-    const run = {
-      ...completeRun({ runId: 'wf_1', startedAt: 0 } as WorkflowRun),
-      name: 'run-plan', status: 'running' as const,
-      child: { name: 'run-lot', phases: ['Design', 'RED', 'Review'], details: {}, labels: {} },
-      lots: parsePlanLots(RUN_PLAN),
-      agents: [agent('d1', 1, 'design', 'F1', 'done', 'Design'), agent('a1', 2, 'audit', 'F1', 'running', 'Audit'), agent('p2', 3, 'pre-design F2', 'F2', 'done', 'Review')],
-    }
-    expect(run.lots.slice(0, 2).map(one => lotStateOf(run, one))).toEqual(['running', 'pending'])
-    expect(lotRun(run, 'F2').agents.map(one => [one.label, one.phase])).toEqual([['pre-design F2', 'Design']])
-    expect(lotRun(run, 'F1').agents.map(one => one.label)).toEqual(['design', 'audit', 'pre-design F2'])
-  })
-
-  const predesignRun = (predesign: WorkflowAgent['state']) => {
+  const idleRun = () => {
     const agent = (id: string, index: number, label: string, lot: string, state: WorkflowAgent['state'], phase: string) => ({
       ...blankAgent(id, index, label, 'Opus', 'x', 'p', index * 1000), lot, state, phase, endedAt: state === 'running' ? null : index * 1000 + 500,
     })
@@ -1666,31 +1649,14 @@ describe('sheet-driven cycles', () => {
         agent('d1', 1, 'design', 'F1', 'done', 'Design'),
         agent('a1', 2, 'audit', 'F1', 'done', 'Audit'),
         agent('v1', 3, 'next batch review', 'F1', 'done', 'Review'),
-        agent('p2', 4, 'pre-design F2', 'F2', predesign, 'Review'),
       ],
     }
   }
 
-  test('pre-design awaited by its launching batch: shown in the launcher view under Review, the next batch keeps it too', () => {
-    const run = predesignRun('running')
-    expect(lotRun(run, 'F1').agents.map(one => [one.label, one.phase])).toEqual([['design', 'Design'], ['audit', 'Audit'], ['next batch review', 'Review'], ['pre-design F2', 'Review']])
-    expect(lotRun(run, 'F2').agents.map(one => one.label)).toEqual(['pre-design F2'])
-  })
-
-  test('running batch with no active agent: waiting its pre-design, else the next phase of the child workflow, never the last finished agent', () => {
-    const waiting = predesignRun('running')
-    expect(lotStateOf(waiting, waiting.lots[0]!)).toBe('running')
-    expect(lotDetailOf(waiting, waiting.lots[0]!, 'running', 10_000)).toBe('waiting pre-design F2')
-    const idle = predesignRun('done')
+  test('running batch with no active agent: the next phase of the child workflow, never the last finished agent', () => {
+    const idle = idleRun()
+    expect(lotStateOf(idle, idle.lots[0]!)).toBe('running')
     expect(lotDetailOf(idle, idle.lots[0]!, 'running', 10_000)).toBe('Report')
-  })
-
-  test('next batch while its pre-design runs: half glyph and text naming the launcher, state still pending', () => {
-    const run = predesignRun('running')
-    const next = run.lots[1]!
-    expect([lotStateOf(run, next), isPredesigning(run, next, 'pending'), lotDetailOf(run, next, 'pending', 10_000), PREDESIGN_GLYPH]).toEqual(['pending', true, 'pre-design (by F1)', '◐'])
-    const done = predesignRun('done')
-    expect([isPredesigning(done, done.lots[1]!, 'pending'), lotDetailOf(done, done.lots[1]!, 'pending', 10_000)]).toEqual([false, 'pre-designed (by F1)'])
   })
 
   test('wave of the RED phase: highest launched wave, total from the sheet index else the highest seen; older labels carry none', () => {
@@ -1707,11 +1673,11 @@ describe('sheet-driven cycles', () => {
   })
 })
 
-test('pane counts cycles from the cycle states, flags unreachable methods, tags the next batch pre-design', async ($, on) => {
+test('pane counts cycles from the cycle states, flags unreachable methods', async ($, on) => {
   const stamps: Stamps = {}
   const files: Record<string, string> = {
     [`${SESSION}/workflows/scripts/run-lot-${RUN}.js`]: SCRIPT,
-    [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ description: 'pre-design F5', workflowPhase: 'Review' }),
+    [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ description: 'next batch review', workflowPhase: 'Review' }),
     [SHEET_PATH]: CYCLES_SHEET,
     [WORK_FILE]: [
       cycleLine('F4', 'Créer le produit', { status: 'RED', exit: 1, table: [{ test: 'A.Create' }], unreachable: [] }, { status: 'GREEN', exit: 0 }),
@@ -1723,7 +1689,7 @@ test('pane counts cycles from the cycle states, flags unreachable methods, tags 
   const clock = world(on, files, { stamps })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
-  await $.agent.spawn(spawn('pre-design F5', 1))
+  await $.agent.spawn(spawn('next batch review', 1))
   await clock.advance(2_000)
 
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
@@ -1734,7 +1700,6 @@ test('pane counts cycles from the cycle states, flags unreachable methods, tags 
   expect(await ui.find({ type: 'Text', text: /○ X3 Garde d'architecture/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /↳ unreachable, not written: A\.Unreachable/ }))?.props.color).toBe('warning')
   expect((await ui.find({ key: 'cycle-marks-X2' }))?.text).toMatch(/RED ✓\s+GREEN ·/)
-  expect(await ui.find({ type: 'Button', text: /pre-.* · next batch$/ })).toBeDefined()
   await ui.unmount()
 
   files[WORK_FILE] += [

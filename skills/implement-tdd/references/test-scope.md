@@ -16,9 +16,8 @@ Never `eval "$(…)"` it: the guards and the `rtk` rewrite read the command text
 Narrowing to a class or a method appends the runner's own filter. Illustration, `clean-architecture` preset — Microsoft.Testing.Platform (xUnit v3): `--project <csproj>` mandatory, always `--no-build --no-restore`; filters `--filter-class` / `--filter-method`, `*` wildcards, **repeatable** — values unioned; VSTest syntax `--filter "FullyQualifiedName~..."` doesn't exist there.
 
 ```bash
-rtk dotnet build {{PRODUCT}}.sln --no-restore
-rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore
-rtk dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore --filter-class "*CreateProductTests"
+<commands.test, {suite}=UnitTests> --filter-class "*CreateProductTests"
+<commands.test, {suite}=UnitTests> --filter-class "*CreateProductTests" --filter-method "Should*_WhenNameIsEmpty"
 ```
 
 RTK compacts logs, never replaces an exit code. No suite green without exit `0`. Distinguish a test not run, skipped, failed.
@@ -33,7 +32,7 @@ RTK compacts logs, never replaces an exit code. No suite green without exit `0`.
 
 ## 1. Which test level to write
 
-| The behaviour is about… | Skill | Project |
+| The behaviour is about… | Skill (the repo's, `rules/cctoolkit.md`) | Project |
 |---|---|---|
 | Command/Query + Handler | `/tests-unit-tests` | `tests/{{PRODUCT}}.UnitTests/` |
 | Repository method | `/tests-integration-tests` | `tests/{{PRODUCT}}.IntegrationTests/` |

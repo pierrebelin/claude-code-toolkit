@@ -1,6 +1,6 @@
 export const meta = {
   name: 'run-lot',
-  description: 'FX batch under strict TDD, autonomous: cycles from the sheet, RED/GREEN per behaviour, global green, pre-audit, audit, next-batch review and pre-design',
+  description: 'FX batch under strict TDD, autonomous: cycles from the sheet, RED/GREEN per behaviour, global green, pre-audit, audit, next-batch review',
   whenToUse: 'Implement a plan batch without human intervention. Argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`; plan, batch and run folder are derived from it.',
   phases: [
     { title: 'Design', detail: 'cycle index of the sheet; design writes the `## Cycles` block only when absent or invalid; declaratives' },
@@ -9,7 +9,7 @@ export const meta = {
     { title: 'Global green', detail: 'whole or filtered suites per test-scope.md, beside the pre-audit gate' },
     { title: 'Closing', detail: 'cctoolkit pre-audit and what it lists, beside global green' },
     { title: 'Audit', detail: 'cctoolkit audit-capture, ddd-tdd-auditor, two retries at most' },
-    { title: 'Review', detail: 'adversarial-reviewer and pre-design of the next sheet, beside the audit' },
+    { title: 'Review', detail: 'adversarial-reviewer on the next sheet, beside the audit' },
     { title: 'Arbiter', detail: 'a stop is settled by the arbiter and listed for review after the run; a question only when no decision is defensible' },
     { title: 'Question', detail: 'human-only stop: question line in run/.work.jsonl, wait for the answer appended from the session, same run' },
     { title: 'Report', detail: 'run/batches/FX.md, written even on stop; DONE: batch committed, its lines reduced to the cycle states' },
@@ -144,7 +144,6 @@ const short = (text, n = 40) => (text.length > n ? text.slice(0, n - 1) + '…' 
 const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], review: null, audit: null, toReview: [] }
 const toReview = (step, text, why = '') => history.toReview.push({ step, text, why })
 let reviewing = null
-let predesigning = null
 const USER = 'user decision'
 const WAIT_SECONDS = 300
 const WAIT_ROUNDS = 2
@@ -580,8 +579,8 @@ async function report(status, reason, verdict) {
         : []),
       ...(status === DONE
         ? [commitAtEnd
-            ? `Then one call: \`cctoolkit batch-baseline commit ${workFile} ${batch} --sheet ${sheet} && cctoolkit run-work drop ${workFile} --batch ${batch} --kind preexisting,question,answer; rm -rf "$(${tmpCommand})"\`. \`commit\` = the line the commit printed (stderr included on failure). The commit holds the files of the batch only, the user's earlier changes left out; the \`cycle\` lines stay as the TDD evidence a later correction resumes from. This is the intended end of every finished batch.`
-            : `Then one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; rm -rf "$(${tmpCommand})"\`. The run-plan gate commits the batch after its build check. \`commit\` empty.`]
+            ? `Then one call: \`cctoolkit batch-baseline commit ${workFile} ${batch} --sheet ${sheet} && cctoolkit run-work drop ${workFile} --batch ${batch} --kind preexisting,question,answer; cctoolkit run-work rm-tmp ${batch}\`. \`commit\` = the line the commit printed (stderr included on failure). The commit holds the files of the batch only, the user's earlier changes left out; the \`cycle\` lines stay as the TDD evidence a later correction resumes from. This is the intended end of every finished batch.`
+            : `Then one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit run-work rm-tmp ${batch}\`. The run-plan gate commits the batch after its build check. \`commit\` empty.`]
         : [`Then one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer\`: the \`preexisting\` and \`cycle\` lines stay for the resume.`]),
       'Return the written path.',
       '',
@@ -596,7 +595,6 @@ async function report(status, reason, verdict) {
 
 async function finish(status, reason, verdict) {
   if (reviewing) history.review = await reviewing
-  if (predesigning) await predesigning
   const written = await report(status, reason, verdict)
   return {
     status,
@@ -633,12 +631,11 @@ const readIndex = (target, phaseName) => agent(
   { schema: INDEX, phase: phaseName, label: `index ${fileName(target).split('/').pop()}`, model: 'haiku', effort: 'low' },
 ).catch(() => null)
 
-function designPrompt(target, targetBatch, ahead) {
+function designPrompt(target, targetBatch) {
   return [
     FRAME,
     '',
     `You are the design of batch ${targetBatch}, without delegation: you write the \`## Cycles\` block of its sheet \`${target}\`; other agents write tests and code from that block alone.`,
-    ahead ? `Batch ${batch} is still under audit beside you: never touch the source or test roots nor any file but \`${target}\`, never build nor run tests.` : '',
     `First call: \`${indexCommand(target)}\`. Exit 0 → the block is already valid: return \`blocked: false\` at once, nothing else.`,
     'Otherwise read, in one message: `<kit>/skills/implement-tdd/references/design.md`, `test-scope.md` and `parallelism.md` of the same folder, then analyse the batch per `design.md`.',
     `Earlier batches and sheet paths in one call: \`cctoolkit plan-next-batch ${plan} --context ${targetBatch}\` prints the \`## Audit gaps\` of the earlier batches' reports, the \`${USER}\`/GAPS lines of the sheets, saved cycles, and the source and test paths the sheet cites that do not exist. Never reread those reports nor grep those sheets.`,
@@ -655,13 +652,13 @@ function designPrompt(target, targetBatch, ahead) {
   ].filter(l => l !== '').join('\n')
 }
 
-const designAgent = (target, targetBatch, ahead, suffix = '') => agent(
-  designPrompt(target, targetBatch, ahead) + suffix,
-  { schema: DESIGN, phase: ahead ? 'Review' : 'Design', label: ahead ? `pre-design ${targetBatch}` : 'design' },
+const designAgent = (target, targetBatch, suffix = '') => agent(
+  designPrompt(target, targetBatch) + suffix,
+  { schema: DESIGN, phase: 'Design', label: 'design' },
 )
 
 async function designed(suffix) {
-  const d = await designAgent(sheet, batch, false, suffix)
+  const d = await designAgent(sheet, batch, suffix)
   if (!d || d.blocked) return { design: d, index: null }
   return { design: d, index: await readIndex(sheet, 'Design') }
 }
@@ -866,7 +863,7 @@ function amendNext(questions, gaps) {
     [
       FRAME,
       '',
-      `Update the next batch sheet \`${nextSheet}\` per the questions and audit gaps below, one Edit per spot, its \`## Cycles\` block included. The review and the pre-design ran beside the audit: check each name, path and signature against the current code, audit fixes included.`,
+      `Update the next batch sheet \`${nextSheet}\` per the questions and audit gaps below, one Edit per spot, its \`## Cycles\` block included. The review ran beside the audit: check each name, path and signature against the current code, audit fixes included.`,
       '- Major: mechanical staleness (name, path, signature changed by batch ' + batch + '), apply the delivered value.',
       `- Blocking: settled by the cited source; rewrite the design of the sheet per that source and \`answer\`. A change of scope or of an RM/CU gets one line under \`## Decisions\`: the answer and its source, marked \`${USER}\` when the source is \`${USER}\`, \`${TO_REVIEW}\` otherwise. No \`Hn\`: the run lists every other answer for the user review.`,
       `- Audit gap of batch ${batch}: apply it to the next sheet only where that sheet repeats the rejected choice.`,
@@ -879,10 +876,8 @@ function amendNext(questions, gaps) {
   ).catch(() => null)
 }
 
-const nextBatch = (/-(F\d+)\.md$/.exec(nextSheet) || [])[1] || ''
 if (nextSheet) {
   reviewing = reviewNext('next batch review')
-  predesigning = designAgent(nextSheet, nextBatch, true).catch(() => null)
 }
 
 function fixGaps(verdict, round) {
@@ -954,13 +949,6 @@ if (reviewing) {
   }
   const unanswered = answeredByUser.filter(q => !q.answer || q.answer.toUpperCase() === 'STOP')
   const settled = [...applied, ...answeredByUser.filter(q => !unanswered.includes(q))]
-  if (predesigning) {
-    const pre = await predesigning
-    predesigning = null
-    if (!pre) log(`pre-design ${nextBatch} without result — that batch designs at its start`)
-    else if (pre.blocked) toReview(`Pre-design ${nextBatch}`, `\`## Cycles\` block not written: ${pre.reason}`)
-    else for (const line of pre.review || []) toReview(`Pre-design ${nextBatch}`, line)
-  }
   const carried = history.verdicts.flatMap(v => v.gaps).filter(g => g.severity !== 'Minor')
   if (settled.length || carried.length) await amendNext(settled, carried)
   if (unanswered.length) {

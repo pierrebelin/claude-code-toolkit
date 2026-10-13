@@ -15,7 +15,7 @@ Batch supplied → read only its Tests and DDD Design sections: they decide whet
 
 ## Strict rules
 
-- Test covering rule of handler's rules table (`kit:rules`) carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]`. Rule proven only here stops counting untested. No documented rule → no trait. Contract and E2E tests carry none.
+- Test covering rule of handler's rules table (`kit:rules`) carries it: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]` under `[Fact]`/`[Theory]`. Rule proven only here stops counting untested (`.claude/rules/tests.md`). No documented rule → no trait.
 - One builder per aggregate: `With*()` for properties (chaining `this`), `As*()` for presets (`AsDraft`, `AsPublished`). `Build()` uses `Restore()`, not `Create()`.
 - Seed through `DbContext` directly, not through the repository under test (circular).
 - Real SQL Server Testcontainers database: reuse `BaseTestFixture` / `DatabaseContainerPool`; no SQLite in-memory, no shared database.
@@ -30,7 +30,9 @@ Batch supplied → read only its Tests and DDD Design sections: they decide whet
 tests/{{PRODUCT}}.IntegrationTests/
 ├── Core/
 │   ├── BaseIntegrationFixture.cs   (IAsyncLifetime, pool-isolated database)
-│   └── BaseTestFixture.cs          (AppDbContext, UnitOfWork, services)
+│   ├── BaseTestFixture.cs          (AppDbContext, UnitOfWork, services)
+│   └── DataBuilder/
+│       └── [Entity]EntityBuilder.cs (one per aggregate)
 ├── [BoundedContext]/
 │   └── [Repository]/
 │       └── [MethodName]/
@@ -38,7 +40,7 @@ tests/{{PRODUCT}}.IntegrationTests/
 │           └── [MethodName]Tests.cs
 ```
 
-Builders shared under `tests/{{PRODUCT}}.CoreTests/DataBuilder/` (`.claude/rules/tests.md`) — `[Entity]EntityBuilder.cs`, one per aggregate; extend rather than copy locally. Class naming → `.claude/rules/tests.md`, `Naming` table.
+Class naming → `.claude/rules/tests.md`, `Naming` table.
 
 ## Templates
 
@@ -116,7 +118,7 @@ public class [MethodName]Tests : IAsyncLifetime
 
 ## Final verification
 
-- [ ] Target test green: the suite's test-mode variable, then `commands.test` with `{suite}` = `IntegrationTests`, narrowed to `*[MethodName]Tests` (`implement-tdd/references/test-scope.md` § Runner, § 3)
+- [ ] Target test green: the suite's test-mode variable, then `commands.test` with `{suite}` = `IntegrationTests`, narrowed to `*[MethodName]Tests` (`skills/implement-tdd/references/test-scope.md` § Runner, § 3)
 - [ ] Direct `DbContext` seeding, `BaseTestFixture` / `DatabaseContainerPool` fixture
 - [ ] Persisted state verified after detaching or re-reading where needed
 - [ ] This test really covers persistence, not business rules

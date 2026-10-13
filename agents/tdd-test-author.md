@@ -32,7 +32,7 @@ Delegation *is* context contract: no re-read of plan or batch sheet. Take only R
 
 **Every unit test carries its rule; an integration test carries it when it proves a documented rule; contract and E2E tests carry none.** Right under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder name under `src/{{PRODUCT}}.Application/**/`, id = one delegation hands you. Two rules → two attributes. Ties test to handler documentation; `## RED` table keeps its two columns.
 
-Load the test skill of the requested level with `Skill`, by name — that one only, level is orchestrator's choice. Then files contract names, one `Read` each. Shared doubles and builders (`layout.tests.shared`): extend, never grow a parallel set in the current suite.
+Load the test skill of the requested level with `Skill`, by its bare name (`tests-unit-tests`: the repo's own, never prefixed, `rules/cctoolkit.md`) — that one only, level is orchestrator's choice. Then files contract names, one `Read` each. Shared doubles and builders (`layout.tests.shared`): extend, never grow a parallel set in the current suite.
 
 **New test class = one `Write`, not a chain of `Edit`s.** Fixture change and `CoreTests` builder extension go in the same message as the test class when files differ; only successive edits of one file sequential.
 

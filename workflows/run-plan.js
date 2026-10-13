@@ -112,6 +112,7 @@ let stop = null
 
 const journalLine = line => `cctoolkit run-work append ${work} <<'JOURNAL_LINE'\n${JSON.stringify({ kind: 'journal', run: pre.stamp, text: line })}\nJOURNAL_LINE`
 const tmpOf = name => `"$(cctoolkit run-work tmp ${name})"`
+const rmTmp = (...names) => `cctoolkit run-work rm-tmp ${names.join(' ')}`
 
 function journal(line) {
   return agent(`${FRAME}\n\nOne call, nothing else:\n\n${journalLine(line)}`, { schema: obj({ ok: bool }), phase: 'Batch', label: 'journal', ...SHELL })
@@ -166,7 +167,7 @@ function seal(b, done) {
       '',
       `Batch ${b.batch} passed its gate. One call: \`cctoolkit batch-baseline commit ${work} ${b.batch} --sheet ${b.sheet}; echo "exit=$?"\`.`,
       'exit 0 → `ok: true`; otherwise `ok: false`. `commit` = the output verbatim, stderr included.',
-      `Then one call: \`cctoolkit run-work drop ${work} --batch ${b.batch} --kind preexisting,question,answer; rm -rf ${tmpOf(`gate-${b.batch}`)} ${tmpOf(b.batch)}\`, then \`${journalLine(done)}\`.`,
+      `Then one call: \`cctoolkit run-work drop ${work} --batch ${b.batch} --kind preexisting,question,answer; ${rmTmp(`gate-${b.batch}`, b.batch)}\`, then \`${journalLine(done)}\`.`,
     ].join('\n'),
     { schema: SEALED, phase: 'Gate', label: `commit ${b.batch}`, ...SHELL },
   ).catch(() => null)
@@ -180,7 +181,7 @@ function setAside(b, reason) {
       '',
       `Batch ${b.batch} is set aside: ${reason}. Put the tree back to its state at the batch start, in this order:`,
       `1. \`cctoolkit batch-baseline restore ${work} ${b.batch} --save ${patch}\` (the script alone touches the source and test roots). Exit ≠ 0 → \`ok: false\`, \`detail\` = its output verbatim, stop.`,
-      `2. \`cctoolkit run-work drop ${work} --batch ${b.batch}; rm -rf ${tmpOf(`gate-${b.batch}`)} ${tmpOf(b.batch)}\`: the saved cycles describe code just removed, a later run starts the batch over; the patch alone is kept.`,
+      `2. \`cctoolkit run-work drop ${work} --batch ${b.batch}; ${rmTmp(`gate-${b.batch}`, b.batch)}\`: the saved cycles describe code just removed, a later run starts the batch over; the patch alone is kept.`,
       `3. \`grep -nE "^### (Batch|Lot) ${b.batch}\\b" ${pre.plan}\`: the heading carries \`✅ DONE\` → one Edit putting \`⬜\` in place of \`✅ DONE\` and its date, nothing else moves.`,
       `4. \`${journalLine(`${b.batch} ✗ — set aside — ${reason} — patch ${patch}`)}\`.`,
       '`ok: true`, `detail` = the last line the restore printed.',
@@ -293,7 +294,7 @@ if (finalRed.length) log(`final check red: ${finalRed.map(x => x.name).join(', '
 phase('Report')
 if (!ran.length) {
   await agent(
-    `${FRAME}\n\nNo batch ran: in one call, \`cctoolkit run-work drop ${work} --run ${pre.stamp}; rm -rf ${tmpOf('final')}; command -v osascript >/dev/null && osascript -e 'display notification "${`Plan stopped — ${reason || 'no batch launched'}`.replace(/["'\\]/g, '')}" with title "run-plan"' || true\`.`,
+    `${FRAME}\n\nNo batch ran: in one call, \`cctoolkit run-work drop ${work} --run ${pre.stamp}; ${rmTmp('final')}; command -v osascript >/dev/null && osascript -e 'display notification "${`Plan stopped — ${reason || 'no batch launched'}`.replace(/["'\\]/g, '')}" with title "run-plan"' || true\`.`,
     { schema: obj({ ok: bool }), phase: 'Report', label: 'cleanup', ...SHELL },
   )
   return { status: reason ? BLOCKED : DONE, reason: reason || '—', report: null, batches: [] }
@@ -312,7 +313,7 @@ const rep = await agent(
     '- `## Final check` — table `| Suite | Exit | Failed tests |` from `finalCheck`; `Not run.` when `finalCheck` is null',
     '- `## Journal` — the journal lines verbatim, in order',
     `\`lastLine\` = \`Plan stopped — <stop>\` when stop is not null, else \`Plan done — review of ${reportFile} required.\`${finalRed.length ? `, followed by \` — final check red: ${finalRed.map(x => x.name).join(', ')}\`` : ''}.`,
-    `Then one call: \`cctoolkit run-work drop ${work} --run ${pre.stamp}; rm -rf ${tmpOf('final')}; command -v osascript >/dev/null && osascript -e 'display notification "<lastLine, double quotes removed>" with title "run-plan"' || true\` (the journal of the run, now copied into the report).`,
+    `Then one call: \`cctoolkit run-work drop ${work} --run ${pre.stamp}; ${rmTmp('final')}; command -v osascript >/dev/null && osascript -e 'display notification "<lastLine, double quotes removed>" with title "run-plan"' || true\` (the journal of the run, now copied into the report).`,
     '',
     '```json',
     payload,

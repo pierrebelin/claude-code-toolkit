@@ -35,6 +35,7 @@ This step is the one that matters. The plugin brings skills, agents and hooks, b
 | Choose | one round of questions: the preset (ranked on your real folders), the documents' language, the code language, the product when ambiguous |
 | Config | writes `.claude/kit.config.json` — only what differs from the preset — validates it, offers `migrate-anchors` on specs, plans and handler sheets older than the `<!-- kit:… -->` anchors |
 | Rules | copies the universal rules and the preset's layer rules into `.claude/rules/`, `{{PRODUCT}}` substituted, dead `paths:` globs rewritten from your layout. **No preset fits?** It drafts one rule per layer from your most-changed files, each convention cited `file:line`, marked "review before trusting" |
+| Skills | copies the preset's test skills (`tests-*`) into `.claude/skills/`, `{{PRODUCT}}` substituted; a local copy that differs is shown and kept unless you choose otherwise |
 | Settings | merges permissions and env into `.claude/settings.json`, installs the statusline, completes `.claude/.gitignore` |
 | Report | applies the doctor's mechanical fixes, re-runs `cctoolkit doctor`, prints one summary table and the next step |
 
@@ -64,7 +65,7 @@ claude plugin marketplace update cctoolkit
 claude plugin update cctoolkit@cctoolkit
 ```
 
-Restart Claude Code, then `cctoolkit doctor`. Nothing in the repo changes: `kit.config.json`, `.claude/rules/` and the settings stay as they are. What each release brings: [CHANGELOG.md](CHANGELOG.md). A release listing **Rules changed** → re-run `/cctoolkit:kit-init` to pull them: it shows each difference and asks.
+Restart Claude Code, then `cctoolkit doctor`. Nothing in the repo changes: `kit.config.json`, `.claude/rules/`, `.claude/skills/` and the settings stay as they are. What each release brings: [CHANGELOG.md](CHANGELOG.md). A release listing **Rules changed** or **Skills changed** → re-run `/cctoolkit:kit-init` to pull them: it shows each difference and asks.
 
 Updates are **not automatic** for this marketplace — Claude Code turns auto-update on only for Anthropic's own. To have them, toggle **Enable auto-update** on `cctoolkit` under `/plugin` → Marketplaces, or add `"autoUpdate": true` to its entry under `extraKnownMarketplaces` in `.claude/settings.json`, which turns it on for the whole team.
 

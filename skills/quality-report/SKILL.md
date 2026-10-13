@@ -17,7 +17,7 @@ The `docs/metrics/quality-report-*` file names are frozen: the whole report hist
 
 This file = common workflow, writing rules, report structure, JSON schema, coherence checks.
 
-## Absolute rule — `docs/` is out of scope
+## `docs/` is out of scope
 
 `docs/` never analysed: not by SonarQube, not by git activity figures, not by any file or line count — this skill's own reports live there. Every repo-walking command carries the exclusion (`':(exclude)docs'` on git pathspecs, `docs/**` in `sonar.exclusions`); new commands added here carry it too.
 
@@ -95,7 +95,7 @@ File name: `docs/metrics/quality-report-YYYY-MM-DD.md` (today's date). Exists �
 **Structure, tables, expected detail → `report-template.md`, copied verbatim.** Nine sections, `1. Executive summary` to `9. Conclusion`. Adapt the section names and the layers to the detected stack:
 
 - §4 — `.NET`: `API endpoint coverage` (X endpoints — Y active + Z [Skip]). `JS/TS`: `Page and hook coverage` (X pages — Y with tests, coverage of the business hooks).
-- §2 — no git repo → `Data unavailable — the project is not a git repository.` No `Trend` column, no comparison with the previous report (absolute rule below).
+- §2 — no git repo → `Data unavailable — the project is not a git repository.` No `Trend` column, no comparison with the previous report (§ No trending in the report).
 - §5 — Stryker absent → `Stryker is not configured on this project.`
 - §6 — SonarQube absent → `SonarQube is not configured on this project.`
 
@@ -109,13 +109,13 @@ After the Markdown, write the JSON at the same location, `docs/metrics/quality-r
 
 ---
 
-## Absolute rule — no trending in the report
+## No trending in the report
 
 A report is a snapshot at instant T: no "Trend" column, deltas or comparisons with the previous report. Comparing reports is the job of whatever reads the JSON history; the Markdown holds today's raw values only.
 
 ---
 
-## Writing tone — absolute rule
+## Writing tone
 
 Partial, non-complacent. Goal: an honest, precise view of how solid the codebase really is — not a celebration of the work done.
 

@@ -14,6 +14,10 @@ under `run/`: `tmp` hands out a folder of the system temp directory for them.
     cctoolkit run-work tmp <name>
         creates and prints `$TMPDIR/cctoolkit-run/<repo>-<hash>/<name>`, the same path on
         every call of the same repo
+    cctoolkit run-work rm-tmp <name>...
+        removes those folders of `tmp`; a name holding `/` or `..`, or empty, is refused.
+        Replaces `rm -rf "$(cctoolkit run-work tmp <name>)"`, which Claude Code's guard
+        holds for confirmation (unresolvable target) and denies in an unattended session
     cctoolkit run-work purge <run folder> [<stamp>]
         migrates once from the older layouts, then keeps, for every run:
         - journal lines of run <stamp> only; question and answer lines never;
@@ -61,6 +65,16 @@ def tmp_dir(name: str) -> Path:
     root = Path(kit_config.project_root()).resolve()
     repo = f"{root.name}-{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
     return Path(tempfile.gettempdir()) / "cctoolkit-run" / repo / name
+
+
+def rm_tmp(names: list[str]) -> int:
+    bad = [n for n in names if not n or "/" in n or n in (".", "..")]
+    if bad or not names:
+        print(f"rm-tmp: invalid name(s): {bad or 'none given'}", file=sys.stderr)
+        return 2
+    for name in names:
+        shutil.rmtree(tmp_dir(name), ignore_errors=True)
+    return 0
 
 
 def option(args: list[str], name: str) -> str | None:
@@ -282,6 +296,8 @@ def main(argv: list[str]) -> int:
         folder.mkdir(parents=True, exist_ok=True)
         print(folder)
         return 0
+    if command == "rm-tmp":
+        return rm_tmp(argv[1:])
     if command == "append":
         return append(target)
     if command == "journal" and rest:

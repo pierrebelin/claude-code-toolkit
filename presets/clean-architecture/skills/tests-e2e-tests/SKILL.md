@@ -15,9 +15,9 @@ Complete business story on real stack: Aspire, database, auth, API, SDK. Complem
 - Reuse existing `ApiApplicationFixture`, SDK client already exposed; don't recreate the fixture from the template.
 - Credentials from secure local configuration, never from code, skill, snapshots.
 
-## Non-negotiable rules
+## Rules
 
-- No `[Trait("RM", …)]`: an E2E test proves a journey, never a single row of a handler's rules table; the rule is proven, and traced, by the handler test (`.claude/rules/tests.md`).
+- No `[Trait("RM", …)]` on E2E tests: rule traceability lives in `UnitTests` and `IntegrationTests` (`.claude/rules/tests.md`).
 - One test = complete journey: `create → update → delete`, `create → activate → deactivate`, `initialize → create → get → delete`.
 - Forbidden: `Create`, `Get`, `Compile`, `Delete` alone — those are contract/integration tests.
 - Zero mocks, zero direct database seeding, zero raw `HttpClient`: client SDK only.
@@ -59,7 +59,7 @@ public sealed class [Feature]LifecycleTests(ApiApplicationFixture fixture)
 
 ## Verification
 
-- [ ] `commands.test` with `{suite}` = `E2ETests`, narrowed to `*[Feature]LifecycleTests` (`implement-tdd/references/test-scope.md` § Runner), green, or justified Skip
-- [ ] Lifecycle selected, ≥2 operations, no cleanup step, no `RM` trait
+- [ ] `commands.test` with `{suite}` = `E2ETests`, narrowed to `*[Feature]LifecycleTests` (`skills/implement-tdd/references/test-scope.md` § Runner), green, or justified Skip
+- [ ] Lifecycle selected, ≥2 operations, no cleanup step
 - [ ] Real SDK + Aspire; no mock, no database seeding, no secret, no isolated endpoint
 - [ ] Existing file extended, existing fixture reused

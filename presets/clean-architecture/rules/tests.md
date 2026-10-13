@@ -51,7 +51,7 @@ Tests outside handler folders (`Core/`, `ScriptingTests`) out of scope — no ru
 
 ## Naming
 
-Test method: `Should{Result}_When{Condition}`, `{Result}` = **actual assertion**, not intent.
+Test method: `Should{Result}_When{Condition}`, `{Result}` = **actual assertion**, not intent. Exception: contract tests, one happy path per route, are named `Should{Action}()` (`ShouldCreateOrder()`).
 
 | Suite | Class pattern | Example |
 |-------|---------------|---------|

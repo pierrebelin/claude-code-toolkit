@@ -82,7 +82,7 @@ export type Step = {
 
 export type CycleState = 'pending' | 'red' | 'done'
 
-export type SheetCycle = { id: string; behaviour: string; wave: number; guard: boolean; state: CycleState; unreachable: string[] }
+export type SheetCycle = { id: string; behaviour: string; wave: number; guard: boolean; state: CycleState; unreachable: string[]; live?: 'RED' | 'GREEN' }
 
 export type Sheet = { lot: string; name: string; isDone: boolean; steps: Step[]; hypotheses: number; cycles?: SheetCycle[] }
 

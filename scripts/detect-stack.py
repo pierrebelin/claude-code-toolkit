@@ -136,6 +136,7 @@ def fit(root, name, product, framework):
         "sourceRoots": [c.rel(d) for d in c.dirs(c.source_roots)],
         "testRoots": [c.rel(d) for d in c.dirs(c.test_roots)],
         "rulePack": os.path.isdir(os.path.join(os.path.dirname(path), "rules")),
+        "skillPack": os.path.isdir(os.path.join(os.path.dirname(path), "skills")),
     }
 
 
@@ -178,8 +179,13 @@ def main(argv):
         except (kit_config.KitConfigError, KeyError, TypeError, re.error) as e:
             presets.append({"preset": name, "error": str(e), "useCaseFolders": 0})
     presets.sort(key=lambda p: (-p["useCaseFolders"], p["preset"] != kit_config.DEFAULT_PRESET, p["preset"]))
-    legacy = [d for d in ("hooks", "lib", "skills", "agents", "tools", "presets", "evals")
+    legacy = [d for d in ("hooks", "lib", "agents", "tools", "presets", "evals")
               if os.path.isdir(os.path.join(cl, d))]
+    # .claude/skills/ also holds the repo's own skills and the preset's, installed by kit-init:
+    # only a folder named after a skill the plugin ships betrays a copy.
+    if any(os.path.isdir(os.path.join(cl, "skills", s)) for s in os.listdir(os.path.join(HERE, "skills"))
+           if os.path.isdir(os.path.join(HERE, "skills", s))):
+        legacy.insert(2, "skills")
     # Copies that moved the kit's scripts under .claude/, and the mods' own marketplace.
     if os.path.isfile(os.path.join(cl, "scripts", "pre-audit.sh")):
         legacy.append("scripts")

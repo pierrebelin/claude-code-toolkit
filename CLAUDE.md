@@ -13,7 +13,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `lib/` | modules the hooks call, config and test-tag readers |
 | `scripts/`, `bin/` | repo-wide scanners and one-shots, run as `cctoolkit <name>` |
 | `tools/` | `doctor` |
-| `presets/`, `rules/` | layouts, `kit.config.json`, layer and universal rules |
+| `presets/`, `rules/` | layouts, `kit.config.json`, layer and universal rules, the preset's test skills |
 | `templates/` | settings, statusline, `.gitignore` merged into the repo |
 | `evals/` | recorded hook cases |
 | `workflows/` | `run-lot` (one batch) and `run-plan` (whole plan), as Workflow scripts |
@@ -44,6 +44,7 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 | stack-neutral behaviour rule | `rules/` — only `markdown-output.md`, `context-discipline.md` and `cctoolkit.md` live there; a plugin cannot load rules, `/cctoolkit:kit-init` copies them into the repo |
 | a path, glob, marker, tag carrier or command that differs between repos | a key of `kit.config.json`, its default in each `presets/<name>/preset.json`, read through `lib/kit_config.py` — never a constant in a hook or a script |
 | procedure (TDD cycle, audit steps) | the relevant `SKILL.md` |
+| how to write tests of one level (bound to a layout and a test stack) | `presets/<preset>/skills/tests-*/` — copied into the repo by `/cctoolkit:kit-init`, never under `skills/` |
 | wiring (event, matcher, hook order) | `hooks/hooks.json` — commands written `bash "${CLAUDE_PLUGIN_ROOT}/hooks/x.sh"` |
 | what the repo's own settings carry (permissions, env, statusline, plugin enablement) | `templates/` — merged into the repo by `/cctoolkit:kit-init`, never read from here |
 | a script or tool the skills call | `scripts/` or `tools/`, reached through `bin/cctoolkit <name>` — never a path in a skill, an agent or a reference |
@@ -66,6 +67,6 @@ Two sources that drift make the choice random: a fact lives in exactly one place
 
 Claude Code pins an installed plugin to the `version` of its `plugin.json`: a push changing shipped files under the same version never reaches the users who installed it. `cctoolkit` and its mods share **one version**, the same in every `plugin.json`.
 
-1. A change to shipped files of any plugin → `bash dev/bump.sh <version>` sets it in every `plugin.json` (patch: fix; minor: behaviour or rule change; major: a change that breaks an installed repo), and add its `## <version> — <date>` section to `CHANGELOG.md`, user-facing, each entry naming the plugin it changes. A change under `rules/` or `presets/*/rules/` is listed under **Rules changed**: the user pulls it by re-running `/cctoolkit:kit-init`.
+1. A change to shipped files of any plugin → `bash dev/bump.sh <version>` sets it in every `plugin.json` (patch: fix; minor: behaviour or rule change; major: a change that breaks an installed repo), and add its `## <version> — <date>` section to `CHANGELOG.md`, user-facing, each entry naming the plugin it changes. A change under `rules/` or `presets/*/rules/` is listed under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: the user pulls either by re-running `/cctoolkit:kit-init`.
 2. Before pushing: `bash dev/release-check.sh` — `FAIL` blocks the push (shipped change without bump, versions that differ), `TODO` names a release still to tag.
 3. After the commit: `claude plugin tag --push <plugin dir>` for every plugin, each creating `<name>--v<version>`.

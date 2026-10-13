@@ -162,6 +162,22 @@
         "exit": 0,
         "stdout": "same"
       }
+    },
+    {
+      "name": "rm-tmp removes the named tmp folders and nothing else",
+      "cmd": "a=$(python3 {{KIT}}/scripts/run-work.py tmp rmt-a-{{SID}}) && b=$(python3 {{KIT}}/scripts/run-work.py tmp rmt-b-{{SID}}) && c=$(python3 {{KIT}}/scripts/run-work.py tmp rmt-c-{{SID}}) && touch $a/f && python3 {{KIT}}/scripts/run-work.py rm-tmp rmt-a-{{SID}} rmt-b-{{SID}} && [ ! -e $a ] && [ ! -e $b ] && [ -d $c ] && python3 {{KIT}}/scripts/run-work.py rm-tmp rmt-c-{{SID}} && echo removed",
+      "expect": {
+        "exit": 0,
+        "stdout": "removed"
+      }
+    },
+    {
+      "name": "rm-tmp refuses a name escaping the tmp root, or no name",
+      "cmd": "python3 {{KIT}}/scripts/run-work.py rm-tmp ../x 2>/dev/null; e1=$?; python3 {{KIT}}/scripts/run-work.py rm-tmp a/b 2>/dev/null; e2=$?; python3 {{KIT}}/scripts/run-work.py rm-tmp 2>/dev/null; echo \"$e1 $e2 $?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "2 2 2"
+      }
     }
   ]
 }

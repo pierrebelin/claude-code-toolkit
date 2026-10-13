@@ -9,7 +9,8 @@
 # Then, for each plugin of the marketplace:
 #   FAIL  shipped files changed since the current version was released
 #   FAIL  a pending version whose release changes rules, with no
-#         "Rules changed" in its CHANGELOG section
+#         "Rules changed" in its CHANGELOG section; same for the preset
+#         skills and "Skills changed" (both copied into repos by kit-init)
 #   TODO  a version committed but not tagged yet: `claude plugin tag --push <dir>`
 #   OK    otherwise
 # A version is released at its tag `<name>--v<version>`, or, before tags existed,
@@ -21,6 +22,7 @@ command -v jq >/dev/null || { echo "FAIL  jq missing"; exit 2; }
 # Shipped paths per plugin: what changes behaviour once installed.
 KIT_PATHS="skills agents hooks lib scripts tools presets rules templates workflows bin"
 RULE_PATHS="rules presets/*/rules"
+SKILL_PATHS="presets/*/skills"
 
 fail=0
 versions=$(jq -r '.plugins[].source' .claude-plugin/marketplace.json | while read -r source; do
@@ -76,6 +78,13 @@ while IFS=$'\t' read -r name source; do
     if [ -n "$rules" ] && ! grep -q 'Rules changed' <<<"$section"; then
       echo "FAIL  $name $ver: rules changed, CHANGELOG section has no 'Rules changed'"
       printf '        %s\n' $rules
+      fail=1; continue
+    fi
+    # shellcheck disable=SC2086
+    skills=$(changed_since "$base" $SKILL_PATHS)
+    if [ -n "$skills" ] && ! grep -q 'Skills changed' <<<"$section"; then
+      echo "FAIL  $name $ver: preset skills changed, CHANGELOG section has no 'Skills changed'"
+      printf '        %s\n' $skills | head -10
       fail=1; continue
     fi
   fi
