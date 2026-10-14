@@ -39,6 +39,6 @@ export type Navigation = { expanded: string[]; collapsed: string[] }
 
 declare module 'claude-code' {
   interface PluginState {
-    'spec-pane': { tracked: Tracked; decisions: Decision[]; nav: Navigation; now: number }
+    'spec-pane': { tracked: Tracked; decisions: Decision[]; nav: Navigation; now: number; isShown: boolean }
   }
 }

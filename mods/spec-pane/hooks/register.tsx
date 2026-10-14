@@ -25,6 +25,7 @@ const tracked = atom({ plugin: 'spec-pane', key: 'tracked' } as const, IDLE)
 const decisions = atom({ plugin: 'spec-pane', key: 'decisions' } as const, [] as Decision[])
 const nav = atom({ plugin: 'spec-pane', key: 'nav' } as const, HOME)
 const now = atom({ plugin: 'spec-pane', key: 'now' } as const, 0)
+const isShown = atom({ plugin: 'spec-pane', key: 'isShown' } as const, false)
 
 export const fold = (text: string): string =>
   text
@@ -239,6 +240,8 @@ export const escapeXml = (text: string): string =>
 
 export const svgHeight = (source: string): number => Number(/<svg[^>]*\sheight="(\d+)"/.exec(source)?.[1] ?? 0)
 
+export const svgWidth = (source: string): number => Number(/<svg[^>]*\swidth="(\d+)"/.exec(source)?.[1] ?? 0)
+
 const px = (value: number): string => `${Math.round(value * 10) / 10}`
 
 const counted = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`
@@ -431,8 +434,15 @@ export const questionsTone = (questions: OpenQuestion[]): 'error' | 'warning' | 
   return tones.includes('error') ? 'error' : tones.includes('warning') ? 'warning' : 'inactive'
 }
 
+// The plugin's own close never reaches its own ui.close hook: the flag is set here.
+async function closePane($: EngineInterface): Promise<void> {
+  await $.ui.close({ id: PANE }).catch(() => undefined)
+  await update($, isShown, () => false)
+}
+
 async function openPane($: EngineInterface): Promise<void> {
-  await $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
+  const opened = await $.ui.open({ id: PANE, title: TITLE }).catch(() => null)
+  if (opened?.isPlaced) await update($, isShown, () => true)
 }
 
 async function arm($: EngineInterface, topic: string | null): Promise<void> {
@@ -466,7 +476,33 @@ async function tick($: EngineInterface): Promise<void> {
 export const register: Register = on => {
   let root: string | null = null
 
+  // On a desktop, a button above the prompt opens and closes the pane: its tab has no way back
+  // once closed but the command. The surface stacks each plugin's band: this one draws its own alone.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface !== 'desktop' || e.props.hasSurvey || !((await read($, tracked)).isArmed)) return next(e)
+    const { Box, Button } = $.ui.resolve(e)
+    const shown = await read($, isShown)
+    return (
+      <Box>
+        <Button
+          key="toggle-spec-pane"
+          label="◫ Spec"
+          variant={shown ? 'primary' : 'secondary'}
+          onPress={() => (shown ? closePane($) : openPane($))}
+        />
+      </Box>
+    )
+  })
+
+  on('ui.close', async ($, e, next) => {
+    const result = await next(e)
+    if (e.id === PANE) await update($, isShown, () => false)
+    return result
+  })
+
   on('session.start', async ($, e, next) => {
+    const panes = await $.ui.panes().catch(() => [])
+    await update($, isShown, () => panes.some(pane => pane.id === PANE))
     root = e.cwd
     await $.command.register({
       name: 'spec-pane',
@@ -563,7 +599,7 @@ export const register: Register = on => {
       }))
     const isOpen = (group: string) => !where.collapsed.includes(group)
 
-    const close = <Button key="close" label="✕" plain dimColor onPress={() => $.ui.close({ id: PANE })} />
+    const close = <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
     const header = (title: string, trail?: string) => (
       <Box key="header" height={1}>
         <Box flexGrow={1} flexShrink={1}>
@@ -753,7 +789,7 @@ export const register: Register = on => {
         </Text>
         {Svg !== undefined && gauge !== '' && (
           <Box key="gauge" marginTop={1}>
-            <Svg key="gauge-svg" source={gauge} alt={specGaugeAlt(asked, doc)} height={svgHeight(gauge)} isInteractive />
+            <Svg key="gauge-svg" source={gauge} alt={specGaugeAlt(asked, doc)} width={svgWidth(gauge)} height={svgHeight(gauge)} isInteractive />
           </Box>
         )}
         {where.expanded.length > 0 && (

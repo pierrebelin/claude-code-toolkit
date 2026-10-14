@@ -63,6 +63,7 @@ const runs = atom({ plugin: 'run-lot-pane', key: 'runs' } as const, [] as Workfl
 const now = atom({ plugin: 'run-lot-pane', key: 'now' } as const, 0)
 const HOME: Navigation = { screen: 'run', phase: null, agentId: null, back: 'run', toggled: [], lot: null }
 const nav = atom({ plugin: 'run-lot-pane', key: 'nav' } as const, HOME)
+const isShown = atom({ plugin: 'run-lot-pane', key: 'isShown' } as const, false)
 const usage = atom({ plugin: 'run-lot-pane', key: 'usage' } as const, { context: null, percent: null, cost: null } as SessionFigures)
 const history = atom({ plugin: 'run-lot-pane', key: 'history' } as const, {} as PhaseSamples)
 
@@ -1459,6 +1460,8 @@ export const escapeXml = (text: string): string =>
 
 export const svgHeight = (source: string): number => Number(/<svg[^>]*\sheight="(\d+)"/.exec(source)?.[1] ?? 0)
 
+export const svgWidth = (source: string): number => Number(/<svg[^>]*\swidth="(\d+)"/.exec(source)?.[1] ?? 0)
+
 const px = (value: number): string => `${Math.round(value * 10) / 10}`
 
 const textWidth = (text: string, size = CHAR_PX): number => [...text].length * size
@@ -2145,8 +2148,15 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
   ]
 }
 
+// The plugin's own close never reaches its own ui.close hook: the flag is set here.
+async function closePane($: EngineInterface): Promise<void> {
+  await $.ui.close({ id: PANE }).catch(() => undefined)
+  await update($, isShown, () => false)
+}
+
 async function openPane($: EngineInterface): Promise<void> {
-  await $.ui.open({ id: PANE, title: 'Workflow', columns: PANE_COLUMNS }).catch(() => undefined)
+  const opened = await $.ui.open({ id: PANE, title: 'Workflow', columns: PANE_COLUMNS }).catch(() => null)
+  if (opened?.isPlaced) await update($, isShown, () => true)
 }
 
 async function readText($: EngineInterface, path: string): Promise<string | null> {
@@ -2511,7 +2521,33 @@ export const register: Register = on => {
   let root: string | null = null
   let sequence = 0
 
+  // On a desktop, a button above the prompt opens and closes the pane: its tab has no way back
+  // once closed but the command. The surface stacks each plugin's band: this one draws its own alone.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface !== 'desktop' || e.props.hasSurvey || !((await read($, runs)).length > 0)) return next(e)
+    const { Box, Button } = $.ui.resolve(e)
+    const shown = await read($, isShown)
+    return (
+      <Box>
+        <Button
+          key="toggle-run-lot-pane"
+          label="◫ Workflow"
+          variant={shown ? 'primary' : 'secondary'}
+          onPress={() => (shown ? closePane($) : openPane($))}
+        />
+      </Box>
+    )
+  })
+
+  on('ui.close', async ($, e, next) => {
+    const result = await next(e)
+    if (e.id === PANE) await update($, isShown, () => false)
+    return result
+  })
+
   on('session.start', async ($, e, next) => {
+    const panes = await $.ui.panes().catch(() => [])
+    await update($, isShown, () => panes.some(pane => pane.id === PANE))
     root = e.cwd
     await $.command.register({
       name: 'run-lot-pane',
@@ -2757,6 +2793,17 @@ export const register: Register = on => {
     const Svg = e.surface === 'desktop' ? $.ui.resolve(e).Svg : undefined
     const accent = e.surface === 'desktop' ? 'claude' : undefined
     const tddTone = (label: string) => (e.surface !== 'desktop' ? undefined : label === 'RED' ? 'error' : label === 'GREEN' ? 'success' : undefined)
+    // On a desktop a row's text tells its stage apart, not its glyph alone: done in grey,
+    // running in bold, to come lighter and in italics. The terminal keeps its own styles.
+    type Stage = 'done' | 'running' | 'pending'
+    const staged = (stage: Stage, terminal: { color?: string; bold?: boolean }, tone?: string) =>
+      e.surface !== 'desktop'
+        ? terminal
+        : stage === 'done'
+          ? { color: tone ?? 'inactive' }
+          : stage === 'running'
+            ? { color: tone, bold: true }
+            : { color: 'subtle', italic: true }
     const list = (await read($, runs)).map(completeRun)
     const at = await read($, now)
     const session = await read($, usage)
@@ -2768,9 +2815,24 @@ export const register: Register = on => {
     const current = planRun !== null && lotInView !== null ? lotRun(planRun, lotInView) : last
     const columns = e.props.bodyColumns
     const spin = spinnerFrame(at)
-    const barWidth = Math.max(8, Math.min(40, columns - 28))
+    // A desktop's proportional font draws the bar wider than its columns: kept shorter there.
+    const barWidth = Math.max(8, Math.min(e.surface === 'desktop' ? 28 : 40, columns - 28))
     const go = (change: Partial<Navigation>) => () => void update($, nav, state => ({ ...state, ...change }))
-    const close = <Button key="close" label="✕" plain dimColor onPress={() => $.ui.close({ id: PANE })} />
+    const close = <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
+    // A desktop draws a Button natively, its children's colours dropped: there the row keeps
+    // its own colours and a trailing › opens it; the terminal presses the whole row.
+    const pressable = (key: string, onPress: () => void, content: JSX.Element | JSX.Element[], hotkey?: string) =>
+      e.surface === 'desktop' ? (
+        <Box key={`${key}-row`}>
+          {content}
+          <Text> </Text>
+          <Button key={key} label="›" hotkey={hotkey} plain dimColor onPress={onPress} />
+        </Box>
+      ) : (
+        <Button key={key} hotkey={hotkey} plain onPress={onPress}>
+          {content}
+        </Button>
+      )
 
     const reasonBlock = (key: string, reason: string) =>
       reasonLines(reason, columns - 7).map((line, index) => (
@@ -2843,18 +2905,22 @@ export const register: Register = on => {
     const agentButton = (agent: WorkflowAgent, prefix: string, from: Screen, mark = '') => (
       <Box key={`agent-${agent.id}`} height={1}>
         <Text color="inactive">{prefix}</Text>
-        <Button key={`open-${agent.id}`} plain onPress={go({ screen: 'agent', agentId: agent.id, back: from })}>
-          <Text color={agentTone(agent)}>{agentGlyph(agent)} </Text>
-          <Text color={agent.state === 'error' ? 'error' : agent.state === 'running' ? undefined : 'inactive'}>{agent.label}</Text>
-          <Text color="inactive">
-            {' '}
-            · {agentAge(agent)}
-            {activityOf(agent, at) === null ? '' : ` · ${activityOf(agent, at)}`}
-            {agent.state === 'running' && agent.lastTool !== null ? ` · ${agent.lastTool} (${agent.tools})` : ''}
-            {agent.tokens > 0 ? ` · ctx ${kilo(agent.context)} · ${dollars(agent.cost)}` : ''}
-          </Text>
-          {mark !== '' && <Text color="warning"> {mark}</Text>}
-        </Button>
+        {pressable(
+          `open-${agent.id}`,
+          go({ screen: 'agent', agentId: agent.id, back: from }),
+          [
+            <Text key="glyph" color={agentTone(agent)}>{agentGlyph(agent)} </Text>,
+            <Text key="label" color={agent.state === 'error' ? 'error' : agent.state === 'running' ? undefined : 'inactive'}>{agent.label}</Text>,
+            <Text key="meta" color="inactive">
+              {' '}
+              · {agentAge(agent)}
+              {activityOf(agent, at) === null ? '' : ` · ${activityOf(agent, at)}`}
+              {agent.state === 'running' && agent.lastTool !== null ? ` · ${agent.lastTool} (${agent.tools})` : ''}
+              {agent.tokens > 0 ? ` · ctx ${kilo(agent.context)} · ${dollars(agent.cost)}` : ''}
+            </Text>,
+            ...(mark !== '' ? [<Text key="mark" color="warning"> {mark}</Text>] : []),
+          ],
+        )}
       </Box>
     )
 
@@ -2912,9 +2978,7 @@ export const register: Register = on => {
               <Box key={`lot-${entry.lot}`}>
                 <Text>{'  '}</Text>
                 {planRun.agents.some(agent => agent.lot === entry.lot) ? (
-                  <Button key={`open-lot-${entry.lot}`} hotkey={index < 9 ? String(index + 1) : undefined} plain onPress={openLot(entry.lot)}>
-                    {label}
-                  </Button>
+                  pressable(`open-lot-${entry.lot}`, openLot(entry.lot), label, index < 9 ? String(index + 1) : undefined)
                 ) : (
                   label
                 )}
@@ -2935,7 +2999,7 @@ export const register: Register = on => {
           </Text>
         ) : (
           <Box key="timeline" marginTop={1}>
-            <Svg key="timeline-svg" source={source} alt={alt} height={svgHeight(source)} isInteractive />
+            <Svg key="timeline-svg" source={source} alt={alt} width={svgWidth(source)} height={svgHeight(source)} isInteractive />
           </Box>
         )}
       </Box>
@@ -3172,11 +3236,17 @@ export const register: Register = on => {
             `agent-row-${agent.id}`,
             <Box>
               <Text>{'     '}</Text>
-              <Button key={`open-${agent.id}`} plain onPress={go({ screen: 'agent', agentId: agent.id, back: 'run' })}>
-                <Text color={agentTone(agent)}>{agentGlyph(agent)} </Text>
-                <Text color={labelColor}>{fit(agent.label, labelWidth)}</Text>
-                {retry !== '' && <Text color="warning">{retry}</Text>}
-              </Button>
+              {pressable(
+                `open-${agent.id}`,
+                go({ screen: 'agent', agentId: agent.id, back: 'run' }),
+                [
+                  <Text key="glyph" color={agentTone(agent)}>{agentGlyph(agent)} </Text>,
+                  <Text key="label" {...staged(agent.state === 'running' ? 'running' : 'done', { color: labelColor }, labelColor)}>
+                    {fit(agent.label, labelWidth)}
+                  </Text>,
+                  ...(retry !== '' ? [<Text key="retry" color="warning">{retry}</Text>] : []),
+                ],
+              )}
             </Box>,
             [
               ...(isWide ? [cell(`model-${agent.id}`, MODEL_WIDTH, modelLabel(agent), 'inactive', true)] : []),
@@ -3220,7 +3290,7 @@ export const register: Register = on => {
       const text = [waveText, detail].filter(one => one !== '').join(' · ')
       if (text === '' || room < 10) return null
       return (
-        <Text color="inactive" wrap="truncate-end">
+        <Text {...(phase.mark === 'pending' ? staged('pending', { color: 'inactive' }) : { color: 'inactive' })} wrap="truncate-end">
           {'  '}
           {fit(text, room - 2)}
         </Text>
@@ -3245,12 +3315,23 @@ export const register: Register = on => {
                 <Text> </Text>
               )}
               <Text> </Text>
-              <Button key={`phase-${phase.title}`} plain onPress={go({ screen: 'phase', phase: phase.title })}>
-                <Text color={markTone(phase.mark)}>{markGlyph(phase.mark)} </Text>
-                <Text bold={phase.mark === 'running'} color={phase.mark === 'pending' ? 'inactive' : tddTone(phase.title)}>
-                  {phase.title}
-                </Text>
-              </Button>
+              {pressable(
+                `phase-${phase.title}`,
+                go({ screen: 'phase', phase: phase.title }),
+                [
+                  <Text key="glyph" color={markTone(phase.mark)}>{markGlyph(phase.mark)} </Text>,
+                  <Text
+                    key="title"
+                    {...staged(
+                      phase.mark,
+                      { bold: phase.mark === 'running', color: phase.mark === 'pending' ? 'inactive' : tddTone(phase.title) },
+                      tddTone(phase.title),
+                    )}
+                  >
+                    {phase.title}
+                  </Text>,
+                ],
+              )}
               {phaseSuffix(phase, room)}
             </Box>,
             hasAgents ? figureCells(`phase-${phase.title}`, `${phase.agents.length}`, duration(phase.span), dollars(totalsOf(phase.agents).cost)) : undefined,
@@ -3297,7 +3378,12 @@ export const register: Register = on => {
             <Text wrap="truncate-end">
               {'  '}
               <Text color={isDone ? 'success' : isStarted ? 'claude' : 'inactive'}>{isDone ? '✓' : isStarted ? '◐' : '○'} </Text>
-              <Text bold={one === currentSheetStep} color={isDone || one === currentSheetStep ? undefined : 'inactive'}>
+              <Text
+                {...staged(isDone ? 'done' : one === currentSheetStep ? 'running' : 'pending', {
+                  bold: one === currentSheetStep,
+                  color: isDone || one === currentSheetStep ? undefined : 'inactive',
+                })}
+              >
                 {fit(`${one.number} ${one.title}`, titleWidth)}
               </Text>
             </Text>,
@@ -3350,7 +3436,12 @@ export const register: Register = on => {
             <Text wrap="truncate-end">
               {'  '}
               <Text color={isDone ? 'success' : isStarted ? 'claude' : 'inactive'}>{isDone ? '✓' : isStarted ? '◐' : '○'} </Text>
-              <Text bold={one === currentCycle} color={isDone || one === currentCycle ? undefined : 'inactive'}>
+              <Text
+                {...staged(isDone ? 'done' : one === currentCycle ? 'running' : 'pending', {
+                  bold: one === currentCycle,
+                  color: isDone || one === currentCycle ? undefined : 'inactive',
+                })}
+              >
                 {fit(`${one.id} ${one.behaviour}`, titleWidth)}
               </Text>
             </Text>,
@@ -3501,9 +3592,7 @@ export const register: Register = on => {
                 view === null ? (
                   left
                 ) : (
-                  <Button key={`plan-open-${entry.lot}`} plain onPress={openLot(entry.lot)}>
-                    {left}
-                  </Button>
+                  pressable(`plan-open-${entry.lot}`, openLot(entry.lot), left)
                 ),
                 view === null
                   ? state === 'done' && entry.past

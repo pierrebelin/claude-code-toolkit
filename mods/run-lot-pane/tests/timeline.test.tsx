@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import type { WorkflowAgent, WorkflowRun } from '../types'
-import { blankAgent, demoHistory, demoPlanRuns, demoRuns, expectedPhases, lotRun, phaseRows, phaseTimeline, planTimeline, stepsOf, svgHeight } from '../hooks/register'
+import { blankAgent, demoHistory, demoPlanRuns, demoRuns, expectedPhases, lotRun, phaseRows, phaseTimeline, planTimeline, stepsOf, svgHeight, svgWidth } from '../hooks/register'
 
 const AT = 10_000_000
 const NEUTRAL = '#2a78d6'
@@ -181,12 +181,20 @@ describe('plan timeline', () => {
   })
 })
 
-const world = (on: On) => {
+const world = (on: On, opened = new Set<string>()) => {
   mock.clock(on)
   on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 84_000, window: 200_000, percent: 42 }, rateLimits: [], cost: { usd: 1 } } }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.open', ($, e) => {
+    opened.add(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', ($, e) => {
+    opened.delete(e.id)
+    return { value: undefined }
+  })
+  on('ui.panes', () => ({ value: [...opened].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }))
   on('fs.read', ($, e) => ({ deny: `ENOENT ${e.path}` }))
   on('fs.stat', ($, e) => ({ deny: `ENOENT ${e.path}` }))
   on('fs.list', ($, e) => ({ deny: `ENOENT ${e.path}` }))
@@ -223,6 +231,8 @@ test('the desktop keeps the phase view and opens the timeline on demand; the ter
     expect(svg?.props.isInteractive).toBe(true)
     expect(String(svg?.props.source)).toMatch(/^<svg[\s\S]*<\/svg>$/)
     expect(svg?.props.height).toBe(svgHeight(String(svg?.props.source)))
+  expect(svg?.props.width).toBe(svgWidth(String(svg?.props.source)))
+  expect(svg?.props.width).toBeGreaterThan(0)
     expect(await desktop.find({ type: 'Text', text: /timeline$/ })).toBeDefined()
     expect(await desktop.find({ type: 'Text', text: /^ {2}(PHASES|LOTS)$/ })).toBeUndefined()
     await desktop.press({ key: 'back' })
@@ -278,7 +288,67 @@ test('a touch of colour on the desktop: accent headings, RED in red and GREEN in
     reached: ['inactive', 'inactive', 'inactive', 'inactive', 'inactive'],
   })
   expect(await colours('desktop')).toEqual({
-    phases: 'claude', sheet: 'claude', red: 'error', green: 'success', design: undefined, pending: 'inactive',
+    phases: 'claude', sheet: 'claude', red: 'error', green: 'success', design: 'inactive', pending: 'subtle',
     reached: ['error', 'error', 'error', 'inactive', 'inactive'],
   })
+})
+
+test('desktop rows keep their colours outside the native button, a trailing › opens them; the terminal presses the whole row', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'run-lot-pane', args: 'demo' } as Parameters<typeof $.command.run>[0])
+  const desktop = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...PANE })
+  const glyphOf = async (key: string) => ((await desktop.find({ key }))?.children[0] as { props?: { color?: string } } | undefined)?.props?.color
+  expect(await glyphOf('open-demo-g1-row')).toBe('success')
+  expect(await glyphOf('open-demo-g2b-row')).toBe('claude')
+  expect(await glyphOf('phase-Design-row')).toBe('success')
+  expect((await desktop.find({ type: 'Button', key: 'open-demo-g1' }))?.props.label).toBe('›')
+  const styleOf = async (text: RegExp) => {
+    const found = await desktop.find({ type: 'Text', text })
+    return { color: found?.props.color, bold: found?.props.bold, italic: found?.props.italic }
+  }
+  expect(await styleOf(/^Design$/)).toEqual({ color: 'inactive', bold: undefined, italic: undefined })
+  expect(await styleOf(/^GREEN$/)).toEqual({ color: 'success', bold: true, italic: undefined })
+  expect(await styleOf(/^Audit$/)).toEqual({ color: 'subtle', bold: undefined, italic: true })
+  expect(await styleOf(/^X1 Create the product$/)).toEqual({ color: 'inactive', bold: undefined, italic: undefined })
+  expect(await styleOf(/^X3 Publication lock$/)).toEqual({ color: undefined, bold: true, italic: undefined })
+  expect(await styleOf(/^X4 Remove a deleted item$/)).toEqual({ color: 'subtle', bold: undefined, italic: true })
+  await desktop.press({ key: 'open-demo-g1' })
+  expect(await desktop.find({ type: 'Text', text: /›/ })).toBeDefined()
+  await desktop.unmount()
+  const terminal = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  expect(await terminal.find({ key: 'open-demo-g1-row' })).toBeUndefined()
+  expect((await terminal.find({ type: 'Button', key: 'open-demo-g1' }))?.props.label).toBeUndefined()
+  await terminal.unmount()
+})
+
+const BAND = {
+  component: 'AbovePrompt',
+  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
+} as const
+
+test('a button above the prompt opens and closes the pane on the desktop, once there is a run; never on the terminal', async ($, on) => {
+  const open = new Set<string>()
+  world(on, open)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const empty = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...BAND })
+  expect(await empty.find({ key: 'toggle-run-lot-pane' })).toBeUndefined()
+  await empty.unmount()
+
+  await $.command.run({ command: 'run-lot-pane', args: 'demo' } as Parameters<typeof $.command.run>[0])
+  const terminal = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...BAND })
+  expect(await terminal.find({ key: 'toggle-run-lot-pane' })).toBeUndefined()
+  await terminal.unmount()
+
+  const band = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...BAND })
+  const button = async () => (await band.find({ key: 'toggle-run-lot-pane' }))?.props
+  expect((await button())?.label).toBe('◫ Workflow')
+  expect((await button())?.variant).toBe('primary')
+  await band.press({ key: 'toggle-run-lot-pane' })
+  expect(open.has('run-lot-pane')).toBe(false)
+  expect((await button())?.variant).toBe('secondary')
+  await band.press({ key: 'toggle-run-lot-pane' })
+  expect(open.has('run-lot-pane')).toBe(true)
+  expect((await button())?.variant).toBe('primary')
+  await band.unmount()
 })
