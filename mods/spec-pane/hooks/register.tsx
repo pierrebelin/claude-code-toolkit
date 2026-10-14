@@ -94,6 +94,19 @@ export const parseOpenQuestions = (body: string): OpenQuestion[] =>
 
 const trimBlank = (lines: string[]): string => lines.join('\n').trim()
 
+export const questionsSection = (sections: SpecSection[]): SpecSection | undefined =>
+  sections.find(one => OPEN_QUESTIONS.some(title => fold(one.title).startsWith(title))) ?? sections.find(one => one.number === '12')
+
+export const sectionCounts = (doc: SpecDoc): Record<string, number> => {
+  const questions = questionsSection(doc.sections)
+  return Object.fromEntries(
+    doc.sections.map(section => [
+      section.number,
+      section === questions ? doc.openQuestions.length : section.body.split('\n').filter(line => ITEM_PATTERN.test(line)).length,
+    ]),
+  )
+}
+
 export const parseSpec = (text: string): SpecDoc => {
   const lines = text.split('\n')
   const title = (lines.find(line => /^#\s/.test(line)) ?? '').replace(/^#\s+/, '').trim()
@@ -135,8 +148,7 @@ export const parseSpec = (text: string): SpecDoc => {
     else if (item !== null) item.lines.push(line)
   }
   closeSection()
-  const questions =
-    sections.find(one => OPEN_QUESTIONS.some(title => fold(one.title).startsWith(title))) ?? sections.find(one => one.number === '12')
+  const questions = questionsSection(sections)
   return {
     title,
     summary,
@@ -204,8 +216,214 @@ export const withAnswers = (asked: Decision[], result: unknown): Decision[] => {
   })
 }
 
+export const isUnanswered = (decision: Decision): boolean => !decision.isPending && decision.answer === null
+
 export const isOffRecommendation = (decision: Decision): boolean =>
   decision.answer !== null && decision.recommended !== null && !decision.answer.split(', ').includes(decision.recommended)
+
+const SVG_WIDTH = 560
+const CELL = 18
+const CELL_GAP = 3
+const COLUMN_GAP = 24
+const LEGEND_CHAR_PX = 6.2
+const NEUTRAL = '#2a78d6'
+const CELL_INK = '#0b0b0b'
+const STATUS = { good: '#0ca30c', warning: '#fab219', serious: '#ec835a', critical: '#d03b3b' } as const
+const SVG_STYLE =
+  '<style>text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif}.ink{fill:#52514e}.head{fill:#52514e;font-weight:600}.muted{fill:#52514e;opacity:.7}' +
+  '.pending{fill:none;stroke:#52514e;stroke-dasharray:3 2}.none{fill:#c3c2b7}.glyph{font-size:10px;font-weight:600}' +
+  '.hit{fill:#52514e;fill-opacity:0}g.mark:hover .hit{fill-opacity:.14}' +
+  '@media (prefers-color-scheme: dark){.ink,.head,.muted{fill:#c3c2b7}.pending{stroke:#c3c2b7}.none{fill:#52514e}.hit{fill:#c3c2b7}}</style>'
+
+export const escapeXml = (text: string): string =>
+  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+export const svgHeight = (source: string): number => Number(/<svg[^>]*\sheight="(\d+)"/.exec(source)?.[1] ?? 0)
+
+const px = (value: number): string => `${Math.round(value * 10) / 10}`
+
+const counted = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`
+
+type Paint = string | 'pending' | 'none'
+
+type Cell = { fill: Paint; glyph: string; title: string[] }
+
+type Block = { svg: string; height: number }
+
+const cells = (items: Cell[], left: number, y: number, width: number): Block => {
+  const perRow = Math.max(1, Math.floor((width + CELL_GAP) / (CELL + CELL_GAP)))
+  const svg = items
+    .map((item, index) => {
+      const x = left + (index % perRow) * (CELL + CELL_GAP)
+      const top = y + Math.floor(index / perRow) * (CELL + CELL_GAP)
+      const square =
+        item.fill === 'pending'
+          ? `<rect class="pending" x="${px(x + 0.5)}" y="${px(top + 0.5)}" width="${CELL - 1}" height="${CELL - 1}" rx="4"/>`
+          : item.fill === 'none'
+            ? `<rect class="none" x="${x}" y="${top}" width="${CELL}" height="${CELL}" rx="4"/>`
+            : `<rect x="${x}" y="${top}" width="${CELL}" height="${CELL}" rx="4" fill="${item.fill}"/>`
+      const isInked = item.fill !== 'pending' && item.fill !== 'none'
+      const glyph = `<text class="glyph${isInked ? '' : ' ink'}" x="${px(x + CELL / 2)}" y="${px(top + CELL / 2 + 3.5)}" text-anchor="middle"${isInked ? ` fill="${CELL_INK}"` : ''}>${escapeXml(item.glyph)}</text>`
+      return `<g class="mark"><title>${item.title.map(escapeXml).join('&#10;')}</title><rect class="hit" x="${x - 1.5}" y="${top - 1.5}" width="${CELL + 3}" height="${CELL + 3}" rx="5"/>${square}${glyph}</g>`
+    })
+    .join('')
+  return { svg, height: Math.ceil(items.length / perRow) * (CELL + CELL_GAP) - CELL_GAP }
+}
+
+const LEGEND_LINE = 16
+
+const legend = (items: { fill: Paint; text: string }[], left: number, y: number, width: number): Block => {
+  let x = 0
+  let line = 0
+  const svg = items
+    .map(item => {
+      const room = 13 + [...item.text].length * LEGEND_CHAR_PX
+      if (x > 0 && x + room > width) {
+        x = 0
+        line += 1
+      }
+      const at = left + x
+      const base = y + line * LEGEND_LINE
+      const swatch =
+        item.fill === 'pending'
+          ? `<rect class="pending" x="${at + 0.5}" y="${base - 8.5}" width="8" height="8" rx="2"/>`
+          : item.fill === 'none'
+            ? `<rect class="none" x="${at}" y="${base - 9}" width="9" height="9" rx="2"/>`
+            : `<rect x="${at}" y="${base - 9}" width="9" height="9" rx="2" fill="${item.fill}"/>`
+      x += room + 16
+      return `${swatch}<text class="ink" x="${at + 13}" y="${base}">${escapeXml(item.text)}</text>`
+    })
+    .join('')
+  return { svg, height: (line + 1) * LEGEND_LINE }
+}
+
+type Severity = 'blocking' | 'major' | 'other'
+
+const SEVERITIES: { key: Severity; icon: string; fill: string }[] = [
+  { key: 'blocking', icon: '✖', fill: STATUS.critical },
+  { key: 'major', icon: '▲', fill: STATUS.serious },
+  { key: 'other', icon: '●', fill: STATUS.warning },
+]
+
+const severityOf = (question: OpenQuestion): Severity => {
+  const tone = severityTone(question.severity)
+  return tone === 'error' ? 'blocking' : tone === 'warning' ? 'major' : 'other'
+}
+
+const bySeverity = (questions: OpenQuestion[]) =>
+  SEVERITIES.map(one => ({ ...one, items: questions.filter(question => severityOf(question) === one.key) }))
+
+const decisionParts = (asked: Decision[]) => {
+  const pending = asked.filter(one => one.isPending)
+  const none = asked.filter(isUnanswered)
+  const other = asked.filter(one => !one.isPending && !isUnanswered(one) && isOffRecommendation(one))
+  const kept = asked.filter(one => !one.isPending && !isUnanswered(one) && !isOffRecommendation(one))
+  return { pending, none, other, kept }
+}
+
+const nameOf = (decision: Decision): string => decision.header || decision.question
+
+const heading = (title: string, count: string, left: number, width: number): string =>
+  `<text class="head" x="${left}" y="12">${escapeXml(title)}</text>` +
+  (count === '' ? '' : `<text class="muted" x="${left + width}" y="12" text-anchor="end">${escapeXml(count)}</text>`)
+
+const block = (title: string, count: string, items: Cell[], keys: { fill: Paint; text: string }[], left: number, width: number): Block => {
+  const grid = cells(items, left, 20, width)
+  const key = legend(keys, left, 20 + grid.height + 18, width)
+  return { svg: heading(title, count, left, width) + grid.svg + key.svg, height: 20 + grid.height + 6 + key.height }
+}
+
+const answerOf = (decision: Decision): string[] =>
+  [
+    nameOf(decision),
+    decision.header === '' ? '' : decision.question,
+    decision.isPending ? 'waiting for the answer' : decision.answer === null ? 'no answer' : `answer: ${decision.answer}`,
+    decision.recommended === null ? '' : `recommended: ${decision.recommended}`,
+  ].filter(one => one !== '')
+
+export const specGauge = (asked: Decision[], doc: SpecDoc | null): string => {
+  if (asked.length === 0 && doc === null) return ''
+  const isPair = doc !== null && asked.length > 0
+  const width = isPair ? (SVG_WIDTH - COLUMN_GAP) / 2 : SVG_WIDTH
+  const blocks: Block[] = []
+  if (doc !== null) {
+    if (doc.openQuestions.length === 0) {
+      blocks.push({
+        svg:
+          heading('Open questions', '', 0, width) +
+          `<rect x="0" y="20" width="${CELL}" height="${CELL}" rx="4" fill="${STATUS.good}"/><text class="glyph" x="${CELL / 2}" y="${20 + CELL / 2 + 3.5}" text-anchor="middle" fill="${CELL_INK}">✓</text><text class="ink" x="${CELL + 8}" y="33">no open question</text>`,
+        height: 20 + CELL,
+      })
+    } else {
+      const groups = bySeverity(doc.openQuestions)
+      blocks.push(
+        block(
+          'Open questions',
+          counted(doc.openQuestions.length, 'open', 'open'),
+          groups.flatMap(group =>
+            group.items.map(question => ({
+              fill: group.fill,
+              glyph: group.icon,
+              title: [`${question.id} · ${group.key}`, plain(question.question), question.impact === '' ? '' : `impact: ${plain(question.impact)}`].filter(one => one !== ''),
+            })),
+          ),
+          groups.filter(group => group.items.length > 0).map(group => ({ fill: group.fill, text: `${group.icon} ${group.items.length} ${group.key}` })),
+          0,
+          width,
+        ),
+      )
+    }
+  }
+  if (asked.length > 0) {
+    const { pending, none, other, kept } = decisionParts(asked)
+    blocks.push(
+      block(
+        'Decisions',
+        `${kept.length + other.length} of ${asked.length} answered`,
+        [
+          ...kept.map(one => ({ fill: STATUS.good, glyph: '✓', title: answerOf(one) })),
+          ...other.map(one => ({ fill: NEUTRAL, glyph: '≠', title: answerOf(one) })),
+          ...none.map(one => ({ fill: 'none', glyph: '–', title: answerOf(one) })),
+          ...pending.map(one => ({ fill: 'pending', glyph: '?', title: answerOf(one) })),
+        ],
+        [
+          ...(kept.length > 0 ? [{ fill: STATUS.good, text: `✓ ${kept.length} recommended kept` }] : []),
+          ...(other.length > 0 ? [{ fill: NEUTRAL, text: `≠ ${other.length} other choice` }] : []),
+          ...(none.length > 0 ? [{ fill: 'none', text: `– ${none.length} no answer` }] : []),
+          ...(pending.length > 0 ? [{ fill: 'pending', text: `? ${pending.length} pending` }] : []),
+        ],
+        isPair ? width + COLUMN_GAP : 0,
+        width,
+      ),
+    )
+  }
+  const height = Math.ceil(Math.max(...blocks.map(one => one.height)) + 4)
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_WIDTH}" height="${height}" viewBox="0 0 ${SVG_WIDTH} ${height}">${SVG_STYLE}${blocks.map(one => one.svg).join('')}</svg>`
+}
+
+export const specGaugeAlt = (asked: Decision[], doc: SpecDoc | null): string => {
+  const parts: string[] = []
+  if (doc !== null) {
+    const groups = bySeverity(doc.openQuestions).filter(group => group.items.length > 0)
+    parts.push(
+      doc.openQuestions.length === 0
+        ? 'no open question'
+        : `${counted(doc.openQuestions.length, 'open question')} (${groups.map(group => `${group.items.length} ${group.key}`).join(', ')})`,
+    )
+  }
+  if (asked.length > 0) {
+    const { pending, none, other, kept } = decisionParts(asked)
+    const split = [
+      kept.length > 0 ? `${kept.length} recommended kept` : '',
+      other.length > 0 ? `${other.length} other choice${other.length === 1 ? '' : 's'}` : '',
+      none.length > 0 ? `${none.length} without answer` : '',
+      pending.length > 0 ? `${pending.length} pending` : '',
+    ].filter(one => one !== '')
+    parts.push(`${counted(asked.length, 'decision')} (${split.join(', ')})`)
+  } else parts.push('no decision')
+  if (doc === null) parts.push('spec not written yet')
+  return `Spec state: ${parts.join(', ')}.`
+}
 
 const blockingCount = (questions: OpenQuestion[]): number => questions.filter(one => severityTone(one.severity) === 'error').length
 
@@ -318,6 +536,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
+    const Svg = e.surface === 'desktop' ? $.ui.resolve(e).Svg : undefined
     const state = await read($, tracked)
     const asked = await read($, decisions)
     const where: Navigation = { ...HOME, ...(await read($, nav)) }
@@ -382,8 +601,8 @@ export const register: Register = on => {
             )
           }),
           <Box key="d-answer" marginTop={1}>
-            <Text wrap="wrap" color={decision.isPending ? 'claude' : isOffRecommendation(decision) ? 'warning' : undefined}>
-              {decision.isPending ? 'Waiting for the answer…' : `Answer: ${decision.answer ?? '—'}`}
+            <Text wrap="wrap" color={decision.isPending ? 'claude' : isUnanswered(decision) ? 'inactive' : isOffRecommendation(decision) ? 'warning' : undefined}>
+              {decision.isPending ? 'Waiting for the answer…' : decision.answer === null ? 'No answer' : `Answer: ${decision.answer}`}
             </Text>
           </Box>,
           ...(decision.note === null ? [] : [<Text key="d-note" color="inactive" wrap="wrap">{`Note: ${decision.note}`}</Text>]),
@@ -462,12 +681,12 @@ export const register: Register = on => {
     const pending = asked.filter(one => one.isPending).length
     const decisionRows = asked.flatMap(decision =>
       entry('decision', decision.id, [
-        <Text key="mark" color={decision.isPending ? 'claude' : isOffRecommendation(decision) ? 'warning' : 'success'}>
-          {decision.isPending ? '? ' : isOffRecommendation(decision) ? '≠ ' : '✓ '}
+        <Text key="mark" color={decision.isPending ? 'claude' : isUnanswered(decision) ? 'inactive' : isOffRecommendation(decision) ? 'warning' : 'success'}>
+          {decision.isPending ? '? ' : isUnanswered(decision) ? '– ' : isOffRecommendation(decision) ? '≠ ' : '✓ '}
         </Text>,
         <Text key="text" wrap="truncate-end">
           {fit(
-            `${decision.header !== '' ? `${decision.header} · ` : ''}${decision.isPending ? decision.question : (decision.answer ?? '—')}`,
+            `${decision.header !== '' ? `${decision.header} · ` : ''}${decision.isPending ? decision.question : (decision.answer ?? 'no answer')}`,
             columns - 4,
           )}
         </Text>,
@@ -502,15 +721,22 @@ export const register: Register = on => {
           </Text>,
         ]),
       )
-    const sectionRows = (doc?.sections ?? []).flatMap(section =>
-      entry('section', section.number, [
+    const counts = Svg === undefined || doc === null ? {} : sectionCounts(doc)
+    const questionsAt = doc === null ? undefined : questionsSection(doc.sections)
+    const questionsTone = blockingCount(doc?.openQuestions ?? []) > 0 ? 'error' : 'warning'
+    const sectionRows = (doc?.sections ?? []).flatMap(section => {
+      const count = counts[section.number] ?? 0
+      const isQuestions = section === questionsAt
+      return entry('section', section.number, [
         <Text key="text" wrap="truncate-end">
-          {fit(`${section.number}. ${section.title}`, columns - 2)}
+          {fit(`${section.number}. ${section.title}`, columns - 2 - (count > 0 ? String(count).length + 2 : 0))}
         </Text>,
-      ]),
-    )
+        ...(count > 0 ? [<Text key="count" color={isQuestions ? questionsTone : 'inactive'}>{`  ${count}`}</Text>] : []),
+      ])
+    })
 
     const location = state.path === null ? 'waiting for the SPEC file…' : relativePath(state.path, root)
+    const gauge = Svg === undefined ? '' : specGauge(asked, doc)
     const freshness = state.readAt === null || at === 0 ? '' : ` · read ${ago(at - state.readAt)} ago`
 
     return (
@@ -521,6 +747,11 @@ export const register: Register = on => {
           {location}
           {freshness}
         </Text>
+        {Svg !== undefined && gauge !== '' && (
+          <Box key="gauge" marginTop={1}>
+            <Svg key="gauge-svg" source={gauge} alt={specGaugeAlt(asked, doc)} height={svgHeight(gauge)} isInteractive />
+          </Box>
+        )}
         {where.expanded.length > 0 && (
           <Box key="fold" height={1}>
             <Text>{'     '}</Text>
