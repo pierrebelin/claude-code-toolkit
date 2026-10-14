@@ -12,6 +12,8 @@
 #         "Rules changed" in its CHANGELOG section; same for the preset
 #         skills and "Skills changed" (both copied into repos by kit-init)
 #   TODO  a version committed but not tagged yet: `claude plugin tag --push <dir>`
+#   TODO  the kit's tag without its GitHub release (one per version, the mods
+#         share it): `gh release create cctoolkit--v<version>`; skipped without `gh`
 #   OK    otherwise
 # A version is released at its tag `<name>--v<version>`, or, before tags existed,
 # at the commit that introduced it. Exit 1 on any FAIL.
@@ -63,6 +65,9 @@ while IFS=$'\t' read -r name source; do
       fail=1
     elif ! git rev-parse -q --verify "refs/tags/$name--v$ver" >/dev/null; then
       echo "TODO  $name $ver: not tagged — claude plugin tag --push ${dir:-.}"
+    elif [ -z "$dir" ] && command -v gh >/dev/null && gh auth status >/dev/null 2>&1 \
+      && ! gh release view "$name--v$ver" >/dev/null 2>&1; then
+      echo "TODO  $name $ver: no GitHub release — gh release create $name--v$ver --verify-tag --title \"$name $ver\" (notes: its CHANGELOG section)"
     else
       echo "OK    $name $ver"
     fi
@@ -88,7 +93,8 @@ while IFS=$'\t' read -r name source; do
       fail=1; continue
     fi
   fi
-  echo "OK    $name $committed → $ver (pending: commit, then claude plugin tag --push ${dir:-.})"
+  next="claude plugin tag --push ${dir:-.}"; [ -z "$dir" ] && next="$next, then its GitHub release"
+  echo "OK    $name $committed → $ver (pending: commit, then $next)"
 done < <(jq -r '.plugins[] | [.name, .source] | @tsv' .claude-plugin/marketplace.json)
 
 exit $fail
