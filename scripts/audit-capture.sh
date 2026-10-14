@@ -15,26 +15,40 @@ set -uo pipefail
 # the diff makes it mandatory.
 #
 # Usage:
-#   cctoolkit audit-capture <batch> <sheet.md> <output> [--base <work>]
+#   cctoolkit audit-capture <batch> <sheet.md> <output> [--base <work>] [--suites-green <S1,S2>]
 #
 # --base: the run work file holding the `batch-baseline snapshot` of the batch. The diff
 # is then the batch's own, files the user had modified before the batch left out: a diff
 # three batches wide once reached the auditor at 6802 lines, truncated to 1200.
+#
+# --suites-green: the suites the global green ran green just before. Written as
+# `suites-green` beside the output, it lets lib/guard-auditor.sh refuse the
+# auditor a rerun of them while no source or test file changed (2026-10-14: about
+# 6 min of reruns in one audit).
 #
 # Example:
 #   cctoolkit audit-capture F1 todo/<feature>/PLAN-F1.md \
 #        "$SCRATCHPAD/audit-F1.txt"
 # ══════════════════════════════════════════════════════════════════════════════
 
-if [[ $# -ne 3 && ! ( $# -eq 5 && "$4" == "--base" ) ]]; then
-    echo "Usage: cctoolkit audit-capture <batch> <sheet.md> <output> [--base <work>]" >&2
+usage() {
+    echo "Usage: cctoolkit audit-capture <batch> <sheet.md> <output> [--base <work>] [--suites-green <S1,S2>]" >&2
     exit 2
-fi
-
+}
+[[ $# -ge 3 ]] || usage
 BATCH="$1"
 SHEET="$2"
 OUT="$3"
-BASE="${5:-}"
+shift 3
+BASE=""
+GREEN=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --base) [[ $# -ge 2 ]] || usage; BASE="$2"; shift 2 ;;
+        --suites-green) [[ $# -ge 2 ]] || usage; GREEN="$2"; shift 2 ;;
+        *) usage ;;
+    esac
+done
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # kit_config.py beside scripts/ (plugin, toolkit); under .claude/lib/ in a copy
 # predating the plugin, where scripts/ sat at the repo root.
@@ -59,6 +73,16 @@ read -ra CODE_DIRS <<<"$KIT_SOURCE_DIRS $KIT_TEST_DIRS"
 
 mkdir -p "$(dirname "$OUT")"
 : > "$OUT"
+
+MARKER="$(dirname "$OUT")/suites-green"
+rm -f "$MARKER"
+if [[ -n "$GREEN" ]]; then
+    VERB="$(python3 "$KIT_PY" command test X 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) { if ($i == "rtk") continue; if ($i ~ /^-|\//) break; v = v (v ? " " : "") $i } print v }')"
+    {
+        printf 'verb: %s\nroots: %s\n' "$VERB" "$KIT_SOURCE_DIRS $KIT_TEST_DIRS"
+        tr ',' '\n' <<<"$GREEN" | sed -n 's/^ *\([^ ]\{1,\}\) *$/suite: \1/p'
+    } >"$MARKER"
+fi
 
 # Bounded on purpose: this file is read by a model that pays for every line of
 # it on every later turn. A raw log has no place here.

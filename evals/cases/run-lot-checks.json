@@ -56,6 +56,14 @@
         "exit": 0,
         "stdout": "log: 1 wave(s), 1 behaviour(s), 1 already done;"
       }
+    },
+    {
+      "name": "run-lot flow: past 12 cycles one capture feeds the code and plan auditors in parallel, green suites marked",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js split | grep -E 'AGENTS|ERR|WARN|UNHANDLED' | sed 's/.*GREEN C13 B13 | //' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "suites | pre-audit | next batch review | capture | audit code | audit plan | next sheet | report;"
+      }
     }
   ]
 }

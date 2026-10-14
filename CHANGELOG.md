@@ -4,6 +4,15 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 1.9.4 — 2026-10-14
+
+- `cctoolkit`: the batch audit of `run-lot` is faster. Measured on a 27-cycle batch: 24 min of audit, 60 % of it lost.
+  - `ddd-tdd-auditor` runs at effort `medium` with 70 turns instead of `high` with 45: the first auditor ran out of turns without a verdict.
+  - Each auditor appends its findings to a notes file as it goes; the second attempt after an auditor without result starts from those notes instead of redoing the audit.
+  - Past 12 cycles, one capture feeds two auditors in parallel: code axes (Correctness, Reuse, Simplification, Cost, Placement, Comments) and plan axes (coverage, Test, Plan, Scope, validations). Their verdicts are merged.
+  - New Bash guard for the auditor only: no background command, no recursive `grep` (use `git grep`), no rerun of a suite the global green ran green while no source or test file changed since. `cctoolkit audit-capture` takes `--suites-green` to record those suites.
+- `cctoolkit`: a batch whose cycles each add an entry to one registry file no longer runs wave by wave. Registry entries (code constant, catalogue entry, enum member) join the declarative artefacts written once before the first RED; `cctoolkit sheet-cycles --index` refuses a production file in more than 3 cycles and says to move those entries. Measured on a 29-cycle batch: 23 cycles sharing one error-code file gave 27 waves of one cycle, 19 min of RED in sequence. An existing sheet the rule now refuses is redesigned by the run.
+
 ## 1.9.3 — 2026-10-14
 
 - `spec-pane`, `run-lot-pane`: in Claude Desktop's Code tab, the spec state summary and the timeline were drawn at about half their size, squeezed into a frame 300 px wide, with an empty band below them. The drawing now gets its own width and shows at full size.

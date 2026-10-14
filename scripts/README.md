@@ -16,7 +16,7 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | `migrate-anchors` | one-shot: appends the `<!-- kit:… -->` anchors to documents written before them — dry run by default, `--apply` writes |
 | `turn-batching-check` | tool-call batching, context fill per tool, `read-bounds` denials and forcings followed by an edit — main chain, then subagents (`<session>/subagents/`); `--save-baseline` / `--compare` |
 | `quality-report-check` | checks a `docs/metrics/quality-report-*` pair |
-| `audit-capture` | the deterministic audit material in one file, so `/verify-ddd-tdd` opens it once; `--base <work>` (the run work file) limits the diff to the batch's own files |
+| `audit-capture` | the deterministic audit material in one file, so `/verify-ddd-tdd` opens it once; `--base <work>` (the run work file) limits the diff to the batch's own files; `--suites-green <S1,S2>` writes the `suites-green` marker beside the output, read by `lib/guard-auditor.sh` |
 | `pre-audit` | the mechanical gate before `/verify-ddd-tdd` — red means no fork. Gate 8 (opt-in, `layout.sources.languageGuard`) lists French sentences added to production literals |
 | `access-cost` | awaited Infrastructure calls read off the syntax tree with ast-grep; C# only; `--base <work> FX` flags only the lines the batch added against `HEAD` |
 | `install-git-hooks` | links `settings.local.json` into new worktrees, for a plugin enabled at local scope |

@@ -12,8 +12,9 @@
 #   2. guard-cat-bounds  deny       -> terminal, an unbounded dump never reaches rtk
 #   3. guard-diff-bounds deny       -> terminal, a whole patch never reaches rtk either
 #   4. guard-integration deny       -> terminal, a whole IntegrationTests suite never runs
-#   5. piped-filter x2   rewrite    -> terminal, rtk knows neither of these tools
-#   6. rewrite-rtk       rewrite    -> the default path
+#   5. guard-auditor     deny       -> terminal, the batch auditor neither waits nor reruns
+#   6. piped-filter x2   rewrite    -> terminal, rtk knows neither of these tools
+#   7. rewrite-rtk       rewrite    -> the default path
 #
 # A module entry may carry an argument, which is why MODULES is an array and the
 # expansion below is deliberately unquoted: the strings are ours, not the user's.
@@ -43,15 +44,16 @@ HOOK_INPUT=$(cat)
 # each); the command is appended behind an RS (\x1e) instead, and split off on
 # the FIRST occurrence — the four metadata fields can hold neither separator.
 # -j, not -r: no trailing newline to strip, and none to inject into the command.
-PARSED=$(printf '%s' "$HOOK_INPUT" | jq -j '([(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.transcript_path // "")] | join("\u001f")) + "\u001e" + (.tool_input.command // "")')
+# agent_type and run_in_background ride along for guard-auditor (2026-10-14).
+PARSED=$(printf '%s' "$HOOK_INPUT" | jq -j '([(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.transcript_path // ""), (.agent_type // ""), (.tool_input.run_in_background // false | tostring)] | join("\u001f")) + "\u001e" + (.tool_input.command // "")')
 
-IFS=$'\x1f' read -r HOOK_TOOL_NAME HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH <<<"${PARSED%%$'\x1e'*}"
+IFS=$'\x1f' read -r HOOK_TOOL_NAME HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH HOOK_AGENT_TYPE HOOK_BACKGROUND <<<"${PARSED%%$'\x1e'*}"
 HOOK_CMD="${PARSED#*$'\x1e'}"
 
 [ "$HOOK_TOOL_NAME" = "Bash" ] || exit 0
 [ -n "$HOOK_CMD" ] || exit 0
 
-export HOOK_INPUT HOOK_CMD HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH
+export HOOK_INPUT HOOK_CMD HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH HOOK_AGENT_TYPE HOOK_BACKGROUND
 
 # Advisory, not a decision: it never denies and never rewrites, so it runs
 # outside the terminal chain and is merged into whatever that chain answers.
@@ -84,6 +86,7 @@ MODULES=(
   "guard-cat-bounds.sh"
   "guard-diff-bounds.sh"
   "guard-integration-filter.sh"
+  "guard-auditor.sh"
   "rewrite-piped-filter.sh graphify-query"
   "rewrite-piped-filter.sh git-grep"
   "rewrite-rtk.sh"

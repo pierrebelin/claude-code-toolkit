@@ -45,4 +45,4 @@ Paths are repo-relative and exact, copied from the sheet or the code — `sheet-
 
 ## Declarative artefacts
 
-The list and its limits: `common-rules.md` §4 point 5, that paragraph only. Listed in `declaratives` as `path — mirrors <existing file>; what it holds` (the enum member or discriminator the expected observation names included): the run writes them before the first RED. Nothing else goes there (no test, no signature stub).
+The list and its limits: `common-rules.md` §4 point 5, that paragraph only. Listed in `declaratives` as `path — mirrors <existing file>; what it holds` (the enum member or discriminator the expected observation names included): the run writes them before the first RED. A registry entry is one line per entry, `path — after <neighbour entry>; <name> = <value>`, and its file leaves the `production` of the cycles that only add it: `sheet-cycles --index` refuses a production file in more than 3 cycles. Nothing else goes there (no test, no signature stub).

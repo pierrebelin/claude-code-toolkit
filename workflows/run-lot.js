@@ -703,7 +703,7 @@ if (lotIndex.declaratives.length) {
       [
         FRAME,
         '',
-        'Write the declarative artefacts below before any RED, per `<kit>/skills/implement-tdd/references/common-rules.md` §4 point 5, that paragraph only: each mirrors the existing file it names; one already on disk with that content stays as is. No test, no signature stub, no logic.',
+        'Write the declarative artefacts below before any RED, per `<kit>/skills/implement-tdd/references/common-rules.md` §4 point 5, that paragraph only: each mirrors the existing file it names, a registry entry goes after the neighbour entry it names; one already on disk with that content stays as is. No test, no signature stub, no logic.',
         ...lotIndex.declaratives.map(d => `- ${d}`),
         'Then the solution build of `<kit>/skills/implement-tdd/references/test-scope.md` once: exit 0 → `ok: true`; otherwise fix what you wrote, at most twice, then `ok: false`, `detail` = the first error line.',
       ].join('\n') + suffix,
@@ -801,8 +801,22 @@ if (!gated || !gated.ok) toReview('Closing', `pre-audit not run, the audit judge
 else if (!gated.preauditGreen) toReview('Closing', `pre-audit RED, the audit judges it: ${gated.failures.join(' ; ')}`)
 
 const capture = `<tmp>/audit-${batch}.txt`
+const greenSuites = (history.suites?.suites ?? []).filter(x => x.exit === 0).map(x => x.name)
+const captureCommand = `cctoolkit audit-capture ${batch} ${sheet} "$(${tmpCommand})/audit-${batch}.txt" --base ${workFile}${greenSuites.length ? ` --suites-green ${greenSuites.join(',')}` : ''}`
 
-function audit(retry, again = false) {
+// A batch past SPLIT_CYCLES cycles is audited by two auditors in parallel, one per
+// group of axes, on one shared capture (2026-10-14: a 27-cycle batch, a 5584-line
+// diff, one auditor out of turns after 5.6 min, its retry 13.6 min).
+const SPLIT_CYCLES = 12
+const PARTS = [
+  { key: 'code', scope: 'Audit only the code axes of §2 — Correctness, Reuse, Simplification, Cost, Placement, Comments — over the production hunks of the diff. Coverage (§1.2), the Test, Plan and Scope axes and the validations (§3) belong to a second auditor running beside you: leave them out, `validations` empty.' },
+  { key: 'plan', scope: 'Audit only §1 (scope, id coverage, every hunk traced to an RM/CU or step) and the Test, Plan and Scope axes of §2, TDD evidence included, then the validations (§3). The code axes (Correctness, Reuse, Simplification, Cost, Placement, Comments) belong to a second auditor running beside you: read a production hunk only to trace it.' },
+]
+
+const notesOf = key => `<tmp>/audit-${batch}.${key}.notes.md`
+
+function audit(retry, again = false, part = null, captured = false) {
+  const notes = notesOf(part ? part.key : retry ? `resume-${retry.round}` : 'all')
   const previous = retry
     ? [
         '',
@@ -814,20 +828,26 @@ function audit(retry, again = false) {
     : ''
   const alreadyRun = retry
     ? '\nThe fix changed code after the global green and ran only filtered tests: run once, in a single message, the suites `<kit>/skills/implement-tdd/references/test-scope.md` requires for the whole batch diff.'
-    : [
-        '',
-        'Suites the global green ran after the last production change, the pre-audit gate touched no production code since: read these exit codes, never rerun them (verify-ddd-tdd §3); run only a suite missing here or scoped too narrowly for the diff.',
-        history.suites.suites.map(x => `- ${x.name} — exit ${x.exit}, scope ${x.scope}, ${x.count} tests`).join('\n'),
-      ].join('\n')
+    : part && part.key === 'code'
+      ? ''
+      : [
+          '',
+          'Suites the global green ran after the last production change, the pre-audit gate touched no production code since: read these exit codes, never rerun them (verify-ddd-tdd §3); a guard refuses the rerun. A scope you judge too narrow is a Test gap carrying the filtered command, the fix round runs it; run only a suite missing here.',
+          history.suites.suites.map(x => `- ${x.name} — exit ${x.exit}, scope ${x.scope}, ${x.count} tests`).join('\n'),
+        ].join('\n')
   return agent(
     [
       FRAME,
       '',
       `Read \`<kit>/skills/verify-ddd-tdd/SKILL.md\` and follow it as if the skill were invoked with the argument \`batch ${batch}${retry ? ' resume' : ''}\`, fast mode.`,
-      retry || again
-        ? `Capture: \`${capture}\` (to read), ${TMP}. Section ${batch} of the sheet: \`${sheet}\`.`
-        : `First run \`cctoolkit audit-capture ${batch} ${sheet} "$(${tmpCommand})/audit-${batch}.txt" --base ${workFile}\`, then read the capture \`${capture}\`, ${TMP}. Section ${batch} of the sheet: \`${sheet}\`.`,
-      again ? 'A previous attempt ended without structured output, most likely out of turns: the capture is written, never rerun it nor a suite it already holds; judge from it, then return the verdict at once.' : '',
+      retry || again || captured
+        ? `Capture: \`${capture}\` (to read, already written: never rerun it), ${TMP}. Section ${batch} of the sheet: \`${sheet}\`.`
+        : `First run \`${captureCommand}\`, then read the capture \`${capture}\`, ${TMP}. Section ${batch} of the sheet: \`${sheet}\`.`,
+      part ? part.scope : '',
+      again
+        ? `A previous attempt ended without structured output, most likely out of turns: the capture is written, never rerun it nor a suite it already holds. Read \`${notes}\` first: the findings and validations that attempt settled, never re-establish them; finish what they leave uncovered, then return the verdict at once.`
+        : `Notes: \`${notes}\`. Empty it first (\`: > <path>\`), then append each finding the moment you settle it, one line \`severity | axis | gap | evidence | fix\`, and each validation read or run. Your turns are bounded: these notes are what a second attempt starts from.`,
+      'Search with `git grep -n -e <pattern> -- <paths>`, never a recursive grep; every command in the foreground.',
       alreadyRun,
       history.toReview.length ? `Decisions the run took without the user, each listed for the user review after the plan — never a \`Plan\` gap for being absent from the sheet: ${history.toReview.map(x => `${x.step}: ${x.text}`).join(' ; ')}` : '',
       previous,
@@ -835,15 +855,41 @@ function audit(retry, again = false) {
       'Structured output: `block` = the markdown verdict block verbatim (fixed format of the skill), `gaps` = its Blocking/Major rows,',
       '`minors` = its minors one line each, `validations` = its Validations lines, `hypotheses` = the Hn.',
     ].join('\n'),
-    { agentType: 'cctoolkit:ddd-tdd-auditor', schema: VERDICT, phase: 'Audit', label: `${retry ? `audit retry ${retry.round}` : 'audit'}${again ? ' again' : ''}` },
+    { agentType: 'cctoolkit:ddd-tdd-auditor', schema: VERDICT, phase: 'Audit', label: `${retry ? `audit retry ${retry.round}` : 'audit'}${part ? ` ${part.key}` : ''}${again ? ' again' : ''}` },
   ).catch(() => null)
 }
 
-async function audited(retry) {
-  const verdict = await audit(retry)
+async function audited(retry, part = null, captured = false) {
+  const verdict = await audit(retry, false, part, captured)
   if (verdict) return verdict
-  log('audit without result — one more attempt on the same capture')
-  return audit(retry, true)
+  log(`audit${part ? ` ${part.key}` : ''} without result — one more attempt on the same capture`)
+  return audit(retry, true, part, captured)
+}
+
+function merged(verdicts) {
+  return {
+    verdict: verdicts.some(v => v.verdict === GAPS) ? GAPS : verdicts[0].verdict,
+    gaps: verdicts.flatMap(v => v.gaps),
+    minors: verdicts.flatMap(v => v.minors),
+    validations: verdicts.flatMap(v => v.validations),
+    hypotheses: verdicts.flatMap(v => v.hypotheses),
+    block: verdicts.map(v => v.block).join('\n\n'),
+  }
+}
+
+async function firstAudit() {
+  if (history.cycles.length < SPLIT_CYCLES) return audited(null)
+  const captured = await agent(
+    [FRAME, '', `Run \`${captureCommand}\` in the foreground, ${TMP}. Read nothing else. \`ok\` = exit 0, \`detail\` = on failure, its last 6 lines.`].join('\n'),
+    { schema: OK, phase: 'Audit', label: 'capture', model: 'haiku', effort: 'low' },
+  ).catch(() => null)
+  if (!captured || !captured.ok) {
+    log(`capture failed${captured ? ` — ${captured.detail || ''}` : ''}: one auditor captures and audits alone`)
+    return audited(null)
+  }
+  const parts = await parallel(PARTS.map(part => () => audited(null, part, true)))
+  if (parts.some(v => !v)) return null
+  return merged(parts)
 }
 
 function auditPending() {
@@ -899,7 +945,7 @@ function fixGaps(verdict, round) {
 const wrongProduction = v => v.gaps.some(g => g.severity === 'Blocking' && /correct/i.test(g.axis))
 
 phase('Audit')
-let verdict = await audited(null)
+let verdict = await firstAudit()
 if (!verdict) auditPending()
 else {
   history.verdicts.push(verdict)

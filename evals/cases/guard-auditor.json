@@ -1,0 +1,65 @@
+{
+  "fixtures": [
+    {"path": "suites-green", "kind": "text", "content": "verb: dotnet test\nroots: src tests\nsuite: UnitTests\nsuite: ContractTests\n"}
+  ],
+  "cases": [
+    {
+      "name": "auditor background command is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "a1", "agent_type": "cctoolkit:ddd-tdd-auditor", "transcript_path": "",
+        "tool_input": {"command": "ls", "run_in_background": true}},
+      "expect": {"decision": "deny", "reason": "Background command refused in the audit"}
+    },
+    {
+      "name": "auditor recursive grep through rtk proxy is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "a1", "agent_type": "cctoolkit:ddd-tdd-auditor", "transcript_path": "",
+        "tool_input": {"command": "rtk proxy grep -rn -e 'InvalidInput' src tests | cut -c1-220"}},
+      "expect": {"decision": "deny", "reason": "git grep -n"}
+    },
+    {
+      "name": "auditor git grep passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "a1", "agent_type": "cctoolkit:ddd-tdd-auditor", "transcript_path": "",
+        "tool_input": {"command": "git grep -n -e InvalidInput -- src tests"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "auditor grep on one file passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "a1", "agent_type": "cctoolkit:ddd-tdd-auditor", "transcript_path": "",
+        "tool_input": {"command": "grep -n 'Create(' src/Catalog/Product.cs"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "auditor rerun of a suite the global green ran is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"HOOK_SUITES_MARKER": "{{FIX}}/suites-green"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "a1", "agent_type": "cctoolkit:ddd-tdd-auditor", "transcript_path": "",
+        "tool_input": {"command": "dotnet test --project tests/{{PRODUCT}}.UnitTests/{{PRODUCT}}.UnitTests.csproj --no-build --no-restore --filter-class \"*.Catalog.*\""}},
+      "expect": {"decision": "deny", "reason": "already ran green"}
+    },
+    {
+      "name": "auditor run of a suite absent from the marker passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "env": {"HOOK_SUITES_MARKER": "{{FIX}}/suites-green"},
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "a1", "agent_type": "cctoolkit:ddd-tdd-auditor", "transcript_path": "",
+        "tool_input": {"command": "dotnet test --project tests/{{PRODUCT}}.DslTests/{{PRODUCT}}.DslTests.csproj --no-build --no-restore"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "other agent recursive grep passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "a2", "agent_type": "cctoolkit:tdd-implementer", "transcript_path": "",
+        "tool_input": {"command": "grep -rn Foo src"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "main thread background command passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "session_id": "{{SID}}", "agent_id": "", "transcript_path": "",
+        "tool_input": {"command": "ls", "run_in_background": true}},
+      "expect": {"decision": "not_deny"}
+    }
+  ]
+}

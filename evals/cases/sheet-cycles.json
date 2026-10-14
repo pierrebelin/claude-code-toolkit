@@ -89,6 +89,11 @@
       "path": "sc/st-other.jsonl",
       "kind": "text",
       "content": "{\"kind\":\"cycle\",\"batch\":\"F9\",\"slug\":\"une-creation-refusee\",\"state\":{\"behaviour\":\"Une création refusée\",\"red\":{\"status\":\"RED\",\"exit\":1,\"table\":[{\"test\":\"ATests.ShouldRefuse_WhenNameIsEmpty\",\"case\":\"c\"}]},\"green\":{\"status\":\"GREEN\",\"exit\":0}}}\n"
+    },
+    {
+      "path": "sc/registry.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Cas 1\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenCase1\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C2\", \"wave\": 2, \"behaviour\": \"Cas 2\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenCase2\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C3\", \"wave\": 3, \"behaviour\": \"Cas 3\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenCase3\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C4\", \"wave\": 4, \"behaviour\": \"Cas 4\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenCase4\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
     }
   ],
   "cases": [
@@ -249,6 +254,14 @@
       "expect": {
         "exit": 1,
         "stdout": "C1"
+      }
+    },
+    {
+      "name": "a production file in 4 cycles refused, registry entries pointed to declaratives",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/registry.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "in the `production` of 4 cycles (C1, C2, C3, C4), at most 3"
       }
     }
   ]

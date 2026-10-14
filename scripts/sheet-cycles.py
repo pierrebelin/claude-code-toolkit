@@ -61,6 +61,10 @@ INCOMPLETE_NAME = re.compile(r"…|\.\.\.|[<>{}*]|_$|_?When$")
 TO_CREATE = re.compile(r"to create|\bnew\b|à créer|a creer|nouveau|nouvelle", re.I)
 MAX_TEST_FILES = 4
 MAX_PRODUCTION_FILES = 8
+# A production file in more cycles than this serialises the batch: two cycles sharing
+# a file never share a wave. Measured 2026-10-14: 23 of 29 cycles adding their entry to
+# one error-code registry gave 27 waves of one cycle, 19 min of RED in sequence.
+MAX_CYCLES_PER_FILE = 3
 
 
 class Layout:
@@ -186,12 +190,20 @@ def validate(data, layout):
         if len(production) > MAX_PRODUCTION_FILES:
             errors.append(f"{where}: {len(production)} production files, at most {MAX_PRODUCTION_FILES} — split the cycle")
         by_wave.setdefault(c["wave"], []).append((c["id"], set(tests), production))
+    per_file = {}
+    for members in by_wave.values():
+        for cid, _, production in members:
+            for p in production:
+                per_file.setdefault(p, []).append(cid)
+    for p, ids in sorted(per_file.items()):
+        if len(ids) > MAX_CYCLES_PER_FILE:
+            errors.append(f"{p}: in the `production` of {len(ids)} cycles ({', '.join(ids)}), at most {MAX_CYCLES_PER_FILE} — it serialises them into successive waves. Registry entries (code constant, catalogue entry, enum member) go in `declaratives`, written once before the first RED, and leave `production`; a real change shared by these cycles groups them")
     for wave, members in sorted(by_wave.items()):
         for a in range(len(members)):
             for b in range(a + 1, len(members)):
                 shared = (members[a][1] & members[b][1]) | (members[a][2] & members[b][2])
                 if shared:
-                    errors.append(f"wave {wave}: {members[a][0]} and {members[b][0]} share {', '.join(sorted(shared))} — successive waves")
+                    errors.append(f"wave {wave}: {members[a][0]} and {members[b][0]} share {', '.join(sorted(shared))} — successive waves, or registry entries moved to `declaratives`")
     if "declaratives" in data and not isinstance(data["declaratives"], list):
         errors.append("`declaratives` must be a list")
     return errors

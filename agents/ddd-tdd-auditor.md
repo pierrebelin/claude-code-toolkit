@@ -7,8 +7,8 @@ tools:
   - Grep
   - Bash
 model: opus
-effort: high
-maxTurns: 45
+effort: medium
+maxTurns: 70
 ---
 
 # DDD + TDD auditor
