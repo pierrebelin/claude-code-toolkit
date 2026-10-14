@@ -157,6 +157,6 @@ export type Navigation = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'run-lot-pane': { runs: WorkflowRun[]; now: number; usage: SessionFigures; nav: Navigation; history: PhaseSamples }
+    'run-lot-pane': { runs: WorkflowRun[]; now: number; usage: SessionFigures; nav: Navigation; history: PhaseSamples; isShown: boolean }
   }
 }

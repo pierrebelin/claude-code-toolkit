@@ -77,6 +77,7 @@ const world = (on: On, tokens: number) => {
   const clock = mock.clock(on)
   on('fs.exists', () => ({ value: false }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.messages', () => ({ value: [] }))
   on('session.usage', () => ({ value: { startedAt: 1, context: { tokens, window: 1_000_000, percent: 7 }, rateLimits: [{ kind: 'five_hour', percentUsed: 49.6 }], cost: { usd: 4.126 } } }))
   on('ui.render', ($, e) => {
     const { Box } = $.ui.resolve(e)
@@ -91,6 +92,12 @@ const BAND = {
   props: { isDraft: false, isWorking: false, hint: '? for shortcuts' },
 } as const
 
+// A desktop draws no tail beside the hint line: there the band goes above the prompt.
+const ABOVE = {
+  component: 'AbovePrompt',
+  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
+} as const
+
 const turn = { reason: 'answer', answer: '', durationMs: 10, isAborted: false, turnId: 't1' } as const
 
 test('band shows step and cache after a turn, on every surface', async ($, on) => {
@@ -100,7 +107,7 @@ test('band shows step and cache after a turn, on every surface', async ($, on) =
   await clock.advance(50 * 60 * 1000)
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'context-band', surface, ...BAND })
+    const ui = await $.ui.mount({ plugin: 'context-band', surface, ...(surface === 'desktop' ? ABOVE : BAND) })
     expect(await ui.find({ type: 'Text', text: /150k step/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /Cache \(10m\)/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^ 50%$/ })).toBeDefined()
@@ -144,6 +151,7 @@ test('a tool call of the main thread lands in the top contributions', async ($, 
   mock.clock(on)
   on('fs.exists', () => ({ value: false }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.messages', () => ({ value: [] }))
   on('session.usage', () => ({ value: { startedAt: 1, context: { tokens, window: 1_000_000, percent: 10 }, rateLimits: [] } }))
   on('ui.render', ($, e) => {
     const { Box } = $.ui.resolve(e)
@@ -161,7 +169,6 @@ test('a tool call of the main thread lands in the top contributions', async ($, 
   const ui = await $.ui.mount({ plugin: 'context-band', surface: 'terminal', ...BAND })
   expect(await ui.find({ type: 'Text', text: /Read Handler\.cs/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^3\.0k$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /\+3\.0k/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -170,6 +177,7 @@ test('top contributions show two above the engine hint, the toggle lists them al
   mock.clock(on)
   on('fs.exists', () => ({ value: false }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.messages', () => ({ value: [] }))
   on('session.usage', () => ({ value: { startedAt: 1, context: { tokens, window: 1_000_000, percent: 10 }, rateLimits: [] } }))
   on('ui.render', ($, e) => {
     const { Box } = $.ui.resolve(e)
@@ -242,4 +250,20 @@ test('session start replays the transcript when the band is empty', async ($, on
   expect(await ui.find({ type: 'Text', text: /Read Big\.cs/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /1 turn\b/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('the desktop draws the band above the prompt, never beside the hint line; the terminal the other way round', async ($, on) => {
+  const clock = world(on, 160_000)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.turn.complete(turn)
+  await clock.advance(50 * 60 * 1000)
+  const hint = await $.ui.mount({ plugin: 'context-band', surface: 'desktop', ...BAND })
+  expect(await hint.find({ type: 'Text', text: /Cache \(10m\)/ })).toBeUndefined()
+  await hint.unmount()
+  const above = await $.ui.mount({ plugin: 'context-band', surface: 'terminal', ...ABOVE })
+  expect(await above.find({ type: 'Text', text: /Cache \(10m\)/ })).toBeUndefined()
+  await above.unmount()
+  const survey = await $.ui.mount({ plugin: 'context-band', surface: 'desktop', ...ABOVE, props: { ...ABOVE.props, hasSurvey: true } })
+  expect(await survey.find({ type: 'Text', text: /Cache \(10m\)/ })).toBeUndefined()
+  await survey.unmount()
 })

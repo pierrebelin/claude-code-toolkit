@@ -306,19 +306,36 @@ export const register: Register = on => {
     return result
   })
 
+  // The terminal draws the band beside the prompt's hint line; a desktop draws no tail there,
+  // so it goes into the band above the prompt, which the surface stacks plugin by plugin.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     const state = complete(await read($, band))
-    if (state.readings.length === 0) return next(e)
-
-    const hint = await next(e)
+    if (state.readings.length === 0 || e.surface === 'desktop') return next(e)
     const columns = e.viewport === undefined ? undefined : Math.max(0, e.viewport.columns - HINT_INDENT)
+    return contextView($, e, state, e.props.isWorking, columns, await next(e))
+  })
 
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const state = complete(await read($, band))
+    if (state.readings.length === 0 || e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
+    return contextView($, e, state, e.props.isWorking, e.props.bodyColumns, null)
+  })
+}
+
+async function contextView(
+  $: EngineInterface,
+  e: Parameters<EngineInterface['ui']['resolve']>[0],
+  state: Band,
+  isWorking: boolean,
+  columns: number | undefined,
+  below: JSX.Element | null,
+): Promise<JSX.Element> {
     const { Box, Button, Text } = $.ui.resolve(e)
     const at = await read($, now)
     const tokens = state.readings[state.readings.length - 1] ?? 0
     const percent = state.window > 0 ? Math.round((tokens * 100) / state.window) : null
     const color = tokenColor(tokens)
-    const cache = e.props.isWorking ? null : cacheState(state.lastTurnAt, at, tokens)
+    const cache = isWorking ? null : cacheState(state.lastTurnAt, at, tokens)
     const rebuilding = await read($, isRebuilding)
     const grouping = state.streak >= STREAK_SHOWN
     const limit = state.fiveHour
@@ -414,8 +431,7 @@ export const register: Register = on => {
             </Box>
           )}
         </Box>
-        {hint}
+        {below}
       </Box>
     )
-  })
 }

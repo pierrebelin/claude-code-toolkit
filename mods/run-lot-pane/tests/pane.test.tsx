@@ -611,6 +611,9 @@ const paneAt = (bodyColumns: number) => ({ ...PANE, props: { ...PANE.props, body
 
 type Finder = { find: (query: { key: string }) => Promise<{ children: unknown[] } | undefined> }
 
+// A desktop presses a row through its trailing ›: the row's text sits in a Box beside it.
+const pressType = (surface: 'terminal' | 'desktop') => (surface === 'desktop' ? 'Box' : 'Button')
+
 const colorOf = async (ui: Finder, key: string) =>
   ((await ui.find({ key }))?.children[0] as { props?: { color?: string } } | undefined)?.props?.color
 
@@ -671,10 +674,10 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
     expect(await ui.find({ type: 'Text', text: /^agents$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^time$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^cost$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', text: /⏺ Design/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', text: /[✢✳✶✻✽] RED(?! 1)/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', text: /[✢✳✶✻✽] RED 1 créer/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', text: /○ GREEN/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /⏺ Design/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽] RED(?! 1)/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽] RED 1 créer/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /○ GREEN/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /tdd-test-author/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /tdd-implementer, serial/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /comportements/ })).toBeUndefined()
@@ -843,17 +846,17 @@ test('running demo: columns, model, retry, slow agent, stalled, interrupted, est
     expect(await ui.find({ type: 'Text', text: /✻ run-lot · F4 · CAT-LIFECYCLE/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /running\s+12m40\s+6\/7 agents\s+ETA ~8m/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /━+─+\s+2\/8 phases/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', text: /GREEN X3 lock ↻ 2/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /GREEN X3 lock ↻ 2/ })).toBeDefined()
     expect((await ui.find({ key: 'model-demo-g1' }))?.text).toBe('Sonnet · high')
     expect(await colorOf(ui, 'agent-demo-g2b-time')).toBe('warning')
     expect(await colorOf(ui, 'agent-demo-g1-time')).toBe('inactive')
     expect(await ui.find({ type: 'Text', text: /^ {9}● thinking · 4.2k chars · 160 tok\/s · Edit \(48\) · ctx 36k · ⚠ 48 tools$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /tdd-implementer, ser/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^ {2}wave 1\/2$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', text: /○ Global green/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /○ Global green/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /whole or filtered suites/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', text: /○ Audit/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', text: /○ Report/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /○ Audit/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /○ Report/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /○ Audit · Review · Report/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /SHEET F4 · 2 hypotheses/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^2\/5 cycles$/ })).toBeDefined()
@@ -897,7 +900,7 @@ test('finished demo: verdict on the Audit row, outcome in a coloured box, slow a
     for (const line of wrapWords(DEMO_REASON, 53)) expect((await ui.find({ type: 'Text', text: line }))?.text).toBe(line)
     expect((await ui.find({ type: 'Text', text: /Report:/ }))?.text).toBe(`Report: ${DEMO_REPORT}`)
     expect(await colorOf(ui, 'agent-demo-g2b-time')).toBe('warning')
-    expect(await ui.find({ type: 'Button', text: /GREEN X3 lock ↻ 2/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /GREEN X3 lock ↻ 2/ })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: /^5\/5 cycles$/ }))?.props.color).toBe('success')
     expect(await ui.find({ type: 'Text', text: /○ Audit · Review · Report/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /ETA/ })).toBeUndefined()

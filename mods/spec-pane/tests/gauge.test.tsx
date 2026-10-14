@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import type { Decision, OpenQuestion, SpecDoc } from '../types'
-import { isUnanswered, parseSpec, questionsTone, sectionCounts, specGauge, specGaugeAlt, svgHeight } from '../hooks/register'
+import { isUnanswered, parseSpec, questionsTone, sectionCounts, specGauge, specGaugeAlt, svgHeight, svgWidth } from '../hooks/register'
 
 const GOOD = '#0ca30c'
 const WARNING = '#fab219'
@@ -199,11 +199,19 @@ const PANE = {
   props: { title: 'Spec', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
 
-const world = (on: On, files: Record<string, string>) => {
+const world = (on: On, files: Record<string, string>, opened = new Set<string>()) => {
   mock.clock(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.open', ($, e) => {
+    opened.add(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', ($, e) => {
+    opened.delete(e.id)
+    return { value: undefined }
+  })
+  on('ui.panes', () => ({ value: [...opened].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }))
   on('fs.read', ($, e) => (files[e.path] === undefined ? { deny: `ENOENT ${e.path}` } : { value: files[e.path] ?? '' }))
   on('fs.stat', ($, e) =>
     files[e.path] === undefined ? { deny: `ENOENT ${e.path}` } : { value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } },
@@ -245,6 +253,8 @@ test('the desktop draws the spec state once a decision is asked or the spec writ
   expect(svg?.props.alt).toBe('Spec state: 1 open question (1 blocking), 1 decision (1 recommended kept).')
   expect(svg?.props.isInteractive).toBe(true)
   expect(svg?.props.height).toBe(svgHeight(String(svg?.props.source)))
+  expect(svg?.props.width).toBe(svgWidth(String(svg?.props.source)))
+  expect(svg?.props.width).toBeGreaterThan(0)
   expect(await desktop.find({ type: 'Text', text: /CAT — Catalog/ })).toBeDefined()
   expect((await desktop.findAll({ type: 'Text', text: /^ {2}1$/ })).map(one => one.props.color)).toEqual(['inactive', 'error'])
   await desktop.unmount()
@@ -285,4 +295,35 @@ test('a decision closed without an answer reads "no answer" in grey, never a kep
   const desktop = await $.ui.mount({ plugin: 'spec-pane', surface: 'desktop', ...PANE })
   expect((await desktop.find({ type: 'Svg' }))?.props.alt).toBe('Spec state: 2 decisions (1 recommended kept, 1 without answer), spec not written yet.')
   await desktop.unmount()
+})
+
+const BAND = {
+  component: 'AbovePrompt',
+  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
+} as const
+
+test('a button above the prompt opens and closes the pane on the desktop, once a spec is followed; never on the terminal', async ($, on) => {
+  const open = new Set<string>()
+  world(on, { [PATH]: SPEC }, open)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const idle = await $.ui.mount({ plugin: 'spec-pane', surface: 'desktop', ...BAND })
+  expect(await idle.find({ key: 'toggle-spec-pane' })).toBeUndefined()
+  await idle.unmount()
+
+  await $.command.run({ command: 'spec-pane', args: 'todo/catalog/SPEC-catalog.md' } as Parameters<typeof $.command.run>[0])
+  const terminal = await $.ui.mount({ plugin: 'spec-pane', surface: 'terminal', ...BAND })
+  expect(await terminal.find({ key: 'toggle-spec-pane' })).toBeUndefined()
+  await terminal.unmount()
+
+  const band = await $.ui.mount({ plugin: 'spec-pane', surface: 'desktop', ...BAND })
+  const button = async () => (await band.find({ key: 'toggle-spec-pane' }))?.props
+  expect((await button())?.label).toBe('◫ Spec')
+  expect((await button())?.variant).toBe('primary')
+  await band.press({ key: 'toggle-spec-pane' })
+  expect(open.has('spec-pane')).toBe(false)
+  expect((await button())?.variant).toBe('secondary')
+  await band.press({ key: 'toggle-spec-pane' })
+  expect(open.has('spec-pane')).toBe(true)
+  expect((await button())?.variant).toBe('primary')
+  await band.unmount()
 })
