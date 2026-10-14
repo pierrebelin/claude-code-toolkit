@@ -2,13 +2,16 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import type { Decision, OpenQuestion, SpecDoc } from '../types'
-import { isUnanswered, parseSpec, sectionCounts, specGauge, specGaugeAlt, svgHeight } from '../hooks/register'
+import { isUnanswered, parseSpec, questionsTone, sectionCounts, specGauge, specGaugeAlt, svgHeight } from '../hooks/register'
 
 const GOOD = '#0ca30c'
 const WARNING = '#fab219'
-const SERIOUS = '#ec835a'
 const CRITICAL = '#d03b3b'
-const NEUTRAL = '#2a78d6'
+
+const squaresOf = (svg: string): string[] =>
+  [...svg.matchAll(/<rect (?:class="(pending|none)" )?x="[\d.]+" y="[\d.]+" width="1[78]" height="1[78]" rx="4"(?: fill="(#[0-9a-f]{6})")?\/><text[^>]*>([^<]+)<\/text>/g)].map(
+    found => `${found[2] ?? found[1]} ${found[3]}`,
+  )
 
 const titlesOf = (svg: string): string[] => [...svg.matchAll(/<title>([^<]*)<\/title>/g)].map(found => found[1] ?? '')
 
@@ -35,14 +38,13 @@ describe('spec gauge', () => {
     expect(specGauge([], null)).toBe('')
   })
 
-  test('one square per open question, ordered by severity, icon inside, the question on hover', () => {
+  test('one square per open question, ordered by severity, icon inside, in the colours of the list below, the question on hover', () => {
     const svg = specGauge(DECISIONS, docOf(QUESTIONS))
     expect(svg.startsWith('<svg')).toBe(true)
     expect(svg.endsWith('</svg>')).toBe(true)
     expect(svg).toContain('>Open questions</text>')
     expect(svg).toContain('>6 open</text>')
-    const squares = [...svg.matchAll(/<rect x="[\d.]+" y="[\d.]+" width="18" height="18" rx="4" fill="(#[0-9a-f]{6})"\/><text[^>]*>([^<]+)<\/text>/g)].map(found => `${found[1]} ${found[2]}`)
-    expect(squares.slice(0, 6)).toEqual([`${CRITICAL} ✖`, `${CRITICAL} ✖`, `${SERIOUS} ▲`, `${SERIOUS} ▲`, `${WARNING} ●`, `${WARNING} ●`])
+    expect(squaresOf(svg).slice(0, 6)).toEqual([`${CRITICAL} ✖`, `${CRITICAL} ✖`, `${WARNING} ▲`, `${WARNING} ▲`, 'none ●', 'none ●'])
     expect(svg).toContain('✖ 2 blocking')
     expect(svg).toContain('▲ 2 major')
     expect(svg).toContain('● 2 other')
@@ -51,12 +53,11 @@ describe('spec gauge', () => {
     expect(titles).toContain('Q6 · major&#10;Q6?')
   })
 
-  test('one square per decision: recommended kept, other choice, pending; question and answer on hover', () => {
+  test('one square per decision: recommended kept, other choice, pending, in the colours of the list below; question and answer on hover', () => {
     const svg = specGauge(DECISIONS, docOf(QUESTIONS))
     expect(svg).toContain('>Decisions</text>')
     expect(svg).toContain('>4 of 5 answered</text>')
-    const squares = [...svg.matchAll(/<rect (?:class="pending" )?x="[\d.]+" y="[\d.]+" width="1[78]" height="1[78]" rx="4"(?: fill="(#[0-9a-f]{6})")?\/><text[^>]*>([^<]+)<\/text>/g)].map(found => `${found[1] ?? 'none'} ${found[2]}`)
-    expect(squares.slice(6)).toEqual([`${GOOD} ✓`, `${GOOD} ✓`, `${GOOD} ✓`, `${NEUTRAL} ≠`, 'none ?'])
+    expect(squaresOf(svg).slice(6)).toEqual([`${GOOD} ✓`, `${GOOD} ✓`, `${GOOD} ✓`, `${WARNING} ≠`, 'pending ?'])
     expect(svg).toContain('✓ 3 recommended kept')
     expect(svg).toContain('≠ 1 other choice')
     expect(svg).toContain('? 1 pending')
@@ -133,7 +134,11 @@ describe('spec gauge', () => {
     const many = Array.from({ length: 40 }, (_, index) => question(`Q${index + 1}`, 'Major'))
     const tops = new Set([...specGauge([], docOf(many)).matchAll(/<rect x="[\d.]+" y="([\d.]+)" width="18"/g)].map(found => found[1]))
     expect(tops.size).toBe(2)
-    const half = new Set([...specGauge(DECISIONS, docOf(many.slice(0, 13))).matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="18"[^>]*fill="#ec835a"/g)].map(found => found[2]))
+    const half = new Set(
+      [...specGauge(DECISIONS, docOf(many.slice(0, 13))).matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="18"[^>]*fill="#fab219"/g)]
+        .filter(found => Number(found[1]) < 268)
+        .map(found => found[2]),
+    )
     expect(half.size).toBe(2)
   })
 
@@ -164,6 +169,12 @@ describe('sommaire counts', () => {
   test('each section counts its use cases, rules or open questions', () => {
     const doc = parseSpec(SPEC)
     expect(sectionCounts(doc)).toEqual({ '4': 1, '12': 1 })
+  })
+
+  test('the open questions count takes the tone of the most severe question, as the list does', () => {
+    expect(questionsTone(QUESTIONS)).toBe('error')
+    expect(questionsTone([question('Q1', 'Majeur'), question('Q2', '')])).toBe('warning')
+    expect(questionsTone([question('Q1', 'Mineur'), question('Q2', '')])).toBe('inactive')
   })
 })
 

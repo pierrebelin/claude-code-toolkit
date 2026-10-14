@@ -226,9 +226,8 @@ const CELL = 18
 const CELL_GAP = 3
 const COLUMN_GAP = 24
 const LEGEND_CHAR_PX = 6.2
-const NEUTRAL = '#2a78d6'
 const CELL_INK = '#0b0b0b'
-const STATUS = { good: '#0ca30c', warning: '#fab219', serious: '#ec835a', critical: '#d03b3b' } as const
+const STATUS = { good: '#0ca30c', warning: '#fab219', critical: '#d03b3b' } as const
 const SVG_STYLE =
   '<style>text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif}.ink{fill:#52514e}.head{fill:#52514e;font-weight:600}.muted{fill:#52514e;opacity:.7}' +
   '.pending{fill:none;stroke:#52514e;stroke-dasharray:3 2}.none{fill:#c3c2b7}.glyph{font-size:10px;font-weight:600}' +
@@ -299,10 +298,10 @@ const legend = (items: { fill: Paint; text: string }[], left: number, y: number,
 
 type Severity = 'blocking' | 'major' | 'other'
 
-const SEVERITIES: { key: Severity; icon: string; fill: string }[] = [
+const SEVERITIES: { key: Severity; icon: string; fill: Paint }[] = [
   { key: 'blocking', icon: '✖', fill: STATUS.critical },
-  { key: 'major', icon: '▲', fill: STATUS.serious },
-  { key: 'other', icon: '●', fill: STATUS.warning },
+  { key: 'major', icon: '▲', fill: STATUS.warning },
+  { key: 'other', icon: '●', fill: 'none' },
 ]
 
 const severityOf = (question: OpenQuestion): Severity => {
@@ -382,13 +381,13 @@ export const specGauge = (asked: Decision[], doc: SpecDoc | null): string => {
         `${kept.length + other.length} of ${asked.length} answered`,
         [
           ...kept.map(one => ({ fill: STATUS.good, glyph: '✓', title: answerOf(one) })),
-          ...other.map(one => ({ fill: NEUTRAL, glyph: '≠', title: answerOf(one) })),
+          ...other.map(one => ({ fill: STATUS.warning, glyph: '≠', title: answerOf(one) })),
           ...none.map(one => ({ fill: 'none', glyph: '–', title: answerOf(one) })),
           ...pending.map(one => ({ fill: 'pending', glyph: '?', title: answerOf(one) })),
         ],
         [
           ...(kept.length > 0 ? [{ fill: STATUS.good, text: `✓ ${kept.length} recommended kept` }] : []),
-          ...(other.length > 0 ? [{ fill: NEUTRAL, text: `≠ ${other.length} other choice` }] : []),
+          ...(other.length > 0 ? [{ fill: STATUS.warning, text: `≠ ${other.length} other choice` }] : []),
           ...(none.length > 0 ? [{ fill: 'none', text: `– ${none.length} no answer` }] : []),
           ...(pending.length > 0 ? [{ fill: 'pending', text: `? ${pending.length} pending` }] : []),
         ],
@@ -426,6 +425,11 @@ export const specGaugeAlt = (asked: Decision[], doc: SpecDoc | null): string => 
 }
 
 const blockingCount = (questions: OpenQuestion[]): number => questions.filter(one => severityTone(one.severity) === 'error').length
+
+export const questionsTone = (questions: OpenQuestion[]): 'error' | 'warning' | 'inactive' => {
+  const tones = questions.map(one => severityTone(one.severity))
+  return tones.includes('error') ? 'error' : tones.includes('warning') ? 'warning' : 'inactive'
+}
 
 async function openPane($: EngineInterface): Promise<void> {
   await $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
@@ -723,7 +727,7 @@ export const register: Register = on => {
       )
     const counts = Svg === undefined || doc === null ? {} : sectionCounts(doc)
     const questionsAt = doc === null ? undefined : questionsSection(doc.sections)
-    const questionsTone = blockingCount(doc?.openQuestions ?? []) > 0 ? 'error' : 'warning'
+    const countTone = questionsTone(doc?.openQuestions ?? [])
     const sectionRows = (doc?.sections ?? []).flatMap(section => {
       const count = counts[section.number] ?? 0
       const isQuestions = section === questionsAt
@@ -731,7 +735,7 @@ export const register: Register = on => {
         <Text key="text" wrap="truncate-end">
           {fit(`${section.number}. ${section.title}`, columns - 2 - (count > 0 ? String(count).length + 2 : 0))}
         </Text>,
-        ...(count > 0 ? [<Text key="count" color={isQuestions ? questionsTone : 'inactive'}>{`  ${count}`}</Text>] : []),
+        ...(count > 0 ? [<Text key="count" color={isQuestions ? countTone : 'inactive'}>{`  ${count}`}</Text>] : []),
       ])
     })
 
