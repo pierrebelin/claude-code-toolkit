@@ -144,7 +144,7 @@ export type SessionFigures = {
   cost: number | null
 }
 
-export type Screen = 'run' | 'phase' | 'agent'
+export type Screen = 'run' | 'phase' | 'agent' | 'timeline'
 
 export type Navigation = {
   screen: Screen
