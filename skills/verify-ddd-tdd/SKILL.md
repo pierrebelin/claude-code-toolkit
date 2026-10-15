@@ -18,7 +18,7 @@ $ARGUMENTS
 
 - **Fast**, default: global plan + batch sheet, DDD/APP/PERF coverage, applied ids, diff, modified files, targeted tests.
 - **Full**, with `full` in argument: widens to touched boundaries, adds whole fast suites (§3.4). Never the whole `IntegrationTests` suite.
-- **Resume**, with `resume`: re-audit after correction. Scope = previous verdict's deviation table + diff since, both supplied by the caller. Re-judge only the axes and suites those deviations reach; nothing already verdicted is re-established.
+- **Resume**, with `resume`: re-audit after correction. Scope = previous verdict's deviation table + diff since, both supplied by the caller. Re-judge only the axes and suites those deviations reach; nothing already verdicted is re-established. A gap the correction contested gets its answer (§ Contested findings).
 
 Coverage: read the compact indexes `ddd-rules.md` + `architecture-rules.md` (under 6 kB), then the lines of the ids the sheet applies. `ddd-examples.md` only if an id stays ambiguous.
 
@@ -108,16 +108,27 @@ Not run: `[suite]` — `[reason]`
 ```markdown
 ## Verdict — GAPS
 
-| Severity | Axis | Gap | Evidence | Expected fix |
-|----------|------|-----|----------|--------------|
-| Blocking | Correctness | Unhandled absence: `inputs X → wrong behaviour Y` | `path:line` | Handle the missing case in the aggregate |
-| Blocking | Test | Spy in a handler test | `path:line` | Assert the result or SavedEvents depending on the handler type |
-| Major | Reuse | Second type of the same shape as the existing one | `path:line` | Rename and extend `path:line` |
-| Major | Cost | (worsened) Second repository call in a pre-existing loop | `path:line` | Remove the call the batch added |
-| Major | Plan | Stale plan: an RM moves, the sheet and the spec still state the old one | `path:line` | Update the sheet, and the spec if an RM moves |
-| Major | Scope | Hunk with no RM/CU nor owning step | `path:line` | Revert the hunk, or tie it to a step of the sheet |
+| Severity | Axis | Gap | Evidence | Closure | Expected fix |
+|----------|------|-----|----------|---------|--------------|
+| Blocking | Correctness | Unhandled absence: `inputs X → wrong behaviour Y` | `path:line` | `inputs X` → `outcome Z`, a test proving it | Handle the missing case in the aggregate |
+| Blocking | Test | Spy in a handler test | `path:line` | No interaction assertion left in the test | Assert the result or SavedEvents depending on the handler type |
+| Major | Reuse | Second type of the same shape as the existing one | `path:line` | One type of that shape | Rename and extend `path:line` |
+| Major | Cost | (worsened) Second repository call in a pre-existing loop | `path:line` | The batch adds no call inside the loop | Remove the call the batch added |
+| Major | Plan | Stale plan: an RM moves, the sheet and the spec still state the old one | `path:line` | Sheet and spec state the delivered RM | Update the sheet, and the spec if an RM moves |
+| Major | Scope | Hunk with no RM/CU nor owning step | `path:line` | Every hunk traced | Revert the hunk, or tie it to a step of the sheet |
 
 Validations: `[command]` — exit N, scope `[filter or "whole suite"]` / not run
 ```
+
+`Closure` = the observable state that closes the gap, checkable by reading the code or running a test; `Expected fix` is one way to reach it, never an order.
+
+## Contested findings
+
+The correction may contest a gap instead of applying it, only by naming a concrete harm its closure would do: a behaviour it breaks, an invariant it violates, a cost it adds. "Complex", "out of scope", "not needed" open no contest: the gap is applied and the objection recorded. The resume audit answers each contest once, never by repeating the gap:
+
+- **Accept** — the harm holds and outweighs the gap: the finding closes, the trade-off goes to the user's review.
+- **Counter** — another closure reaches the gap without the harm: state it; the next round applies it.
+- **Refute** — the harm does not hold: why, with evidence `path:line`; the next round applies the gap.
+- **Escalate** — both readings hold and the choice is the user's: it goes to the user's review, nothing waits on it.
 
 Fix nothing here; fixing belongs to `/implement-tdd`.

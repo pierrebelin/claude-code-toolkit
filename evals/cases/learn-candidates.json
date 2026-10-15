@@ -390,6 +390,14 @@
         "exit": 0,
         "stdout": "fix: one read · batch product-archiving F2"
       }
+    },
+    {
+      "name": "GAPS table with the Closure column: evidence and fix read from their own cells; a table without it unchanged; a report line ending in Closure parsed",
+      "cmd": "python3 -c \"import importlib.util,sys; s=importlib.util.spec_from_file_location('lc', sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); new='| Severity | Axis | Gap | Evidence | Closure | Expected fix |\\n|---|---|---|---|---|---|\\n| Major | Reuse | Twin type | \\\\x60a.cs:1\\\\x60 | one type | rename |'; old='| Major | Reuse | Twin type | \\\\x60a.cs:1\\\\x60 | rename |'; r1=list(m.rows_of(new))[0]; r2=list(m.rows_of(old))[0]; print(r1[3], r1[4], r1[5], '/', r2[3], r2[4], r2[5], '/', bool(m.REPORT_GAP.match('- Major — Reuse — Twin type (evidence: a.cs:1). Fix: rename; not applied. Closure: one type.')))\" {{KIT}}/scripts/learn-candidates.py",
+      "expect": {
+        "exit": 0,
+        "stdout": "Twin type `a.cs:1` rename / Twin type `a.cs:1` rename / True"
+      }
     }
   ]
 }

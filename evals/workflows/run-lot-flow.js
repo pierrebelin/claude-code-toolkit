@@ -3,16 +3,32 @@
 // unreachable method is listed for review instead of retried, the audit is handed the run's decisions,
 // the next sheet is reviewed beside the audit, never designed by this batch; past 12 cycles one capture
 // feeds two auditors in parallel, the green suites marked for the rerun guard.
-// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split
+// contest: the fix contests a gap with a named harm and another without; the resume audit first forgets to
+// answer (audited again), then Accepts — the gap closes, its trade-off listed; refute: the audit Refutes, round 2 fixes.
+// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|contest|refute
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
 const variant = process.argv[3] || 'block'
 const labels = []
+let audits = 0
+const GAPV = { verdict: 'GAPS', gaps: [{ severity: 'Major', axis: 'Reuse', gap: 'Second type of the same shape', evidence: 'src/X.cs:3', closure: 'one type left', fix: 'rename' }, { severity: 'Major', axis: 'Scope', gap: 'Hunk outside the batch', evidence: 'src/Y.cs:1', closure: 'hunk gone', fix: 'revert' }], minors: [], validations: [], hypotheses: [], block: '## Verdict — GAPS' }
 const cyc = (id, wave, b) => ({ id, wave, behaviour: b, rmcu: 'RM-01', steps: ['1. Step'], refactor: false, guard: false, methods: ['A.ShouldX_WhenY', 'A.ShouldDead_WhenZ'], decisions: '' })
 const idx = { ok: true, missing: false, errors: [], declaratives: variant === 'block' ? ['src/X.cs — mirrors Y'] : [], cycles: variant === 'split' ? Array.from({ length: 13 }, (_, i) => cyc(`C${i + 1}`, 1, `B${i + 1}`)) : [cyc('C1', 1, 'One'), cyc('C2', 2, 'Two')] }
 const agent = async (prompt, o) => {
   labels.push(o.label)
   const l = o.label
+  if (['contest', 'refute'].includes(variant) && l.startsWith('audit')) {
+    audits += 1
+    if (audits === 1) return GAPV
+    if (audits === 2 && !prompt.includes('Second type of the same shape — harm: breaks the Catalog mapping')) console.log('WARN contest not handed to the resume audit')
+    if (variant === 'refute' && audits === 2) return { ...GAPV, gaps: [GAPV.gaps[0]], responses: [{ gap: 'Second type of the same shape', answer: 'Refute', text: 'mapping reads the old type only' }] }
+    if (variant === 'contest' && audits === 2) return { ...GAPV, gaps: [GAPV.gaps[0]], responses: [] }
+    return { verdict: 'VALID', gaps: variant === 'contest' ? [GAPV.gaps[0]] : [], minors: [], validations: [], hypotheses: [], block: '## Verdict', responses: [{ gap: 'Second type of the same shape', answer: 'Accept', text: 'two types kept, mapping untouched' }] }
+  }
+  if (l.startsWith('fix ')) {
+    if (variant === 'refute' && l === 'fix 2' && !prompt.includes('Refute: mapping reads the old type only')) console.log('WARN rebuttal not handed to round 2')
+    return { fixed: ['x'], files: ['src/X.cs'], validations: [], contested: l === 'fix 1' ? [{ gap: 'Second type of the same shape', harm: 'breaks the Catalog mapping' }, { gap: 'Hunk outside the batch', harm: '' }] : [], objections: [] }
+  }
   if (l === 'resume state' && !prompt.includes('cctoolkit batch-baseline snapshot todo/x/run/.work.jsonl F3')) console.log('WARN no batch snapshot')
   if (l === 'resume state' && !prompt.includes('--states todo/x/run/.work.jsonl')) console.log('WARN saved states not read through sheet-cycles --states')
   if (l === 'resume state') return { cycles: variant === 'resume' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { status: 'RED', exit: 1, table: [{ test: 'A.ShouldX_WhenY', case: '' }], tests: [], stubs: [], productionDiff: [], removed: [], expectedFailure: '', command: 'x' }, green: { status: 'GREEN', exit: 0 } }] : [], index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : idx, nextSheet: 'todo/x/X-PLAN-F4.md' }
@@ -33,5 +49,5 @@ const agent = async (prompt, o) => {
 }
 const fn = new (Object.getPrototypeOf(async function () {}).constructor)('args', 'agent', 'log', 'phase', 'parallel', 'workflow', src)
 fn('todo/x/X-PLAN-F3.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), async () => null)
-  .then(r => { console.log('STATUS', r.status, '| toReview', r.toReview.length, r.toReview.map(x => x.step).join(',')); console.log('AGENTS', labels.join(' | ')) })
+  .then(r => { console.log('STATUS', r.status, '| toReview', r.toReview.length, r.toReview.map(x => x.step).join(',') + (audits ? ` | audits ${audits}` : '')); if (variant === 'contest' || variant === 'refute') console.log('REVIEW', r.toReview.filter(x => x.step === 'Audit').map(x => x.text.slice(0, 40)).join(' ; ')); console.log('AGENTS', labels.join(' | ')) })
   .catch(e => { console.log('ERR', e.stack); process.exitCode = 1 })

@@ -69,9 +69,9 @@ INDEX_LINK = re.compile(r"^\s*-\s*\[[^\]]*\]\(([^)]+)\)")
 REPO_PATH = re.compile(r"^[\w.@-]+(/[\w.@-]+)+/?$")
 VERDICT = re.compile(r"^## Verdict — (?:GAPS|ECARTS)", re.M)
 AUDIT_GAPS = ("## audit gaps", "## ecarts d'audit")
-# `- <severity> — <axis> — <gap> (evidence: <evidence>). Fix: <fix>; applied in round n: … .`
+# `- <severity> — <axis> — <gap> (evidence: <evidence>). Fix: <fix>; applied in round n: … .[ Closure: <closure>.]`
 # or `; not applied.` — the line renderReport() of workflows/run-lot.js writes.
-REPORT_GAP = re.compile(r"^- (\w+) — ([^—]+?) — (.*) \(evidence: (.*)\)\. Fix: (.*?)(?:; applied in round \d+: .*|; not applied)\.$")
+REPORT_GAP = re.compile(r"^- (\w+) — ([^—]+?) — (.*) \(evidence: (.*)\)\. Fix: (.*?)(?:; applied in round \d+: .*?|; not applied)\.(?: Closure: .*\.)?$")
 AUDITORS = {"ddd-tdd-auditor", "fork"}
 # Severities and axes in both vocabularies, folded onto the English ones; French
 # verdicts and state files predate the translation and stay readable.
@@ -165,12 +165,22 @@ def axis(label):
     return axis_pair(label)[0]
 
 
+CLOSURE = ("closure", "fermeture")
+
+
 def rows_of(text):
+    """Rows of a GAPS table: Severity, Axis, Gap, Evidence, [Closure,] Expected fix — the
+    header row says whether `Closure` is there (verdicts before 1.12.0 carry none)."""
+    closure = False
     for line in text.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) >= 5 and cells[0] in SEVERITIES:
+        if any(fold(c) in CLOSURE for c in cells):
+            closure = True
+            continue
+        tail = 3 if closure else 2
+        if len(cells) >= 3 + tail and cells[0] in SEVERITIES:
             english, written = axis_pair(cells[1])
-            yield SEVERITIES[cells[0]], english, written, " | ".join(cells[2:-2]), cells[-2], cells[-1]
+            yield SEVERITIES[cells[0]], english, written, " | ".join(cells[2:-tail]), cells[-tail], cells[-1]
 
 
 def same_gap(axis_, gap):

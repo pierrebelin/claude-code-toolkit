@@ -64,6 +64,22 @@
         "exit": 0,
         "stdout": "suites | pre-audit | next batch review | capture | audit code | audit plan | next sheet | report;"
       }
+    },
+    {
+      "name": "run-lot flow: a contest with a named harm reaches the resume audit, a contest without harm is no contest, a missing response is audited again, Accept closes the gap and lists its trade-off",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js contest | grep -E 'STATUS|REVIEW|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Audit | audits 3;REVIEW contest accepted, trade-off (round 1): S;"
+      }
+    },
+    {
+      "name": "run-lot flow: a Refute keeps the gap open and its text reaches the round 2 fix",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js refute | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 3;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites | pre-audit | next batch review | audit | fix 1 | audit retry 1 | fix 2 | audit retry 2 | next sheet | report;"
+      }
     }
   ]
 }

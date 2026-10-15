@@ -49,7 +49,7 @@ English, verbatim, whatever `language`.
 | Frozen literal | Parsed by |
 |---|---|
 | The rule tag's value `{HandlerFolder}/{RM\|RL-xx}`, and each carrier of `lib/kit_testtag.py`: xUnit `[Trait("RM", "…")]`, pytest `@pytest.mark.rm("…")`, JUnit `@Tag("RM:…")`, Jest `[RM …]` in a title | `lib/kit_testtag.py`, read by `hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`, `scripts/untagged-tests.py`, `scripts/pre-audit.sh` |
-| `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Comments`/`Test`/`Plan`/`Scope` | `/verify-ddd-tdd` verdict format, `scripts/learn-candidates.py` |
+| `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Comments`/`Test`/`Plan`/`Scope`; GAPS columns `Severity`/`Axis`/`Gap`/`Evidence`/`Closure`/`Expected fix` (a table without `Closure` is read too); contest answers `Accept`/`Counter`/`Refute`/`Escalate` | `/verify-ddd-tdd` verdict format, `scripts/learn-candidates.py`, `run-lot` (answers) |
 | `## RED`, `## GREEN`, `## BLOCKED` and their fields | `tdd-test-author` / `tdd-implementer` reports, `run-lot`, `hooks/subagent-report-shape.sh` |
 | `Test files you may modify, granted: <paths>.` in a GREEN prompt; reasons opening a `BLOCKED` diagnostic `tests modified at GREEN: <paths> — granted: <paths>`, `RED on stub: <marker> in <methods>` | written by `run-lot` (grant) and `lib/tdd_scope.py` (reasons); read by `lib/tdd_scope.py` (grant) and `run-lot` `checkRed`/`checkGreen`/`decide` (reasons) |
 | `→ Batch FX complete — manual validation required` — the closing line | `hooks/implement-tdd-guard.sh` |
@@ -71,6 +71,7 @@ A repo that started in French keeps its deliverables as they are: specs, plans a
 | `## STATUS — DONE\|BLOCKED\|GAPS`, `Verdict:`, `Reason:`, `## To validate` | `## STATUT — TERMINÉ\|BLOQUÉ\|ECARTS`, `Verdict :`, `Raison :`, `## À valider` |
 | `Verdict:` values `VALID`, `GAPS`, `GAPS carried`, `to redo`, `none` | `VALIDE`, `ECARTS`, `ECARTS reportés`, `à refaire`, `aucun` |
 | `user decision to validate`, `user decision` | `décision user à valider`, `décision utilisateur` |
+| GAPS column `Closure` | `Fermeture` |
 | `## Verdict — VALID\|GAPS`; severities `Blocking`/`Major`/`Minor`; axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Comments`/`Test`/`Plan`/`Scope`; class `Worsened` | `## Verdict — VALIDE\|ECARTS`; `Bloquant`/`Majeur`/`Mineur`; `Correction`/`Réutilisation`/`Simplification`/`Coût`/`Placement`/`Commentaires`/`Test`/`Plan`/`Périmètre`; `Aggravé` |
 | `## RED`, `## GREEN`, `## BLOCKED` | `## RED`, `## GREEN`, `## BLOQUÉ` |
 | `## RED` fields `Tests`, `Command`, `Production diff`, `Expected failure`, `Case covered`; `## GREEN` fields `Production`, `Command`, `Tests diff`, `Cost`, `Deleted at REFACTOR`, `Reported without fixing`; `exit N` on the `Command` line; the `Cost` line's `Infrastructure in loop or in-memory filter: none` | `Tests`, `Commande`, `Diff production`, `Échec attendu`, `Cas couvert`; `Production`, `Commande`, `Diff tests`, `Coût`, `Supprimé au REFACTOR`, `Signalé sans correction`; `exit N`; `Infrastructure en boucle ou filtre mémoire : aucun` |

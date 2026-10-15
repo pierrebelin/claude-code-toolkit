@@ -99,7 +99,8 @@ const SUITES = obj({
 
 const CLOSING = obj({ ok: bool, files: arr(str), preauditGreen: bool, failures: arr(str), diagnostic: str }, ['diagnostic'])
 
-const GAP = obj({ severity: { type: 'string', enum: ['Blocking', 'Major', 'Minor'] }, axis: str, gap: str, evidence: str, fix: str })
+const GAP = obj({ severity: { type: 'string', enum: ['Blocking', 'Major', 'Minor'] }, axis: str, gap: str, evidence: str, closure: str, fix: str })
+const ANSWERS = ['Accept', 'Counter', 'Refute', 'Escalate']
 
 const VERDICT = obj({
   verdict: { type: 'string', enum: ['VALID', 'GAPS'] },
@@ -108,9 +109,10 @@ const VERDICT = obj({
   validations: arr(str),
   hypotheses: arr(str),
   block: str,
-})
+  responses: arr(obj({ gap: str, answer: { type: 'string', enum: ANSWERS }, text: str })),
+}, ['responses'])
 
-const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str) })
+const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str), contested: arr(obj({ gap: str, harm: str })), objections: arr(str) })
 
 const REVIEW = obj({
   result: { type: 'string', enum: ['CLEAR', 'GAPS'] },
@@ -141,7 +143,7 @@ const list = xs => (xs && xs.length ? xs.map(x => `\`${x}\``).join(', ') : 'none
 const fileName = line => line.replace(/`/g, '').trim().replace(/^[ MADRCU?!]{1,2}\s+/, '').split(/\s+/)[0] || ''
 const short = (text, n = 40) => (text.length > n ? text.slice(0, n - 1) + '…' : text)
 
-const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], review: null, audit: null, toReview: [] }
+const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], contests: [], review: null, audit: null, toReview: [] }
 const toReview = (step, text, why = '') => history.toReview.push({ step, text, why })
 let reviewing = null
 const USER = 'user decision'
@@ -494,7 +496,7 @@ function renderReport(status, reason, verdict) {
   const flagged = cycles.map(c => c.green?.flagged).filter(Boolean)
   const gapsOf = v => v.gaps.filter(g => g.severity !== 'Minor')
   const auditGaps = history.verdicts.flatMap((v, i) => gapsOf(v).map(g =>
-    `- ${g.severity} — ${g.axis} — ${cell(g.gap)} (evidence: ${cell(g.evidence)}). Fix: ${cell(g.fix)}${history.fixes[i] ? `; applied in round ${i + 1}: ${cell(history.fixes[i].fixed.join('; '))}` : '; not applied'}.`))
+    `- ${g.severity} — ${g.axis} — ${cell(g.gap)} (evidence: ${cell(g.evidence)}). Fix: ${cell(g.fix)}${history.fixes[i] ? `; applied in round ${i + 1}: ${cell(history.fixes[i].fixed.join('; '))}` : '; not applied'}.${g.closure ? ` Closure: ${cell(g.closure)}.` : ''}`))
   const reviews = history.review ? [history.review] : []
   const tests = new Map()
   for (const c of cycles) {
@@ -539,6 +541,10 @@ function renderReport(status, reason, verdict) {
     ...(history.verdicts.length
       ? history.verdicts.map((v, i) => `- ${i ? `Resume ${i}` : 'Initial'}: ${v.verdict}${gapsOf(v).length ? ` (${gapsOf(v).map(g => g.severity).join(', ')})` : ''}`)
       : ['No audit.']),
+    ...history.contests.flatMap(x => [
+      ...x.contested.map(c => `- Round ${x.round} contested: ${cell(c.gap)} — harm: ${cell(c.harm)} → ${cell(answerOf(x.responses, c) ? `${answerOf(x.responses, c).answer}: ${answerOf(x.responses, c).text}` : 'no response')}`),
+      ...x.objections.map(o => `- Round ${x.round} objection, gap applied: ${cell(o)}`),
+    ]),
     ...(reviews.length
       ? ['', '### Next batch review', '', ...reviews.map(r => `- ${r.result} — ${r.questions.length} question(s)${r.questions.length ? ': ' + r.questions.map(q => `${q.severity} — ${cell(q.question)} — answer: ${cell(q.answer)}`).join('; ') : ''}`)]
       : []),
@@ -822,7 +828,12 @@ function audit(retry, again = false, part = null, captured = false) {
     ? [
         '',
         'Mode `resume`. Gap table of the previous verdict:',
-        retry.verdict.gaps.map(e => `| ${e.severity} | ${e.axis} | ${e.gap} | ${e.evidence} | ${e.fix} |`).join('\n'),
+        retry.verdict.gaps.map(e => `| ${e.severity} | ${e.axis} | ${e.gap} | ${e.evidence} | ${e.closure} | ${e.fix} |`).join('\n'),
+        retry.contested.length
+          ? `Gaps the fix contested, left as they were — one entry in \`responses\` each (\`gap\` = the Gap cell verbatim), per \`<kit>/skills/verify-ddd-tdd/SKILL.md\` § Contested findings:\n${retry.contested.map(c => `- ${c.gap} — harm: ${c.harm}`).join('\n')}`
+          : '',
+        retry.unanswered ? `A previous attempt left these contests without a response: ${retry.unanswered.map(c => c.gap).join(' ; ')}. Every contest gets Accept, Counter, Refute or Escalate, never the gap repeated.` : '',
+        retry.fix.objections.length ? `Objections of the fix, gaps applied anyway (no contest): ${retry.fix.objections.join(' ; ')}.` : '',
         `Files touched by the fix: ${list(retry.fix.files)} — diff from: \`git diff -- <these files>\`.`,
         `Validations the fix reran: ${list(retry.fix.validations)}.`,
       ].join('\n')
@@ -847,7 +858,7 @@ function audit(retry, again = false, part = null, captured = false) {
       part ? part.scope : '',
       again
         ? `A previous attempt ended without structured output, most likely out of turns: the capture is written, never rerun it nor a suite it already holds. Read \`${notes}\` first: the findings and validations that attempt settled, never re-establish them; finish what they leave uncovered, then return the verdict at once.`
-        : `Notes: \`${notes}\`. Empty it first (\`: > <path>\`), then append each finding the moment you settle it, one line \`severity | axis | gap | evidence | fix\`, and each validation read or run. Your turns are bounded: these notes are what a second attempt starts from.`,
+        : `Notes: \`${notes}\`. Empty it first (\`: > <path>\`), then append each finding the moment you settle it, one line \`severity | axis | gap | evidence | closure | fix\`, and each validation read or run. Your turns are bounded: these notes are what a second attempt starts from.`,
       'Search with `git grep -n -e <pattern> -- <paths>`, never a recursive grep; every command in the foreground.',
       alreadyRun,
       history.toReview.length ? `Decisions the run took without the user, each listed for the user review after the plan — never a \`Plan\` gap for being absent from the sheet: ${history.toReview.map(x => `${x.step}: ${x.text}`).join(' ; ')}` : '',
@@ -855,6 +866,7 @@ function audit(retry, again = false, part = null, captured = false) {
       '',
       'Structured output: `block` = the markdown verdict block verbatim (fixed format of the skill), `gaps` = its Blocking/Major rows,',
       '`minors` = its minors one line each, `validations` = its Validations lines, `hypotheses` = the Hn.',
+      retry && retry.contested.length ? '`responses` = one entry per contested gap: `gap` (its Gap cell), `answer` (Accept, Counter, Refute, Escalate), `text` (the trade-off, the other closure, the refutation with its evidence, or the two readings).' : '',
     ].join('\n'),
     { agentType: 'cctoolkit:ddd-tdd-auditor', schema: VERDICT, phase: 'Audit', label: `${retry ? `audit retry ${retry.round}` : 'audit'}${part ? ` ${part.key}` : ''}${again ? ' again' : ''}` },
   ).catch(() => null)
@@ -927,39 +939,78 @@ if (nextSheet) {
   reviewing = reviewNext('next batch review')
 }
 
-function fixGaps(verdict, round) {
+function fixGaps(verdict, round, answered = []) {
   return agent(
     [
       FRAME,
       '',
       'Fix the Blocking and Major gaps of the verdict below, per `<kit>/skills/implement-tdd/references/closing.md` §3 (verdict GAPS).',
+      'Each gap is closed when its `Closure` holds; `Expected fix` is one way there, not an order.',
+      'Contest a gap only when closing it would do named harm — a behaviour it breaks, an invariant it violates, a cost it adds: `contested` = its Gap cell verbatim and that `harm`, the gap left as is (protocol: `<kit>/skills/verify-ddd-tdd/SKILL.md` § Contested findings). "Complex", "out of scope", "not needed" open no contest: apply the gap, put the objection in `objections`.',
+      answered.length ? `Answers of the audit to the earlier contests — Counter and Refute are fixed this round: ${answered.map(a => `${a.gap} → ${a.answer}: ${a.text}`).join(' ; ')}` : '',
       'A fix that adds a rule or a branch goes through a red test first.',
       `The batch diff is already gathered in \`${capture}\` (${TMP}): read the hunks a gap cites there, open only the files its \`Evidence\` names, never \`git diff\` the batch again.`,
       'Run only the filtered tests of the classes you touch (filtered command of `<kit>/skills/implement-tdd/references/test-scope.md`), never a whole suite: the audit that follows reruns the suites. Return them with exit and scope.',
       '',
       verdict.block,
-    ].join('\n'),
+    ].filter(l => l !== '').join('\n'),
     { schema: FIX, phase: 'Audit', label: `fix ${round}`, model: 'sonnet' },
   ).catch(() => null)
 }
 
 const wrongProduction = v => v.gaps.some(g => g.severity === 'Blocking' && /correct/i.test(g.axis))
 
+const gapKey = text => String(text || '').replace(/[`*]/g, '').replace(/\s+/g, ' ').trim().toLowerCase()
+const sameGap = (a, b) => { const x = gapKey(a); const y = gapKey(b); return !!x && !!y && (x === y || x.startsWith(y.slice(0, 60)) || y.startsWith(x.slice(0, 60))) }
+const answerOf = (responses, c) => (responses || []).find(r => sameGap(r.gap, c.gap)) || null
+
+// A contest without a named harm is no contest: the gap stays open, the objection is kept.
+function contestsOf(fix) {
+  const contested = (fix.contested || []).filter(c => String(c.harm || '').trim())
+  const bare = (fix.contested || []).filter(c => !String(c.harm || '').trim()).map(c => `${c.gap} (contest without harm, gap left open)`)
+  return { contested, objections: [...(fix.objections || []), ...bare] }
+}
+
+// Accept closes the gap, its trade-off listed for the user; Escalate hands it to the user and
+// holds nothing back; Counter and Refute leave it open for the next round.
+function settle(v, contested, round) {
+  const closing = []
+  for (const c of contested) {
+    const r = answerOf(v.responses, c)
+    if (!r || (r.answer !== 'Accept' && r.answer !== 'Escalate')) continue
+    closing.push(c)
+    toReview('Audit', `contest ${r.answer === 'Accept' ? 'accepted, trade-off' : 'escalated'} (round ${round}): ${c.gap} — harm: ${c.harm} → ${r.text}`)
+  }
+  const gaps = v.gaps.filter(g => !closing.some(c => sameGap(g.gap, c.gap)))
+  return { ...v, gaps, verdict: gaps.some(g => g.severity !== 'Minor') ? GAPS : 'VALID' }
+}
+
+const lastContest = () => history.contests[history.contests.length - 1] || null
+const rebuttals = x => (x ? x.contested.map(c => ({ gap: c.gap, ...(answerOf(x.responses, c) || { answer: '', text: '' }) })).filter(a => a.answer === 'Counter' || a.answer === 'Refute') : [])
+
 phase('Audit')
 let verdict = await firstAudit()
 if (!verdict) auditPending()
 else {
   history.verdicts.push(verdict)
-  for (let round = 1; round <= 2 && verdict.verdict === GAPS && (round === 1 || wrongProduction(verdict)); round++) {
-    const fix = await fixGaps(verdict, round)
+  for (let round = 1; round <= 2 && verdict.verdict === GAPS && (round === 1 || wrongProduction(verdict) || rebuttals(lastContest()).length); round++) {
+    const fix = await fixGaps(verdict, round, rebuttals(lastContest()))
     if (!fix) break
-    history.fixes.push(fix)
-    const next = await audited({ verdict, fix, round })
+    const { contested, objections } = contestsOf(fix)
+    const applied = { ...fix, objections }
+    history.fixes.push(applied)
+    let next = await audited({ verdict, fix: applied, round, contested })
+    const unanswered = n => contested.filter(c => !answerOf(n.responses, c))
+    if (next && unanswered(next).length) {
+      log(`audit retry ${round}: ${unanswered(next).length} contest(s) without a response — audit again`)
+      next = (await audited({ verdict, fix: applied, round, contested, unanswered: unanswered(next) })) || next
+    }
     if (!next) {
       auditPending()
       break
     }
-    verdict = next
+    history.contests.push({ round, contested, objections, responses: next.responses || [] })
+    verdict = settle(next, contested, round)
     history.verdicts.push(verdict)
   }
   if (verdict.verdict === GAPS) {
