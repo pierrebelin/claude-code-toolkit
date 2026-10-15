@@ -844,7 +844,7 @@ test('running demo: columns, model, retry, slow agent, stalled, interrupted, est
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
     expect(await ui.find({ type: 'Text', text: /✻ run-lot · F4 · CAT-LIFECYCLE/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /running\s+12m40\s+6\/7 agents\s+ETA ~8m/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /waiting for user\s+12m40\s+6\/7 agents\s+ETA ~8m/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /━+─+\s+2\/8 phases/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /GREEN X3 lock ↻ 2/ })).toBeDefined()
     expect((await ui.find({ key: 'model-demo-g1' }))?.text).toBe('Sonnet · high')
@@ -1509,7 +1509,7 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await $.command.run({ command: 'run-lot-pane', args: 'demo plan' } as Parameters<typeof $.command.run>[0])
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /1\/4 lots/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /1\/6 lots/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / GREEN · GREEN C3 hide$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / after F2, F3$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Supervisor$/ })).toBeDefined()
@@ -1520,7 +1520,7 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
 
   await $.command.run({ command: 'run-lot-pane', args: 'demo plan end' } as Parameters<typeof $.command.run>[0])
   const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await end.find({ type: 'Text', text: /3\/4 lots/ })).toBeDefined()
+  expect(await end.find({ type: 'Text', text: /3\/6 lots/ })).toBeDefined()
   expect(await end.find({ key: 'outcome' })).toBeDefined()
   expect(await end.find({ type: 'Text', text: /LOTS/ })).toBeDefined()
   await end.unmount()

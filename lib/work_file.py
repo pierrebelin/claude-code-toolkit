@@ -16,13 +16,16 @@ fits in one line of JSON per event:
     {"kind": "question", "batch": "F2", "id": "F2-1", "at": ..., "payload": {...}}
     {"kind": "answer", "batch": "F2", "id": "F2-1", "at": ..., "answers": [...]}
     {"kind": "journal", "run": "<stamp>", "at": ..., "text": "..."}
-    {"kind": "audit-round", "batch": "F2", "round": 1, "open": 3, "files": [...], "contested": [...], "responses": [...]}
+    {"kind": "audit-round", "batch": "F2", "round": 1, "open": 3, "files": [...], "contested": [...], "responses": [...], "after": 1, "diverged": false}
         one audit fix round: findings it answered, files it changed (read off the tree by
-        `cctoolkit audit-round`), contests and the audit's responses; the last line of a round wins
+        `cctoolkit audit-round`), contests, the audit's responses and the findings left (`after`, `diverged`, written once
+        the audit answered); the last line of a round wins
     {"kind": "attempt", "batch": "F2", "step": "GREEN …", "n": 2, "reason": "..."}
         a rejected attempt of a step and why, written with the next attempt
     {"kind": "breaker", "run": "<stamp>", "asides": [...], "decision": "stop"|"continue", "cause": "..."}
         run-plan's check of the batches set aside for a common cause
+    {"kind": "ack", "batch": "F2", "ref": "<id>|pause", "what": "note-taken"|"applied"|"paused"}
+        a script's answer to a line of the pane file `run/.pane.jsonl` (lib/pane_file.py)
 
 Concurrent RED and GREEN agents append at the same time: every append and every rewrite
 holds an exclusive `flock` on the file itself, and a rewrite truncates in place (a
@@ -38,7 +41,7 @@ import unicodedata
 from pathlib import Path
 
 NAME = ".work.jsonl"
-KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker")
+KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker", "ack")
 
 
 def tmp_dir(name: str) -> Path:

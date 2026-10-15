@@ -3,7 +3,7 @@ import type { EngineInterface, FsEntry, ModelUsage, Register, TurnStepChunk } fr
 
 import type {
   AuditVerdict, ChildWorkflow, Journal, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet,
-  LotFigures, PlanLot, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun,
+  LotFigures, PlanLot, Prompted, RunFeed, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun,
 } from '../types'
 
 const PANE = 'run-lot-pane'
@@ -45,6 +45,7 @@ const PROMPT_LOT = /Workflow run-lot, batch (F\d+)\.[\s\S]*?Batch sheet: (\S+?\.
 const REVIEW_LOT = /^mode: (?:lot-suivant|next-batch) \S+ (\S*?-PLAN-(F\d+)\.md)/
 const PLAN_SECTIONS = ['### Execution des lots', '### Batch execution']
 const PLAN_DONE = /^### (?:Lot|Batch) (F\d+)\b.*✅ DONE/gm
+const PLAN_HEADING = /^### (?:Lot|Batch) (F\d+) — (.+?)(?:\s+(?:—\s+)?(?:✅ DONE.*|⬜))?\s*$/gm
 const REPORT_STATUS = /^## (?:STATUT|STATUS) — (\S+)/
 const LOT_DONE = ['TERMINÉ', 'DONE']
 const WAITING_TONE = 'cyan'
@@ -56,6 +57,12 @@ const CYCLES_SECTION = '## Cycles'
 const RETIRED_LABELS = [/^tick /, /^closing \+ pre-audit$/]
 const INTRODUCED_LABELS = [/^index /, /^declaratives$/, /^pre-audit$/]
 const DROPPED_LABELS = [/^pre-design /]
+const WAIT_SECONDS = 600
+const PANE_FILE = '.pane.jsonl'
+const FEED_KINDS = ['question', 'answer', 'audit-round', 'attempt', 'breaker', 'ack', 'journal']
+const STEP_PHASES = ['Global green', 'Closing']
+const ASIDE_LINE = /^(F\d+) ✗ — set aside — (.*?)(?: — patch (\S+))?$/
+const KEPT_SECTIONS = ['## To validate', '## Plan stopped']
 
 type Launched = { status?: string; runId?: string; scriptPath?: string; workflowName?: string; transcriptDir?: string }
 
@@ -66,6 +73,7 @@ const nav = atom({ plugin: 'run-lot-pane', key: 'nav' } as const, HOME)
 const isShown = atom({ plugin: 'run-lot-pane', key: 'isShown' } as const, false)
 const usage = atom({ plugin: 'run-lot-pane', key: 'usage' } as const, { context: null, percent: null, cost: null } as SessionFigures)
 const history = atom({ plugin: 'run-lot-pane', key: 'history' } as const, {} as PhaseSamples)
+const feed = atom({ plugin: 'run-lot-pane', key: 'feed' } as const, null as RunFeed | null)
 
 export const duration = (ms: number): string => {
   const seconds = Math.max(0, Math.round(ms / 1000))
@@ -576,19 +584,21 @@ export const parsePlanLots = (text: string): PlanLot[] => {
   const depsAt = Math.max(header.indexOf('depend de'), header.indexOf('depends on'))
   if (lotAt < 0) return []
   const done = new Set([...text.matchAll(PLAN_DONE)].map(found => found[1]))
+  const titles = Object.fromEntries([...text.matchAll(PLAN_HEADING)].map(found => [found[1] ?? '', found[2] ?? '']))
   return table.slice(2).flatMap(line => {
     const cells = cellsOf(line)
     const lot = /F\d+/.exec(cells[lotAt] ?? '')?.[0]
     if (lot === undefined) return []
     const deps = depsAt < 0 ? [] : ((cells[depsAt] ?? '').match(/F\d+/g) ?? [])
-    return [{ ...blankLot(lot), deps, isDone: done.has(lot) }]
+    const title = titles[lot]
+    return [{ ...blankLot(lot), deps, isDone: done.has(lot), ...(title === undefined || title === '' ? {} : { title }) }]
   })
 }
 
 export const mergeLots = (known: PlanLot[], planned: PlanLot[]): PlanLot[] => [
   ...planned.map(one => {
     const seen = known.find(other => other.lot === one.lot)
-    return seen === undefined ? one : { ...seen, deps: one.deps, isDone: one.isDone }
+    return seen === undefined ? one : { ...seen, deps: one.deps, isDone: one.isDone, ...(one.title === undefined ? {} : { title: one.title }) }
   }),
   ...known.filter(other => !planned.some(one => one.lot === other.lot)),
 ]
@@ -619,10 +629,25 @@ export const cycleStatesOf = (lines: WorkLine[], lot: string): Record<string, st
   )
 
 
-export const pendingQuestionsOf = (lines: WorkLine[], lot: string): string[] => {
-  const answered = new Set(lines.flatMap(line => (line.kind === 'answer' ? [String(line.id)] : [])))
-  return lines.flatMap(line => (line.kind === 'question' && line.batch === lot && !answered.has(String(line.id)) ? [String(line.id)] : []))
+export type PendingQuestion = { batch: string; id: string; count: number; endsAt: number }
+
+const numberOf = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+
+// A question waits `waitSeconds` (600 on lines written before the field) before the run applies its
+// recommendation; an answer line of the same id, written at or after it, answers it.
+export const openQuestionsOf = (lines: WorkLine[]): PendingQuestion[] => {
+  const records = lines as Record<string, unknown>[]
+  return records.flatMap(line => {
+    if (line.kind !== 'question') return []
+    const at = numberOf(line.at) ?? 0
+    if (records.some(other => other.kind === 'answer' && String(other.id) === String(line.id) && (numberOf(other.at) ?? Infinity) >= at)) return []
+    const payload = fieldsOf(line.payload)
+    const asked = Array.isArray(payload?.questions) ? payload.questions.length : 1
+    return [{ batch: String(line.batch ?? payload?.batch ?? ''), id: String(line.id), count: Math.max(1, asked), endsAt: (at + (numberOf(payload?.waitSeconds) ?? WAIT_SECONDS)) * 1000 }]
+  })
 }
+
+export const pendingQuestionsOf = (lines: WorkLine[], lot: string): string[] => openQuestionsOf(lines).filter(one => one.batch === lot).map(one => one.id)
 
 export const reportOutcomeOf = (text: string, path: string): Outcome | null => {
   const status = REPORT_STATUS.exec(text.split('\n')[0] ?? '')?.[1]
@@ -1878,6 +1903,439 @@ export const planTimelineAlt = (run: WorkflowRun, at: number): string => {
   return `Batch timeline of ${run.name}: ${parts.join(', ')}.`
 }
 
+// What the run files say beside the agents: the workflow's and its scripts' lines of
+// `run/.work.jsonl`, the user's answers of `run/.pane.jsonl` (written by this mod alone, whole),
+// the `## To validate` sections of the reports. Every view below reads them, never a copy of its own.
+type Fields = Record<string, unknown>
+
+const recordsOf = (lines: WorkLine[]): Fields[] => lines as Fields[]
+
+export const paneFileOf = (root: string): string => `${root}/${PANE_FILE}`
+
+export const runRootOfRun = (run: WorkflowRun): string | null => {
+  const sheet = run.plan ?? sheetPathOf(run.argument)
+  return sheet === null ? null : runRootOf(sheet)
+}
+
+export const questionBanner = (questions: PendingQuestion[], at: number): string | null => {
+  const first = questions.filter(one => one.endsAt > at).sort((a, b) => a.endsAt - b.endsAt)[0]
+  return first === undefined ? null : `? ${first.batch} — ${counted(first.count, 'question')} — recommendation applied in ${clockOf(first.endsAt - at)}`
+}
+
+export type Contest = { gap: string; harm: string; answer: string | null; text: string | null }
+
+export type AuditRound = { round: number; open: number; after: number | null; files: number; contested: Contest[]; diverged: boolean }
+
+const gapKey = (text: string): string => text.replace(/[`*]/g, '').replace(/\s+/g, ' ').trim().toLowerCase()
+
+const isSameGap = (a: string, b: string): boolean => {
+  const x = gapKey(a)
+  const y = gapKey(b)
+  return x !== '' && y !== '' && (x === y || x.startsWith(y.slice(0, 60)) || y.startsWith(x.slice(0, 60)))
+}
+
+// The last line of a (batch, round) wins: the fix writes it, the resume audit adds `after`.
+export const auditRoundsOf = (lines: WorkLine[], batch: string): AuditRound[] => {
+  const last = new Map<number, Fields>()
+  for (const line of recordsOf(lines)) {
+    const round = numberOf(line.round)
+    if (line.kind === 'audit-round' && line.batch === batch && round !== null) last.set(round, line)
+  }
+  return [...last.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([round, line]) => {
+      const responses = (Array.isArray(line.responses) ? (line.responses as unknown[]) : []).flatMap(one => (fieldsOf(one) === null ? [] : [fieldsOf(one)!]))
+      const contested = (Array.isArray(line.contested) ? (line.contested as unknown[]) : []).flatMap((one): Contest[] => {
+        const fields = fieldsOf(one)
+        const gap = textOf(fields?.gap)
+        if (gap === null) return []
+        const response = responses.find(other => isSameGap(textOf(other.gap) ?? '', gap))
+        return [{ gap, harm: textOf(fields?.harm) ?? '', answer: textOf(response?.answer), text: textOf(response?.text) }]
+      })
+      const files = Array.isArray(line.files) ? line.files.length : (numberOf(line.files) ?? 0)
+      return { round, open: numberOf(line.open) ?? 0, after: numberOf(line.after), files, contested, diverged: line.diverged === true }
+    })
+}
+
+export const roundLine = (round: AuditRound): string =>
+  `R${round.round} findings ${round.open}${round.after === null ? '' : ` → ${round.after}`} · files ${round.files}${round.diverged ? ' · diverging, rounds stopped' : ''}`
+
+export const contestLine = (contest: Contest): string =>
+  `contested: ${contest.gap} — harm: ${contest.harm} → ${contest.answer === null ? 'no response' : `${contest.answer}${contest.text === null ? '' : `: ${contest.text}`}`}`
+
+export type Attempt = { step: string; n: number; reason: string }
+
+export const attemptLinesOf = (lines: WorkLine[], batch: string): Attempt[] =>
+  recordsOf(lines).flatMap(line => {
+    const step = textOf(line.step)
+    const n = numberOf(line.n)
+    return line.kind === 'attempt' && line.batch === batch && step !== null && n !== null ? [{ step, n, reason: textOf(line.reason) ?? '—' }] : []
+  })
+
+const bare = (text: string): string => text.replace(/…$/, '').trim().toLowerCase()
+
+// An attempt names its step `RED <behaviour ≤60…>`, an agent its cycle `RED <id> w<wave> <behaviour ≤40…>`:
+// the two behaviours, cut differently, meet on their common start. Other steps name the agent's label
+// (`Design`, `Declaratives`) or its phase (`Global green`, `Closing`).
+export const isAttemptOf = (step: string, agent: WorkflowAgent): boolean => {
+  const cycle = /^(RED|GREEN) (.+)$/.exec(step)
+  const label = CYCLE_LABEL.exec(agent.label)
+  if (cycle === null) return label === null && (agent.label.toLowerCase() === step.toLowerCase() || (STEP_PHASES.includes(step) && agent.phase === step))
+  if (label === null || !agent.label.toUpperCase().startsWith(`${cycle[1]} `)) return false
+  const wanted = bare(cycle[2] ?? '')
+  const named = bare(label[2] ?? '')
+  return wanted !== '' && named !== '' && (wanted.startsWith(named) || named.startsWith(wanted))
+}
+
+export type Retry = { attempt: number; reasons: string[] }
+
+// Attempt n carries why attempt n-1 was rejected: the k-th agent of a step lists the reasons of 2..k.
+export const retryOf = (agents: WorkflowAgent[], agent: WorkflowAgent, attempts: Attempt[]): Retry | null => {
+  const mine = attempts.filter(one => isAttemptOf(one.step, agent))
+  if (mine.length === 0 || agent.state === 'interrupted') return null
+  const peers = agents
+    .filter(other => other.state !== 'interrupted' && mine.some(one => isAttemptOf(one.step, other)))
+    .sort((a, b) => a.startedAt - b.startedAt || a.index - b.index)
+  const attempt = peers.indexOf(agent) + 1
+  const reasons = mine.filter(one => one.n <= attempt).sort((a, b) => a.n - b.n).map(one => one.reason)
+  return attempt < 2 || reasons.length === 0 ? null : { attempt, reasons }
+}
+
+export type Breaker = { asides: string[]; cause: string }
+
+export const breakerOf = (lines: WorkLine[]): Breaker | null => {
+  const last = recordsOf(lines).filter(line => line.kind === 'breaker' && line.decision === 'stop').pop()
+  if (last === undefined) return null
+  return { asides: Array.isArray(last.asides) ? last.asides.map(String) : [], cause: textOf(last.cause) ?? '' }
+}
+
+export type Aside = { reason: string; patch: string | null }
+
+export const asidesOf = (lines: WorkLine[]): Record<string, Aside> => {
+  const found: Record<string, Aside> = {}
+  for (const line of recordsOf(lines)) {
+    const set = line.kind === 'journal' ? ASIDE_LINE.exec(textOf(line.text) ?? '') : null
+    if (set?.[1] !== undefined) found[set[1]] = { reason: set[2] ?? '', patch: set[3] ?? null }
+    if (line.kind === 'breaker' && Array.isArray(line.asides)) for (const lot of line.asides.map(String)) found[lot] = found[lot] ?? { reason: '', patch: null }
+  }
+  return found
+}
+
+export const paneLinesOf = (text: string): Fields[] =>
+  recordsOf(workLinesOf(text)).filter(line => line.kind === 'pause' || line.kind === 'note' || line.kind === 'validation')
+
+const acksOf = (work: WorkLine[]): Fields[] => recordsOf(work).filter(line => line.kind === 'ack')
+
+export type PauseState = 'off' | 'requested' | 'spent'
+
+// The last pause line wins; an `ack` of ref `pause` written after it says run-plan paused on it.
+export const pauseStateOf = (pane: Fields[], work: WorkLine[]): PauseState => {
+  const last = pane.filter(line => line.kind === 'pause').pop()
+  if (last === undefined || last.on !== true) return 'off'
+  const at = numberOf(last.at) ?? 0
+  return acksOf(work).some(ack => ack.ref === 'pause' && (numberOf(ack.at) ?? 0) > at) ? 'spent' : 'requested'
+}
+
+export type Note = { id: string; batch: string; text: string; at: number; isTaken: boolean }
+
+export const notesOf = (pane: Fields[], work: WorkLine[]): Note[] => {
+  const taken = new Set(acksOf(work).flatMap(ack => (ack.what === 'note-taken' ? [String(ack.ref)] : [])))
+  const last = new Map<string, Fields>()
+  for (const line of pane) if (line.kind === 'note' && textOf(line.id) !== null) last.set(String(line.id), line)
+  return [...last.values()].map(line => ({
+    id: String(line.id), batch: String(line.batch ?? ''), text: textOf(line.text) ?? '', at: numberOf(line.at) ?? 0, isTaken: taken.has(String(line.id)),
+  }))
+}
+
+export type Decision = 'keep' | 'reject' | 'amend'
+
+export type Answer = { decision: Decision; text: string; at: number; applied: { relaunch: string | null } | null }
+
+const DECISIONS: Decision[] = ['keep', 'reject', 'amend']
+
+// The last validation line of an id wins; an `ack` of what `applied`, at or after it, applied it.
+export const answersOf = (pane: Fields[], work: WorkLine[]): Record<string, Answer> => {
+  const acks = acksOf(work).filter(ack => ack.what === 'applied')
+  const answers: Record<string, Answer> = {}
+  for (const line of pane) {
+    const decision = DECISIONS.find(one => one === line.decision)
+    if (line.kind !== 'validation' || textOf(line.id) === null || decision === undefined) continue
+    const at = numberOf(line.at) ?? 0
+    const ack = acks.filter(one => one.ref === line.id && (numberOf(one.at) ?? 0) >= at).pop()
+    answers[String(line.id)] = { decision, text: textOf(line.text) ?? '', at, applied: ack === undefined ? null : { relaunch: textOf(ack.relaunch) } }
+  }
+  return answers
+}
+
+export type ValidateEntry = { id: string; batch: string; step: string; text: string; why: string | null; section: string | null; sheet: string | null }
+
+export const shortHash = (text: string): string => {
+  let hash = 0x811c9dc5
+  for (const char of text) hash = Math.imul(hash ^ (char.codePointAt(0) ?? 0), 0x01000193) >>> 0
+  return hash.toString(16).padStart(8, '0')
+}
+
+export const entryIdOf = (batch: string, step: string, text: string): string => `v-${shortHash(`${batch}|${step}|${text}`)}`
+
+const sectionOf = (text: string, heading: string): string[] => {
+  const lines = text.split(/\r?\n/)
+  const start = lines.findIndex(line => line.trim().startsWith(heading))
+  if (start < 0) return []
+  const end = lines.findIndex((line, at) => at > start && line.startsWith('## '))
+  return lines.slice(start, end < 0 ? undefined : end)
+}
+
+// The sections the views read, all a report's state needs to keep.
+export const keptSections = (text: string): string => KEPT_SECTIONS.map(heading => sectionOf(text, heading).join('\n')).filter(one => one !== '').join('\n\n')
+
+// A batch report's bullets read `- <step> — <text> (<why>)`; the run report's, one `###` per kind,
+// start with their batch.
+export const toValidateOf = (text: string, batch: string | null, sheetOf: (batch: string) => string | null = () => null): ValidateEntry[] => {
+  let section: string | null = null
+  return sectionOf(text, '## To validate')
+    .slice(1)
+    .flatMap(line => {
+      const heading = /^###\s+(.+)$/.exec(line)
+      if (heading !== null) section = heading[1]?.trim() ?? null
+      const bullet = /^[-*]\s+(.+)$/.exec(line)?.[1]?.trim()
+      if (bullet === undefined || /^(None|Aucun)\b/i.test(bullet)) return []
+      const prefixed = batch === null ? /^(F\d+)\b\s*(?:[—:–-]\s*)?(.*)$/.exec(bullet) : null
+      const owner = batch ?? prefixed?.[1] ?? ''
+      const rest = prefixed?.[2] ?? bullet
+      const split = rest.indexOf(' — ')
+      const step = split < 0 ? (section ?? 'Entry') : rest.slice(0, split).trim()
+      const body = split < 0 ? rest : rest.slice(split + 3).trim()
+      const why = /\s\(([^()]+)\)$/.exec(body)
+      const said = why === null ? body : body.slice(0, why.index).trim()
+      return [{ id: entryIdOf(owner, step, said), batch: owner, step, text: said, why: why?.[1] ?? null, section, sheet: owner === '' ? null : sheetOf(owner) }]
+    })
+}
+
+export const reportLotOf = (path: string): string | null => /\/(F\d+)(?:-[\w]+)?\.md$/.exec(path)?.[1] ?? null
+
+export type FeedView = {
+  work: WorkLine[]
+  pane: Fields[]
+  questions: PendingQuestion[]
+  breaker: Breaker | null
+  asides: Record<string, Aside>
+  pause: PauseState
+  notes: Note[]
+  answers: Record<string, Answer>
+}
+
+export const feedViewOf = (feed: RunFeed | null): FeedView => {
+  const work = workLinesOf(feed?.work ?? '')
+  const pane = paneLinesOf(feed?.pane ?? '')
+  return {
+    work, pane, questions: openQuestionsOf(work), breaker: breakerOf(work), asides: asidesOf(work),
+    pause: pauseStateOf(pane, work), notes: notesOf(pane, work), answers: answersOf(pane, work),
+  }
+}
+
+// The entries to validate: the reports' bullets first, then what the run files say before a report
+// does (a divergence, a batch set aside, the breaker's stop), and the notes the run took.
+export const validateEntriesOf = (feed: RunFeed | null, sheetOf: (batch: string) => string | null, lots: string[]): ValidateEntry[] => {
+  if (feed === null) return []
+  const view = feedViewOf(feed)
+  const reported = Object.entries(feed.reports).flatMap(([path, text]) => toValidateOf(text, reportLotOf(path), sheetOf))
+  const says = (batch: string | null, pattern: RegExp) =>
+    reported.some(one => (batch === null || one.batch === batch) && (pattern.test(one.text) || pattern.test(one.section ?? '') || pattern.test(one.step)))
+  const derived = (batch: string, step: string, text: string): ValidateEntry => ({ id: entryIdOf(batch, step, text), batch, step, text, why: null, section: null, sheet: sheetOf(batch) })
+  const diverging = lots.flatMap(lot =>
+    says(lot, /diverging/i) ? [] : auditRoundsOf(view.work, lot).filter(one => one.diverged).map(one => derived(lot, 'Audit', `round ${one.round} diverging: findings ${one.open}${one.after === null ? '' : ` → ${one.after}`}, files ${one.files} — rounds stopped`)),
+  )
+  const asides = Object.entries(view.asides).flatMap(([lot, aside]) =>
+    says(lot, /set aside/i) || aside.reason === '' ? [] : [derived(lot, 'Set aside', `${aside.reason}${aside.patch === null ? '' : ` — patch ${aside.patch}`}`)],
+  )
+  const breaker = view.breaker
+  const stopped = breaker === null || says(null, /common cause/i) ? [] : [derived(breaker.asides[breaker.asides.length - 1] ?? '', 'Plan stopped', `common cause across ${breaker.asides.join(', ')}: ${breaker.cause}`)]
+  const notes = view.notes.filter(one => one.isTaken).map(one => ({ ...derived(one.batch, 'Note', one.text), id: `v-${one.id}` }))
+  const all = [...reported, ...diverging, ...asides, ...stopped, ...notes]
+  return all.filter((one, index) => all.findIndex(other => other.id === one.id) === index)
+}
+
+export const withPaneLine = (text: string, record: Fields): string => {
+  const kept = text.replace(/\s+$/, '')
+  return `${kept === '' ? '' : `${kept}\n`}${JSON.stringify(record)}\n`
+}
+
+export type GraphState = 'done' | 'running' | 'waiting' | 'question' | 'aside' | 'blocked' | 'failed'
+
+export type GraphNode = { lot: string; name: string; deps: string[]; state: GraphState; layer: number; hover: string[] }
+
+const GRAPH_WORDS: Record<GraphState, string> = {
+  done: 'done', running: 'running', waiting: 'waiting', question: 'question', aside: 'set aside', blocked: 'blocked', failed: 'failed',
+}
+
+export const graphGlyph = (state: GraphState): string =>
+  state === 'done' ? '✓' : state === 'running' ? '●' : state === 'waiting' ? '○' : state === 'question' ? '?' : state === 'blocked' ? '⊘' : '✗'
+
+const graphFill = (state: GraphState): string =>
+  state === 'done' ? STATUS.good : state === 'running' ? NEUTRAL : state === 'question' ? STATUS.warning : state === 'blocked' ? STATUS.serious : state === 'waiting' ? '#8c8b85' : STATUS.critical
+
+// One node per batch of the plan table, placed one column past its deepest dependency.
+export const graphNodesOf = (run: WorkflowRun, view: FeedView, at: number): GraphNode[] => {
+  const known = new Set(run.lots.map(entry => entry.lot))
+  const base: Record<string, GraphState> = {}
+  for (const entry of run.lots) {
+    const state = lotStateOf(run, entry)
+    const isBlockedOutcome = entry.outcome !== null && ['BLOQUÉ', 'BLOCKED'].includes(entry.outcome.label)
+    base[entry.lot] =
+      entry.lot in view.asides || (run.child !== null && isBlockedOutcome && state !== 'running')
+        ? 'aside'
+        : state === 'completed' || state === 'done' ? 'done' : state === 'running' ? 'running' : state === 'waiting' ? 'question' : state === 'pending' ? 'waiting' : 'failed'
+  }
+  const asideAbove = (lot: string, seen: Set<string> = new Set()): string | null => {
+    for (const dep of run.lots.find(entry => entry.lot === lot)?.deps ?? []) {
+      if (!known.has(dep) || seen.has(dep)) continue
+      seen.add(dep)
+      if (base[dep] === 'aside') return dep
+      const higher = asideAbove(dep, seen)
+      if (higher !== null) return higher
+    }
+    return null
+  }
+  const layers: Record<string, number> = {}
+  const layerOf = (lot: string, path: string[] = []): number => {
+    if (layers[lot] !== undefined) return layers[lot]!
+    const deps = (run.lots.find(entry => entry.lot === lot)?.deps ?? []).filter(dep => known.has(dep) && !path.includes(dep))
+    const layer = deps.length === 0 ? 0 : 1 + Math.max(...deps.map(dep => layerOf(dep, [...path, lot])))
+    layers[lot] = layer
+    return layer
+  }
+  const asideReason = (lot: string): string => {
+    const reason = view.asides[lot]?.reason || run.lots.find(entry => entry.lot === lot)?.outcome?.reason || ''
+    return reason === '' ? '' : ` — ${reason}`
+  }
+  return run.lots.map(entry => {
+    const blocker = base[entry.lot] === 'waiting' ? asideAbove(entry.lot) : null
+    const state: GraphState = blocker !== null ? 'blocked' : (base[entry.lot] ?? 'waiting')
+    const deps = entry.deps.filter(dep => known.has(dep))
+    const agents = run.agents.filter(agent => agent.lot === entry.lot)
+    const span = agents.length > 0 ? lotRun(run, entry.lot) : null
+    const name = entry.view?.name || entry.title || ''
+    const open = deps.filter(dep => base[dep] !== 'done')
+    const said =
+      state === 'blocked' && blocker !== null
+        ? `blocked: ${blocker} set aside${asideReason(blocker)}`
+        : state === 'waiting'
+          ? open.length > 0 ? `waiting on ${open.map(dep => `${dep} (${GRAPH_WORDS[base[dep] ?? 'waiting']})`).join(', ')}` : 'waiting to start'
+          : state === 'aside'
+            ? `set aside${asideReason(entry.lot)}`
+            : state === 'done' && agents.length === 0 ? 'done before this run' : lotDetailOf(run, entry, lotStateOf(run, entry), at)
+    const figures =
+      span !== null
+        ? `${duration(span.durationMs ?? at - span.startedAt)} · ${dollars(totalsOf(agents).cost)}`
+        : entry.past ? `${duration(entry.past.durationMs)} · ${dollars(entry.past.cost)}` : ''
+    return {
+      lot: entry.lot, name, deps, state, layer: layerOf(entry.lot),
+      hover: [[entry.lot, name].filter(one => one !== '').join(' · '), said, figures].filter(one => one !== ''),
+    }
+  })
+}
+
+// Edges out of a batch set aside, or out of one it blocks, are drawn red and dashed.
+const isCutEdge = (from: GraphNode | undefined): boolean => from !== undefined && (from.state === 'aside' || from.state === 'blocked')
+
+export type TreeLine = { lot: string; prefix: string; text: string; state: GraphState }
+
+// The terminal's light tree: each batch under its first dependency, met again further down as `↑`.
+export const graphTreeLines = (nodes: GraphNode[]): TreeLine[] => {
+  const lines: TreeLine[] = []
+  const shown = new Set<string>()
+  const childrenOf = (lot: string) => nodes.filter(node => node.deps[0] === lot)
+  const extraOf = (node: GraphNode, parent: string | null) => node.deps.filter(dep => dep !== parent)
+  const walk = (node: GraphNode, parent: string | null, lead: string, isLast: boolean, isRoot: boolean) => {
+    const branch = isRoot ? '' : isLast ? '└─ ' : '├─ '
+    const extra = extraOf(node, parent)
+    const status = node.hover[1] ?? GRAPH_WORDS[node.state]
+    if (shown.has(node.lot)) {
+      lines.push({ lot: node.lot, prefix: `${lead}${branch}`, text: `${node.lot} ↑`, state: node.state })
+      return
+    }
+    shown.add(node.lot)
+    lines.push({
+      lot: node.lot, prefix: `${lead}${branch}`,
+      text: `${graphGlyph(node.state)} ${node.lot}${node.name === '' ? '' : ` ${node.name}`} · ${status}${parent !== null && extra.length > 0 ? ` · also after ${extra.join(', ')}` : ''}`,
+      state: node.state,
+    })
+    const children = childrenOf(node.lot)
+    children.forEach((child, index) => walk(child, node.lot, `${lead}${isRoot ? '' : isLast ? '   ' : '│  '}`, index === children.length - 1, false))
+  }
+  for (const root of nodes.filter(node => node.deps.length === 0)) walk(root, null, '', true, true)
+  for (const node of nodes.filter(one => !shown.has(one.lot))) walk(node, null, '', true, true)
+  return lines
+}
+
+const NODE_WIDTH = 132
+const NODE_HEIGHT = 36
+const LAYER_GAP = 48
+const NODE_GAP = 14
+const GRAPH_STYLE =
+  '<style>text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif}text.small{font-size:10px}.head{font-weight:600}' +
+  '.ink{fill:#52514e}.muted{fill:#52514e;opacity:.7}.edge{stroke:#52514e;stroke-opacity:.45;fill:none}.arrow{fill:#52514e;fill-opacity:.45}' +
+  'g.node:hover rect.box{stroke-width:2}.live{animation:live 1.6s ease-in-out infinite}@keyframes live{50%{opacity:.35}}' +
+  '@media (prefers-reduced-motion:reduce){.live{animation:none}}' +
+  '@media (prefers-color-scheme: dark){.ink,.muted{fill:#c3c2b7}.edge{stroke:#c3c2b7}.arrow{fill:#c3c2b7}}</style>'
+
+export const planGraph = (nodes: GraphNode[]): string => {
+  if (nodes.length === 0) return ''
+  const columns = Math.max(...nodes.map(node => node.layer)) + 1
+  const width = NODE_WIDTH
+  const rows: Record<number, number> = {}
+  const placed = nodes.map(node => {
+    const row = rows[node.layer] ?? 0
+    rows[node.layer] = row + 1
+    return { node, x: SVG_PAD + node.layer * (width + LAYER_GAP), y: SVG_TOP + row * (NODE_HEIGHT + NODE_GAP) }
+  })
+  const at = (lot: string) => placed.find(one => one.node.lot === lot)
+  const body: string[] = []
+  for (const { node, x, y } of placed) {
+    for (const dep of node.deps) {
+      const from = at(dep)
+      if (from === undefined) continue
+      const x1 = from.x + width
+      const y1 = from.y + NODE_HEIGHT / 2
+      const x2 = x - 4
+      const y2 = y + NODE_HEIGHT / 2
+      const mid = (x1 + x2) / 2
+      const isCut = isCutEdge(from.node)
+      const stroke = isCut ? ` stroke="${STATUS.critical}" stroke-opacity="1" stroke-dasharray="4 3"` : ''
+      body.push(
+        `<g class="edge-of-${escapeXml(dep)}-${escapeXml(node.lot)}"><title>${escapeXml(`${dep} → ${node.lot}${isCut ? ` · held back: ${dep} ${GRAPH_WORDS[from.node.state]}` : ''}`)}</title>` +
+          `<path class="edge${isCut ? ' cut' : ''}" d="M${px(x1)} ${px(y1)} C${px(mid)} ${px(y1)} ${px(mid)} ${px(y2)} ${px(x2)} ${px(y2)}"${stroke}/>` +
+          `<path class="arrow" d="M${px(x2)} ${px(y2 - 4)} L${px(x2 + 4)} ${px(y2)} L${px(x2)} ${px(y2 + 4)} Z"${isCut ? ` fill="${STATUS.critical}" fill-opacity="1"` : ''}/></g>`,
+      )
+    }
+  }
+  for (const { node, x, y } of placed) {
+    const fill = graphFill(node.state)
+    const chars = Math.floor((width - 16) / SMALL_PX)
+    body.push(
+      `<g class="node"><title>${node.hover.map(escapeXml).join('&#10;')}</title>` +
+        `<rect class="box${node.state === 'running' ? ' live' : ''}" x="${px(x)}" y="${px(y)}" width="${px(width)}" height="${NODE_HEIGHT}" rx="6" fill="${fill}" fill-opacity=".14" stroke="${fill}"${node.state === 'blocked' ? ' stroke-dasharray="4 3"' : ''}/>` +
+        `<text class="ink head" x="${px(x + 8)}" y="${px(y + 14)}">${escapeXml(`${graphGlyph(node.state)} ${node.lot}`)}<tspan class="muted" font-weight="400">  ${escapeXml(GRAPH_WORDS[node.state])}</tspan></text>` +
+        `<text class="muted small" x="${px(x + 8)}" y="${px(y + 28)}">${escapeXml(cut(node.name || '—', chars))}</text></g>`,
+    )
+  }
+  const states = (Object.keys(GRAPH_WORDS) as GraphState[]).filter(state => nodes.some(node => node.state === state))
+  const height = SVG_TOP + Math.max(...Object.values(rows)) * (NODE_HEIGHT + NODE_GAP) + 8
+  let lx = SVG_PAD
+  const legend = states
+    .map(state => {
+      const drawn = `<rect x="${lx}" y="10" width="14" height="10" rx="3" fill="${graphFill(state)}" fill-opacity=".14" stroke="${graphFill(state)}"/><text class="ink small" x="${lx + 18}" y="19">${GRAPH_WORDS[state]}</text>`
+      lx += 18 + textWidth(GRAPH_WORDS[state], SMALL_PX) + 14
+      return drawn
+    })
+    .join('')
+  const svgWidthPx = Math.ceil(Math.max(lx, SVG_PAD * 2 + columns * width + (columns - 1) * LAYER_GAP))
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidthPx}" height="${Math.ceil(height)}" viewBox="0 0 ${svgWidthPx} ${Math.ceil(height)}">${GRAPH_STYLE}${legend}${body.join('')}</svg>`
+}
+
+export const planGraphAlt = (nodes: GraphNode[]): string =>
+  `Batch graph: ${nodes.map(node => `${node.lot} ${GRAPH_WORDS[node.state]}${node.deps.length > 0 ? ` after ${node.deps.join(', ')}` : ''}`).join('; ')}.`
+
 const DEMO = 'demo-'
 
 type DemoLive = Pick<WorkflowAgent, 'openCalls' | 'toolSince' | 'waitingSince' | 'firstChunkAt' | 'lastChunkAt' | 'streamKind' | 'streamChars'>
@@ -2032,13 +2490,14 @@ export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
       audit: isFinished ? { verdict: 'GAPS', blocking: 1, major: 2 } : null,
       sheet: demoSheet(isFinished),
       agents: isFinished ? [...build, ...closing] : build,
+      ...(isFinished ? {} : { asking: 1 }),
     },
   ]
 }
 
 export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
   const t = inMs
-  const total = t(48, 20)
+  const total = t(48, 30)
   const begin = isFinished ? at - total : at - t(31, 10)
   const loadedAt = at
   const [lotRunTemplate] = demoRuns(at)
@@ -2057,6 +2516,8 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
     ], isFinished),
     F3: sheet('F3', 'Restore a product', [step('1', 'Restore the product', marks(isFinished, isFinished, isFinished)), step('2', 'Refuse a deleted one', marks(isFinished, isFinished, isFinished))], isFinished),
     F4: sheet('F4', 'Product history', [step('1', 'List the events', marks(false, false, false)), step('2', 'Page the events', marks(false, false, false))], false),
+    F5: sheet('F5', 'Export the products', [step('1', 'Export the catalog', marks(false, false, false))], false),
+    F6: sheet('F6', 'Export schedule', [step('1', 'Schedule the export', marks(false, false, false))], false),
   }
   const agent = (
     id: string, index: number, lot: string | null, label: string, phase: string, from: number, to: number | null,
@@ -2107,7 +2568,14 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
     agent(id, index, null, label, phase, from, from + length, 'done', 'Haiku')
   const f1 = lotAgents('F1', 3, t(1, 10), null, ['create', 'duplicate name'], 1)
   const f1End = Math.max(...f1.map(one => (one.endedAt ?? 0) - begin))
-  const f2Start = f1End + t(1, 40)
+  // F5 stops at its design and is set aside: the plan goes on with F2, F6 held back behind it.
+  const f5Start = f1End + t(1, 40)
+  const f5 = [
+    agent('F5-0', 17, 'F5', 'design', 'Design', f5Start, f5Start + t(1, 50), 'done', 'Opus'),
+    agent('F5-1', 18, 'F5', 'report', 'Report', f5Start + t(1, 55), f5Start + t(2, 20), 'done', 'Haiku'),
+  ]
+  const f5End = f5Start + t(2, 20)
+  const f2Start = f5End + t(1, 40)
   const f2 = lotAgents('F2', 20, f2Start, isFinished ? null : 'GREEN C3 hide', ['archive', 'twice', 'hide'], 1.15)
   const f2End = Math.max(...f2.map(one => (one.endedAt ?? 0) - begin))
   const f3 = isFinished ? lotAgents('F3', 40, f2End + t(1, 40), null, ['restore', 'deleted'], 0.8) : []
@@ -2117,6 +2585,7 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
     supervisor('n1', 2, 'next batch', 'Batch', t(0, 50), t(0, 20)),
     supervisor('g1', 15, 'gate F1', 'Gate', f1End, t(1, 10)),
     supervisor('n2', 16, 'next batch', 'Batch', f1End + t(1, 10), t(0, 20)),
+    supervisor('as5', 19, 'aside F5', 'Aside', f5End, t(1, 10)),
     ...(isFinished
       ? [
           supervisor('g2', 35, 'gate F2', 'Gate', f2End, t(1, 10)),
@@ -2127,6 +2596,7 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
       : []),
   ]
   const done = (lot: string): Outcome => ({ label: 'DONE', reason: null, report: `todo/product-archiving/run/batches/${lot}.md` })
+  const aside: Outcome = { label: 'BLOCKED', reason: DEMO_ASIDE, report: 'todo/product-archiving/run/batches/F5.md' }
   const lot = (id: string, deps: string[], outcome: Outcome | null): PlanLot => ({
     lot: id, sheet: `todo/product-archiving/PRD-ARCH-PLAN-${id}.md`, deps, isDone: false, outcome,
     audit: outcome === null ? null : { verdict: 'VALID', blocking: 0, major: 0 }, view: views[id] ?? null,
@@ -2134,18 +2604,148 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
   return [
     {
       runId: `${DEMO}plan`, name: 'run-plan', argument: 'todo/product-archiving/PRD-ARCH-PLAN.md --until F3',
-      phases: ['Preflight', 'Batch', 'Gate', 'Report'],
-      details: { Preflight: 'plan check, doctor, docker, kit root, run folder', Batch: 'next batch, out-of-batch check, run-lot', Gate: 'report status, plan heading, fast suites, out-of-batch, snapshot', Report: 'REPORT.md and notification' },
+      phases: ['Preflight', 'Batch', 'Gate', 'Aside', 'Report'],
+      details: { Preflight: 'plan check, doctor, docker, kit root, run folder', Batch: 'next batch, out-of-batch check, run-lot', Gate: 'report status, plan heading, fast suites, out-of-batch, snapshot', Aside: 'blocked batch: patch, tree restored, dependents skipped', Report: 'REPORT.md and notification' },
       transcriptDir: null, startedAt: begin, launchedAt: begin, durationMs: isFinished ? total : null, status: isFinished ? 'completed' : 'running',
       child: { name: 'run-lot', phases: childPhases, details: childDetails, labels: {} },
       plan: 'todo/product-archiving/PRD-ARCH-PLAN.md',
-      lots: [lot('F1', [], done('F1')), lot('F2', ['F1'], isFinished ? done('F2') : null), lot('F3', ['F1'], isFinished ? done('F3') : null), lot('F4', ['F2', 'F3'], null)],
-      outcome: isFinished ? { label: 'DONE', reason: 'F1, F2, F3 done, stopped at --until F3', report: 'todo/product-archiving/run/2026-10-10-0912.md' } : null,
+      lots: [
+        lot('F1', [], done('F1')), lot('F2', ['F1'], isFinished ? done('F2') : null), lot('F3', ['F1'], isFinished ? done('F3') : null), lot('F4', ['F2', 'F3'], null),
+        { ...lot('F5', ['F1'], aside), audit: null }, lot('F6', ['F5'], null),
+      ],
+      outcome: isFinished
+        ? { label: 'BLOCKED', reason: 'batches set aside: F5 (holds back F6) — F1, F2, F3 done, paused by user before F4', report: DEMO_RUN_REPORT }
+        : null,
       audit: null,
       sheet: null,
-      agents: [...supervisors, ...f1, ...f2, ...f3].sort((a, b) => a.index - b.index),
+      agents: [...supervisors, ...f1, ...f5, ...f2, ...f3].sort((a, b) => a.index - b.index),
     },
   ]
+}
+
+const DEMO_ASIDE = 'design blocked: no defensible export format, CSV or the catalog JSON feed'
+const DEMO_STAMP = '2026-10-10-0912'
+const DEMO_RUN_REPORT = `todo/product-archiving/run/${DEMO_STAMP}.md`
+const DEMO_LOT_SHEET = 'todo/catalog-lifecycle/CAT-LIFECYCLE-PLAN-F4.md'
+
+const DEMO_LOT_REPORT = `## STATUS — GAPS
+
+Reason: two fix rounds done, one blocking gap remains on the organization lock
+
+## To validate
+
+- Design — the publication lock is set on the catalog, not on each product (no rule names the owner)
+- RED Publication lock — unreachable guard, test not written, removal proposed: \`Product.EnsureCatalogOpen\` (the catalog check refuses the call first)
+- Question design — unanswered, recommendation applied: lock on publication or on first sale? → on publication (RM-04 reads published)
+- Audit — contest accepted, trade-off (round 1): duplicated guard in the aggregate — harm: none → the guard stays in the aggregate
+- Audit — audit rounds stopped, diverging: round 2 changed 5 file(s) for 2 finding(s), 2 still open (Product.cs, DeleteProductCommandHandler.cs)
+- Assumptions — H2: archived items keep their audit trail (tech lead)
+`
+
+const DEMO_PLAN_REPORTS: Record<string, string> = {
+  F1: `## To validate
+
+- Assumptions — H1: \`ArchivedAt\` comes from \`TimeProvider\`, not from the request (tech lead)
+`,
+  F5: `## To validate
+
+- Design — export format undecided: CSV or the catalog JSON feed (no rule names one, both keep every RM/CU)
+`,
+  F2: `## To validate
+
+- Design — archiving twice answers 409, not 204 (the spec says refused, not ignored)
+`,
+}
+
+const DEMO_RUN_TEXT = `## To validate
+
+### Batches set aside
+
+- F5 — Set aside — ${DEMO_ASIDE} — patch run/${DEMO_STAMP}-aside-F5.patch
+
+### Arbiter and design decisions
+
+- F3 — Design — restoring keeps the archive date in the history (the audit trail is never rewritten)
+`
+
+const jsonLine = (record: Record<string, unknown>): string => JSON.stringify(record)
+
+// The run files of each demo, as the workflow and the pane would have left them: the views read
+// them like any run's; the pane's answers go into this copy, never to disk.
+export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFinished: boolean): RunFeed => {
+  const s = Math.floor(at / 1000)
+  const root = runRootOfRun(run) ?? 'run'
+  if (!isPlan) {
+    const report = `${root}/batches/F4.md`
+    const entries = isFinished ? toValidateOf(DEMO_LOT_REPORT, 'F4') : []
+    const id = (index: number) => entries[index]?.id ?? ''
+    const entry = (index: number) => ({ batch: 'F4', step: entries[index]?.step ?? '', text: entries[index]?.text ?? '', sheet: DEMO_LOT_SHEET })
+    const work = [
+      jsonLine({ kind: 'attempt', batch: 'F4', step: 'GREEN lock', n: 2, reason: 'tests modified at GREEN: tests/Acme.UnitTests/Catalog/Products/ProductTests.cs — granted: none', at: s - 300 }),
+      ...(isFinished
+        ? [
+            jsonLine({ kind: 'audit-round', batch: 'F4', round: 1, open: 3, files: ['Product.cs', 'ProductTests.cs', 'DeleteProductCommandHandler.cs', 'DeleteProductTests.cs'], contested: [{ gap: 'duplicated guard in the aggregate', harm: 'none, the guard runs once per command' }], responses: [], at: s - 280 }),
+            jsonLine({
+              kind: 'audit-round', batch: 'F4', round: 1, open: 3, files: ['Product.cs', 'ProductTests.cs', 'DeleteProductCommandHandler.cs', 'DeleteProductTests.cs'],
+              contested: [{ gap: 'duplicated guard in the aggregate', harm: 'none, the guard runs once per command' }],
+              responses: [{ gap: 'duplicated guard in the aggregate', answer: 'Accept', text: 'trade-off kept, the guard stays in the aggregate' }], after: 2, at: s - 250,
+            }),
+            jsonLine({
+              kind: 'audit-round', batch: 'F4', round: 2, open: 2, files: ['Product.cs', 'ProductTests.cs', 'DeleteProductCommandHandler.cs', 'DeleteProductTests.cs', 'Catalog.cs'],
+              contested: [{ gap: 'organization lock not checked before deletion', harm: 'a member of another organization deletes the product' }],
+              responses: [{ gap: 'organization lock not checked before deletion', answer: 'Escalate', text: 'needs the owner of the organization rule' }], after: 2, diverged: true, at: s - 120,
+            }),
+            jsonLine({ kind: 'ack', batch: 'F4', ref: 'n-demo-1', what: 'note-taken', at: s - 900 }),
+            jsonLine({ kind: 'ack', batch: 'F4', ref: id(0), what: 'applied', at: s - 60 }),
+            jsonLine({ kind: 'ack', batch: 'F4', ref: id(1), what: 'applied', relaunch: `/run-lot ${DEMO_LOT_SHEET}`, hn: 'H3', cycles: ['X3'], at: s - 60 }),
+          ]
+        : [
+            jsonLine({
+              kind: 'question', batch: 'F4', id: 'F4-design-1', at: s - 148,
+              payload: {
+                batch: 'F4', sheet: DEMO_LOT_SHEET, kind: 'design', context: 'publication lock owner', waitSeconds: WAIT_SECONDS,
+                questions: [
+                  { id: 'q1', severity: 'Major', question: 'Lock on publication or on first sale?', evidence: 'RM-04', options: ['publication', 'first sale'], recommendation: 'publication' },
+                  { id: 'q2', severity: 'Minor', question: 'Archived catalog read-only?', evidence: 'RM-07', options: ['yes', 'no'], recommendation: 'yes' },
+                ],
+              },
+            }),
+            jsonLine({ kind: 'ack', batch: 'F4', ref: 'n-demo-1', what: 'note-taken', at: s - 600 }),
+          ]),
+    ]
+    const pane = [
+      jsonLine({ kind: 'note', id: 'n-demo-1', batch: 'F4', text: 'an archived catalog is read-only', at: s - 700 }),
+      jsonLine({ kind: 'note', id: 'n-demo-2', batch: 'F4', text: 'keep the lock check in the aggregate, not the handler', at: s - 90 }),
+      ...(isFinished
+        ? [
+            jsonLine({ kind: 'validation', id: id(0), entry: entry(0), decision: 'keep', text: '', at: s - 200 }),
+            jsonLine({ kind: 'validation', id: id(1), entry: entry(1), decision: 'amend', text: 'write the test, the guard stays', at: s - 190 }),
+            jsonLine({ kind: 'validation', id: id(2), entry: entry(2), decision: 'reject', text: 'lock on first sale, the spec is wrong here', at: s - 30 }),
+          ]
+        : []),
+    ]
+    return { runId: run.runId, root, work: work.join('\n'), pane: pane.join('\n'), reports: isFinished ? { [report]: keptSections(DEMO_LOT_REPORT) } : {} }
+  }
+  const reports: Record<string, string> = Object.fromEntries(
+    Object.entries(DEMO_PLAN_REPORTS)
+      .filter(([lot]) => isFinished || lot !== 'F2')
+      .map(([lot, text]) => [`${root}/batches/${lot}.md`, text]),
+  )
+  if (isFinished) reports[DEMO_RUN_REPORT] = DEMO_RUN_TEXT
+  const f1 = toValidateOf(DEMO_PLAN_REPORTS.F1 ?? '', 'F1')[0]
+  const work = [
+    jsonLine({ kind: 'journal', run: DEMO_STAMP, text: `F5 ✗ — set aside — ${DEMO_ASIDE} — patch run/${DEMO_STAMP}-aside-F5.patch`, at: s - 900 }),
+    jsonLine({ kind: 'ack', batch: 'F1', ref: 'n-demo-p1', what: 'note-taken', at: s - 1500 }),
+    jsonLine({ kind: 'ack', batch: 'F1', ref: f1?.id ?? '', what: 'applied', at: s - 1400 }),
+    ...(isFinished ? [jsonLine({ kind: 'ack', ref: 'pause', what: 'paused', at: s - 30 })] : []),
+  ]
+  const pane = [
+    jsonLine({ kind: 'note', id: 'n-demo-p1', batch: 'F1', text: 'reuse the archived flag of the catalog', at: s - 1600 }),
+    jsonLine({ kind: 'validation', id: f1?.id ?? '', entry: { batch: 'F1', step: f1?.step ?? '', text: f1?.text ?? '', sheet: 'todo/product-archiving/PRD-ARCH-PLAN-F1.md' }, decision: 'keep', text: '', at: s - 1500 }),
+    jsonLine({ kind: 'note', id: 'n-demo-p2', batch: 'F2', text: 'the archived filter stays off by default', at: s - 240 }),
+    jsonLine({ kind: 'pause', on: true, at: s - 120 }),
+  ]
+  return { runId: run.runId, root, work: work.join('\n'), pane: pane.join('\n'), reports }
 }
 
 // The plugin's own close never reaches its own ui.close hook: the flag is set here.
@@ -2423,6 +3023,80 @@ async function withCycleProgress($: EngineInterface, sheet: Sheet, path: string,
   return { ...sheet, cycles: sheet.cycles.map(cycle => cycleProgressOf(cycle, states[cycleSlugOf(cycle.behaviour)] ?? null)) }
 }
 
+export const feedWorkOf = (text: string): string =>
+  text
+    .split('\n')
+    .filter(one => FEED_KINDS.includes(String(recordOf(one)?.kind)))
+    .join('\n')
+
+// The run files a run's views read beside its work and pane files: the report of each batch, and
+// the run report — named by the outcome, or by the stamp of the run's journal lines.
+export const feedPathsOf = (run: WorkflowRun, runRoot: string, work: WorkLine[]): string[] => {
+  const sheets =
+    run.child === null
+      ? [{ sheet: sheetPathOf(run.argument), lot: lotOf(run.argument)?.lot ?? null }]
+      : run.lots.map(entry => ({ sheet: entry.sheet ?? (run.plan === null ? null : run.plan.replace(/\.md$/, `-${entry.lot}.md`)), lot: entry.lot }))
+  const stamp = recordsOf(work).flatMap(line => (line.kind === 'journal' || line.kind === 'breaker') && textOf(line.run) !== null ? [textOf(line.run)!] : []).pop()
+  return [
+    ...new Set([
+      ...sheets.flatMap(({ sheet, lot }) => (sheet === null || lot === null ? [] : reportPathsOf(sheet, lot))),
+      ...(run.child === null ? [] : [run.outcome?.report ?? null, stamp === undefined ? null : `${runRoot}/${stamp}.md`].flatMap(path => (path === null ? [] : [path]))),
+    ]),
+  ]
+}
+
+const seenFeed = new Map<string, number>()
+
+async function refreshFeed($: EngineInterface, run: WorkflowRun): Promise<void> {
+  const runRoot = runRootOfRun(run)
+  if (runRoot === null || run.runId.startsWith(DEMO)) return
+  const kept = await read($, feed)
+  const before = kept !== null && kept.runId === run.runId && kept.root === runRoot ? kept : null
+  const fresh = async (path: string, previous: string | undefined, keep: (text: string) => string): Promise<string | undefined> => {
+    const stat = await $.fs.stat(path).catch(() => null)
+    if (stat === null) return undefined
+    if (previous !== undefined && seenFeed.get(path) === stat.mtimeMs) return previous
+    const text = await readText($, path)
+    if (text === null) return previous
+    seenFeed.set(path, stat.mtimeMs)
+    return keep(text)
+  }
+  const work = (await fresh(`${runRoot}/.work.jsonl`, before?.work, feedWorkOf)) ?? ''
+  const pane = (await fresh(paneFileOf(runRoot), before?.pane, text => text)) ?? ''
+  const reports: Record<string, string> = {}
+  for (const path of feedPathsOf(run, runRoot, workLinesOf(work))) {
+    const text = await fresh(path, before?.reports[path], keptSections)
+    if (text !== undefined && text !== '') reports[path] = text
+  }
+  const next: RunFeed = { runId: run.runId, root: runRoot, work, pane, reports }
+  if (before !== null && JSON.stringify(before) === JSON.stringify(next)) return
+  await update($, feed, () => next)
+}
+
+// The pane file is the mod's alone: read whole, the line appended, written whole. A demo run has no
+// files: its answers go into the demo's copy.
+async function writePane($: EngineInterface, record: Record<string, unknown>, at?: number): Promise<void> {
+  const run = (await read($, runs)).map(completeRun).pop()
+  if (run === undefined) return
+  const written = { ...record, at: at ?? Math.round(await $.clock.now()) / 1000 }
+  if (run.runId.startsWith(DEMO)) {
+    await update($, feed, kept => (kept === null || kept.runId !== run.runId ? kept : { ...kept, pane: withPaneLine(kept.pane, written) }))
+    return
+  }
+  const runRoot = runRootOfRun(run)
+  if (runRoot === null) return
+  const path = paneFileOf(runRoot)
+  await $.fs.write(path, withPaneLine((await readText($, path)) ?? '', written)).catch(() => undefined)
+  await refreshFeed($, run)
+}
+
+async function bannerNow($: EngineInterface): Promise<string | null> {
+  const last = (await read($, runs)).map(completeRun).pop()
+  const kept = await read($, feed)
+  if (last === undefined || last.status !== 'running' || kept === null || kept.runId !== last.runId) return null
+  return questionBanner(feedViewOf(kept).questions, await read($, now))
+}
+
 async function refreshUsage($: EngineInterface): Promise<void> {
   const figures = await $.session.usage().catch(() => null)
   if (figures === null) return
@@ -2437,6 +3111,7 @@ const tick = async ($: EngineInterface): Promise<void> => {
   const list = (await read($, runs)).map(completeRun)
   const last = list[list.length - 1]
   if (last !== undefined) await refreshSheet($, last)
+  if (last !== undefined && (last.status === 'running' || (await read($, isShown)))) await refreshFeed($, last)
   if (!list.some(run => run.status === 'running')) return
   const at = await $.clock.now()
   await update($, now, () => at)
@@ -2523,18 +3198,33 @@ export const register: Register = on => {
 
   // On a desktop, a button above the prompt opens and closes the pane: its tab has no way back
   // once closed but the command. The surface stacks each plugin's band: this one draws its own alone.
+  // On every surface, a question of the run waiting for its answer shows there with its countdown.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.surface !== 'desktop' || e.props.hasSurvey || !((await read($, runs)).length > 0)) return next(e)
-    const { Box, Button } = $.ui.resolve(e)
+    if (e.props.hasSurvey) return next(e)
+    const banner = await bannerNow($)
+    const hasToggle = e.surface === 'desktop' && (await read($, runs)).length > 0
+    if (!hasToggle && banner === null) return next(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
     const shown = await read($, isShown)
     return (
-      <Box>
-        <Button
-          key="toggle-run-lot-pane"
-          label="◫ Workflow"
-          variant={shown ? 'primary' : 'secondary'}
-          onPress={() => (shown ? closePane($) : openPane($))}
-        />
+      <Box flexDirection="column">
+        {banner !== null && (
+          <Box key="question-banner">
+            <Text bold color={WAITING_TONE} wrap="truncate-end">
+              {banner}
+            </Text>
+          </Box>
+        )}
+        {hasToggle && (
+          <Box key="toggle-row">
+            <Button
+              key="toggle-run-lot-pane"
+              label="◫ Workflow"
+              variant={shown ? 'primary' : 'secondary'}
+              onPress={() => (shown ? closePane($) : openPane($))}
+            />
+          </Box>
+        )}
       </Box>
     )
   })
@@ -2575,7 +3265,9 @@ export const register: Register = on => {
       const isFinished = demo[2] !== undefined
       const loaded = demo[1] === undefined ? demoRuns(at, isFinished) : demoPlanRuns(at, isFinished)
       await update($, runs, list => [...list.filter(run => !run.runId.startsWith(DEMO)), ...loaded].slice(-KEPT_RUNS))
-      await update($, nav, state => ({ ...state, lot: null }))
+      const shown = loaded[loaded.length - 1]
+      if (shown !== undefined) await update($, feed, () => demoFeedOf(shown, at, demo[1] !== undefined, isFinished))
+      await update($, nav, state => ({ ...state, lot: null, screen: 'run' as const, prompted: null, notice: null }))
       await update($, history, () => demoHistory())
       await update($, now, () => at)
       await refreshUsage($)
@@ -2791,6 +3483,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const Svg = e.surface === 'desktop' ? $.ui.resolve(e).Svg : undefined
+    const Input = e.surface === 'terminal' || e.surface === 'desktop' || e.surface === 'vscode' ? $.ui.resolve(e).Input : undefined
     const accent = e.surface === 'desktop' ? 'claude' : undefined
     const tddTone = (label: string) => (e.surface !== 'desktop' ? undefined : label === 'RED' ? 'error' : label === 'GREEN' ? 'success' : undefined)
     // On a desktop a row's text tells its stage apart, not its glyph alone: done in grey,
@@ -2809,7 +3502,20 @@ export const register: Register = on => {
     const session = await read($, usage)
     const where = await read($, nav)
     const known = await read($, history)
+    const kept = await read($, feed)
     const last = list[list.length - 1]
+    const runFeed = kept !== null && last !== undefined && kept.runId === last.runId ? kept : null
+    const steer = feedViewOf(runFeed)
+    const banner = last?.status === 'running' ? questionBanner(steer.questions, at) : null
+    const bannerRow =
+      banner === null ? null : (
+        <Box key="question-banner" height={1}>
+          <Text bold color={WAITING_TONE} wrap="truncate-end">
+            {'  '}
+            {banner}
+          </Text>
+        </Box>
+      )
     const planRun = last !== undefined && last.child !== null ? last : null
     const lotInView = planRun !== null && where.lot !== null && planRun.lots.some(one => one.lot === where.lot) ? where.lot : null
     const current = planRun !== null && lotInView !== null ? lotRun(planRun, lotInView) : last
@@ -2817,7 +3523,7 @@ export const register: Register = on => {
     const spin = spinnerFrame(at)
     // A desktop's proportional font draws the bar wider than its columns: kept shorter there.
     const barWidth = Math.max(8, Math.min(e.surface === 'desktop' ? 28 : 40, columns - 28))
-    const go = (change: Partial<Navigation>) => () => void update($, nav, state => ({ ...state, ...change }))
+    const go = (change: Partial<Navigation>) => () => void update($, nav, state => ({ ...state, prompted: null, notice: null, ...change }))
     const close = <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
     // A desktop draws a Button natively, its children's colours dropped: there the row keeps
     // its own colours and a trailing › opens it; the terminal presses the whole row.
@@ -2993,6 +3699,7 @@ export const register: Register = on => {
         {crumbs(name, 'timeline')}
         {backBar('run')}
         {lotBar}
+        {bannerRow}
         {Svg === undefined || source === '' ? (
           <Text key="timeline-empty" color="inactive">
             {'  ⎿  '}Nothing to draw yet.
@@ -3023,6 +3730,225 @@ export const register: Register = on => {
       )
     }
 
+    // What the run files say for the batch in view (a run-lot run's own batch), and the user's steering.
+    const batchInView = lotInView ?? (planRun === null ? (lotOf(current.argument)?.lot ?? null) : null)
+    const attempts = batchInView === null ? [] : attemptLinesOf(steer.work, batchInView)
+    const retryFor = (agent: WorkflowAgent) => retryOf(current.agents, agent, attempts)
+    const rounds = batchInView === null ? [] : auditRoundsOf(steer.work, batchInView)
+    const sheetOfBatch = (batch: string): string | null => {
+      if (planRun === null) return sheetPathOf(current.argument)
+      const entry = planRun.lots.find(one => one.lot === batch)
+      return entry?.sheet ?? (planRun.plan === null ? null : planRun.plan.replace(/\.md$/, `-${batch}.md`))
+    }
+    const entries = validateEntriesOf(runFeed, sheetOfBatch, planRun === null ? (batchInView === null ? [] : [batchInView]) : planRun.lots.map(one => one.lot)).filter(
+      one => lotInView === null || one.batch === lotInView,
+    )
+    const unanswered = entries.filter(one => steer.answers[one.id] === undefined).length
+    const notes = steer.notes.filter(one => lotInView === null || one.batch === lotInView)
+    const isDoneLot = (entry: PlanLot) => ['completed', 'done'].includes(lotStateOf(planRun!, entry))
+    const noteTarget =
+      batchInView ??
+      (planRun === null
+        ? null
+        : (planRun.lots.find(entry => lotStateOf(planRun, entry) === 'running') ??
+            planRun.lots.find(entry => !isDoneLot(entry) && !(entry.lot in steer.asides)) ??
+            planRun.lots[0])?.lot ?? null)
+    const workPath = runFeed === null ? null : `${runFeed.root}/.work.jsonl`
+    const absolute = (path: string) => (path.startsWith('/') || root === null ? path : `${root}/${path}`)
+    const togglePause = () =>
+      planRun === null
+        ? update($, nav, state => ({ ...state, notice: 'pause applies to run-plan only' }))
+        : writePane($, { kind: 'pause', on: steer.pause !== 'requested' })
+    const ask = (prompted: Prompted) => () => update($, nav, state => ({ ...state, prompted, notice: null }))
+    const submitNote = async (value: string) => {
+      const text = value.trim()
+      const aimed = planRun !== null && lotInView === null ? /^(F\d+)\s*:\s*([\s\S]+)$/.exec(text) : null
+      const batch = aimed?.[1] ?? where.prompted?.target ?? ''
+      const said = (aimed?.[2] ?? text).trim()
+      if (said === '' || batch === '') return
+      const stamp = Math.round(await $.clock.now()) / 1000
+      await writePane($, { kind: 'note', id: `n-${stamp}`, batch, text: said }, stamp)
+      await update($, nav, state => ({ ...state, prompted: null }))
+    }
+    const answer = async (entry: ValidateEntry, decision: Decision, text = '') => {
+      const said = { batch: entry.batch, step: entry.step, text: entry.text, ...(entry.sheet === null ? {} : { sheet: entry.sheet }) }
+      await writePane($, { kind: 'validation', id: entry.id, entry: said, decision, text })
+      await update($, nav, state => ({ ...state, prompted: null }))
+    }
+
+    const isPlanView = planRun !== null && lotInView === null
+    const gap = (key: string) => <Text key={key}>{'  '}</Text>
+    const steerBar = (
+      <Box key="steer-bar" height={1}>
+        {gap('steer-gap')}
+        <Button key="open-validate" hotkey="v" plain dimColor onPress={go({ screen: 'validate' })}>
+          {`to validate${unanswered > 0 ? ` ${unanswered}` : ''}`}
+        </Button>
+        {isPlanView && gap('graph-gap')}
+        {isPlanView && (
+          <Button key="open-graph" hotkey="g" plain dimColor onPress={go({ screen: 'graph' })}>
+            graph
+          </Button>
+        )}
+        {gap('pause-gap')}
+        <Button key="pause" hotkey="z" plain dimColor onPress={togglePause}>
+          {steer.pause === 'requested' ? 'cancel pause' : 'pause'}
+        </Button>
+        {noteTarget !== null && gap('note-gap')}
+        {noteTarget !== null && (
+          <Button key="note" hotkey="n" plain dimColor onPress={ask({ kind: 'note', target: noteTarget })}>
+            note
+          </Button>
+        )}
+      </Box>
+    )
+    const steerLines = [
+      ...(planRun !== null && steer.pause !== 'off'
+        ? [
+            <Text key="pause-state" bold={steer.pause === 'requested'} color={steer.pause === 'requested' ? 'warning' : 'inactive'} wrap="truncate-end">
+              {'  '}
+              {steer.pause === 'requested' ? '⏸ pause requested' : '⏸ paused by user'}
+            </Text>,
+          ]
+        : []),
+      ...(where.notice ? [line('notice', where.notice, 'inactive')] : []),
+      ...(where.prompted?.kind === 'note' && Input !== undefined
+        ? [
+            <Box key="note-row" height={1}>
+              {gap('note-input-gap')}
+              <Input
+                key="note-input"
+                label={`note for ${where.prompted.target}: `}
+                placeholder={isPlanView ? 'text, or F3: text for another batch' : 'text'}
+                autoFocus
+                onSubmit={value => submitNote(value)}
+              />
+            </Box>,
+          ]
+        : []),
+    ]
+    const notesSection =
+      notes.length === 0
+        ? null
+        : section(
+            'notes',
+            `Notes · ${notes.length}`,
+            notes.map(note => line(`note-${note.id}`, `${note.isTaken ? '✓' : '✎'} ${note.batch} · ${note.text} · ${note.isTaken ? 'consumed' : 'pending'}`, note.isTaken ? 'inactive' : 'warning')),
+          )
+    const roundRows = (indent: string) =>
+      rounds.flatMap(round => [
+        <Text key={`round-${round.round}`} bold={round.diverged} color={round.diverged ? 'error' : 'inactive'} wrap="truncate-end">
+          {indent}
+          {roundLine(round)}
+        </Text>,
+        ...round.contested.map((contest, index) => (
+          <Text key={`round-${round.round}-contest-${index}`} color="inactive" wrap="wrap">
+            {indent}
+            {'  ↳ '}
+            {contestLine(contest)}
+          </Text>
+        )),
+      ])
+
+    if (where.screen === 'validate') {
+      const decided = (decision: Decision) => (decision === 'keep' ? 'kept' : decision === 'reject' ? 'rejected' : 'amended')
+      const entryBlock = (entry: ValidateEntry) => {
+        const given = steer.answers[entry.id]
+        const said = given === undefined || given.text === '' ? '' : `: ${given.text}`
+        const state =
+          given === undefined
+            ? { text: '○ pending answer', color: 'inactive' }
+            : given.applied !== null
+              ? { text: `✓ ${decided(given.decision)}${said} · applied`, color: 'success' }
+              : { text: `● ${decided(given.decision)}${said} · answered, not applied yet`, color: 'warning' }
+        const asked = where.prompted !== null && where.prompted !== undefined && where.prompted.target === entry.id && where.prompted.kind !== 'note' ? where.prompted.kind : null
+        return (
+          <Box key={`entry-${entry.id}`} flexDirection="column" marginTop={1}>
+            <Text key={`entry-head-${entry.id}`} wrap="truncate-end">
+              {'  '}
+              <Text bold>{entry.batch === '' ? 'run' : entry.batch}</Text>
+              <Text color="inactive"> · {entry.step}</Text>
+            </Text>
+            <Text key={`entry-text-${entry.id}`} wrap="wrap">
+              {'    '}
+              {entry.text}
+              {entry.why === null ? '' : ` (${entry.why})`}
+            </Text>
+            <Text key={`entry-state-${entry.id}`} color={state.color} wrap="wrap">
+              {'    '}
+              {state.text}
+            </Text>
+            {given?.applied?.relaunch != null && line(`entry-relaunch-${entry.id}`, `  relaunch: ${given.applied.relaunch}`, 'inactive', 'wrap')}
+            {given?.applied == null && (
+              <Box key={`entry-actions-${entry.id}`} height={1}>
+                <Text>{'    '}</Text>
+                <Button key={`keep-${entry.id}`} label="✓ keep" plain dimColor onPress={() => answer(entry, 'keep')} />
+                {gap(`reject-gap-${entry.id}`)}
+                <Button key={`reject-${entry.id}`} label="✗ reject" plain dimColor onPress={ask({ kind: 'reject', target: entry.id })} />
+                {gap(`amend-gap-${entry.id}`)}
+                <Button key={`amend-${entry.id}`} label="✎ amend" plain dimColor onPress={ask({ kind: 'amend', target: entry.id })} />
+              </Box>
+            )}
+            {asked !== null && Input !== undefined && (
+              <Box key={`entry-input-${entry.id}`} height={1}>
+                <Text>{'    '}</Text>
+                <Input
+                  key={`answer-${entry.id}`}
+                  label={asked === 'reject' ? 'why reject: ' : 'amended to: '}
+                  autoFocus
+                  onSubmit={value => (value.trim() === '' ? undefined : answer(entry, asked, value.trim()))}
+                />
+              </Box>
+            )}
+          </Box>
+        )
+      }
+      return (
+        <Box flexDirection="column" marginTop={1}>
+          {crumbs(isPlanView ? planRun!.name : `${current.name}${batchInView === null ? '' : ` ${batchInView}`}`, 'to validate')}
+          {backBar('run')}
+          {lotBar}
+          {bannerRow}
+          {workPath !== null && line('apply-hint', `Applied at the next /run-plan or /run-lot start, or now with cctoolkit run-validate apply ${absolute(workPath)}`, 'inactive', 'wrap')}
+          {entries.length === 0 && line('no-entry', 'Nothing to validate.', 'inactive')}
+          {entries.map(entryBlock)}
+        </Box>
+      )
+    }
+
+    if (where.screen === 'graph' && planRun !== null && lotInView === null) {
+      const nodes = graphNodesOf(planRun, steer, at)
+      const source = planGraph(nodes)
+      const graphTone = (state: GraphState) =>
+        state === 'done' ? 'success' : state === 'running' ? 'claude' : state === 'question' ? WAITING_TONE : state === 'aside' || state === 'failed' ? 'error' : state === 'blocked' ? 'warning' : 'inactive'
+      return (
+        <Box flexDirection="column" marginTop={1}>
+          {crumbs(planRun.name, 'graph')}
+          {backBar('run')}
+          {lotBar}
+          {bannerRow}
+          {Svg !== undefined && source !== '' ? (
+            <Box key="graph" marginTop={1}>
+              <Svg key="graph-svg" source={source} alt={planGraphAlt(nodes)} width={svgWidth(source)} height={svgHeight(source)} isInteractive />
+            </Box>
+          ) : (
+            <Box key="graph-tree" flexDirection="column" marginTop={1}>
+              {nodes.length === 0 && line('graph-empty', 'No batch in the plan table.', 'inactive')}
+              {graphTreeLines(nodes).map((one, index) => (
+                <Text key={`tree-${index}`} wrap="truncate-end">
+                  <Text color="inactive">
+                    {'  '}
+                    {one.prefix}
+                  </Text>
+                  <Text color={graphTone(one.state)}>{one.text}</Text>
+                </Text>
+              ))}
+            </Box>
+          )}
+        </Box>
+      )
+    }
+
     const rows = phaseRows(current, at)
     const agentInView = where.screen === 'agent' ? current.agents.find(agent => agent.id === where.agentId) : undefined
     const phaseInView = where.screen === 'phase' ? rows.find(one => one.title === where.phase) : undefined
@@ -3030,6 +3956,7 @@ export const register: Register = on => {
     if (agentInView !== undefined) {
       const agent = agentInView
       const stalls = stallOf(agent)
+      const retry = retryFor(agent)
       const outcome =
         agent.answer ??
         (agent.state === 'running'
@@ -3047,6 +3974,7 @@ export const register: Register = on => {
           {crumbs(`${current.name} › ${agent.phase ?? NO_PHASE}`, `agent ${agent.index}`)}
           {backBar(where.back)}
           {lotBar}
+          {bannerRow}
           <Box marginTop={1}>
             <Text bold wrap="wrap">
               {agent.label}
@@ -3074,6 +4002,12 @@ export const register: Register = on => {
               {stalls.join(' · ')}
             </Text>
           )}
+          {retry !== null &&
+            section(
+              'retries',
+              `Retries · ↻ ${retry.attempt}`,
+              retry.reasons.map((reason, index) => line(`retry-${index}`, `attempt ${index + 1} rejected: ${reason}`, 'warning', 'wrap')),
+            )}
           {section('usage', 'Usage', [
             line(
               'ctx',
@@ -3127,6 +4061,7 @@ export const register: Register = on => {
           {crumbs(current.name, phase.title)}
           {backBar('run')}
           {lotBar}
+          {bannerRow}
           <Text wrap="truncate-end">
             {'  '}
             <Text color={markTone(phase.mark)}>
@@ -3161,6 +4096,7 @@ export const register: Register = on => {
                   ),
                 ),
           )}
+          {phase.title === AUDIT_PHASE && rounds.length > 0 && section('rounds', `Rounds · ${rounds.length}`, roundRows('  '))}
         </Box>
       )
     }
@@ -3223,7 +4159,9 @@ export const register: Register = on => {
       const stalls = stallOf(agent)
       const labelColor =
         agent.state === 'error' ? 'error' : isSlowAgent || stalls.length > 0 ? 'warning' : agent.state === 'running' ? undefined : 'inactive'
-      const retry = attempt > 1 ? ` ↻ ${attempt}` : ''
+      const said = retryFor(agent)
+      const shown = said?.attempt ?? attempt
+      const retry = shown > 1 ? ` ↻ ${shown}` : ''
       const labelWidth = columns - 7 - agentsRightWidth - retry.length - 1
       const live = [
         activityOf(agent, at) ?? '',
@@ -3262,6 +4200,12 @@ export const register: Register = on => {
               {stalls.length > 0 && <Text color="warning">{`${live.length > 0 ? ' · ' : ''}${stalls.join(' · ')}`}</Text>}
             </Text>
           )}
+          {(said?.reasons ?? []).map((reason, index) => (
+            <Text key={`retry-${agent.id}-${index}`} color="warning" wrap="truncate-end">
+              {'         '}
+              {`↻ attempt ${index + 1} rejected: ${reason}`}
+            </Text>
+          ))}
         </Box>
       )
     }
@@ -3339,6 +4283,7 @@ export const register: Register = on => {
           {isOpen(phase) &&
             phase.agents.map(agent => agentRow(agent, attempts[agent.id] ?? 1, typicalMs(known, current.agents, agent)))}
           {isOpen(phase) && phase.earlier.map(agent => agentRow(agent, 1, null))}
+          {phase.title === AUDIT_PHASE && roundRows('     ')}
         </Box>
       )
     }
@@ -3511,7 +4456,21 @@ export const register: Register = on => {
             </Text>
           )}
           {lotBar}
+          {bannerRow}
           {timelineButton}
+          {steerBar}
+          {steerLines}
+          {steer.breaker !== null && (
+            <Box key="breaker" flexDirection="column" marginTop={1} marginLeft={2} paddingX={1} borderStyle="round" borderColor="error">
+              <Text bold color="error" wrap="wrap">
+                ⛔ Plan stopped — common cause
+              </Text>
+              {reasonBlock('breaker-cause', steer.breaker.cause)}
+              <Text color="inactive" wrap="wrap">
+                set aside: {steer.breaker.asides.join(', ')}
+              </Text>
+            </Box>
+          )}
           {planOutcome !== null && (
             <Box
               key="outcome"
@@ -3608,6 +4567,7 @@ export const register: Register = on => {
               )
             })}
           </Box>
+          {notesSection}
           {supervisors.length > 0 &&
             section(
               'supervisor',
@@ -3666,7 +4626,10 @@ export const register: Register = on => {
           </Text>
         )}
         {lotBar}
+        {bannerRow}
         {timelineButton}
+        {steerBar}
+        {steerLines}
         {outcome !== null && (
           <Box
             key="outcome"
@@ -3741,6 +4704,7 @@ export const register: Register = on => {
             {sheet.cycles === undefined ? stepRows(sheet) : cycleRows(sheet.cycles)}
           </Box>
         )}
+        {notesSection}
         {step !== null && (
           <Box key="actions" marginTop={1} height={1}>
             <Text>{'  '}</Text>

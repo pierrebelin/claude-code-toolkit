@@ -39,7 +39,7 @@ const obj = (properties, optional = []) => ({
 
 const PREFLIGHT = obj({ ok: bool, failure: str, plan: str, root: str, kit: str, runRoot: str, stamp: str })
 const NEXT = obj({
-  kind: { type: 'string', enum: ['END', 'WAITING', 'BATCHES', 'ERROR'] },
+  kind: { type: 'string', enum: ['END', 'WAITING', 'BATCHES', 'PAUSED', 'ERROR'] },
   line: str,
   batches: arr(obj({ batch: str, repo: str, sheet: str })),
   held: arr(obj({ batch: str, by: arr(str) })),
@@ -94,7 +94,7 @@ const pre = await agent(
     '2. First, one call: `command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && [ "$(uname)" = Darwin ] && open -a Docker; true` (Docker Desktop boots during the build, no wait loop).',
     '   Then in one message, from `root`: `cctoolkit plan-next-batch <plan> --check`, `cctoolkit doctor --quiet`, and the build configured by kit-init (`commands.build`, empty for a stack without one): `b=$(python3 -c \'import sys; sys.path.insert(0, sys.argv[1]); import kit_config; print(kit_config.load().command("build"))\' "$(cctoolkit root)/lib"); if [ -z "$b" ]; then echo build=none; else out=$(eval "$b" 2>&1); echo "build=$?"; printf \'%s\\n\' "$out" | grep -m1 -iE \'(^|[^a-z])error([^a-z]|$)\'; fi; command -v docker >/dev/null && { docker info >/dev/null 2>&1; echo "docker=$?"; } || echo docker=absent` (timeout 600000).',
     '3. `--check` exit ≠ 0, a doctor `FAIL` line, `docker` neither 0 nor `absent`, or `build` neither 0 nor `none` → `ok: false`, `failure` = the failing line verbatim (for the build: `build=<code>` followed by the first error line, the working tree must compile before any batch starts), `runRoot` and `stamp` empty, stop. No test suite runs here: each batch runs the tests its diff reaches, in its own global green.',
-    `4. Otherwise \`stamp\` = \`$(date +%Y-%m-%d-%H%M)\`, \`runRoot\` = \`<plan folder>/run\` (absolute). One call: \`cctoolkit run-work purge <runRoot> <stamp> && cctoolkit run-work journal <runRoot>/.work.jsonl <stamp> "start $(date '+%Y-%m-%d %H:%M') — plan <plan> — scope ${scope || 'whole plan'}"\` (purge: older layouts migrated, lines no run needs dropped, the 3 most recent runs kept). \`ok: true\`, \`failure\` empty.`,
+    `4. Otherwise \`stamp\` = \`$(date +%Y-%m-%d-%H%M)\`, \`runRoot\` = \`<plan folder>/run\` (absolute). One call: \`cctoolkit run-work purge <runRoot> <stamp> && cctoolkit run-validate apply <runRoot>/.work.jsonl && cctoolkit run-work journal <runRoot>/.work.jsonl <stamp> "start $(date '+%Y-%m-%d %H:%M') — plan <plan> — scope ${scope || 'whole plan'}"\` (purge: older layouts migrated, lines no run needs dropped, the 3 most recent runs kept; run-validate: the answers given in the run-lot-pane mod written into the sheets). \`ok: true\`, \`failure\` empty.`,
   ].join('\n'),
   { schema: PREFLIGHT, phase: 'Preflight', label: 'preflight', ...SHELL },
 )
@@ -219,6 +219,7 @@ while (!stop) {
   if (!next) { stop = 'plan-next-batch without result'; break }
   held = next.held || []
   if (next.kind === 'END') break
+  if (next.kind === 'PAUSED') { stop = 'paused by user'; log('⏸ paused by user between two batches'); break }
   if (next.kind !== 'BATCHES') { stop = next.line; break }
 
   const b = next.batches.find(x => x.repo.replace(/\/$/, '') === pre.root.replace(/\/$/, ''))
@@ -363,7 +364,7 @@ const rep = await agent(
   { schema: REPORT, phase: 'Report', label: 'report', model: 'haiku' },
 )
 
-const RESTART = `A blocked batch never ends the plan: its partial work is saved as \`run/<stamp>-aside-FX.patch\`, the tree goes back to the last batch commit (files the user modified before the batch left as they are), its saved cycles are cleared and the plan goes on with every batch that does not depend on it; \`${BLOCKED}\` here means batches were set aside (listed in \`setAside\` with their dependents) or the run met a technical stop (\`reason\`). The arbiter settles what it can, a question waits 10 min then takes its recommendation, so a batch is set aside for a technical stop, a production Blocking the audit fixes did not lift, a \`STOP\` answer, a question without answer nor recommendation, a step still stopped after its last attempt, or a gate still red after its repair. From the second batch set aside, an arbiter compares the reasons: a cause shared with an earlier one stops the plan, named under \`## Plan stopped — common cause\` of the run report with what to fix in the spec or the plan first. Fix the cause (reapply the patch with \`git apply\` to keep the partial work), write the decision into \`decisions\` of the cycles it touches in the \`## Cycles\` block of the batch sheet (and as \`Hn\` marked \`${USER}\`), then launch a new run-plan: batches ✅ DONE are skipped. Never \`resumeFromRunId\`: replay re-runs finished work.`
+const RESTART = `A blocked batch never ends the plan: its partial work is saved as \`run/<stamp>-aside-FX.patch\`, the tree goes back to the last batch commit (files the user modified before the batch left as they are), its saved cycles are cleared and the plan goes on with every batch that does not depend on it; \`${BLOCKED}\` here means batches were set aside (listed in \`setAside\` with their dependents) or the run met a technical stop (\`reason\`). The arbiter settles what it can, a question waits 10 min then takes its recommendation, so a batch is set aside for a technical stop, a production Blocking the audit fixes did not lift, a \`STOP\` answer, a question without answer nor recommendation, a step still stopped after its last attempt, or a gate still red after its repair. From the second batch set aside, an arbiter compares the reasons: a cause shared with an earlier one stops the plan, named under \`## Plan stopped — common cause\` of the run report with what to fix in the spec or the plan first. Fix the cause (reapply the patch with \`git apply\` to keep the partial work), write the decision into \`decisions\` of the cycles it touches in the \`## Cycles\` block of the batch sheet (and as \`Hn\` marked \`${USER}\`), then launch a new run-plan: batches ✅ DONE are skipped. A pause asked from the run-lot-pane mod stops the plan between two batches (\`paused by user\`): a new run-plan goes on from there. Never \`resumeFromRunId\`: replay re-runs finished work.`
 
 return {
   status: reason ? BLOCKED : DONE,

@@ -100,6 +100,7 @@ export type PlanLot = {
   view: Sheet | null
   asking?: number
   past?: LotFigures | null
+  title?: string
 }
 
 export type WorkflowRun = {
@@ -144,7 +145,11 @@ export type SessionFigures = {
   cost: number | null
 }
 
-export type Screen = 'run' | 'phase' | 'agent' | 'timeline'
+export type Screen = 'run' | 'phase' | 'agent' | 'timeline' | 'validate' | 'graph'
+
+export type Prompted = { kind: 'reject' | 'amend' | 'note'; target: string }
+
+export type RunFeed = { runId: string; root: string; work: string; pane: string; reports: Record<string, string> }
 
 export type Navigation = {
   screen: Screen
@@ -153,10 +158,12 @@ export type Navigation = {
   back: Screen
   toggled: string[]
   lot: string | null
+  prompted?: Prompted | null
+  notice?: string | null
 }
 
 declare module 'claude-code' {
   interface PluginState {
-    'run-lot-pane': { runs: WorkflowRun[]; now: number; usage: SessionFigures; nav: Navigation; history: PhaseSamples; isShown: boolean }
+    'run-lot-pane': { runs: WorkflowRun[]; now: number; usage: SessionFigures; nav: Navigation; history: PhaseSamples; isShown: boolean; feed: RunFeed | null }
   }
 }

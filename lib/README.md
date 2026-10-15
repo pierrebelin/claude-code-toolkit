@@ -10,6 +10,7 @@ What the [hooks](../hooks/README.md) call but the harness never invokes directly
 | `kit_config.py` | `kit.config.json` resolved over its preset — the one reader every hook and script goes through ([`presets/README.md`](../presets/README.md)) |
 | `kit_testtag.py` | the `testTag` adapters: xUnit, pytest, JUnit, Jest |
 | `tdd_scope.py` | `hooks/tdd-scope-guard.sh`, `guard-tdd-scope.sh`, `cctoolkit tdd-scope` | the RED/GREEN write check: snapshot per agent, write log, tree comparison, RED rerun against `tdd.stubFailure`, restore; state under `work_file.tmp_dir("tdd-scope")` |
+| `pane_file.py` | `run-notes`, `run-validate`, `plan-next-batch --next` | the pane file `run/.pane.jsonl`, written whole by the `run-lot-pane` mod alone (pause, notes, answers to `## To validate`), answered by `ack` lines of the work file |
 | `work_file.py` | the run work file `run/.work.jsonl` of run-lot and run-plan: one JSON line per event, appended and rewritten under `flock`; read by `batch-baseline`, `run-work`, `run-question`, `sheet-cycles`, `plan-next-batch`, `pre-audit` |
 
 ## Modules

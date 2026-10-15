@@ -1,0 +1,21 @@
+{
+  "fixtures": [],
+  "cases": [
+    {
+      "name": "run-notes take: a pending note of the batch printed once, another batch's left, nothing printed the second time",
+      "cmd": "R={{FIX}}/pane-{{SID}}; rm -rf $R; mkdir -p $R/todo/x/run && cd $R && W=$R/todo/x/run/.work.jsonl && printf '# Plan\\n' > todo/x/X-PLAN.md && printf '# X F3\\n\\n## Cycles\\n\\n```json\\n{\"cycles\": [{\"id\": \"C1\", \"behaviour\": \"Archive a product\", \"decisions\": \"\"}, {\"id\": \"C2\", \"behaviour\": \"List archived\", \"decisions\": \"\"}]}\\n```\\n\\n## Assumptions <!-- kit:assumptions -->\\n\\n| # | Assumption | To be validated by |\\n|---|------------|--------------------|\\n| H1 | a | b |\\n' > todo/x/X-PLAN-F3.md && printf '{\"kind\":\"note\",\"id\":\"n1\",\"batch\":\"F3\",\"text\":\"keep the old route\",\"at\":1}\\n{\"kind\":\"note\",\"id\":\"n2\",\"batch\":\"F4\",\"text\":\"later\",\"at\":2}\\n' > todo/x/run/.pane.jsonl && a=$(python3 {{KIT}}/scripts/run-notes.py take $W F3) && b=$(python3 {{KIT}}/scripts/run-notes.py take $W F3) && echo \"[$a][$b]$(python3 {{KIT}}/scripts/run-notes.py take $W F4 | wc -l | tr -d ' ')\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "[Note from the user for F3: keep the old route][]1"
+      }
+    },
+    {
+      "name": "run-validate apply: reject writes the decision into the named cycle and an Hn marked user decision, keep changes nothing, each applied once, relaunch printed",
+      "cmd": "R={{FIX}}/pane-{{SID}}; rm -rf $R; mkdir -p $R/todo/x/run && cd $R && W=$R/todo/x/run/.work.jsonl && printf '# Plan\\n' > todo/x/X-PLAN.md && printf '# X F3\\n\\n## Cycles\\n\\n```json\\n{\"cycles\": [{\"id\": \"C1\", \"behaviour\": \"Archive a product\", \"decisions\": \"\"}, {\"id\": \"C2\", \"behaviour\": \"List archived\", \"decisions\": \"\"}]}\\n```\\n\\n## Assumptions <!-- kit:assumptions -->\\n\\n| # | Assumption | To be validated by |\\n|---|------------|--------------------|\\n| H1 | a | b |\\n' > todo/x/X-PLAN-F3.md && printf '{\"kind\":\"validation\",\"id\":\"v1\",\"entry\":{\"batch\":\"F3\",\"step\":\"GREEN Archive a product\",\"text\":\"tests modified at GREEN\"},\"decision\":\"reject\",\"text\":\"restore the test, fix production\",\"at\":1}\\n{\"kind\":\"validation\",\"id\":\"v2\",\"entry\":{\"batch\":\"F3\",\"step\":\"Design\",\"text\":\"choice x\"},\"decision\":\"keep\",\"text\":\"\",\"at\":1}\\n' > todo/x/run/.pane.jsonl && out=$(python3 {{KIT}}/scripts/run-validate.py apply $W | tr '\\n' ';') && again=$(python3 {{KIT}}/scripts/run-validate.py apply $W) && echo \"$out[$again]$(grep -c 'restore the test, fix production' todo/x/X-PLAN-F3.md)|$(grep -o '| H2 | rejected: tests modified at GREEN → restore the test, fix production | user decision |' todo/x/X-PLAN-F3.md)\" && echo \"[$again]$(grep -c 'restore the test, fix production' todo/x/X-PLAN-F3.md)|$(grep -o '| H2 | rejected: tests modified at GREEN → restore the test, fix production | user decision |' todo/x/X-PLAN-F3.md)|$out\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "[]2|| H2 | rejected: tests modified at GREEN → restore the test, fix production | user decision ||F3 — reject: H2 in X-PLAN-F3.md, decisions of C1;F3 — kept: Design;relaunch: F3 — /run-plan"
+      }
+    }
+  ]
+}

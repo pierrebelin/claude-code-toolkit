@@ -29,7 +29,8 @@ its build output and its test containers, whatever the plan says.
               the batch (not under the source or test roots of kit.config.json, .claude/,
               todo/, basename absent from the sheet); exit 1 when any
 --next WORK   next batch, out-of-batch check and journal in one JSON line for run-plan:
-              `kind` END|WAITING|BATCHES, `line` = the text output, `batches`, `held` = the
+              `kind` END|WAITING|BATCHES|PAUSED, `line` = the text output (PAUSED: the user
+              asked for a pause in the run-lot-pane mod, `run/.pane.jsonl`; spent once answered), `batches`, `held` = the
               pending batches --skip holds back with the skipped batches they depend on
               (`[{"batch", "by"}]`), then for the launchable batch of the current repository
               `outsideBatch` and `outsidePaths`; when nothing is outside, appends the
@@ -53,6 +54,7 @@ HERE = Path(__file__).resolve().parent.parent
 for lib in (HERE / "lib", HERE / ".claude" / "lib"):
     sys.path.insert(0, str(lib))
 import kit_config  # noqa: E402
+import pane_file  # noqa: E402
 import work_file  # noqa: E402
 
 DONE = re.compile(r"^### (?:Batch|Lot) (F\d+)\b.*✅ DONE", re.M)
@@ -335,6 +337,11 @@ def main():
         print(f"OK {len(batches)} batches, {len(done & set(by_id))} DONE")
         return
 
+    if args.journal and pane_file.pause_requested(Path(args.journal).parent, args.journal):
+        work_file.append(args.journal, {"kind": "ack", "ref": "pause", "what": "paused"})
+        work_file.append(args.journal, {"kind": "journal", "run": args.run, "text": "⏸ paused by user"})
+        print(json.dumps({"kind": "PAUSED", "line": "paused by user", "batches": [], "held": [], "outsideBatch": "", "outsidePaths": []}))
+        return
     kind, line, launched, held = next_batches(batches, done, in_scope, args.excluded, args.skip, repo_dir, sheet)
     if not args.journal:
         print(line)
