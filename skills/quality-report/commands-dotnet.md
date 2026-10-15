@@ -316,6 +316,18 @@ git diff --no-renames --numstat "$BASE" $MAIN_BRANCH -- src |
 
 `by_layer` counts every touched file (A, M and D) and `lines` = additions + deletions — a churn figure, deliberately not the `lines_modified` / `lines_added` split. Store the two denominators as `activity.cs_files_total` / `activity.cs_lines_total`: `sonarqube.lines_of_code` is **not** usable here (it spans `tests/` too and drops blank/comment lines, while `--numstat` counts physical lines).
 
+### Hotspots — churn × complexity
+
+Feeds §2 `Hotspots` and `activity.hotspots`. Reads the source roots of `kit.config.json` and the main branch's history, renames followed; ranks on the last 365 days before the report commit (`--days`), counts the whole history beside it, and the `fix:` commits; complexity by lizard. Without lizard the status is `missing` — say so, never rank on churn alone; the user installs it with `python3 -m pip install --user lizard`.
+
+```bash
+EXCL=(--exclude '*/Migrations/*' --exclude '*.g.cs' --exclude '*.Designer.cs')
+cctoolkit hotspots --ref "$MAIN_BRANCH" "${EXCL[@]}"          # §2 section
+cctoolkit hotspots --ref "$MAIN_BRANCH" "${EXCL[@]}" --json   # activity.hotspots
+```
+
+Mass commits it lists (formatting, license headers) stay in the churn: add them to `.git-blame-ignore-revs`, or pass `--ignore-rev <sha>` when the user names them.
+
 ### Test inventory
 
 ```bash

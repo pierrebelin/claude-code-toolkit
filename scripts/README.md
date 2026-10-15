@@ -15,7 +15,8 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | `untagged-tests` | tests carrying no rule tag |
 | `migrate-anchors` | one-shot: appends the `<!-- kit:… -->` anchors to documents written before them — dry run by default, `--apply` writes |
 | `turn-batching-check` | tool-call batching, context fill per tool, `read-bounds` denials and forcings followed by an edit — main chain, then subagents (`<session>/subagents/`); `--save-baseline` / `--compare` |
-| `quality-report-check` | checks a `docs/metrics/quality-report-*` pair |
+| `quality-report-check` | checks a `docs/metrics/quality-report-*` pair: arithmetic, evidence statuses (a block not measured holds no number, a measured one belongs to the report commit), hotspot counts |
+| `hotspots` | churn × complexity per source file (`layout.sources`), renames followed, creations, pure renames, merges and `.git-blame-ignore-revs` left out, ranked over a window ending at the commit date (`--days`, 365) with the whole history beside it, `fix:` commits counted; cyclomatic complexity by lizard, `missing` without it; Danger Zone ranked on the total complexity, then on the worst function — Markdown, or `--json` for `activity.hotspots` of the quality report |
 | `audit-capture` | the deterministic audit material in one file, so `/verify-ddd-tdd` opens it once; `--base <work>` (the run work file) limits the diff to the batch's own files; `--suites-green <S1,S2>` writes the `suites-green` marker beside the output, read by `lib/guard-auditor.sh` |
 | `pre-audit` | the mechanical gate before `/verify-ddd-tdd` — red means no fork. Gate 8 (opt-in, `layout.sources.languageGuard`) lists French sentences added to production literals; gate 9 (opt-in, `layout.integrationGuard`) asks for a changed integration test or a waiver when persistence code changes |
 | `access-cost` | awaited Infrastructure calls read off the syntax tree with ast-grep; C# only; `--base <work> FX` flags only the lines the batch added against `HEAD` |
@@ -28,7 +29,7 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | `batch-wallclock` | wall clock of an `/implement-tdd` batch |
 | `kit-diff <repo>` | a manual copy against the kit: MISSING / ADDED / DRIFT / MERGED, plus anonymisation alerts — the migration's first step |
 | `remove-copy` | the migration's deletion: DELETE the files the kit ships, KEEP the repo's own skills and scripts, MOVE a file added inside a kit skill, ORPHAN the repo's eval cases — dry run, `--apply` deletes |
-| `learn-candidates` | the model-free half of `/learn`; reads French verdicts (`## Verdict — ECARTS`) and a `learn-state.json` written with French keys, saves it back in English |
+| `learn-candidates` | the model-free half of `/learn`: the `## Audit gaps` of the `run-lot` reports (`todo/*/run/batches/FX.md`, kept after the transcripts are cleaned up), then the auditor sub-transcripts, a gap found in both counted once; reads French verdicts (`## Verdict — ECARTS`) and a `learn-state.json` written with French keys, saves it back in English |
 
 ## Adapting
 

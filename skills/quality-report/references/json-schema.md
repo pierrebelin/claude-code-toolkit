@@ -10,7 +10,14 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
     "updated_at": "YYYY-MM-DD",
     "branch": "main branch analysed",
     "stack": "dotnet | js",
-    "project_name": "project name (package.json name or .sln name)"
+    "project_name": "project name (package.json name or .sln name)",
+    "commit": "sha of the main branch analysed",
+    "evidence": {
+      "tests":     { "status": "measured", "source": "local", "commit": "sha", "reason": null },
+      "coverage":  { "status": "measured", "source": "local", "commit": "sha", "reason": null },
+      "sonarqube": { "status": "measured", "source": "local", "commit": "sha", "reason": null },
+      "stryker":   { "status": "missing",  "source": "local", "commit": null,  "reason": "run timed out" }
+    }
   },
   "tests": {
     "unit":         { "files": 0, "methods": 0, "passed": 0, "failed": 0, "skipped": 0, "duration_seconds": 0 },
@@ -111,6 +118,24 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
     "cs_scope": "src/**/*.cs excluding Migrations, .g.cs, .Designer.cs",
     "cs_files_total": 0,
     "cs_lines_total": 0,
+    "hotspots": {
+      "status": "measured", "reason": null, "commit": "sha", "commit_date": "ISO date", "shallow": false,
+      "window_days": 365, "window_from": "ISO date", "history_from": "ISO date", "fix_convention": true,
+      "tool": "lizard 1.x", "metric": "cyclomatic",
+      "files_analysed": 0,
+      "excluded": { "tests": 0, "skipped dirs": 0, "generated or vendored": 0, "--exclude": 0 },
+      "ignore_revs_file": false, "ignored_commits": 0, "renames_followed": 0,
+      "mass_commits": [ { "commit": "abbrev sha", "files": 0 } ],
+      "thresholds": { "commits": 0, "complexity_total": 0, "complexity_worst": 0, "rule": "median of the analysed files" },
+      "quadrants": { "danger_zone": 0, "cowboy_code": 0, "fertile_ground": 0, "healthy_closure": 0 },
+      "parser_suspect": [],
+      "danger_zone_top": [
+        { "file": "", "commits": 0, "commits_all": 0, "lines_changed": 0, "fixes": 0,
+          "complexity_total": 0, "complexity_worst": 0, "worst_function": "", "worst_line": 0,
+          "authors": 0, "last_change": "YYYY-MM-DD", "score": 0.0 }
+      ],
+      "worst_function_top": []
+    },
     "cs_periods": [
       { "days":  7, "commits": 0, "files_modified": 0, "files_added": 0, "files_deleted": 0, "lines_modified": 0, "lines_added": 0,
         "by_layer": { "Domain": { "files": 0, "lines": 0 } } },
@@ -124,6 +149,7 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
 
 **Schema v2.0 notes:**
 
+- `metadata.commit` / `metadata.evidence` (optional, older reports lack them): one entry per measured block — hotspots carry their own in `activity.hotspots` —, `status` = `measured` | `not_configured` | `missing` (SKILL.md § Evidence status). `source` = `local` or the CI run ID; `commit` = the commit the result belongs to, equal to `metadata.commit` when measured. A block not `measured` has its own numbers at `null`, never `0`.
 - `metadata.stack`: `"dotnet"` or `"js"` — tells any consumer which interpretation applies.
 - 🔴 Every `duration_seconds` (tests and build) is an integer number of seconds, rounded at collection: a runner float (`465.89999999999998`) leaks into the Markdown tables as unreadable digits.
 - `tests.contract`, `tests.architecture`: .NET-specific. `null` for JS/TS.
@@ -145,3 +171,4 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
 - `activity.cs_periods` (optional): src `.cs` change rate over 7 / 14 / 30 / 90 days. `lines_modified` = additions + deletions inside pre-existing files, `lines_added` = lines of newly added files. Numerator scope `src/**/*.cs` minus `Migrations/`, `*.g.cs`, `*.Designer.cs` — must match `cs_files_total` / `cs_lines_total`, stored alongside (physical lines, from `git grep -c ''` at the report commit). Do not divide by `sonarqube.lines_of_code`: different scope (`tests/` included, blank/comment lines dropped) → ratios above 100%. Absent → the change-rate card is not rendered.
 - `codebase.size` (optional): code size snapshot at the report commit, `{ files, lines }` everywhere, physical lines. `src` / `tests` = totals; `src_by_layer` keys match `coverage.by_layer` (extra layers such as `SDK` allowed), `tests_by_project` keys = test project or first dir under `tests/`. Sums of `src_by_layer` and `tests_by_project` equal `src` and `tests` (checked by script). .NET: `size.src` equals `activity.cs_files_total` / `cs_lines_total` (same scope). Absent → the code size card is not rendered.
 - `activity.cs_periods[].by_layer` (optional): churn per layer for that window, `{ files, lines }` where `lines` = additions + deletions over every touched file (A, M and D). Keys must match `coverage.by_layer` / `sonarqube.issues_by_layer`. Absent → the per-layer churn card is not rendered.
+- `activity.hotspots` (optional): `cctoolkit hotspots --json` pasted as is — never edited by hand. `status: "missing"` (lizard absent) → `thresholds`, `quadrants`, `danger_zone_top`, `worst_function_top` are `null`. Quadrant counts sum to `files_analysed`. `commits` / `lines_changed` / `fixes` count the window (`window_days` before the commit date, `null` = whole history), `commits_all` the whole history. `fixes` is `null` when `fix_convention` is false — no `fix:` commit in the history, so zero would read as "no bug". `worst_function_top` = the Danger Zone recomputed on the worst function, files already in `danger_zone_top` left out. Absent → the hotspot card is not rendered.

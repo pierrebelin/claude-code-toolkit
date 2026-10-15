@@ -183,6 +183,18 @@ git diff "$BASE_COMMIT" $MAIN_BRANCH --shortstat -- . ':(exclude)docs'
 
 > If the project is **not a git repository**, skip this step and put `null` in the JSON.
 
+### Hotspots — churn × complexity
+
+Feeds §2 `Hotspots` and `activity.hotspots`. Reads the source roots of `kit.config.json` and the main branch's history, renames followed; ranks on the last 365 days before the report commit (`--days`), counts the whole history beside it, and the `fix:` commits; complexity by lizard. Without lizard the status is `missing` — say so, never rank on churn alone; the user installs it with `python3 -m pip install --user lizard`.
+
+```bash
+EXCL=(--exclude '*.d.ts' --exclude '*.test.*' --exclude '*.spec.*')
+cctoolkit hotspots --ref "$MAIN_BRANCH" "${EXCL[@]}"          # §2 section
+cctoolkit hotspots --ref "$MAIN_BRANCH" "${EXCL[@]}" --json   # activity.hotspots
+```
+
+Mass commits it lists (formatting, license headers) stay in the churn: add them to `.git-blame-ignore-revs`, or pass `--ignore-rev <sha>` when the user names them.
+
 ### Test inventory
 
 ```bash

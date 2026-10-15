@@ -271,7 +271,7 @@ fi
 
 # --- /learn backlog -------------------------------------------------------------
 # Verdict deviations nobody turned into a rule yet. The script only refreshes its
-# own transcript cache (.claude/learn-state.json, ignored by git): nothing in the
+# own cache of reports and transcripts (.claude/learn-state.json, ignored by git): nothing in the
 # repo changes. Silent below two lots, so a single bad batch does not nag.
 if [ -f "$KIT/scripts/learn-candidates.py" ]; then
   backlog=$(CLAUDE_PROJECT_DIR="$ROOT" python3 "$KIT/scripts/learn-candidates.py" --count 2>/dev/null)

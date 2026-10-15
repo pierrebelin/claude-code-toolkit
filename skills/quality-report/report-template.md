@@ -1,6 +1,6 @@
 # Software quality report — [Month YYYY]
 
-> Branch analysed: `<main branch>` — Date: [date]
+> Branch analysed: `<main branch>` at `<commit>` — Date: [date]
 
 ---
 
@@ -16,6 +16,8 @@
 | Code coverage (lines) | ✅/⚠️/🔴 | **XX%** lines — **XX%** branches — XX% methods |
 | Static quality (SonarQube) | ✅/⚠️/🔴 | Quality Gate **PASS/FAIL** — new-code coverage XX% — duplication XX% |
 | Test robustness (Stryker) | ✅/⚠️/🔴 | Detection **XX%** / Overall **XX%** (Domain + Application) |
+
+Status `—` = tool not configured; 🔴 `Missing` = configured but no usable result for this commit — never ✅.
 
 **At a glance:** [1 sentence summarising the overall state — non-complacent, factual]
 
@@ -65,6 +67,12 @@ Tests / src line ratio: **X.X**.
 | [other test projects, sorted by lines] | X | X | XX% |
 
 [1-2 lines of interpretation: layer whose weight departs from its coverage or churn weight, test project oversized or nearly empty against the layer it protects]
+
+### Hotspots — churn × complexity
+
+[Output of `cctoolkit hotspots`, as is: commit, window, files analysed and excluded, thresholds, quadrant counts, the two tables (total complexity, worst function), renames, ignored and mass commits]
+
+[1 sentence per listed file: why it changes so often, why it is complex, whether its fixes make it a bug nest]
 
 ---
 
@@ -212,6 +220,9 @@ Tests / src line ratio: **X.X**.
 
 ### What must improve
 [Long and precise — fragile zones, blind spots, insufficient scores with figures]
+
+### What the measures cannot see
+[Concrete blind spots of this run — missing evidence, `since`-mode Stryker, suppressed issues, migration churn, moved code, type-level logic]
 
 ### Verdict
 [1 direct sentence on the real state of the codebase — no reassuring phrasing]

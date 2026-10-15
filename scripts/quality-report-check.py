@@ -195,6 +195,81 @@ def check_size(report):
                 fail(f"codebase.size.src.{field} = {got}, activity.{key} = {expected} — same scope expected")
 
 
+EVIDENCE_STATUSES = ("measured", "not_configured", "missing")
+QUADRANTS = ("danger_zone", "cowboy_code", "fertile_ground", "healthy_closure")
+
+
+def numbers_in(entry):
+    """Every number in a block, nested ones included."""
+    if isinstance(entry, bool):
+        return []
+    if isinstance(entry, (int, float)):
+        return [entry]
+    if isinstance(entry, dict):
+        return [n for v in entry.values() for n in numbers_in(v)]
+    if isinstance(entry, list):
+        return [n for v in entry for n in numbers_in(v)]
+    return []
+
+
+def check_evidence(report):
+    metadata = report.get("metadata") or {}
+    evidence = metadata.get("evidence")
+    if evidence is None:
+        warn("metadata.evidence missing — a missing block cannot be told from a clean one")
+        return
+    commit = metadata.get("commit")
+    for block, entry in evidence.items():
+        status = (entry or {}).get("status")
+        if status not in EVIDENCE_STATUSES:
+            fail(f"metadata.evidence.{block}.status = {status!r}, expected one of {', '.join(EVIDENCE_STATUSES)}")
+        elif status == "measured":
+            if commit and entry.get("commit") != commit:
+                fail(
+                    f"metadata.evidence.{block}: measured at {entry.get('commit')}, report commit {commit} "
+                    "— results from another commit are missing, not measured"
+                )
+        else:
+            if numbers_in(report.get(block)):
+                fail(f"{block}: status {status} but the block holds numbers — null them, never 0 or an older figure")
+            if status == "missing" and not entry.get("reason"):
+                fail(f"metadata.evidence.{block}: missing without a reason")
+
+
+def check_hotspots(report):
+    hot = (report.get("activity") or {}).get("hotspots")
+    if not isinstance(hot, dict):
+        return
+    if hot.get("status") != "measured":
+        if hot.get("danger_zone_top") or hot.get("worst_function_top") or hot.get("quadrants"):
+            fail("activity.hotspots: status missing but quadrants or a ranking present")
+        return
+    quadrants = hot.get("quadrants") or {}
+    analysed = number(hot.get("files_analysed"))
+    total = sum(number(quadrants.get(q)) or 0 for q in QUADRANTS)
+    if analysed is not None and total != analysed:
+        fail(f"activity.hotspots: quadrants sum to {total}, files_analysed = {analysed}")
+    top = hot.get("danger_zone_top") or []
+    if len(top) > (number(quadrants.get("danger_zone")) or 0):
+        fail(f"activity.hotspots: {len(top)} ranked files, {quadrants.get('danger_zone')} in the Danger Zone")
+    for name in ("danger_zone_top", "worst_function_top"):
+        rows = hot.get(name) or []
+        scores = [number(d.get("score")) or 0 for d in rows]
+        if scores != sorted(scores, reverse=True):
+            fail(f"activity.hotspots.{name} not sorted by score")
+        for d in rows:
+            if not hot.get("fix_convention") and d.get("fixes") is not None:
+                fail(f"activity.hotspots.{name}: {d.get('file')} counts fixes without the fix: convention")
+            if (number(d.get("commits")) or 0) > (number(d.get("commits_all")) or 0):
+                fail(f"activity.hotspots.{name}: {d.get('file')} has more window commits than in the whole history")
+    listed = {d.get("file") for d in top}
+    if any(d.get("file") in listed for d in hot.get("worst_function_top") or []):
+        fail("activity.hotspots.worst_function_top repeats a file of danger_zone_top")
+    commit = (report.get("metadata") or {}).get("commit")
+    if commit and hot.get("commit") != commit:
+        fail(f"activity.hotspots.commit = {hot.get('commit')}, report commit {commit}")
+
+
 def main():
     if len(sys.argv) > 1:
         path = sys.argv[1]
@@ -218,6 +293,8 @@ def main():
     check_stryker(report)
     check_sonarqube(report)
     check_size(report)
+    check_evidence(report)
+    check_hotspots(report)
 
     print(f"Report: {path}")
     for message in warnings:

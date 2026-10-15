@@ -21,6 +21,18 @@ This file = common workflow, writing rules, report structure, JSON schema, coher
 
 `docs/` never analysed: not by SonarQube, not by git activity figures, not by any file or line count — this skill's own reports live there. Every repo-walking command carries the exclusion (`':(exclude)docs'` on git pathspecs, `docs/**` in `sonar.exclusions`); new commands added here carry it too.
 
+## Evidence status — missing never looks clean
+
+Every measured block (tests, coverage, SonarQube, Stryker) has one of three statuses, recorded in `metadata.evidence` (`references/json-schema.md`); `cctoolkit hotspots` writes its own:
+
+- **measured** — the tool ran on the report commit and its result was read. Clean or with findings.
+- **not_configured** — the project has no such tool. The section says so (`Stryker is not configured on this project.`); §1 shows `—`, not ✅.
+- **missing** — the tool exists but gave no usable result: run failed or timed out, output unreadable, or the result read belongs to another commit (a Stryker report older than this run, a SonarQube analysis whose `revision` is not the report commit). The section says `Missing — <reason>`, §1 shows 🔴, and §9 counts it as a blind spot.
+
+A missing value is `null` in the JSON, never `0` and never last month's figure. Results from a CI run count only when the run's head SHA is the report commit; record the run ID as the source.
+
+The report commit is `git rev-parse $MAIN_BRANCH`, stored as `metadata.commit`. A working tree on another commit, or with uncommitted changes, measures something else: check out the main branch clean before step 1, or state the gap in the report header.
+
 ## Preliminary step — choosing the Stryker mode
 
 Before any execution, ask the user which Stryker mode through `AskUserQuestion`:
@@ -48,7 +60,7 @@ Per choice:
 1. Start Docker (if needed)
 2. Run the tests with coverage
 3. Launch SonarQube + aggregated coverage **in parallel**
-4. Collect git data, test inventory, page/endpoint coverage — **launch Stryker in the background**
+4. Collect git data, hotspots, test inventory, page/endpoint coverage — **launch Stryker in the background**
 5. Wait for SonarQube + Stryker, collect the results
 6. Create or update the Markdown report file
 7. Produce the JSON file
@@ -81,7 +93,7 @@ Each step has the same structure:
 1. **Docker** — start it if needed (see the stack commands)
 2. **Build + tests** — measure the build time, run the tests with coverage (see the stack commands)
 3. **SonarQube + aggregated coverage** — in parallel, background sub-agents (see the stack commands)
-4. **Supplementary data + Stryker** — 4-5 parallel sub-agents for git, test inventory, page/endpoint coverage, codebase health and code size (src/tests, per layer), Stryker in the background (see the stack commands)
+4. **Supplementary data + Stryker** — 4-5 parallel sub-agents for git, test inventory, page/endpoint coverage, codebase health and code size (src/tests, per layer), `cctoolkit hotspots` run directly (no sub-agent: one command, seconds), Stryker in the background (see the stack commands)
 5. **Wait and collect** — wait for SonarQube + Stryker, collect the results
 
 > **Common rule for every stack:** launch Stryker after the tests finish (step 2), not alongside them — it instruments the code and interferes with the test run.
@@ -98,6 +110,9 @@ File name: `docs/metrics/quality-report-YYYY-MM-DD.md` (today's date). Exists �
 - §2 — no git repo → `Data unavailable — the project is not a git repository.` No `Trend` column, no comparison with the previous report (§ No trending in the report).
 - §5 — Stryker absent → `Stryker is not configured on this project.`
 - §6 — SonarQube absent → `SonarQube is not configured on this project.`
+- Any section whose evidence is **missing** → `Missing — <reason>.` in place of its tables (§ Evidence status).
+- §2 `Hotspots` — the output of `cctoolkit hotspots`, pasted as is: ranked on the last 365 days, the whole history beside it; one table on the total complexity, one on the worst function (a short file holding one monster function). Then 1 sentence per listed file: why it is there (one handler grown by every feature, a mapping table edited each release…). A file with many `fix:` commits is a bug nest, not only a busy file: say so. `fixes` absent → the repo does not use `fix:` subjects, say the churn cannot be told from bugs. Mass commits it lists stay in the churn unless the user names them; say so. Every Danger Zone file appears in §7 with its score, or the sentence says why it is no risk (a planned migration churning it).
+- §9 `What the measures cannot see` — the blind spots of this run, concrete: missing evidence, `since`-mode Stryker, coverage that executes a line without asserting it, issues hidden by suppressions (`#pragma warning disable`, `// NOSONAR`, `eslint-disable`), churn from a planned migration read as instability, complexity reset when code moves between files, cyclomatic complexity blind to type-level logic.
 
 ---
 
@@ -137,7 +152,7 @@ Before delivering: arithmetic first, then judgement.
 cctoolkit quality-report-check docs/metrics/quality-report-YYYY-MM-DD.json
 ```
 
-Checks per-type sums against totals (passed, failed, skipped, durations), `active + skip = total` on endpoints and pages, recomputed coverage and detection percentages, severity sum vs `issues_open_total`, duration thresholds per stack. 🔴 → fix the JSON **and** the Markdown section it comes from, re-run. ⚠️ → carry into the report as ⚠️.
+Checks per-type sums against totals (passed, failed, skipped, durations), `active + skip = total` on endpoints and pages, recomputed coverage and detection percentages, severity sum vs `issues_open_total`, duration thresholds per stack, evidence statuses, hotspot counts. 🔴 → fix the JSON **and** the Markdown section it comes from, re-run. ⚠️ → carry into the report as ⚠️.
 
 **8.2 — Markdown ↔ JSON.** Every figure of executive summary §1 matches its detailed section and the JSON exactly. `endpoints_skip > 0` is not uncovered: test exists, disabled.
 
@@ -150,6 +165,12 @@ Checks per-type sums against totals (passed, failed, skipped, durations), `activ
 **8.6 — Code size, §2 ↔ JSON.** `Code size` tables = `codebase.size` exactly; shares recomputed from the lines, not estimated. Interpretation cross-reads the layer weights with `coverage.by_layer` and churn — a heavy layer with low coverage or a thin test project facing it is a §7 risk, not a footnote.
 
 **8.7 — Status icons.** ✅ in §1 never described as problem in §7 or §9; ⚠️ in §9 has matching entry in §7. Correct in favour of most precise description.
+
+**8.8 — Evidence.** No ✅ on a block whose `metadata.evidence` status is not `measured`; every `missing` block named in §9 `What the measures cannot see`. The script checks the JSON side: values `null`, commit equal to `metadata.commit`.
+
+**8.9 — Hotspots, §2 ↔ §7.** Every file of `activity.hotspots.danger_zone_top` and `worst_function_top` in §7 or explained in §2.
+
+**8.10 — Hotspots, by hand.** Two listed files, checked against git and the tool: `git log --follow --no-merges --numstat --since=<window_from> -- <file>` gives the window's commits (minus creation, pure renames, ignored revisions), `lizard <file>` the worst function's score. A gap means a rename lost or a parser that lost function boundaries: say it in §9, never correct the figures by hand.
 
 ---
 

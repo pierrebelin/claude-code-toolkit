@@ -7,14 +7,18 @@ again, it gets fixed again. /learn reads those gaps, draws the recurring motifs
 out of them and has them written into a layer rule after confirmation. This
 script is the model-free half: extract, remember what was treated, count.
 
-Source. The `ddd-tdd-auditor` sub-transcripts (and the /verify-ddd-tdd forks)
+Sources. The `## Audit gaps` section of every `/run-lot` report,
+`todo/<code>/run/batches/FX.md`: one line per Blocking/Major gap, written by the
+workflow and kept in the repo, where transcripts are removed after
+`cleanupPeriodDays` (30 days by default). Then the `ddd-tdd-auditor` sub-transcripts (and the /verify-ddd-tdd forks)
 one message of which starts with `## Verdict — GAPS` (`## Verdict — ECARTS` in the
 verdicts written before the kit was translated; their severities `Bloquant`/`Majeur`
 and French axes fold onto the English ones). Measured on 2026-10-02 on
 the repo this kit comes from: 53 verdicts out of 175 sub-transcripts quoting the
 literal, the rest quote it without producing it (skill template loaded, docs
 agent). 1.7 GB of transcripts, 9.5 s for a full grep: the state remembers the
-mtime of every file read, only what moved is read again.
+mtime of every file read, only what moved is read again. A gap already read from
+the other source (same axis, same text) is not counted twice.
 
 State. `.claude/learn-state.json` (ignored by git): files read, rows extracted,
 treated ids, refused motifs. A refused motif is handed back to /learn so that it
@@ -46,6 +50,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import unicodedata
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -56,12 +61,17 @@ try:
 except ImportError:
     ROOT = HERE
 STATE = os.environ.get("LEARN_STATE") or os.path.join(ROOT, ".claude", "learn-state.json")
+REPORTS = os.path.join(os.environ.get("LEARN_REPORTS") or ROOT, "todo", "*", "run", "batches", "F*.md")
 TRANSCRIPTS = os.environ.get("LEARN_TRANSCRIPTS") or os.path.join(
     os.path.expanduser("~/.claude/projects"), re.sub(r"[^A-Za-z0-9]", "-", ROOT))
 MEMORY = os.environ.get("LEARN_MEMORY") or os.path.join(TRANSCRIPTS, "memory")
 INDEX_LINK = re.compile(r"^\s*-\s*\[[^\]]*\]\(([^)]+)\)")
 REPO_PATH = re.compile(r"^[\w.@-]+(/[\w.@-]+)+/?$")
 VERDICT = re.compile(r"^## Verdict — (?:GAPS|ECARTS)", re.M)
+AUDIT_GAPS = ("## audit gaps", "## ecarts d'audit")
+# `- <severity> — <axis> — <gap> (evidence: <evidence>). Fix: <fix>; applied in round n: … .`
+# or `; not applied.` — the line renderReport() of workflows/run-lot.js writes.
+REPORT_GAP = re.compile(r"^- (\w+) — ([^—]+?) — (.*) \(evidence: (.*)\)\. Fix: (.*?)(?:; applied in round \d+: .*|; not applied)\.$")
 AUDITORS = {"ddd-tdd-auditor", "fork"}
 # Severities and axes in both vocabularies, folded onto the English ones; French
 # verdicts and state files predate the translation and stay readable.
@@ -163,9 +173,51 @@ def rows_of(text):
             yield SEVERITIES[cells[0]], english, written, " | ".join(cells[2:-2]), cells[-2], cells[-1]
 
 
+def same_gap(axis_, gap):
+    return axis_, " ".join(fold(gap.replace("\\|", "|")).split())
+
+
+def report_rows(path):
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    start = next((i for i, l in enumerate(lines) if fold(l.strip()) in AUDIT_GAPS), None)
+    if start is None:
+        return
+    for line in lines[start + 1:]:
+        if line.startswith("## "):
+            break
+        m = REPORT_GAP.match(line.strip())
+        if m and m.group(1) in SEVERITIES:
+            english, written = axis_pair(m.group(2))
+            yield SEVERITIES[m.group(1)], english, written, m.group(3), m.group(4), m.group(5)
+
+
 def scan(s):
     seen = s["files"]
     known = {r["id"] for r in s["rows"]}
+    gaps = {same_gap(r["axis"], r["gap"]) for r in s["rows"]}
+
+    def add(row, written):
+        rid = hashlib.sha1(f"{row['session']}|{written}|{row['gap']}".encode()).hexdigest()[:10]
+        key = same_gap(row["axis"], row["gap"])
+        if rid in known or key in gaps:
+            return
+        known.add(rid)
+        gaps.add(key)
+        s["rows"].append(dict(id=rid, **row))
+
+    for path in glob.glob(REPORTS):
+        mtime = os.path.getmtime(path)
+        if seen.get(path) == mtime:
+            continue
+        seen[path] = mtime
+        code = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(path))))
+        batch = os.path.basename(path)[:-3]
+        date = time.strftime("%Y-%m-%d", time.localtime(mtime))
+        for sev, ax, written, gap, evidence, fix in report_rows(path):
+            add(dict(session=f"{code}/{batch}", date=date, batch=f"{code} {batch}",
+                     severity=sev, axis=ax, gap=gap, evidence=evidence, fix=fix), written)
+
     for path in glob.glob(os.path.join(TRANSCRIPTS, "*", "subagents", "*.jsonl")):
         mtime = os.path.getmtime(path)
         if seen.get(path) == mtime:
@@ -181,13 +233,8 @@ def scan(s):
         session = os.path.basename(os.path.dirname(os.path.dirname(path)))[:8]
         for text, ts in verdict_texts(path):
             for sev, ax, written, gap, evidence, fix in rows_of(text):
-                rid = hashlib.sha1(f"{session}|{written}|{gap}".encode()).hexdigest()[:10]
-                if rid in known:
-                    continue
-                known.add(rid)
-                s["rows"].append(dict(
-                    id=rid, session=session, date=ts[:10], batch=meta.get("description", ""),
-                    severity=sev, axis=ax, gap=gap, evidence=evidence, fix=fix))
+                add(dict(session=session, date=ts[:10], batch=meta.get("description", ""),
+                         severity=sev, axis=ax, gap=gap, evidence=evidence, fix=fix), written)
 
 
 def pending(s):
