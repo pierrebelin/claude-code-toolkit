@@ -39,10 +39,10 @@ flowchart LR
 | Command | `/cctoolkit:run-plan <plan>` | `/cctoolkit:run-lot <sheet>` |
 | Runs | every batch, in dependency order | one batch |
 | You step in | once, at the end | after each batch: review, `/clear`, next |
-| Stops | a batch that cannot pass is set aside, only its dependents wait | the batch comes back `DONE`, or with what needs your eyes |
+| Stops | a batch that cannot pass is set aside, only its dependents wait; batches set aside for one shared cause stop the plan | the batch comes back `DONE`, or with what needs your eyes |
 | Fits | a plan you trust, a run over lunch or overnight | a new plan, a tricky batch, a team that reviews every commit |
 
-**Whole plan** runs `run-lot` on each batch the plan's dependency table allows, then checks each result from disk before going on. A stop is settled by an arbiter agent, not by a question: what it decided without you lands at the top of the run report, to read after the plan. A batch that still cannot pass is set aside, its partial work saved as a patch, and the batches that do not depend on it carry on. A question reaches you only when no decision is defensible: arm `cctoolkit run-question watch <plan folder>/run` in the background, answer through AskUserQuestion, the run goes on. Each batch that passes its gate gets its own commit, never a push; you review the batches together at the end, with one report per run, `run/<stamp>.md`, and the patch of every batch set aside. `--until F3` stops after a given batch, `--only F2` runs just one.
+**Whole plan** runs `run-lot` on each batch the plan's dependency table allows, then checks each result from disk before going on. A stop is settled by an arbiter agent, not by a question: what it decided without you lands at the top of the run report, to read after the plan. A batch that still cannot pass is set aside, its partial work saved as a patch, and the batches that do not depend on it carry on. Two batches set aside for the same cause stop the plan: the run report opens on what to fix before relaunching. A question reaches you only when no decision is defensible: arm `cctoolkit run-question watch <plan folder>/run` in the background, answer through AskUserQuestion, the run goes on. Each batch that passes its gate gets its own commit, never a push; you review the batches together at the end, with one report per run, `run/<stamp>.md`, and the patch of every batch set aside. `--until F3` stops after a given batch, `--only F2` runs just one.
 
 **Batch by batch** keeps you in the loop: each batch ends on a report and its own commit, you read it and start the next one with a clean context.
 
@@ -75,7 +75,7 @@ A batch takes tens of minutes and a dozen agents, a whole plan several times tha
 
 ![run-lot-pane following a whole plan](mods/run-lot-pane/screenshots/demo-plan-running.png)
 
-`1`-`9` opens a batch, `p` comes back to the plan. A batch, opened from the plan or run on its own: each phase, which agent is working, the tests going red then green, the cost, and the final verdict.
+`1`-`9` opens a batch, `p` comes back to the plan. A batch, opened from the plan or run on its own: each phase, which agent is working, the tests going red then green, the cost, and the final verdict. The pane also steers the run: `v` keeps, rejects or amends what the run decided without you, `z` pauses a plan between two batches, `n` leaves a note for a batch's agents.
 
 ![run-lot-pane during a batch](mods/run-lot-pane/screenshots/demo-running.png)
 
