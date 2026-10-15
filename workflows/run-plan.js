@@ -6,7 +6,7 @@ export const meta = {
     { title: 'Preflight', detail: 'plan check, doctor, docker, build green, kit root, run stamp, old runs and orphan scratch folders removed' },
     { title: 'Batch', detail: 'next batch, out-of-batch check and journal in one call, run-lot (its questions wait for the answer in the same run)' },
     { title: 'Gate', detail: 'report status, plan heading, build green, one repair, batch commit, journal' },
-    { title: 'Aside', detail: 'blocked batch: partial work saved as a patch, tree restored to the batch start, dependents skipped' },
+    { title: 'Aside', detail: 'blocked batch: partial work saved as a patch, tree restored to the batch start, dependents skipped; from the second, an arbiter looks for a cause common to the batches set aside — one stops the plan' },
     { title: 'Final check', detail: 'every test suite run whole once, integration included, after the last batch: reported, never blocking' },
     { title: 'Report', detail: 'run/<stamp>.md: every decision taken without the user first, then batches, final check and journal; run lines of run/.work.jsonl removed, notification' },
   ],
@@ -57,6 +57,7 @@ const SEALED = obj({ ok: bool, commit: str })
 const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str) })
 const REPORT = obj({ path: str, lastLine: str })
 const FINAL = obj({ suites: arr(obj({ name: str, exit: int, failed: arr(str) })) })
+const BREAKER = obj({ commonCause: bool, cause: str, batches: arr(str), fixBeforeRelaunch: str })
 const FINAL_TIMEOUT_MIN = 40
 
 function newFailures(build) {
@@ -109,6 +110,7 @@ const toReview = []
 const aside = []
 let held = []
 let stop = null
+let breaker = null
 
 const journalLine = line => `cctoolkit run-work append ${work} <<'JOURNAL_LINE'\n${JSON.stringify({ kind: 'journal', run: pre.stamp, text: line })}\nJOURNAL_LINE`
 const tmpOf = name => `"$(cctoolkit run-work tmp ${name})"`
@@ -116,6 +118,27 @@ const rmTmp = (...names) => `cctoolkit run-work rm-tmp ${names.join(' ')}`
 
 function journal(line) {
   return agent(`${FRAME}\n\nOne call, nothing else:\n\n${journalLine(line)}`, { schema: obj({ ok: bool }), phase: 'Batch', label: 'journal', ...SHELL })
+}
+
+const breakerLine = (decision, b) => `cctoolkit run-work append ${work} <<'BREAKER_LINE'\n${JSON.stringify({ kind: 'breaker', run: pre.stamp, asides: aside.map(x => x.batch), decision, cause: b ? b.cause : '' })}\nBREAKER_LINE`
+
+// From the second batch set aside, an arbiter compares the reasons: a cause they share (the same
+// spec ambiguity, the same wrong assumption, the same workaround) would set aside every batch it
+// reaches, so the plan stops for the spec or the plan to be fixed first. Distinct causes: the plan
+// goes on as before. Every decision is a `breaker` line of the work file.
+function checkBreaker() {
+  return agent(
+    [
+      FRAME.replace('Run exactly the commands given, return their outputs through the structured output.', 'Return your decision through the structured output.'),
+      '',
+      `Batches set aside in this run, latest last:`,
+      ...aside.map(x => `- ${x.batch} — ${x.reason}${x.report ? ` — report \`${x.report}\`` : ''}`),
+      'In each report, read only its `Reason:` line and its `## To validate` section (`sed -n` on that section), nothing else.',
+      `Does the latest one (${aside[aside.length - 1].batch}) share its cause with an earlier one? A shared cause is the same spec ambiguity, the same wrong assumption, the same workaround, the same missing precondition — not merely the same step or the same kind of failure (two red suites for unrelated reasons are distinct).`,
+      '`commonCause` true only when that cause is named: `cause` = one sentence citing the report lines it rests on, `batches` = the batches it explains, `fixBeforeRelaunch` = what to fix in the spec or the plan before a new run. Otherwise `commonCause` false, `cause` = why the causes differ, one line, `batches` empty, `fixBeforeRelaunch` empty. Prose in the docs language of `kit.config.json`.',
+    ].join('\n'),
+    { schema: BREAKER, phase: 'Aside', label: `breaker ${aside.length}`, model: 'sonnet', effort: 'medium' },
+  ).catch(() => null)
 }
 
 function nextBatches() {
@@ -245,6 +268,19 @@ while (!stop) {
     entry.patch = patchOf(b.batch)
     aside.push({ batch: b.batch, reason: failure, patch: entry.patch, report: result.report || null, restored: back.detail || '' })
     log(`→ ${b.batch} set aside, tree restored — ${failure}`)
+    if (aside.length >= 2) {
+      const b2 = await checkBreaker()
+      const decision = b2 && b2.commonCause ? 'stop' : 'continue'
+      await agent(`${FRAME}\n\nOne call, nothing else:\n\n${breakerLine(decision, b2)}`, { schema: obj({ ok: bool }), phase: 'Aside', label: 'breaker line', ...SHELL }).catch(() => null)
+      if (decision === 'stop') {
+        breaker = b2
+        stop = `common cause across the batches set aside (${b2.batches.join(', ') || aside.map(x => x.batch).join(', ')}): ${b2.cause}`
+        log(`breaker: ${stop}`)
+        await journal(`⛔ ${stop}`)
+        break
+      }
+      log(`breaker: ${aside.length} batches set aside, distinct causes — plan goes on`)
+    }
   } else {
     const sealed = await seal(b, `${b.batch} ✅ — Hn: ${entry.hypotheses.length}, Minor: ${entry.minors.length}`)
     entry.commit = sealed ? sealed.commit : null
@@ -300,7 +336,7 @@ if (!ran.length) {
   return { status: reason ? BLOCKED : DONE, reason: reason || '—', report: null, batches: [] }
 }
 const payload = JSON.stringify({ plan: pre.plan, scope: scope || 'whole plan', report: reportFile, stop: reason, batches: ran, aside, finalCheck: finalCheck ? finalCheck.suites : null }, null, 1)
-const review = JSON.stringify({ stop: reason, toReview, audits: ran.filter(r => r.audit).map(r => ({ batch: r.batch, audit: r.audit, report: r.report })), hypotheses: ran.flatMap(r => r.hypotheses.map(h => ({ batch: r.batch, h }))) }, null, 1)
+const review = JSON.stringify({ stop: reason, breaker, toReview, audits: ran.filter(r => r.audit).map(r => ({ batch: r.batch, audit: r.audit, report: r.report })), hypotheses: ran.flatMap(r => r.hypotheses.map(h => ({ batch: r.batch, h }))) }, null, 1)
 const rep = await agent(
   [
     FRAME,
@@ -308,6 +344,7 @@ const rep = await agent(
     `First, one call: \`cctoolkit run-work journal ${work} ${pre.stamp}\`: the journal of the run, one line each.`,
     `Write \`${reportFile}\` in a single Write, headings verbatim, prose in the docs language of \`kit.config.json\`, from the two JSON below, without reading code, tests or batch reports. Header: plan, scope, start time = the \`start\` line of the journal, end time = \`date '+%Y-%m-%d %H:%M'\`. Then, in this order:`,
     '- table `| Batch | Status | Report | Commit | Patch |`, one row per batch of the first JSON, `Commit` = the hash `commit` starts with (`—` when absent)',
+    ...(breaker ? ['- `## Plan stopped — common cause` — from `breaker` of the second JSON: the cause, the batches it reached, what to fix in the spec or the plan before relaunching (`fixBeforeRelaunch`), then the relaunch: a new `/run-plan` skips the batches ✅ DONE'] : []),
     `- \`## To validate\` — from the second JSON, everything the run decided without the user (marked \`${TO_REVIEW}\`), to review after the plan, one \`###\` per kind: \`### Stop\` (\`stop\` verbatim, only when not null), \`### Batches set aside\` (\`toReview\` entries of step \`Set aside\`), \`### Start\` (\`toReview\` entries of step \`Start\`), \`### Final check\` (\`toReview\` entries of step \`Final check\`), \`### Audits to redo\` (\`audit\` = \`to redo\`: batch, report, command \`/verify-ddd-tdd batch FX\`), \`### Audit gaps carried\` (\`toReview\` entries of step \`Audit\`, and \`audit\` = \`GAPS carried\`), \`### Arbiter and design decisions\` (other \`toReview\` entries, step and why kept), \`### Assumptions\` (every \`h\`). One bullet per entry, prefixed by its batch; \`None.\` for an empty section.`,
     '- `## Minor` — every minor of the first JSON, prefixed by its batch; `None.` when none',
     '- `## Final check` — table `| Suite | Exit | Failed tests |` from `finalCheck`; `Not run.` when `finalCheck` is null',
@@ -326,7 +363,7 @@ const rep = await agent(
   { schema: REPORT, phase: 'Report', label: 'report', model: 'haiku' },
 )
 
-const RESTART = `A blocked batch never ends the plan: its partial work is saved as \`run/<stamp>-aside-FX.patch\`, the tree goes back to the last batch commit (files the user modified before the batch left as they are), its saved cycles are cleared and the plan goes on with every batch that does not depend on it; \`${BLOCKED}\` here means batches were set aside (listed in \`setAside\` with their dependents) or the run met a technical stop (\`reason\`). The arbiter settles what it can, a question waits 10 min then takes its recommendation, so a batch is set aside for a technical stop, a production Blocking the audit fixes did not lift, a \`STOP\` answer, a question without answer nor recommendation, a step still stopped after its last attempt, or a gate still red after its repair. Fix the cause (reapply the patch with \`git apply\` to keep the partial work), write the decision into \`decisions\` of the cycles it touches in the \`## Cycles\` block of the batch sheet (and as \`Hn\` marked \`${USER}\`), then launch a new run-plan: batches ✅ DONE are skipped. Never \`resumeFromRunId\`: replay re-runs finished work.`
+const RESTART = `A blocked batch never ends the plan: its partial work is saved as \`run/<stamp>-aside-FX.patch\`, the tree goes back to the last batch commit (files the user modified before the batch left as they are), its saved cycles are cleared and the plan goes on with every batch that does not depend on it; \`${BLOCKED}\` here means batches were set aside (listed in \`setAside\` with their dependents) or the run met a technical stop (\`reason\`). The arbiter settles what it can, a question waits 10 min then takes its recommendation, so a batch is set aside for a technical stop, a production Blocking the audit fixes did not lift, a \`STOP\` answer, a question without answer nor recommendation, a step still stopped after its last attempt, or a gate still red after its repair. From the second batch set aside, an arbiter compares the reasons: a cause shared with an earlier one stops the plan, named under \`## Plan stopped — common cause\` of the run report with what to fix in the spec or the plan first. Fix the cause (reapply the patch with \`git apply\` to keep the partial work), write the decision into \`decisions\` of the cycles it touches in the \`## Cycles\` block of the batch sheet (and as \`Hn\` marked \`${USER}\`), then launch a new run-plan: batches ✅ DONE are skipped. Never \`resumeFromRunId\`: replay re-runs finished work.`
 
 return {
   status: reason ? BLOCKED : DONE,

@@ -96,6 +96,22 @@
         "exit": 0,
         "stdout": "log: audit rounds stopped, diverging: round 1 changed 5 file(s) for 2 finding(s), 3 still open;"
       }
+    },
+    {
+      "name": "run-plan flow: a cause the breaker finds common to the two batches set aside stops the plan before the next batch, a breaker line written, the report given its common-cause section",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-flow.js {{KIT}}/workflows/run-plan.js common | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | common cause across the batches set aside (F1, F2): archive date source ambiguous in the spec ; batches set aside: F1, F2;AGENTS preflight | next batch | run-lot F1 | aside F1 | next batch | run-lot F2 | aside F2 | breaker 2 | breaker line | journal | report;"
+      }
+    },
+    {
+      "name": "run-plan flow: distinct causes leave the plan going, the next batch runs",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-flow.js {{KIT}}/workflows/run-plan.js distinct | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | batches set aside: F1, F2;AGENTS preflight | next batch | run-lot F1 | aside F1 | next batch | run-lot F2 | aside F2 | breaker 2 | breaker line | next batch | run-lot F3 | gate F3 | commit F3 | next batch | final check | report;"
+      }
     }
   ]
 }
