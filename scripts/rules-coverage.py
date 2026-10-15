@@ -12,8 +12,10 @@ persistence rule by an integration test.
 
     cctoolkit rules-coverage               # report
     cctoolkit rules-coverage --untested    # only the rules with no test
+    cctoolkit rules-coverage --json        # the same counts and lists, as JSON
     cctoolkit rules-coverage --ids <sheet>  # DDD/APP/PERF ids the plan never classifies
 """
+import json
 import os
 import re
 import sys
@@ -237,9 +239,8 @@ def main():
     only_untested = "--untested" in sys.argv
     traits, methods = scan_traits()
 
-
     total, untested = 0, 0
-    lines = []
+    lines, handlers_missing = [], []
     for rel, md in sorted(handlers()):
         rows = rules_of(md)
         if not rows:
@@ -250,6 +251,7 @@ def main():
         untested += len(miss)
         if miss:
             lines.append(f"  {rel}: {len(miss)}/{len(rows)} with no test — {', '.join(miss)}")
+            handlers_missing.append({"handler": rel, "rules": len(rows), "untested": miss})
         elif not only_untested:
             lines.append(f"  {rel}: {len(rows)}/{len(rows)} ✓")
 
@@ -261,6 +263,12 @@ def main():
     orphans = sorted(k for k, (cls, carried, bound) in methods.items()
                      if bound and cls in traited_classes and not carried)
 
+    if "--json" in sys.argv:
+        print(json.dumps({"rules": total, "with_test": total - untested, "without_test": untested,
+                          "handlers_without_test": handlers_missing, "dead_references": stale,
+                          "unbound_tests": orphans}, indent=2, ensure_ascii=False))
+        return
+
     print(f"rules: {total} | with test: {total - untested} | with no test: {untested}")
     print(f"dead references: {len(stale)} | unbound tests: {len(orphans)}")
     print()
@@ -269,7 +277,6 @@ def main():
         print(f"  DEAD REFERENCE: {s} — trait citing a rule absent from the tables")
     for o in orphans:
         print(f"  UNBOUND TEST: {o}")
-
 
 if __name__ == "__main__":
     main()

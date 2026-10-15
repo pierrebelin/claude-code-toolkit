@@ -16,6 +16,8 @@ Usage:
     cctoolkit access-cost <file.cs> [...]   # files the implementer touched
     cctoolkit access-cost --diff            # every .cs modified under the source roots,
                                             # added lines flagged (audit)
+    cctoolkit access-cost --all --json      # every .cs under the source roots, test roots left
+                                            # out: counts per file as JSON (quality report)
     cctoolkit access-cost --base <work> FX [<file.cs> ...]
         # lines added by batch FX (`batch-baseline`, run work file <work>) flagged, the others
         # listed "(pre-existing)"; no file = every .cs of the batch diff under the
@@ -31,7 +33,9 @@ client, provider, unit of work, DbContext…): anything else is listed as
 "to classify" and left to the reader — a validator runner or a stream is not
 Infrastructure, a badly named gateway is.
 """
+import contextlib
 import difflib
+import io
 import json
 import os
 import re
@@ -197,7 +201,33 @@ def analyse(matches, path, added):
     if inc:
         print(f"Include ({len(inc)}) : " + " · ".join(inc))
     blocking = [i for i in loop + lam + filt if i[1]]
-    return reads, writes, blocking
+    found = {"in_loop": len(loop), "in_lambda": len(lam), "memory_filter": len(filt)}
+    return reads, writes, blocking, found
+
+
+def whole_repo():
+    """--all --json: every .cs of the source roots minus the test roots, one scan."""
+    config = kit()
+    files = []
+    for base, names in config.walk(config.source_roots):
+        for n in names:
+            f = os.path.relpath(os.path.join(base, n), ROOT)
+            if f.endswith(".cs") and not config.under(f, config.test_roots):
+                files.append(f)
+    files.sort()
+    rows = []
+    with contextlib.redirect_stdout(io.StringIO()):
+        # the source root folders, not the file list: thousands of paths overflow the command line
+        matches = scan(ast_grep(), [os.path.relpath(d, ROOT) for d in config.dirs(config.source_roots)]) if files else []
+        for f in files:
+            _, _, _, found = analyse(matches, f, None)
+            if any(found.values()):
+                rows.append({"file": f, **found})
+    rows.sort(key=lambda r: (-(r["in_loop"] + r["in_lambda"] + r["memory_filter"]), r["file"]))
+    total = lambda k: sum(r[k] for r in rows)
+    print(json.dumps({"files_scanned": len(files), "in_loop": total("in_loop"), "in_lambda": total("in_lambda"),
+                      "memory_filter": total("memory_filter"), "files": rows}, indent=2, ensure_ascii=False))
+    return 0
 
 
 def main(argv):
@@ -208,6 +238,8 @@ def main(argv):
     if not binary:
         print("ast-grep missing — brew install ast-grep — cost not checked mechanically, state it by hand")
         return 3
+    if argv == ["--all", "--json"] or argv == ["--json", "--all"]:
+        return whole_repo()
     base = (argv[1], argv[2]) if len(argv) >= 3 and argv[0] == "--base" else None
     if base:
         argv = argv[3:]
@@ -237,7 +269,7 @@ def main(argv):
     reads = writes = 0
     blocking = []
     for f in files:
-        r, w, b = analyse(matches, f, added_since(base, f) if base else added_lines(f) if diff_mode else None)
+        r, w, b, _ = analyse(matches, f, added_since(base, f) if base else added_lines(f) if diff_mode else None)
         reads += r
         writes += w
         blocking += b

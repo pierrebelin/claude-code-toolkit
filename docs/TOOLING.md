@@ -267,3 +267,26 @@ Preflight (haiku: `cctoolkit plan-next-batch --check`, `cctoolkit doctor --quiet
 `cctoolkit plan-next-batch` reads the `### Batch execution` table (`Batch`, `Depends on`, optional `Repo`), at most one batch per repo, and the French form of the table of a repo that started in French; `--outside` mirrors the scope check of `cctoolkit pre-audit` (source and test roots of `kit.config.json`, plan folder, basename named in the sheet; `.claude/` and `todo/` never count as outside).
 
 Limits: batches of this repo only (a `Repo` elsewhere stops the run with its name). No USD cap per batch. Each batch is committed before the next one starts, so batch N+1's diff never holds batch N's code. The `run-lot-pane` mod opens a plan view on such a run: `p` back to the plan, `1`-`9` a batch, agents split by the `Workflow run-lot, batch FX` first line of their prompt.
+
+## Workflow `run-audit` — the quality report
+
+`workflows/run-audit.js`, shipped by the plugin since 1.11.0. Launched by `/quality-report` once the Stryker mode is chosen (off by default):
+
+```text
+/cctoolkit:run-audit --stryker off|full|since --date YYYY-MM-DD --checkout <main checkout>
+```
+
+It never asks: a tool that fails gives `missing` and the run goes on. Phases, each agent on the smallest model that does the job:
+
+| Phase | Agents | Model / effort |
+|-------|--------|----------------|
+| Preflight | doctor, leftover `bg` jobs stopped, `cctoolkit audit-worktree create` (main branch, detached, system temp), stack, temp folders, Docker | haiku / low |
+| Tests | restore, build, every suite with coverage (`commands-<stack>.md` § Step 1-2), alone | sonnet / low |
+| Measures | SonarQube + coverage (reuses an analysis whose `revision` is the commit), `cctoolkit audit-collect`, inventory, git activity — in parallel | sonnet / low, collect haiku |
+| Stryker | only when asked; starts once every measure reading the sources is done (Stryker rewrites them), `cctoolkit bg start audit-stryker`, then `bg wait --seconds 540` per haiku agent, stopped past 4 h (full) or 1 h 30 (since); reports cached per commit (`run-work tmp stryker-<sha>`) and reread on a rerun | sonnet / low, waits haiku |
+| Assemble | `cctoolkit risk-cross`, `cctoolkit report-assemble` — fragments merged, the workflow's metadata and evidence last | haiku / low |
+| Report | the Markdown, from the JSON, the template and `SKILL.md` § Report rules | opus / medium |
+| Check | `quality-report-check`, two repairs at most, then the coherence checks and two hotspot files by hand | haiku, sonnet / medium |
+| Cleanup | jobs stopped, worktree removed (`finally`: on failure too); the temp folder kept unless `DONE` | haiku / low |
+
+No figure crosses two models: each agent writes its own fragment under the temp folder, `report-assemble` merges them and sums `tests.total`. The `run-lot-pane` mod follows it like any workflow (phases and agents, no batch sheet). Flow check without agents: `node evals/workflows/run-audit-flow.js workflows/run-audit.js off|full|timeout|nocollect|blocked`.

@@ -15,9 +15,14 @@
 | API endpoint coverage | ✅/⚠️/🔴 | X endpoints — Y active + Z [Skip] |
 | Code coverage (lines) | ✅/⚠️/🔴 | **XX%** lines — **XX%** branches — XX% methods |
 | Static quality (SonarQube) | ✅/⚠️/🔴 | Quality Gate **PASS/FAIL** — new-code coverage XX% — duplication XX% |
-| Test robustness (Stryker) | ✅/⚠️/🔴 | Detection **XX%** / Overall **XX%** (Domain + Application) |
+| Test robustness (Stryker) | ✅/⚠️/🔴/— | Detection **XX%** / Overall **XX%** (Domain + Application) — or `Skipped (off for this run)` |
+| Hotspots | ⚠️/🔴 | X files in the Danger Zone — X of them under XX% line coverage |
+| Rule traceability | ✅/⚠️/🔴/— | X rules — Y without a test — Z unbound tests |
+| Suppressions | ⚠️/🔴 | X suppressions in X files (pragma X, NOSONAR X, …) |
+| Dependency vulnerabilities | ✅/⚠️/🔴 | X critical — X high — X moderate — X low |
+| Infrastructure calls in loops | ✅/⚠️/🔴/— | X in a loop — X in a lambda — X in-memory filters |
 
-Status `—` = tool not configured; 🔴 `Missing` = configured but no usable result for this commit — never ✅.
+Status `—` = not configured, or skipped by this run; 🔴 `Missing` = configured but no usable result for this commit — never ✅.
 
 **At a glance:** [1 sentence summarising the overall state — non-complacent, factual]
 
@@ -121,6 +126,23 @@ Tests / src line ratio: **X.X**.
 | Infrastructure | XX% |
 | WebAPI | XX% |
 
+### Rule traceability
+
+| Measure | Value |
+|---|---|
+| Business rules | X |
+| With at least one test | X |
+| Without a test | X |
+| Dead references (tag citing no rule) | X |
+| Unbound tests (no tag, in a class carrying some) | X |
+| Tests in classes carrying no tag | X |
+
+| Handler | Rules | Without a test |
+|---|---|---|
+| `Feature/Handler` | X | `RM-02`, `RM-05` |
+
+[1-2 lines: which handlers carry the untested rules, whether the unbound tests point at a rule missing from a table]
+
 ---
 
 ## 4. API endpoint coverage
@@ -163,9 +185,9 @@ Tests / src line ratio: **X.X**.
 
 ---
 
-## 6. Static quality — SonarQube
+## 6. Static quality
 
-### Quality Gate: PASS / FAIL
+### SonarQube — Quality Gate: PASS / FAIL
 
 | Metric | Value | Threshold |
 |---|---|---|
@@ -195,9 +217,60 @@ Tests / src line ratio: **X.X**.
 | Infrastructure | X | X |
 | WebAPI | X | X |
 
+### Suppressions
+
+| Kind | Count |
+|---|---|
+| `#pragma warning disable` | X |
+| `SuppressMessage` | X |
+| `NOSONAR` | X |
+| `eslint-disable` | X |
+| `@ts-ignore` / `@ts-expect-error` / `@ts-nocheck` | X |
+| `ReSharper disable` | X |
+| **Total** | **X** (in X files) |
+
+| Layer | Suppressions |
+|---|---|
+| Domain | X |
+
+Top files: `Xxx.cs` (X), …
+
+### Dependency vulnerabilities
+
+| Severity | Packages |
+|---|---|
+| Critical | X |
+| High | X |
+| Moderate | X |
+| Low | X |
+
+| Package | Version | Severity | Direct | Advisory |
+|---|---|---|---|---|
+| `Xxx` | X.Y.Z | high | yes/no | [link] |
+
+### Infrastructure calls in loops
+
+| Measure | Count |
+|---|---|
+| Infrastructure awaited in a loop | X |
+| Infrastructure awaited in a lambda | X |
+| In-memory filter on an awaited result | X |
+
+| File | Loop | Lambda | Filter |
+|---|---|---|---|
+| `Xxx.cs` | X | X | X |
+
 ---
 
 ## 7. Risk zones
+
+### Danger Zone × coverage × survivors
+
+| File | Ranking | Score | Commits | Fixes | Complexity (total / worst) | Lines covered | Branches covered | Survivors / mutants |
+|---|---|---|---|---|---|---|---|---|
+| `Xxx.cs` | total / worst function | X.XX | X | X | X / X | XX% | XX% | X / X — or `—` (Stryker skipped) |
+
+[1 line per file: what guards it and what does not]
 
 | Zone | Risk | Indicator | Priority |
 |---|---|---|---|
@@ -205,11 +278,11 @@ Tests / src line ratio: **X.X**.
 
 ---
 
-## 8. Actions — next month
+## 8. Actions — next period
 
-| Action | Priority | Context |
-|---|---|---|
-| [Concrete action] | HIGH/MEDIUM/LOW | [Why] |
+| Action | Priority | Context | Carried by |
+|---|---|---|---|
+| [Concrete action on a named file or block] | HIGH/MEDIUM/LOW | [Why — the figure it moves] | [`/plan-implementation`, `/business-spec`, or —] |
 
 ---
 
@@ -222,7 +295,7 @@ Tests / src line ratio: **X.X**.
 [Long and precise — fragile zones, blind spots, insufficient scores with figures]
 
 ### What the measures cannot see
-[Concrete blind spots of this run — missing evidence, `since`-mode Stryker, suppressed issues, migration churn, moved code, type-level logic]
+[Concrete blind spots of this run — missing or skipped evidence, `since`-mode Stryker, suppressed issues, migration churn, moved code, type-level logic]
 
 ### Verdict
 [1 direct sentence on the real state of the codebase — no reassuring phrasing]

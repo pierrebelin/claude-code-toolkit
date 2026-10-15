@@ -16,7 +16,7 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
       "tests":     { "status": "measured", "source": "local", "commit": "sha", "reason": null },
       "coverage":  { "status": "measured", "source": "local", "commit": "sha", "reason": null },
       "sonarqube": { "status": "measured", "source": "local", "commit": "sha", "reason": null },
-      "stryker":   { "status": "missing",  "source": "local", "commit": null,  "reason": "run timed out" }
+      "stryker":   { "status": "skipped",  "source": "local", "commit": null,  "reason": "Stryker off for this run" }
     }
   },
   "tests": {
@@ -102,6 +102,39 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
       "tests": { "files": 0, "lines": 0 },
       "src_by_layer":     { "Domain": { "files": 0, "lines": 0 } },
       "tests_by_project": { "UnitTests": { "files": 0, "lines": 0 } }
+    },
+    "rules_coverage": {
+      "status": "measured", "reason": null, "commit": "sha",
+      "rules": 0, "with_test": 0, "without_test": 0,
+      "handlers_without_test": [ { "handler": "Feature/Handler", "rules": 0, "untested": ["RM-02"] } ],
+      "dead_references": [], "unbound_tests": [], "unbound_tests_count": 0,
+      "untagged": { "tests": 0, "tagged": 0, "untagged": 0, "in_tagged_class": 0, "in_untagged_class": 0,
+                    "by_suite": { "UnitTests": { "in_tagged_class": 0, "in_untagged_class": 0 } } }
+    },
+    "suppressions": {
+      "status": "measured", "reason": null, "commit": "sha",
+      "files_scanned": 0, "total": 0, "files_with_suppressions": 0,
+      "by_kind": { "pragma warning disable": 0, "SuppressMessage": 0, "NOSONAR": 0, "eslint-disable": 0, "ts-ignore": 0, "ReSharper disable": 0 },
+      "by_layer": { "Domain": 0 },
+      "top_files": [ { "file": "", "count": 0 } ]
+    },
+    "vulnerabilities": {
+      "status": "missing", "reason": "npm audit: request to registry failed", "commit": null,
+      "tool": null, "total": null, "by_severity": null, "packages": null
+    },
+    "loop_calls": {
+      "status": "measured", "reason": null, "commit": "sha",
+      "files_scanned": 0, "in_loop": 0, "in_lambda": 0, "memory_filter": 0,
+      "files": [ { "file": "", "in_loop": 0, "in_lambda": 0, "memory_filter": 0 } ]
+    },
+    "hotspot_risk": {
+      "status": "measured", "reason": null, "commit": "sha",
+      "coverage": { "status": "measured", "reason": null, "format": "sonarqube-generic" },
+      "stryker": { "status": "skipped", "reason": "Stryker off for this run" },
+      "rows": [
+        { "file": "", "ranking": "total", "score": 0.0, "commits": 0, "fixes": 0, "complexity_total": 0, "complexity_worst": 0,
+          "line_coverage_pct": 0.0, "branch_coverage_pct": 0.0, "mutants": null, "survived": null, "no_coverage": null, "detection_pct": null }
+      ]
     }
   },
   "activity": {
@@ -149,7 +182,7 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
 
 **Schema v2.0 notes:**
 
-- `metadata.commit` / `metadata.evidence` (optional, older reports lack them): one entry per measured block — hotspots carry their own in `activity.hotspots` —, `status` = `measured` | `not_configured` | `missing` (SKILL.md § Evidence status). `source` = `local` or the CI run ID; `commit` = the commit the result belongs to, equal to `metadata.commit` when measured. A block not `measured` has its own numbers at `null`, never `0`.
+- `metadata.commit` / `metadata.evidence` (optional, older reports lack them): one entry per measured block — hotspots and the `codebase.*` blocks below carry their own —, `status` = `measured` | `not_configured` | `skipped` | `missing` (SKILL.md § Evidence status); `skipped` and `missing` carry a `reason`. `source` = `local` or the CI run ID; `commit` = the commit the result belongs to, equal to `metadata.commit` when measured. A block not `measured` has its own numbers at `null`, never `0`.
 - `metadata.stack`: `"dotnet"` or `"js"` — tells any consumer which interpretation applies.
 - 🔴 Every `duration_seconds` (tests and build) is an integer number of seconds, rounded at collection: a runner float (`465.89999999999998`) leaks into the Markdown tables as unreadable digits.
 - `tests.contract`, `tests.architecture`: .NET-specific. `null` for JS/TS.
@@ -172,3 +205,6 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
 - `codebase.size` (optional): code size snapshot at the report commit, `{ files, lines }` everywhere, physical lines. `src` / `tests` = totals; `src_by_layer` keys match `coverage.by_layer` (extra layers such as `SDK` allowed), `tests_by_project` keys = test project or first dir under `tests/`. Sums of `src_by_layer` and `tests_by_project` equal `src` and `tests` (checked by script). .NET: `size.src` equals `activity.cs_files_total` / `cs_lines_total` (same scope). Absent → the code size card is not rendered.
 - `activity.cs_periods[].by_layer` (optional): churn per layer for that window, `{ files, lines }` where `lines` = additions + deletions over every touched file (A, M and D). Keys must match `coverage.by_layer` / `sonarqube.issues_by_layer`. Absent → the per-layer churn card is not rendered.
 - `activity.hotspots` (optional): `cctoolkit hotspots --json` pasted as is — never edited by hand. `status: "missing"` (lizard absent) → `thresholds`, `quadrants`, `danger_zone_top`, `worst_function_top` are `null`. Quadrant counts sum to `files_analysed`. `commits` / `lines_changed` / `fixes` count the window (`window_days` before the commit date, `null` = whole history), `commits_all` the whole history. `fixes` is `null` when `fix_convention` is false — no `fix:` commit in the history, so zero would read as "no bug". `worst_function_top` = the Danger Zone recomputed on the worst function, files already in `danger_zone_top` left out. Absent → the hotspot card is not rendered.
+- `codebase.rules_coverage`, `suppressions`, `vulnerabilities`, `loop_calls` (optional, older reports lack them): `cctoolkit audit-collect`, pasted as is — never edited by hand. Each carries `{status, reason, commit}`; a block not `measured` has every other field `null`. `rules_coverage` = `rules-coverage --json` + `untagged-tests --json` (`unbound_tests` lists 30 at most, `unbound_tests_count` counts them all); `not_configured` when no rule sheet holds a rules table. `suppressions` counts the sources at the commit, test roots left out; `by_kind` and `by_layer` each sum to `total`. `vulnerabilities.packages` lists the high and critical ones; `by_severity` sums to `total`. `loop_calls` is C# only (`not_configured` for js); `files` lists 30 at most, the totals count them all.
+- `codebase.hotspot_risk` (optional): `cctoolkit risk-cross`, one row per file of `activity.hotspots.danger_zone_top` and `worst_function_top`. `coverage` / `stryker` give each side's status: a side not `measured` leaves its columns `null` in every row. A file absent from the coverage report reads 0 % (never loaded by a test); a file absent from the mutation reports keeps `null` mutants (outside the mutation scope).
+- Under `codebase`, never under `tests`: `quality-report-check` sums every object under `tests` as a test type.

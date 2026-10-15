@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Coherence checks for docs/metrics/quality-report-YYYY-MM-DD.json.
 
-Runs the arithmetic and threshold checks of the quality-report skill (step 8).
+Runs the arithmetic and threshold checks of the quality report (`/quality-report`,
+§ Coherence checks), the `codebase.*` evidence blocks included.
 The judgement checks — status icons, section wording — stay in the skill.
 
 Usage:
@@ -42,7 +43,9 @@ def test_types(tests):
 
 
 def check_tests(report):
-    tests = report.get("tests") or {}
+    tests = report.get("tests")
+    if not isinstance(tests, dict):
+        return
     total = tests.get("total") or {}
     types = test_types(tests)
     for field in ("passed", "failed", "skipped"):
@@ -195,7 +198,9 @@ def check_size(report):
                 fail(f"codebase.size.src.{field} = {got}, activity.{key} = {expected} — same scope expected")
 
 
-EVIDENCE_STATUSES = ("measured", "not_configured", "missing")
+EVIDENCE_STATUSES = ("measured", "not_configured", "missing", "skipped")
+WITH_REASON = ("missing", "skipped")
+BLOCK_META = ("status", "reason", "commit")
 QUADRANTS = ("danger_zone", "cowboy_code", "fertile_ground", "healthy_closure")
 
 
@@ -232,8 +237,8 @@ def check_evidence(report):
         else:
             if numbers_in(report.get(block)):
                 fail(f"{block}: status {status} but the block holds numbers — null them, never 0 or an older figure")
-            if status == "missing" and not entry.get("reason"):
-                fail(f"metadata.evidence.{block}: missing without a reason")
+            if status in WITH_REASON and not entry.get("reason"):
+                fail(f"metadata.evidence.{block}: {status} without a reason")
 
 
 def check_hotspots(report):
@@ -270,6 +275,74 @@ def check_hotspots(report):
         fail(f"activity.hotspots.commit = {hot.get('commit')}, report commit {commit}")
 
 
+def sums_to(label, total, parts):
+    total = number(total)
+    if total is None or not isinstance(parts, dict):
+        return
+    got = sum(number(v) or 0 for v in parts.values())
+    if got != total:
+        fail(f"{label}: parts sum to {got}, total {total}")
+
+
+def check_codebase_blocks(report):
+    """The `{status, reason, commit, …}` blocks under `codebase` (cctoolkit audit-collect, risk-cross)."""
+    codebase = report.get("codebase") or {}
+    commit = (report.get("metadata") or {}).get("commit")
+    for name, entry in codebase.items():
+        if not isinstance(entry, dict) or "status" not in entry:
+            continue
+        status = entry.get("status")
+        where = f"codebase.{name}"
+        if status not in EVIDENCE_STATUSES:
+            fail(f"{where}.status = {status!r}, expected one of {', '.join(EVIDENCE_STATUSES)}")
+            continue
+        if status != "measured":
+            if numbers_in({k: v for k, v in entry.items() if k not in BLOCK_META}):
+                fail(f"{where}: status {status} but the block holds numbers — null them, never 0")
+            if status in WITH_REASON and not entry.get("reason"):
+                fail(f"{where}: {status} without a reason")
+            continue
+        if commit and entry.get("commit") != commit:
+            fail(f"{where}: measured at {entry.get('commit')}, report commit {commit}")
+        if name == "rules_coverage":
+            rules, with_test, without = (number(entry.get(k)) for k in ("rules", "with_test", "without_test"))
+            if None not in (rules, with_test, without) and with_test + without != rules:
+                fail(f"{where}: {with_test} with test + {without} without != {rules} rules")
+            untagged = entry.get("untagged") or {}
+            t, tagged, un = (number(untagged.get(k)) for k in ("tests", "tagged", "untagged"))
+            if None not in (t, tagged, un) and tagged + un != t:
+                fail(f"{where}.untagged: {tagged} tagged + {un} untagged != {t} tests")
+            strict, loose = number(untagged.get("in_tagged_class")), number(untagged.get("in_untagged_class"))
+            if None not in (un, strict, loose) and strict + loose != un:
+                fail(f"{where}.untagged: {strict} + {loose} by class != {un} untagged")
+        elif name == "suppressions":
+            sums_to(f"{where}.by_kind", entry.get("total"), entry.get("by_kind"))
+            sums_to(f"{where}.by_layer", entry.get("total"), entry.get("by_layer"))
+        elif name == "vulnerabilities":
+            sums_to(f"{where}.by_severity", entry.get("total"), entry.get("by_severity"))
+        elif name == "loop_calls" and isinstance(entry.get("files"), list):
+            for key in ("in_loop", "in_lambda", "memory_filter"):
+                listed = sum(number(f.get(key)) or 0 for f in entry["files"])
+                if number(entry.get(key)) is not None and listed > entry[key]:
+                    fail(f"{where}: files list {listed} {key}, total {entry[key]}")
+        elif name == "hotspot_risk":
+            hot = (report.get("activity") or {}).get("hotspots") or {}
+            ranked = {d.get("file") for k in ("danger_zone_top", "worst_function_top") for d in hot.get(k) or []}
+            crossed = {r.get("file") for r in entry.get("rows") or []}
+            if ranked != crossed:
+                fail(f"{where}: rows {len(crossed)} files, hotspots rank {len(ranked)} — the cross must hold every Danger Zone file")
+            stryker = (report.get("metadata") or {}).get("evidence", {}).get("stryker", {}).get("status")
+            side = (entry.get("stryker") or {}).get("status")
+            if stryker and side and stryker != side:
+                fail(f"{where}.stryker.status = {side}, metadata.evidence.stryker = {stryker}")
+            coverage = (entry.get("coverage") or {}).get("status")
+            for r in entry.get("rows") or []:
+                if coverage != "measured" and any(r.get(k) is not None for k in ("line_coverage_pct", "branch_coverage_pct")):
+                    fail(f"{where}: {r.get('file')} holds coverage figures, coverage {coverage}")
+                if side != "measured" and any(r.get(k) is not None for k in ("mutants", "survived", "detection_pct")):
+                    fail(f"{where}: {r.get('file')} holds mutant figures, Stryker {side}")
+
+
 def main():
     if len(sys.argv) > 1:
         path = sys.argv[1]
@@ -295,6 +368,7 @@ def main():
     check_size(report)
     check_evidence(report)
     check_hotspots(report)
+    check_codebase_blocks(report)
 
     print(f"Report: {path}")
     for message in warnings:

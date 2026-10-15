@@ -1,0 +1,166 @@
+{
+  "fixtures": [
+    {
+      "path": "cross/hot.json",
+      "kind": "text",
+      "content": "{\"activity\": {\"hotspots\": {\"status\": \"measured\", \"commit\": \"abc\", \"danger_zone_top\": [{\"file\": \"src/P.Domain/A.cs\", \"score\": 1.2, \"commits\": 9, \"fixes\": 2, \"complexity_total\": 40, \"complexity_worst\": 12}, {\"file\": \"src/P.Domain/B.cs\", \"score\": 1.0, \"commits\": 7, \"fixes\": 0, \"complexity_total\": 30, \"complexity_worst\": 9}], \"worst_function_top\": []}}}"
+    },
+    {
+      "path": "cross/cov.xml",
+      "kind": "text",
+      "content": "<coverage version=\"1\"><file path=\"/tmp/wt/src/P.Domain/A.cs\"><lineToCover lineNumber=\"1\" covered=\"true\"/><lineToCover lineNumber=\"2\" covered=\"false\" branchesToCover=\"2\" coveredBranches=\"1\"/></file></coverage>\n"
+    },
+    {
+      "path": "cross/mut/domain.json",
+      "kind": "text",
+      "content": "{\"files\": {\"/tmp/wt/src/P.Domain/A.cs\": {\"mutants\": [{\"status\": \"Killed\"}, {\"status\": \"Survived\"}, {\"status\": \"NoCoverage\"}, {\"status\": \"Ignored\"}]}}}"
+    },
+    {
+      "path": "check/report.json",
+      "kind": "text",
+      "content": "{\"schema_version\": \"2.0\", \"metadata\": {\"stack\": \"js\", \"commit\": \"abc\", \"evidence\": {\"stryker\": {\"status\": \"skipped\", \"source\": \"local\", \"commit\": null, \"reason\": null}}}, \"stryker\": null, \"codebase\": {\"suppressions\": {\"status\": \"measured\", \"reason\": null, \"commit\": \"abc\", \"total\": 3, \"by_kind\": {\"NOSONAR\": 2}, \"by_layer\": {\"Domain\": 2}}, \"loop_calls\": {\"status\": \"not_configured\", \"reason\": \"access-cost reads C# only\", \"commit\": null, \"in_loop\": 0}}}"
+    },
+    {
+      "path": "asm/a.json",
+      "kind": "text",
+      "content": "{\"tests\": {\"unit\": {\"passed\": 3, \"failed\": 1, \"skipped\": 0, \"duration_seconds\": 10}, \"integration\": {\"passed\": 2, \"failed\": 0, \"skipped\": 1, \"duration_seconds\": 20}}}"
+    },
+    {
+      "path": "asm/b.json",
+      "kind": "text",
+      "content": "{\"tests\": {\"unit\": {\"files\": 2, \"methods\": 4}}}"
+    },
+    {
+      "path": "asm/meta.json",
+      "kind": "text",
+      "content": "{\"schema_version\": \"2.0\", \"metadata\": {\"commit\": \"abc\"}, \"stryker\": null}"
+    },
+    {
+      "path": "asm/bad.json",
+      "kind": "text",
+      "content": "{\"trend\": {\"x\": 1}}"
+    }
+  ],
+  "cases": [
+    {
+      "name": "run-audit, Stryker off: no Stryker agent, `skipped` carried to the cross and the evidence, cleanup last",
+      "cmd": "node {{KIT}}/evals/workflows/run-audit-flow.js {{KIT}}/workflows/run-audit.js off | grep -E 'WARN|ERR|UNHANDLED|STATUS' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | stryker skipped Stryker off for this run | minutes 42;"
+      }
+    },
+    {
+      "name": "run-audit, Stryker full: started after every measure, waited until done, the cached reports crossed",
+      "cmd": "node {{KIT}}/evals/workflows/run-audit-flow.js {{KIT}}/workflows/run-audit.js full | grep -E 'WARN|ERR|UNHANDLED|STATUS|AGENTS' | grep -o 'WARN.*\\|ERR.*\\|STATUS [A-Z]* | stryker [a-z_]*\\|stryker wait #3 | stryker results' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | stryker measured;stryker wait #3 | stryker results;"
+      }
+    },
+    {
+      "name": "run-audit, Stryker past its bound: 27 waits of 9 min, stopped, `missing` — never a partial score",
+      "cmd": "O=$(node {{KIT}}/evals/workflows/run-audit-flow.js {{KIT}}/workflows/run-audit.js timeout); printf '%s\\n' \"$O\" | grep -E '^(WARN|ERR)'; printf '%s\\n' \"$O\" | grep -o 'stryker missing Stryker exceeded 4 h — stopped'; printf '%s\\n' \"$O\" | grep -o 'stryker wait #[0-9]*' | wc -l | tr -d ' '; printf '%s\\n' \"$O\" | grep -o 'stryker wait #27 | stryker stop'",
+      "expect": {
+        "exit": 0,
+        "stdout": "stryker missing Stryker exceeded 4 h — stopped\n27\nstryker wait #27 | stryker stop"
+      }
+    },
+    {
+      "name": "run-audit, audit-collect failed: no cross, no hotspot_risk source, the report still assembled",
+      "cmd": "node {{KIT}}/evals/workflows/run-audit-flow.js {{KIT}}/workflows/run-audit.js nocollect | grep -E 'WARN|ERR|STATUS' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | stryker skipped"
+      }
+    },
+    {
+      "name": "run-audit, doctor FAIL: stops at preflight, no worktree, no cleanup agent",
+      "cmd": "node {{KIT}}/evals/workflows/run-audit-flow.js {{KIT}}/workflows/run-audit.js blocked | grep -E 'WARN|ERR|AGENTS' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "AGENTS preflight;"
+      }
+    },
+    {
+      "name": "bg: start detached, wait bounded (3 running, 0 done, 1 failed), a second start refused while running, unknown job exit 2",
+      "cmd": "B='python3 {{KIT}}/scripts/bg.py'; $B start ev-{{SID}} -- 'sleep 2; exit 0' >/dev/null; $B start ev-{{SID}} -- true 2>/dev/null; echo dup=$?; $B wait ev-{{SID}} --seconds 0.2 >/dev/null; echo run=$?; $B wait ev-{{SID}} --seconds 10 | head -1; $B start ev2-{{SID}} -- 'exit 4' >/dev/null; $B wait ev2-{{SID}} --seconds 5 | head -1; $B status nope-{{SID}} >/dev/null; echo unknown=$?",
+      "expect": {
+        "exit": 0,
+        "stdout": "dup=2\nrun=3\nDONE exit=0\nFAILED exit=4\nunknown=2"
+      }
+    },
+    {
+      "name": "bg stop: the job's process group gets SIGTERM, the job reads failed without exit code",
+      "cmd": "B='python3 {{KIT}}/scripts/bg.py'; $B start ev3-{{SID}} -- 'sleep 60' >/dev/null; $B stop ev3-{{SID}}; $B wait ev3-{{SID}} --seconds 3 | head -1",
+      "expect": {
+        "exit": 0,
+        "stdout": ": stopped\nFAILED exit=none"
+      }
+    },
+    {
+      "name": "audit-worktree: create detached at the main branch, untracked kit config copied, remove refuses a path that is no audit worktree",
+      "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && echo '{}' > .claude/kit.config.json && python3 {{KIT}}/scripts/audit-worktree.py create | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[\"branch\"], d[\"copied\"])'; git worktree list | wc -l | tr -d ' '; python3 {{KIT}}/scripts/audit-worktree.py remove /tmp/x 2>&1; python3 {{KIT}}/scripts/audit-worktree.py remove; git worktree list | wc -l | tr -d ' '",
+      "expect": {
+        "exit": 0,
+        "stdout": "main ['.claude/kit.config.json']\n2\nrefused: /tmp/x is not an audit worktree\nremoved: 1\n1"
+      }
+    },
+    {
+      "name": "audit-collect js: suppressions counted at the commit, test roots left out; no rules table not_configured; loop calls not_configured; uncommitted change makes the tree blocks missing",
+      "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && python3 {{KIT}}/scripts/audit-collect.py --stack js --ref main | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"codebase\"]; s=d[\"suppressions\"]; print(s[\"status\"], s[\"total\"], s[\"by_kind\"][\"NOSONAR\"], d[\"rules_coverage\"][\"status\"], d[\"loop_calls\"][\"status\"])'; echo x >> src/P.Domain/A.cs; python3 {{KIT}}/scripts/audit-collect.py --stack js --ref main | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"codebase\"]; print(d[\"rules_coverage\"][\"reason\"], d[\"suppressions\"][\"total\"])'",
+      "expect": {
+        "exit": 0,
+        "stdout": "measured 2 1 not_configured not_configured\nworking tree holds uncommitted changes 2"
+      }
+    },
+    {
+      "name": "audit-collect --out writes only the report fragment, {activity, codebase}: report-assemble refuses any other first-level key",
+      "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && python3 {{KIT}}/scripts/audit-collect.py --stack js --ref main --out {{FIX}}/repo-{{SID}}-out/c.json >/dev/null; python3 -c 'import json,sys; print(sorted(json.load(open(sys.argv[1]))))' {{FIX}}/repo-{{SID}}-out/c.json",
+      "expect": {
+        "exit": 0,
+        "stdout": "['activity', 'codebase']"
+      }
+    },
+    {
+      "name": "risk-cross: coverage per file from SonarQube generic, survivors from mutation reports; a file absent from coverage reads 0 %, absent from the mutation scope stays null",
+      "cmd": "python3 {{KIT}}/scripts/risk-cross.py --hotspots {{FIX}}/cross/hot.json --coverage {{FIX}}/cross/cov.xml --stryker-dir {{FIX}}/cross/mut | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(r[\"file\"], r[\"line_coverage_pct\"], r[\"branch_coverage_pct\"], r[\"mutants\"], r[\"survived\"], r[\"detection_pct\"]) for r in d[\"rows\"]]'",
+      "expect": {
+        "exit": 0,
+        "stdout": "src/P.Domain/A.cs 50.0 50.0 3 1 50.0\nsrc/P.Domain/B.cs 0.0 None None None None"
+      }
+    },
+    {
+      "name": "risk-cross: Stryker skipped leaves every mutant column null and says why",
+      "cmd": "python3 {{KIT}}/scripts/risk-cross.py --hotspots {{FIX}}/cross/hot.json --coverage {{FIX}}/cross/cov.xml --stryker-status skipped --stryker-reason off | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[\"stryker\"][\"status\"], {r[\"mutants\"] for r in d[\"rows\"]})'",
+      "expect": {
+        "exit": 0,
+        "stdout": "skipped {None}"
+      }
+    },
+    {
+      "name": "report-assemble: fragments merged recursively, tests.total summed, --last wins with its nulls",
+      "cmd": "python3 {{KIT}}/scripts/report-assemble.py --out {{FIX}}/asm/out-{{SID}}.json {{FIX}}/asm/a.json {{FIX}}/asm/b.json --last {{FIX}}/asm/meta.json >/dev/null && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d[\"tests\"][\"total\"], d[\"tests\"][\"unit\"][\"methods\"], d[\"stryker\"])' {{FIX}}/asm/out-{{SID}}.json",
+      "expect": {
+        "exit": 0,
+        "stdout": "{'passed': 5, 'failed': 1, 'skipped': 1, 'duration_seconds': 30} 4 None"
+      }
+    },
+    {
+      "name": "report-assemble: a first-level key outside the frozen schema is refused, nothing written",
+      "cmd": "python3 {{KIT}}/scripts/report-assemble.py --out {{FIX}}/asm/bad-{{SID}}.json {{FIX}}/asm/bad.json; echo e=$?; test -f {{FIX}}/asm/bad-{{SID}}.json && echo written || echo none",
+      "expect": {
+        "exit": 0,
+        "stdout": "e=1\nnone"
+      }
+    },
+    {
+      "name": "quality-report-check: skipped needs a reason, codebase sums checked, a not_configured block holding a number is red",
+      "cmd": "python3 {{KIT}}/scripts/quality-report-check.py {{FIX}}/check/report.json | grep -c '🔴' ; python3 {{KIT}}/scripts/quality-report-check.py {{FIX}}/check/report.json | grep -o 'skipped without a reason\\|by_kind: parts sum to 2, total 3\\|loop_calls: status not_configured' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "4\nskipped without a reason;by_kind: parts sum to 2, total 3;loop_calls: status not_configured;"
+      }
+    }
+  ]
+}

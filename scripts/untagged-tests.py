@@ -12,9 +12,11 @@ Two categories, which do not read the same way:
 
     cctoolkit untagged-tests                        # report on stdout
     cctoolkit untagged-tests -o <file.md>           # report into a file
+    cctoolkit untagged-tests --json                 # counts per category and suite, as JSON
 """
 import collections
 import datetime
+import json
 import os
 import sys
 
@@ -58,12 +60,31 @@ def by_file(items):
     return d
 
 
-def report():
-    rows = scan()
+def split(rows):
+    """(untagged, in a class carrying some, in a class carrying none)."""
     traited = {(suite_of(r), c) for r, c, _, _, t in rows if t}
     untagged = [r for r in rows if not r[4]]
     strict = [r for r in untagged if (suite_of(r[0]), r[1]) in traited]
     loose = [r for r in untagged if (suite_of(r[0]), r[1]) not in traited]
+    return untagged, strict, loose
+
+
+def counts():
+    rows = scan()
+    untagged, strict, loose = split(rows)
+    by_suite = collections.OrderedDict()
+    for key, items in (("in_tagged_class", strict), ("in_untagged_class", loose)):
+        for rel, _, _, _, _ in items:
+            entry = by_suite.setdefault(suite_of(rel), {"in_tagged_class": 0, "in_untagged_class": 0})
+            entry[key] += 1
+    return {"tests": len(rows), "tagged": len(rows) - len(untagged), "untagged": len(untagged),
+            "in_tagged_class": len(strict), "in_untagged_class": len(loose),
+            "by_suite": dict(sorted(by_suite.items()))}
+
+
+def report():
+    rows = scan()
+    untagged, strict, loose = split(rows)
 
     roots = ", ".join(f"`{C.rel(d)}/`" for d in C.dirs(C.test_roots))
     bound = list(dict.fromkeys(C.suite_of(b + "/x") for b in C.bound))
@@ -118,6 +139,9 @@ def report():
 
 
 def main():
+    if "--json" in sys.argv:
+        print(json.dumps(counts(), indent=2, ensure_ascii=False))
+        return
     text = report()
     if "-o" in sys.argv:
         dest = sys.argv[sys.argv.index("-o") + 1]

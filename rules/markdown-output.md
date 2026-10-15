@@ -57,7 +57,7 @@ English, verbatim, whatever `language`.
 | `### Batch execution`, columns `Batch` / `Depends on` / `Repo`, `### Batch FX — … — ✅ DONE` | `cctoolkit plan-next-batch` |
 | `## STATUS — DONE\|BLOCKED\|GAPS` first line, `Verdict:` (`VALID`, `GAPS`, `GAPS carried`, `to redo`, `none`), `Reason:`, `## To validate` of `run/batches/FX.md`; `Workflow run-lot, batch FX.` first line of every run-lot prompt | `run-plan` gate, `run-lot-pane` mod |
 | Run files: `run/<YYYY-MM-DD-HHMM>.md` (sections `## To validate`, `## Minor`, `## Final check`, `## Journal`), `run/<YYYY-MM-DD-HHMM>-aside-FX.patch`, `run/batches/FX.md`, work file `run/.work.jsonl` (one JSON line per event: `preexisting`, `cycle`, `question`, `answer`, `journal`); markers `user decision to validate` (taken without the user) and `user decision` (made by the user) | `run-plan`, `cctoolkit plan-next-batch --context`, `cctoolkit run-question`, `run-lot-pane` mod |
-| `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names and the JSON's first-level keys | `scripts/quality-report-check.py`, the whole report history and any viewer built on it |
+| `docs/metrics/quality-report-YYYY-MM-DD.{md,json}` file names and the JSON's first-level keys; evidence statuses `measured` / `not_configured` / `skipped` / `missing` | `scripts/quality-report-check.py`, `scripts/report-assemble.py` (refuses any other first-level key), the whole report history and any viewer built on it |
 | `DEAD REFERENCE`, `UNBOUND TEST` — report labels | emitted by `scripts/rules-coverage.py`, cited by `scripts/untagged-tests.py`, `scripts/pre-audit.sh` and `skills/implement-tdd/references/closing.md` |
 
 ### French aliases — parsers read both vocabularies

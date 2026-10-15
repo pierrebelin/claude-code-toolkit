@@ -2,6 +2,8 @@
 
 Commands for .NET projects (xUnit v3, Stryker .NET, dotnet sonarscanner, ReportGenerator).
 
+Run by the `run-audit` workflow (`/quality-report`) in a worktree of the main branch: every `/tmp/…` path below goes under the run temp folder the workflow names, and a step longer than a Bash call goes through `cctoolkit bg` (`start`, then `wait --seconds 540` until it stops printing `RUNNING`) — never `nohup`, Monitor or `run_in_background`.
+
 Every path assumes the kit's repo shape: `src/{{PRODUCT}}.<Layer>/` and `tests/{{PRODUCT}}.<Suite>/`. Substitute `{{PRODUCT}}` and drop or add the suites the target repo actually has.
 
 **xUnit v3**: test projects are `<OutputType>Exe</OutputType>` (self-hosted runners). Always use `dotnet test --project <path to .csproj>`. Never `dotnet test <folder>` (it fails silently, or reports 0 tests).
@@ -171,23 +173,14 @@ SCRIPT
 chmod +x /tmp/run-sonar.sh
 ```
 
-Run it in the background + Monitor:
+Run it detached, then wait (~5 min in total):
 
 ```bash
-nohup bash /tmp/run-sonar.sh > /dev/null 2>&1 &
-echo "PID: $!"
+cctoolkit bg start audit-sonar -- 'bash /tmp/run-sonar.sh'
+cctoolkit bg wait audit-sonar --seconds 540   # 0 done, 1 failed, 3 still running: wait again
 ```
 
-```
-Monitor(
-  description="SonarQube scan progress",
-  timeout_ms=600000,
-  persistent=false,
-  command='tail -f /tmp/sonar-live.log | grep -E --line-buffered "\\[|Coverage|coverage|Upload|EXECUTION|FINISHED|ERROR|exit="'
-)
-```
-
-> `nohup` + Monitor because `run_in_background` can time out (exit 144). ~5 min in total.
+> Detached because a Bash call stops at 10 min and `run_in_background` can be killed with its agent (exit 144).
 
 `~/.sonar-token` is a file exporting the token: `export SONAR_TOKEN=<token>`. If it does not exist, create it (`chmod 600`) from a SonarQube user token.
 If `dotnet-sonarscanner` is missing → `dotnet tool install -g dotnet-sonarscanner`.
@@ -316,14 +309,13 @@ git diff --no-renames --numstat "$BASE" $MAIN_BRANCH -- src |
 
 `by_layer` counts every touched file (A, M and D) and `lines` = additions + deletions — a churn figure, deliberately not the `lines_modified` / `lines_added` split. Store the two denominators as `activity.cs_files_total` / `activity.cs_lines_total`: `sonarqube.lines_of_code` is **not** usable here (it spans `tests/` too and drops blank/comment lines, while `--numstat` counts physical lines).
 
-### Hotspots — churn × complexity
+### Collected by script
 
-Feeds §2 `Hotspots` and `activity.hotspots`. Reads the source roots of `kit.config.json` and the main branch's history, renames followed; ranks on the last 365 days before the report commit (`--days`), counts the whole history beside it, and the `fix:` commits; complexity by lizard. Without lizard the status is `missing` — say so, never rank on churn alone; the user installs it with `python3 -m pip install --user lizard`.
+Feeds `activity.hotspots` (§2 `Hotspots`) and `codebase.rules_coverage` (§3), `suppressions`, `vulnerabilities`, `loop_calls` (§6) — one call, after the restore. Hotspots: the main branch's history, renames followed, ranked on the last 365 days before the report commit, complexity by lizard (without it `missing` — never ranked on churn alone; `python3 -m pip install --user lizard`). Vulnerabilities: `dotnet list package --vulnerable --include-transitive`, the network needed. Loop calls: ast-grep (`brew install ast-grep`).
 
 ```bash
 EXCL=(--exclude '*/Migrations/*' --exclude '*.g.cs' --exclude '*.Designer.cs')
-cctoolkit hotspots --ref "$MAIN_BRANCH" "${EXCL[@]}"          # §2 section
-cctoolkit hotspots --ref "$MAIN_BRANCH" "${EXCL[@]}" --json   # activity.hotspots
+cctoolkit audit-collect --stack dotnet "${EXCL[@]}" --ref <commit> --out <tmp>/collect.json
 ```
 
 Mass commits it lists (formatting, license headers) stay in the churn: add them to `.git-blame-ignore-revs`, or pass `--ignore-rev <sha>` when the user names them.
@@ -381,25 +373,13 @@ Output `root  layer  files  lines`. Files come from `ls-tree` (an empty file cou
 
 ### Stryker .NET (background)
 
-Only one instance is allowed — two instances corrupt the sources. Always through `nohup` (full runs take ~2h, beyond the bash timeout).
+Configured when `tests/stryker-config.*.json` exist. Only one instance — it rewrites the sources while it runs: the workflow starts it after every measure that reads them, in its own worktree, never beside a `run-lot` in the same checkout. Full runs take ~2h: detached through `cctoolkit bg`, one job running the configs in sequence.
 
 ```bash
-pkill -f "dotnet-stryker" 2>/dev/null || true
-pkill -f "dotnet stryker" 2>/dev/null || true
-sleep 2
-
-REPO=$(git rev-parse --show-toplevel)
-nohup bash -c "
-cd $REPO/tests
-echo '=== DOMAIN START \$(date) ==='
-dotnet stryker --config-file stryker-config.domain.json
-echo '=== DOMAIN END \$(date) ==='
-echo '=== APPLICATION START \$(date) ==='
-dotnet stryker --config-file stryker-config.application.json
-echo '=== APPLICATION END \$(date) ==='
-echo '=== ALL COMPLETE \$(date) ==='
-" > /tmp/stryker-full.log 2>&1 &
-echo "Stryker PID: $!"
+cctoolkit bg start audit-stryker -- 'cd tests &&
+  dotnet stryker --config-file stryker-config.domain.json &&
+  dotnet stryker --config-file stryker-config.application.json'
+cctoolkit bg wait audit-stryker --seconds 540   # 0 done, 1 failed, 3 still running
 ```
 
-Watch it: `tail -5 /tmp/stryker-full.log`
+Mode: full → `"since": { "enabled": false }` in each config; since → `"since": { "enabled": true, "target": "<last report's commit>" }`. Each config writes `tests/StrykerOutput/<timestamp>/reports/mutation-report.json` (enable the `json` reporter beside `html`): the results and the per-file survivors of `cctoolkit risk-cross` are read from it.

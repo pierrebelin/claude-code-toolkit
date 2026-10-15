@@ -1,7 +1,9 @@
 # JS/TS commands — quality report
 
 Commands specific to JS/TS projects (Jest, StrykerJS, sonar-scanner, @swc/jest).
-Referenced by `SKILL.md` for steps 1 to 5.
+Read by the `run-audit` workflow (`/quality-report`), one section per step.
+
+Run by the `run-audit` workflow (`/quality-report`) in a worktree of the main branch: every `/tmp/…` path below goes under the run temp folder the workflow names, and a step longer than a Bash call goes through `cctoolkit bg` (`start`, then `wait --seconds 540` until it stops printing `RUNNING`) — never `nohup`, Monitor or `run_in_background`.
 
 The SonarQube project key is read from `package.json`:
 
@@ -183,14 +185,13 @@ git diff "$BASE_COMMIT" $MAIN_BRANCH --shortstat -- . ':(exclude)docs'
 
 > If the project is **not a git repository**, skip this step and put `null` in the JSON.
 
-### Hotspots — churn × complexity
+### Collected by script
 
-Feeds §2 `Hotspots` and `activity.hotspots`. Reads the source roots of `kit.config.json` and the main branch's history, renames followed; ranks on the last 365 days before the report commit (`--days`), counts the whole history beside it, and the `fix:` commits; complexity by lizard. Without lizard the status is `missing` — say so, never rank on churn alone; the user installs it with `python3 -m pip install --user lizard`.
+Feeds `activity.hotspots` (§2 `Hotspots`) and `codebase.rules_coverage` (§3), `suppressions`, `vulnerabilities` (§6) — one call, after `npm ci`. Hotspots: the main branch's history, renames followed, ranked on the last 365 days before the report commit, complexity by lizard (without it `missing` — never ranked on churn alone; `python3 -m pip install --user lizard`). Vulnerabilities: `npm audit`, the network and `package-lock.json` needed. `loop_calls` is `not_configured`: `access-cost` reads C# only.
 
 ```bash
 EXCL=(--exclude '*.d.ts' --exclude '*.test.*' --exclude '*.spec.*')
-cctoolkit hotspots --ref "$MAIN_BRANCH" "${EXCL[@]}"          # §2 section
-cctoolkit hotspots --ref "$MAIN_BRANCH" "${EXCL[@]}" --json   # activity.hotspots
+cctoolkit audit-collect --stack js "${EXCL[@]}" --ref <commit> --out <tmp>/collect.json
 ```
 
 Mass commits it lists (formatting, license headers) stay in the churn: add them to `.git-blame-ignore-revs`, or pass `--ignore-rev <sha>` when the user names them.
@@ -286,30 +287,16 @@ Output `root  layer  files  lines`. `src` layers map to `codebase.size.src_by_la
 ls stryker.config.json 2>/dev/null
 cat package.json | python3 -c "import json,sys; d=json.load(sys.stdin); deps={**d.get('devDependencies',{}),**d.get('dependencies',{})}; matches=[k for k in deps if 'stryker' in k.lower()]; print('\n'.join(matches) if matches else 'NOT_INSTALLED')"
 ```
-**If it is installed and configured** (`stryker.config.json` exists), delegate to a **background** subagent:
-
-```
-Run StrykerJS on the project using the existing configuration file:
-
-npx stryker run stryker.config.json > /tmp/stryker-output.log 2>&1
-
-IMPORTANT: do NOT use a pipe (| tail) — it hides the progress.
-Redirect to a log file instead.
-
-Timeout: 2,400,000 ms (40 min)
-
-Return: the full per-file score table, killed/survived/NoCoverage counters,
-the global score, and the total duration.
-```
-
-Watch the progress:
+**If it is installed and configured** (`stryker.config.json` exists), run it detached — one instance, after every measure that reads the sources:
 
 ```bash
-# The progress bar rewrites the last line (\r)
-tail -1 /tmp/stryker-output.log
+cctoolkit bg start audit-stryker -- 'npx stryker run stryker.config.json'
+cctoolkit bg wait audit-stryker --seconds 540   # 0 done, 1 failed, 3 still running
 ```
 
-**If StrykerJS is NOT installed**, install it:
+The `json` reporter writes `reports/mutation/mutation.json`: the results and the per-file survivors of `cctoolkit risk-cross` are read from it. StrykerJS has no `since`: the audit runs it full whatever the mode.
+
+**If StrykerJS is NOT installed**, the audit reads it `not_configured` and installs nothing (its worktree is thrown away). To adopt it in the repo:
 
 ```bash
 npm install --no-package-lock --legacy-peer-deps --force --save-dev \
