@@ -177,7 +177,7 @@ describe('plan graph', () => {
     const hover = (lot: string) => nodes.find(node => node.lot === lot)?.hover ?? []
     expect(hover('F4')[1]).toBe('waiting on F2 (running), F3 (waiting)')
     expect(hover('F6')[1]).toBe('blocked: F5 set aside — design blocked')
-    expect(hover('F1')).toEqual(['F1 · Create a product', expect.stringMatching(/^DONE/), expect.stringMatching(/^\d+m\d{2} · \$\d+\.\d{2}$/)])
+    expect(hover('F1')).toEqual(['F1 · Create a product', expect.stringMatching(/^DONE/), expect.stringMatching(/^\d+m\d{2} · \d+(\.\d)?[kM]? tok$/)])
     const svg = planGraph(nodes)
     expect(svg).toMatch(/^<svg[\s\S]*<\/svg>$/)
     expect(svgWidth(svg)).toBeGreaterThan(0)

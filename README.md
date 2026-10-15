@@ -71,11 +71,11 @@ Want to see the files? **[`examples/`](examples/README.md)** walks one small fea
 
 ## Watch it run
 
-A batch takes tens of minutes and a dozen agents, a whole plan several times that. The **`run-lot-pane`** mod shows it live inside Claude Code. On a plan, it opens on the plan: each batch with its state, time and cost, and the supervisor checking between batches.
+A batch takes tens of minutes and a dozen agents, a whole plan several times that. The **`run-lot-pane`** mod shows it live inside Claude Code. On a plan, it opens on the plan: each batch with its state, time and tokens, and the supervisor checking between batches.
 
 ![run-lot-pane following a whole plan](mods/run-lot-pane/screenshots/demo-plan-running.png)
 
-`1`-`9` opens a batch, `p` comes back to the plan. A batch, opened from the plan or run on its own: each phase, which agent is working, the tests going red then green, the cost, and the final verdict. The pane also steers the run: `v` keeps, rejects or amends what the run decided without you, `z` pauses a plan between two batches, `n` leaves a note for a batch's agents.
+`1`-`9` opens a batch, `p` comes back to the plan. A batch, opened from the plan or run on its own: each phase, which agent is working, the tests going red then green, the tokens spent, and the final verdict. The pane also steers the run: `v` keeps, rejects or amends what the run decided without you, `z` pauses a plan between two batches, `n` leaves a note for a batch's agents.
 
 ![run-lot-pane during a batch](mods/run-lot-pane/screenshots/demo-running.png)
 

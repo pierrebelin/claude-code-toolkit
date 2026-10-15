@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 1.12.1 — 2026-10-15
+
+- `run-lot-pane`: the pane shows tokens instead of costs. The `cost` column becomes `tokens` (`87k`, `1.2M`) for agents, phases and batches; the `Run` and `Plan` lines, an agent's detail, a phase's share (`% of run tokens`, `▲ most tokens`) and the timeline and graph tooltips give tokens too. An agent's total is the sum of its own model calls (prompt, cache included, and output), no longer a share of the session cost. The `Session` line keeps the context alone. `context-band` is unchanged.
+
 ## 1.12.0 — 2026-10-15
 
 - `cctoolkit`: what the RED and GREEN agents wrote is checked on the tree, no longer on their report. A new hook, `tdd-scope-guard.sh`, snapshots the source and test roots when each TDD agent starts; the implementer's `Edit`/`Write` of a test file is denied unless the arbiter granted it or it is a `.verified.txt`; a write through Bash under those roots (redirection, `sed -i`, `rm`, `git checkout`, a formatter…) is denied to both agents. When an agent returns, the tree since its snapshot, minus what agents running beside it wrote, must match: no test file changed at GREEN unless granted, no source file changed at RED outside its `stubs`. The agent puts a file back with `cctoolkit tdd-scope restore`, or returns `BLOCKED` with the hook's exact reason, which `run-lot` hands to the retry and the arbiter. `testsDiff` and `productionDiff` stay in the reports for display only.

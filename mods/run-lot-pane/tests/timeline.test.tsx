@@ -50,7 +50,7 @@ describe('phase timeline', () => {
     expect(titles.filter(title => !title.includes('expected&#10;'))).toHaveLength(run!.agents.length)
     const live = titles.find(title => title.startsWith('GREEN X3 lock') && title.includes('running'))
     expect(live).toContain('Sonnet · high')
-    expect(live).toContain('$')
+    expect(live).toMatch(/\d+(\.\d)?[kM]? tok/)
     expect(live).toContain('tool Edit (48)')
     expect(live).toMatch(/\d+m\d{2}/)
     expect(live).toMatch(/expected ~\d+m more/)
@@ -114,14 +114,14 @@ describe('phase timeline', () => {
   })
 
   test('one agent: one bar with its tooltip; text from the run is escaped', () => {
-    const agent = { ...blankAgent('a1', 1, 'design <A & B>', 'Opus', 'general', '', AT - 60_000), phase: 'Design', effort: 'high', cost: 0.42, lastTool: 'Read', tools: 3 }
+    const agent = { ...blankAgent('a1', 1, 'design <A & B>', 'Opus', 'general', '', AT - 60_000), phase: 'Design', effort: 'high', tokens: 42_000, lastTool: 'Read', tools: 3 }
     const svg = phaseTimeline(bareRun([agent], ['Design']), AT, {})
     const titles = titlesOf(svg)
     expect(titles).toHaveLength(1)
     expect(titles[0]).toContain('design &lt;A &amp; B&gt;')
     expect(titles[0]).toContain('Opus · high')
     expect(titles[0]).toContain('1m00')
-    expect(titles[0]).toContain('$0.42')
+    expect(titles[0]).toContain('42k tok')
     expect(titles[0]).toContain('tool Read (3)')
     expect(svg).not.toContain('<A & B>')
   })
@@ -146,7 +146,7 @@ describe('plan timeline', () => {
     expect(svg).toContain(NEUTRAL)
     expect(svg).toContain('>now</text>')
     const titles = titlesOf(svg)
-    expect(titles.find(title => title.startsWith('F2'))).toMatch(/running · \d+ agents · \d+m\d{2} · \$\d+\.\d{2}/)
+    expect(titles.find(title => title.startsWith('F2'))).toMatch(/running · \d+ agents · \d+m\d{2} · \d+(\.\d)?[kM]? tok/)
     expect(titles.find(title => title.startsWith('preflight'))).toContain('Haiku · high')
   })
 

@@ -7,8 +7,8 @@ import {
   figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, currentShapeSamples, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles,
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
-  parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel, splitCost,
-  activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, weightOf, withFile, withSamples,
+  parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
+  activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples,
 } from '../hooks/register'
 
 const SESSION = '/home/u/.claude/projects/p/s1'
@@ -296,14 +296,14 @@ describe('reading the run', () => {
   })
 
   test('current step: last running phase, else first pending, none once the run ends', () => {
-    expect(figuresLine(totalsOf([{ ...agentOf('x', 'RED', 'done'), context: 1_500, tokens: 2_400_000, cost: 1.234 }]))).toBe('ctx 2k · 2.4M tok · $1.23')
-    const red = [{ ...agentOf('r1', 'RED', 'done'), cost: 0.3 }, { ...agentOf('r2', 'RED', 'running'), cost: 0.1 }]
+    expect(figuresLine(totalsOf([{ ...agentOf('x', 'RED', 'done'), context: 1_500, tokens: 2_400_000 }]))).toBe('ctx 2k · 2.4M tok')
+    const red = [{ ...agentOf('r1', 'RED', 'done'), tokens: 300 }, { ...agentOf('r2', 'RED', 'running'), tokens: 100 }]
     const insight = phaseInsight(
       phaseRows(runOf(red), 30).find(row => row.title === 'RED')!,
-      runOf([...red, { ...agentOf('g', 'GREEN', 'done'), cost: 0.6 }]),
+      runOf([...red, { ...agentOf('g', 'GREEN', 'done'), tokens: 600 }]),
       30,
     )
-    expect([insight.share, insight.costliest, insight.slowest]).toEqual([40, 'r1', 'r2'])
+    expect([insight.share, insight.heaviest, insight.slowest]).toEqual([40, 'r1', 'r2'])
     const step = (run: WorkflowRun) => currentStep(run, phaseRows(run, 30))
 
     const current = step(runOf([agentOf('a1', 'Design', 'done'), agentOf('a2', 'RED', 'done'), agentOf('a3', 'RED', 'running')]))
@@ -481,16 +481,6 @@ describe('history, estimated end, stall, cost and alert', () => {
     expect(totalsOf([agentOf('g', 'GREEN', 'interrupted', { context: 90_000 }), agentOf('d', 'Design', 'done', { context: 10_000 })]).context).toBe(90_000)
   })
 
-  test('cost split by weighted tokens, cache reads weighted low, sum preserved', () => {
-    const used = { input_tokens: 1_000, output_tokens: 500, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 2_000 }
-    expect(weightOf(used)).toBe(7_500)
-    const micros = (value: number | undefined) => Math.round((value ?? 0) * 1e6)
-    const shares = splitCost(0.3, { a: 3_000, b: 1_000 })
-    expect([micros(shares.a), micros(shares.b)]).toEqual([225_000, 75_000])
-    const spread = splitCost(0.37, { a: 1, b: 2, c: 4 })
-    expect(micros(Object.values(spread).reduce((sum, one) => sum + one, 0))).toBe(370_000)
-    expect([splitCost(0, { a: 1 }), splitCost(0.3, {}), splitCost(0.3, { a: 0 })]).toEqual([{}, {}, {}])
-  })
 
   test('end alert: batch, outcome, duration in minutes, reason truncated unless success', () => {
     const finished = (outcome: WorkflowRun['outcome'], status: WorkflowRun['status'] = 'completed') =>
@@ -516,7 +506,6 @@ type Options = {
   dirs?: Directory
   reads?: string[]
   toasts?: string[]
-  price?: (agentId: string | undefined) => number
   usage?: (agentId: string | undefined) => Partial<ModelUsage> | undefined
   hold?: Promise<void>
   workflowName?: string
@@ -528,11 +517,9 @@ const world = (on: On, files: Record<string, string>, options: Options = {}) => 
   const { closed = [], stamps = {}, dirs = {}, reads = [], toasts = [] } = options
   const clock = mock.clock(on)
   let agents = 0
-  let spent = 1
-  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 84_000, window: 200_000, percent: 42 }, rateLimits: [], cost: { usd: spent } } }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 84_000, window: 200_000, percent: 42 }, rateLimits: [], cost: { usd: 1 } } }))
   on('turn.step', async function* ($, e) {
     if (options.stream !== undefined) yield* options.stream(e)
-    spent += options.price?.(e.agentId) ?? 0.25
     return {
       turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'tool_use',
       usage: {
@@ -668,12 +655,11 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
     expect(await ui.find({ type: 'Text', text: /━+─+\s+1\/3 phases/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^ {2}Session$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^ctx 84k \(42%\)$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^\$1\.75$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^ {2}Run$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^87k tok$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^agents$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^time$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^cost$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^tokens$/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /⏺ Design/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽] RED(?! 1)/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽] RED 1 créer/ })).toBeDefined()
@@ -684,7 +670,7 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
     expect((await ui.find({ key: 'model-a2' }))?.text).toBe('Sonnet · high')
     expect((await ui.find({ key: 'agent-a2-time' }))?.text).toMatch(/^1m0\d$/)
     expect(await colorOf(ui, 'agent-a2-time')).toBe('warning')
-    expect((await ui.find({ key: 'agent-a2-cost' }))?.text).toBe('$0.50')
+    expect((await ui.find({ key: 'agent-a2-tokens' }))?.text).toBe('87k')
     expect(await ui.find({ type: 'Text', text: /^ {9}Edit \(1\) · ctx 43k$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /SHEET F4 · 2 hypotheses/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^2\/4 steps$/ })).toBeDefined()
@@ -726,8 +712,8 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
   expect(await nav.find({ type: 'Text', text: /^ {2}Session$/ })).toBeDefined()
   await nav.press({ key: 'current' })
   expect(await nav.find({ type: 'Text', text: /Agents · 1/ })).toBeDefined()
-  expect(await nav.find({ type: 'Text', text: /100% of run cost/ })).toBeDefined()
-  expect(await nav.find({ type: 'Button', text: /RED 1 créer · 1m0\d · Edit \(1\) · ctx 43k · \$0\.50/ })).toBeDefined()
+  expect(await nav.find({ type: 'Text', text: /100% of run tokens/ })).toBeDefined()
+  expect(await nav.find({ type: 'Button', text: /RED 1 créer · 1m0\d · Edit \(1\) · ctx 43k · 87k tok/ })).toBeDefined()
   await nav.press({ key: 'back' })
   expect(await nav.find({ type: 'Button', text: /✓ design/ })).toBeDefined()
   await nav.press({ key: 'toggle-Design' })
@@ -998,46 +984,38 @@ test('relaunch before the stop is read: running agent interrupted, journal older
   await ui.unmount()
 })
 
-test('cost per agent: session delta split among requesters by weighted tokens, main request included', async ($, on) => {
-  const prices: Record<string, number> = {}
+test('tokens per agent: its own model calls summed, the main thread left out', async ($, on) => {
   const usages: Record<string, Partial<ModelUsage>> = {}
   const only = (field: keyof ModelUsage, tokens: number): Partial<ModelUsage> => ({
     input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, [field]: tokens,
   })
   const files: Record<string, string> = { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1', 'a2'], 'RED') }
-  world(on, files, { price: id => prices[id ?? 'main'] ?? 0.25, usage: id => usages[id ?? 'main'] })
+  world(on, files, { usage: id => usages[id ?? 'main'] })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   await $.agent.spawn(spawn('RED 1', 1))
   await $.agent.spawn(spawn('RED 2', 2))
   await drain($.turn.step(step()))
 
-  prices.a1 = 0
   usages.a1 = only('output_tokens', 2_000)
   await drain($.turn.step(step('a1')))
-  prices.a2 = 0.3
   usages.a2 = only('output_tokens', 1_000)
   await drain($.turn.step(step('a2')))
-  prices.main = 0.2
-  usages.main = only('input_tokens', 1_000)
   await drain($.turn.step(step()))
-  prices.a1 = 0.1
   usages.a1 = only('input_tokens', 1_000)
   await drain($.turn.step(step('a1', 1)))
 
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect((await ui.find({ key: 'agent-a1-cost' }))?.text).toBe('$0.30')
-  expect((await ui.find({ key: 'agent-a2-cost' }))?.text).toBe('$0.10')
-  expect(await ui.find({ type: 'Text', text: /^\$0\.40$/ })).toBeDefined()
+  expect((await ui.find({ key: 'agent-a1-tokens' }))?.text).toBe('3k')
+  expect((await ui.find({ key: 'agent-a2-tokens' }))?.text).toBe('1k')
+  expect(await ui.find({ type: 'Text', text: /^4k tok$/ })).toBeDefined()
   await ui.unmount()
 
-  prices.a1 = 0.25
-  prices.a2 = 0.25
   delete usages.a1
   delete usages.a2
   await Promise.all([drain($.turn.step(step('a1', 2))), drain($.turn.step(step('a2', 1)))])
   const total = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await total.find({ type: 'Text', text: /^\$0\.90$/ })).toBeDefined()
+  expect(await total.find({ type: 'Text', text: /^91k tok$/ })).toBeDefined()
   await total.unmount()
 })
 
@@ -1244,16 +1222,16 @@ describe('batch plan through run-plan', () => {
   })
 
   test('batch figures: counted from its agents, keyed by project and sheet, read back only when well formed', () => {
-    const agent = (id: string, startedAt: number, endedAt: number | null, cost: number) => ({
-      ...blankAgent(id, startedAt, id, 'Sonnet', 'x', 'p', startedAt), endedAt, lastActiveAt: startedAt + 50, tokens: 100, cost,
+    const agent = (id: string, startedAt: number, endedAt: number | null) => ({
+      ...blankAgent(id, startedAt, id, 'Sonnet', 'x', 'p', startedAt), endedAt, lastActiveAt: startedAt + 50, tokens: 100,
     })
-    expect(lotFiguresOf([agent('a', 1_000, 4_000, 0.5), agent('b', 2_000, null, 0.25)])).toEqual({ agents: 2, durationMs: 3_000, tokens: 200, cost: 0.75, endedAt: 4_000 })
+    expect(lotFiguresOf([agent('a', 1_000, 4_000), agent('b', 2_000, null)])).toEqual({ agents: 2, durationMs: 3_000, tokens: 200, endedAt: 4_000 })
     expect(lotFiguresOf([])).toBeNull()
     expect(figuresKeyOf(DIR, 'todo/cat/CAT-PLAN-F1.md')).toBe('lot:p:CAT-F1')
     expect(figuresKeyOf(DIR, '/repo/todo/cat/CAT-PLAN-F1.md')).toBe('lot:p:CAT-F1')
     expect(figuresKeyOf(null, 'todo/cat/CAT-PLAN-F1.md')).toBe('lot::CAT-F1')
     expect(figuresKeyOf(DIR, 'todo/cat/CAT-PLAN.md')).toBeNull()
-    expect(lotFiguresFrom({ agents: 3, durationMs: 9, tokens: 1, cost: 0.1, endedAt: 2 })).toEqual({ agents: 3, durationMs: 9, tokens: 1, cost: 0.1, endedAt: 2 })
+    expect(lotFiguresFrom({ agents: 3, durationMs: 9, tokens: 1, endedAt: 2 })).toEqual({ agents: 3, durationMs: 9, tokens: 1, endedAt: 2 })
     expect(lotFiguresFrom({ agents: '3' })).toBeNull()
     expect(lotFiguresFrom(undefined)).toBeNull()
   })
@@ -1500,7 +1478,7 @@ const result = await workflow('run-lot', b.sheet)
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: / done before this run$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ *17 *$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /\$12\.5/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^900k$/ })).toBeDefined()
   await ui.unmount()
 })
 

@@ -21,8 +21,6 @@ const STALL_SLOW_MS = 60_000
 const SLOW_RATE = 20
 const CHARS_PER_TOKEN = 4
 const STREAM_WRITE_MS = 1_000
-const CACHE_READ_WEIGHT = 0.1
-const MAIN = '(main)'
 const ALERT_MS = 10_000
 const ALERT_REASON = 110
 const PARALLEL_PHASES = [['Global green', 'Closing'], ['Audit', 'Review']]
@@ -33,7 +31,7 @@ const SCANNED_SESSIONS = 200
 const DONE = '✅'
 const COUNT_WIDTH = 6
 const TIME_WIDTH = 7
-const COST_WIDTH = 7
+const TOKENS_WIDTH = 7
 const PANE_COLUMNS = 100
 const MODEL_WIDTH = 14
 const WIDE_COLUMNS = 56
@@ -71,7 +69,7 @@ const now = atom({ plugin: 'run-lot-pane', key: 'now' } as const, 0)
 const HOME: Navigation = { screen: 'run', phase: null, agentId: null, back: 'run', toggled: [], lot: null }
 const nav = atom({ plugin: 'run-lot-pane', key: 'nav' } as const, HOME)
 const isShown = atom({ plugin: 'run-lot-pane', key: 'isShown' } as const, false)
-const usage = atom({ plugin: 'run-lot-pane', key: 'usage' } as const, { context: null, percent: null, cost: null } as SessionFigures)
+const usage = atom({ plugin: 'run-lot-pane', key: 'usage' } as const, { context: null, percent: null } as SessionFigures)
 const history = atom({ plugin: 'run-lot-pane', key: 'history' } as const, {} as PhaseSamples)
 const feed = atom({ plugin: 'run-lot-pane', key: 'feed' } as const, null as RunFeed | null)
 
@@ -113,8 +111,6 @@ export const kilo = (tokens: number): string => {
   return `${tokens}`
 }
 
-export const dollars = (usd: number): string => `$${usd.toFixed(2)}`
-
 export const coarse = (ms: number): string => {
   const minutes = Math.max(1, Math.round(ms / 60_000))
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`
@@ -123,23 +119,13 @@ export const coarse = (ms: number): string => {
 export const promptTokens = (used: ModelUsage): number =>
   used.input_tokens + used.cache_read_input_tokens + used.cache_creation_input_tokens
 
-export const weightOf = (used: ModelUsage): number =>
-  used.input_tokens + used.cache_creation_input_tokens + used.output_tokens + CACHE_READ_WEIGHT * used.cache_read_input_tokens
-
-export const splitCost = (spent: number, weights: Record<string, number>): Record<string, number> => {
-  const total = Object.values(weights).reduce((sum, weight) => sum + weight, 0)
-  if (spent <= 0 || total <= 0) return {}
-  return Object.fromEntries(Object.entries(weights).map(([payer, weight]) => [payer, (spent * weight) / total]))
-}
-
-export type Totals = { context: number; tokens: number; cost: number }
+export type Totals = { context: number; tokens: number }
 
 export const totalsOf = (agents: WorkflowAgent[]): Totals => {
   const running = agents.filter(agent => agent.state === 'running')
   return {
     context: Math.max(0, ...(running.length > 0 ? running : agents).map(agent => agent.context)),
     tokens: agents.reduce((sum, agent) => sum + agent.tokens, 0),
-    cost: agents.reduce((sum, agent) => sum + agent.cost, 0),
   }
 }
 
@@ -148,13 +134,13 @@ export const lotFiguresOf = (agents: WorkflowAgent[]): LotFigures | null => {
   const startedAt = Math.min(...agents.map(agent => agent.startedAt))
   const endedAt = Math.max(...agents.map(agent => agent.endedAt ?? agent.lastActiveAt))
   const totals = totalsOf(agents)
-  return { agents: agents.length, durationMs: endedAt - startedAt, tokens: totals.tokens, cost: totals.cost, endedAt }
+  return { agents: agents.length, durationMs: endedAt - startedAt, tokens: totals.tokens, endedAt }
 }
 
 export const lotFiguresFrom = (value: unknown): LotFigures | null => {
   if (typeof value !== 'object' || value === null) return null
   const fields = value as Record<string, unknown>
-  return ['agents', 'durationMs', 'tokens', 'cost', 'endedAt'].every(key => typeof fields[key] === 'number') ? (fields as LotFigures) : null
+  return ['agents', 'durationMs', 'tokens', 'endedAt'].every(key => typeof fields[key] === 'number') ? (fields as LotFigures) : null
 }
 
 export const figuresKeyOf = (transcriptDir: string | null, sheet: string | null): string | null => {
@@ -165,7 +151,7 @@ export const figuresKeyOf = (transcriptDir: string | null, sheet: string | null)
 }
 
 export const figuresLine = (totals: Totals): string =>
-  `ctx ${kilo(totals.context)} · ${kilo(totals.tokens)} tok · ${dollars(totals.cost)}`
+  `ctx ${kilo(totals.context)} · ${kilo(totals.tokens)} tok`
 
 export const firstLine = (text: string, length = 160): string => {
   const line = (text.split('\n').find(one => one.trim() !== '') ?? '').trim()
@@ -298,17 +284,17 @@ export const clockOf = (ms: number): string => {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
-export type PhaseInsight = { totals: Totals; share: number | null; costliest: string | null; slowest: string | null }
+export type PhaseInsight = { totals: Totals; share: number | null; heaviest: string | null; slowest: string | null }
 
 export const phaseInsight = (phase: PhaseRow, run: WorkflowRun, at: number): PhaseInsight => {
   const totals = totalsOf(phase.agents)
-  const runCost = totalsOf(run.agents).cost
+  const runTokens = totalsOf(run.agents).tokens
   const top = (score: (agent: WorkflowAgent) => number): string | null =>
     phase.agents.length < 2 ? null : ([...phase.agents].sort((a, b) => score(b) - score(a))[0]?.id ?? null)
   return {
     totals,
-    share: runCost > 0 ? Math.round((totals.cost / runCost) * 100) : null,
-    costliest: totals.cost > 0 ? top(agent => agent.cost) : null,
+    share: runTokens > 0 ? Math.round((totals.tokens / runTokens) * 100) : null,
+    heaviest: totals.tokens > 0 ? top(agent => agent.tokens) : null,
     slowest: top(agent => (agent.endedAt ?? at) - agent.startedAt),
   }
 }
@@ -1412,13 +1398,6 @@ const withAgent = (list: WorkflowRun[], agentId: string, change: (agent: Workflo
       : run,
   )
 
-const withCosts = (list: WorkflowRun[], shares: Record<string, number>) =>
-  list.map(run =>
-    run.status === 'running' && run.agents.some(agent => shares[agent.id] !== undefined)
-      ? { ...run, agents: run.agents.map(agent => ({ ...agent, cost: agent.cost + (shares[agent.id] ?? 0) })) }
-      : run,
-  )
-
 const withRequest = (list: WorkflowRun[], agentId: string, used: ModelUsage, effort: string | null, at: number) =>
   withAgent(list, agentId, agent => ({
     ...agent,
@@ -1648,7 +1627,7 @@ const agentBar = (agent: WorkflowAgent, attempt: number, stalls: string[], at: n
     title: [
       agent.label,
       `${modelLabel(agent)} · ${agent.state}`,
-      `${duration(end - agent.startedAt)} · ${dollars(agent.cost)}`,
+      `${duration(end - agent.startedAt)} · ${kilo(agent.tokens)} tok`,
       agent.state === 'running' && agent.lastTool !== null ? `tool ${agent.lastTool} (${agent.tools})` : agent.tools > 0 ? `${agent.tools} tool calls` : '',
       ...marks,
     ].filter(one => one !== ''),
@@ -1859,7 +1838,7 @@ export const planTimeline = (run: WorkflowRun, at: number): string => {
           mark,
           title: [
             [entry.lot, entry.view?.name ?? ''].filter(one => one !== '').join(' · '),
-            `${state === 'completed' ? 'done' : state} · ${counted(agents.length, 'agent')} · ${duration(to - from)} · ${dollars(totalsOf(agents).cost)}`,
+            `${state === 'completed' ? 'done' : state} · ${counted(agents.length, 'agent')} · ${duration(to - from)} · ${kilo(totalsOf(agents).tokens)} tok`,
             active === undefined ? '' : `now: ${active.label}${active.lastTool === null ? '' : ` · ${active.lastTool} (${active.tools})`}`,
             entry.audit === null ? '' : `audit ${auditLabel(entry.audit)}`,
           ].filter(one => one !== ''),
@@ -2226,8 +2205,8 @@ export const graphNodesOf = (run: WorkflowRun, view: FeedView, at: number): Grap
             : state === 'done' && agents.length === 0 ? 'done before this run' : lotDetailOf(run, entry, lotStateOf(run, entry), at)
     const figures =
       span !== null
-        ? `${duration(span.durationMs ?? at - span.startedAt)} · ${dollars(totalsOf(agents).cost)}`
-        : entry.past ? `${duration(entry.past.durationMs)} · ${dollars(entry.past.cost)}` : ''
+        ? `${duration(span.durationMs ?? at - span.startedAt)} · ${kilo(totalsOf(agents).tokens)} tok`
+        : entry.past ? `${duration(entry.past.durationMs)} · ${kilo(entry.past.tokens)} tok` : ''
     return {
       lot: entry.lot, name, deps, state, layer: layerOf(entry.lot),
       hover: [[entry.lot, name].filter(one => one !== '').join(' · '), said, figures].filter(one => one !== ''),
@@ -2350,7 +2329,7 @@ const demoAgent = (
   lastActiveAt: options.activeAt ?? to ?? from, openCalls: 0, ...QUIET, lastChunkAt: null, streamChars: 0, state, lot: options.lot === undefined ? 'F4' : options.lot,
   lastTool: options.lastTool ?? null, tools: options.tools ?? (state === 'running' ? 0 : 10 + index),
   context: 18_000 + index * 3_000, contextStart: 11_000, contextPeak: 18_000 + index * 3_000,
-  tokens: 120_000 + index * 30_000, cost: 0.08 + index * 0.03,
+  tokens: 120_000 + index * 30_000,
   prompt: options.lot === null ? `Workflow run-plan, supervisor step. ${label}.` : `Workflow run-lot, batch ${options.lot ?? 'F4'}. ${label}.`,
   answer: state === 'running' || state === 'error' || state === 'interrupted' ? null : (options.answer ?? `${label}: done, tests green.`),
   toolCounts: { Read: 4 + index, Bash: index, Edit: index > 3 ? 3 : 0, Grep: 2 },
@@ -2530,7 +2509,7 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
     })
     const weight = lot === null ? 0.3 : model === 'Opus' ? 1.6 : model === 'Haiku' ? 0.3 : 1
     const peak = Math.round(lot === null ? 16_000 : 22_000 + weight * 14_000)
-    return { ...made, cost: Math.round(weight * 22) / 100, tokens: Math.round(weight * 160_000), context: peak, contextPeak: peak }
+    return { ...made, tokens: Math.round(weight * 160_000), context: peak, contextPeak: peak }
   }
   const lotAgents = (lot: string, first: number, from: number, last: string | null, behaviours: string[], pace: number): WorkflowAgent[] => {
     const at = (minutes: number, seconds = 0) => Math.round(t(minutes, seconds) * pace)
@@ -3103,7 +3082,6 @@ async function refreshUsage($: EngineInterface): Promise<void> {
   await update($, usage, () => ({
     context: figures.context.tokens ?? null,
     percent: figures.context.percent ?? null,
-    cost: figures.cost?.usd ?? null,
   }))
 }
 
@@ -3121,7 +3099,7 @@ const tick = async ($: EngineInterface): Promise<void> => {
 
 export const blankAgent = (id: string, index: number, label: string, model: string, type: string, prompt: string, at: number): WorkflowAgent => ({
   id, index, label, phase: null, model, effort: null, type, startedAt: at, endedAt: null, lastActiveAt: at, openCalls: 0, ...QUIET, lastChunkAt: null, streamChars: 0, state: 'running',
-  lastTool: null, tools: 0, context: 0, contextStart: 0, contextPeak: 0, tokens: 0, cost: 0, prompt: promptBrief(prompt), answer: null,
+  lastTool: null, tools: 0, context: 0, contextStart: 0, contextPeak: 0, tokens: 0, prompt: promptBrief(prompt), answer: null,
   structured: null, calls: [], toolCounts: {}, files: [], lastError: null, lot: null,
 })
 
@@ -3191,8 +3169,6 @@ const endStream = async ($: EngineInterface, agentId: string, live: Live): Promi
 }
 
 export const register: Register = on => {
-  let bookedCost: number | null = null
-  let requested: Record<string, number> = {}
   let root: string | null = null
   let sequence = 0
 
@@ -3399,24 +3375,10 @@ export const register: Register = on => {
     try {
       const agentId = e.agentId
       const used = result.usage
-      if (used !== null) requested[agentId ?? MAIN] = (requested[agentId ?? MAIN] ?? 0) + weightOf(used)
-      const figures = await $.session.usage().catch(() => null)
-      const cost = figures?.cost?.usd ?? null
-      let shares: Record<string, number> = {}
-      if (cost !== null) {
-        if (bookedCost === null) requested = {}
-        else if (cost > bookedCost) {
-          shares = splitCost(cost - bookedCost, requested)
-          requested = {}
-        }
-        bookedCost = cost
-      }
-      const list = await read($, runs)
-      const mine = agentId !== undefined && used !== null && isFollowed(list, agentId) ? agentId : null
-      if (mine === null && Object.keys(shares).length === 0) return result
+      if (agentId === undefined || used === null || !isFollowed(await read($, runs), agentId)) return result
       const at = await $.clock.now()
       const effort = e.effort === undefined ? null : String(e.effort)
-      await update($, runs, stored => withCosts(mine === null || used === null ? stored : withRequest(stored, mine, used, effort, at), shares))
+      await update($, runs, stored => withRequest(stored, agentId, used, effort, at))
     } catch {
       return result
     }
@@ -3622,7 +3584,7 @@ export const register: Register = on => {
               · {agentAge(agent)}
               {activityOf(agent, at) === null ? '' : ` · ${activityOf(agent, at)}`}
               {agent.state === 'running' && agent.lastTool !== null ? ` · ${agent.lastTool} (${agent.tools})` : ''}
-              {agent.tokens > 0 ? ` · ctx ${kilo(agent.context)} · ${dollars(agent.cost)}` : ''}
+              {agent.tokens > 0 ? ` · ctx ${kilo(agent.context)} · ${kilo(agent.tokens)} tok` : ''}
             </Text>,
             ...(mark !== '' ? [<Text key="mark" color="warning"> {mark}</Text>] : []),
           ],
@@ -4015,7 +3977,7 @@ export const register: Register = on => {
                 ? 'no model call yet'
                 : `ctx ${kilo(agent.contextStart)} ↗ ${kilo(agent.contextPeak)} · now ${kilo(agent.context)}`,
             ),
-            line('tok', `${kilo(agent.tokens)} tok · ${dollars(agent.cost)}`),
+            line('tok', `${kilo(agent.tokens)} tok`),
           ])}
           {section(
             'outcome',
@@ -4077,7 +4039,7 @@ export const register: Register = on => {
             <Text color="inactive" wrap="truncate-end">
               {'  '}
               {figuresLine(insight.totals)}
-              {insight.share !== null ? ` · ${insight.share}% of run cost` : ''}
+              {insight.share !== null ? ` · ${insight.share}% of run tokens` : ''}
             </Text>
           )}
           {section(
@@ -4090,7 +4052,7 @@ export const register: Register = on => {
                     agent,
                     '  ',
                     'phase',
-                    [agent.id === insight.costliest ? '$ most expensive' : '', agent.id === insight.slowest ? '⏱ slowest' : '', ...stallOf(agent)]
+                    [agent.id === insight.heaviest ? '▲ most tokens' : '', agent.id === insight.slowest ? '⏱ slowest' : '', ...stallOf(agent)]
                       .filter(one => one !== '')
                       .join(' · '),
                   ),
@@ -4116,7 +4078,7 @@ export const register: Register = on => {
     const outcome = current.outcome
     const sheet = current.sheet === null ? null : withLiveCycles(current.sheet, current.agents)
     const isWide = columns >= WIDE_COLUMNS
-    const figuresWidth = COUNT_WIDTH + TIME_WIDTH + COST_WIDTH
+    const figuresWidth = COUNT_WIDTH + TIME_WIDTH + TOKENS_WIDTH
     const agentsRightWidth = figuresWidth + (isWide ? MODEL_WIDTH : 0)
     const isOpen = (phase: PhaseRow) =>
       phase.agents.length > 0 ? !where.toggled.includes(phase.title) : phase.earlier.length > 0 && where.toggled.includes(phase.title)
@@ -4133,10 +4095,10 @@ export const register: Register = on => {
         </Text>
       </Box>
     )
-    const figureCells = (key: string, count: string, time: string, cost: string, timeColor = 'inactive') => [
+    const figureCells = (key: string, count: string, time: string, tokens: string, timeColor = 'inactive') => [
       cell(`${key}-count`, COUNT_WIDTH, count, 'inactive'),
       cell(`${key}-time`, TIME_WIDTH, time, timeColor),
-      cell(`${key}-cost`, COST_WIDTH, cost, 'inactive'),
+      cell(`${key}-tokens`, TOKENS_WIDTH, tokens, 'inactive'),
     ]
 
     const figureRow = (key: string, label: string, first: string, second: string) => (
@@ -4188,7 +4150,7 @@ export const register: Register = on => {
             </Box>,
             [
               ...(isWide ? [cell(`model-${agent.id}`, MODEL_WIDTH, modelLabel(agent), 'inactive', true)] : []),
-              ...figureCells(`agent-${agent.id}`, '', agentAge(agent), agent.tokens > 0 ? dollars(agent.cost) : '', isSlowAgent ? 'warning' : 'inactive'),
+              ...figureCells(`agent-${agent.id}`, '', agentAge(agent), agent.tokens > 0 ? kilo(agent.tokens) : '', isSlowAgent ? 'warning' : 'inactive'),
             ],
           )}
           {agent.state === 'running' && (live.length > 0 || stalls.length > 0) && (
@@ -4224,7 +4186,7 @@ export const register: Register = on => {
         return (
           <Text color="inactive" wrap="truncate-end">
             {'  '}
-            {fit(`↻ previous pass · ${phase.earlier.length} agents · ${dollars(previous.cost)}`, room - 2)}
+            {fit(`↻ previous pass · ${phase.earlier.length} agents · ${kilo(previous.tokens)} tok`, room - 2)}
           </Text>
         )
       }
@@ -4278,7 +4240,7 @@ export const register: Register = on => {
               )}
               {phaseSuffix(phase, room)}
             </Box>,
-            hasAgents ? figureCells(`phase-${phase.title}`, `${phase.agents.length}`, duration(phase.span), dollars(totalsOf(phase.agents).cost)) : undefined,
+            hasAgents ? figureCells(`phase-${phase.title}`, `${phase.agents.length}`, duration(phase.span), kilo(totalsOf(phase.agents).tokens)) : undefined,
           )}
           {isOpen(phase) &&
             phase.agents.map(agent => agentRow(agent, attempts[agent.id] ?? 1, typicalMs(known, current.agents, agent)))}
@@ -4518,9 +4480,9 @@ export const register: Register = on => {
               'session',
               'Session',
               `${session.context === null ? '—' : `ctx ${kilo(session.context)}`}${session.percent === null ? '' : ` (${session.percent}%)`}`,
-              session.cost === null ? '' : dollars(session.cost),
+              '',
             )}
-            {figureRow('run', 'Plan', `${kilo(planTotals.tokens)} tok`, dollars(planTotals.cost))}
+            {figureRow('run', 'Plan', `${kilo(planTotals.tokens)} tok`, '')}
           </Box>
           <Box marginTop={1} flexDirection="column">
             {row(
@@ -4532,7 +4494,7 @@ export const register: Register = on => {
               [
                 cell('lots-count', COUNT_WIDTH, 'agents', 'inactive'),
                 cell('lots-time', TIME_WIDTH, 'time', 'inactive'),
-                cell('lots-cost', COST_WIDTH, 'cost', 'inactive'),
+                cell('lots-tokens', TOKENS_WIDTH, 'tokens', 'inactive'),
               ],
             )}
             {states.map(({ entry, state }) => {
@@ -4555,13 +4517,13 @@ export const register: Register = on => {
                 ),
                 view === null
                   ? state === 'done' && entry.past
-                    ? figureCells(`plan-lot-${entry.lot}`, `${entry.past.agents}`, duration(entry.past.durationMs), dollars(entry.past.cost))
+                    ? figureCells(`plan-lot-${entry.lot}`, `${entry.past.agents}`, duration(entry.past.durationMs), kilo(entry.past.tokens))
                     : figureCells(`plan-lot-${entry.lot}`, '', '', '')
                   : figureCells(
                       `plan-lot-${entry.lot}`,
                       `${agents.length}`,
                       duration(view.durationMs ?? at - view.startedAt),
-                      dollars(totalsOf(agents).cost),
+                      kilo(totalsOf(agents).tokens),
                     ),
                 true,
               )
@@ -4656,9 +4618,9 @@ export const register: Register = on => {
             'session',
             'Session',
             `${session.context === null ? '—' : `ctx ${kilo(session.context)}`}${session.percent === null ? '' : ` (${session.percent}%)`}`,
-            session.cost === null ? '' : dollars(session.cost),
+            '',
           )}
-          {figureRow('run', 'Run', `${kilo(runTotals.tokens)} tok`, dollars(runTotals.cost))}
+          {figureRow('run', 'Run', `${kilo(runTotals.tokens)} tok`, '')}
         </Box>
         <Box marginTop={1} flexDirection="column">
           {row(
@@ -4670,7 +4632,7 @@ export const register: Register = on => {
             [
               cell('title-count', COUNT_WIDTH, 'agents', 'inactive'),
               cell('title-time', TIME_WIDTH, 'time', 'inactive'),
-              cell('title-cost', COST_WIDTH, 'cost', 'inactive'),
+              cell('title-tokens', TOKENS_WIDTH, 'tokens', 'inactive'),
             ],
           )}
           {rows.map(phaseRow)}

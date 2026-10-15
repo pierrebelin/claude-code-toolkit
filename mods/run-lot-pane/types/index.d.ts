@@ -38,7 +38,6 @@ export type WorkflowAgent = {
   contextStart: number
   contextPeak: number
   tokens: number
-  cost: number
   prompt: string
   answer: string | null
   structured: string[] | null
@@ -88,7 +87,7 @@ export type Sheet = { lot: string; name: string; isDone: boolean; steps: Step[];
 
 export type ChildWorkflow = { name: string; phases: string[]; details: Record<string, string>; labels: Record<string, string>; script?: string | null }
 
-export type LotFigures = { agents: number; durationMs: number; tokens: number; cost: number; endedAt: number }
+export type LotFigures = { agents: number; durationMs: number; tokens: number; endedAt: number }
 
 export type PlanLot = {
   lot: string
@@ -142,7 +141,6 @@ export type PhaseSamples = Record<string, PhaseSample>
 export type SessionFigures = {
   context: number | null
   percent: number | null
-  cost: number | null
 }
 
 export type Screen = 'run' | 'phase' | 'agent' | 'timeline' | 'validate' | 'graph'
