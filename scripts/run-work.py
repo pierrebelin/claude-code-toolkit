@@ -6,7 +6,7 @@ under `run/`: `tmp` hands out a folder of the system temp directory for them.
 
     cctoolkit run-work append <work>
         appends the JSON object read on stdin (`kind` among preexisting, cycle, question,
-        answer, journal). A `cycle` without `slug` gets the slug of `state.behaviour`.
+        answer, journal, audit-round, attempt, breaker). A `cycle` without `slug` gets the slug of `state.behaviour`.
     cctoolkit run-work journal <work> <stamp> [<text>]
         with <text>: appends a journal line of run <stamp>; without: prints the run's lines
     cctoolkit run-work drop <work> [--batch FX] [--run STAMP] [--kind k1,k2]
@@ -20,7 +20,8 @@ under `run/`: `tmp` hands out a folder of the system temp directory for them.
         holds for confirmation (unresolvable target) and denies in an unattended session
     cctoolkit run-work purge <run folder> [<stamp>]
         migrates once from the older layouts, then keeps, for every run:
-        - journal lines of run <stamp> only; question and answer lines never;
+        - journal and breaker lines of run <stamp> only; question and answer lines never;
+          audit-round and attempt lines of a batch still open only;
         - per batch: `cycle` lines when `batches/FX.md` says `## STATUS — DONE` or the
           older `## STATUT — TERMINÉ`, or the plan heading `### Batch FX` says `✅ DONE`
           (TDD evidence), or when the batch stopped and was never set aside (resume),
@@ -257,8 +258,10 @@ def purge(run: Path, stamp: str | None) -> int:
 
     def kept(r: dict) -> bool:
         kind, state = r.get("kind"), states.get(r.get("batch"))
-        if kind == "journal":
+        if kind in ("journal", "breaker"):
             return bool(stamp) and r.get("run") == stamp
+        if kind in ("audit-round", "attempt"):
+            return state == "open"
         if kind in ("question", "answer"):
             return False
         if kind == "preexisting":

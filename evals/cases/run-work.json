@@ -178,6 +178,14 @@
         "exit": 0,
         "stdout": "2 2 2"
       }
+    },
+    {
+      "name": "purge: audit-round and attempt lines live while their batch is open only, breaker lines with their run's journal",
+      "cmd": "R={{FIX}}/rw-kinds-{{SID}}/run; rm -rf $R; mkdir -p $R/batches && W=$R/.work.jsonl && for l in '{\"kind\":\"audit-round\",\"batch\":\"F1\",\"round\":1,\"open\":2,\"files\":[]}' '{\"kind\":\"attempt\",\"batch\":\"F1\",\"step\":\"GREEN x\",\"n\":1,\"reason\":\"r\"}' '{\"kind\":\"audit-round\",\"batch\":\"F2\",\"round\":1,\"open\":1,\"files\":[]}' '{\"kind\":\"cycle\",\"batch\":\"F2\",\"slug\":\"s\",\"state\":{}}' '{\"kind\":\"breaker\",\"run\":\"2026-10-15-1000\",\"asides\":[\"F3\"],\"decision\":\"continue\",\"cause\":\"\"}' '{\"kind\":\"breaker\",\"run\":\"2026-10-01-1000\",\"asides\":[],\"decision\":\"continue\",\"cause\":\"\"}'; do printf '%s' \"$l\" | python3 {{KIT}}/scripts/run-work.py append $W >/dev/null; done && printf '## STATUS — DONE\\n' > $R/batches/F2.md && python3 {{KIT}}/scripts/run-work.py purge $R 2026-10-15-1000 >/dev/null && jq -r '[.kind, (.batch // .run)] | join(\":\")' $W | tr '\\n' ' '",
+      "expect": {
+        "exit": 0,
+        "stdout": "audit-round:F1 attempt:F1 cycle:F2 breaker:2026-10-15-1000 "
+      }
     }
   ]
 }

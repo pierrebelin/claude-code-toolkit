@@ -5,7 +5,9 @@
 // feeds two auditors in parallel, the green suites marked for the rerun guard.
 // contest: the fix contests a gap with a named harm and another without; the resume audit first forgets to
 // answer (audited again), then Accepts — the gap closes, its trade-off listed; refute: the audit Refutes, round 2 fixes.
-// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|contest|refute
+// scope: the fix changes a file no finding cites — a Scope Major the run adds itself, carried.
+// diverge: findings stay open while the fix changed more than a file and its test per finding — rounds stop.
+// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|contest|refute|scope|diverge
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
 const variant = process.argv[3] || 'block'
@@ -17,7 +19,12 @@ const idx = { ok: true, missing: false, errors: [], declaratives: variant === 'b
 const agent = async (prompt, o) => {
   labels.push(o.label)
   const l = o.label
-  if (['contest', 'refute'].includes(variant) && l.startsWith('audit')) {
+  if (/^round \d+ open$/.test(l)) return { ok: true, files: [], diff: '' }
+  if (/^round \d+ close$/.test(l)) { if (!/"open":[12]/.test(prompt)) console.log('WARN close without the findings answered'); return { ok: true, files: variant === 'scope' ? ['src/X.cs', 'src/Z.cs'] : variant === 'diverge' ? ['src/X.cs', 'src/Y.cs', 'tests/XTests.cs', 'tests/YTests.cs', 'src/W.cs'] : ['src/X.cs'], diff: '/tmp/r.diff' } }
+  if (variant === 'diverge' && l.startsWith('audit')) { audits += 1; return GAPV }
+  if (variant === 'diverge' && l.startsWith('fix ')) return { fixed: ['x'], files: [], validations: [], contested: [], objections: [], extensions: [] }
+  if (['contest', 'refute', 'scope'].includes(variant) && l.startsWith('audit')) {
+    if (variant === 'scope' && audits >= 1) { audits += 1; if (!prompt.includes('/tmp/r.diff') || !prompt.includes('`src/Z.cs`')) console.log('WARN resume audit without the change set'); return { verdict: 'VALID', gaps: [], minors: [], validations: [], hypotheses: [], block: '## Verdict' } }
     audits += 1
     if (audits === 1) return GAPV
     if (audits === 2 && !prompt.includes('Second type of the same shape — harm: breaks the Catalog mapping')) console.log('WARN contest not handed to the resume audit')
@@ -49,5 +56,5 @@ const agent = async (prompt, o) => {
 }
 const fn = new (Object.getPrototypeOf(async function () {}).constructor)('args', 'agent', 'log', 'phase', 'parallel', 'workflow', src)
 fn('todo/x/X-PLAN-F3.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), async () => null)
-  .then(r => { console.log('STATUS', r.status, '| toReview', r.toReview.length, r.toReview.map(x => x.step).join(',') + (audits ? ` | audits ${audits}` : '')); if (variant === 'contest' || variant === 'refute') console.log('REVIEW', r.toReview.filter(x => x.step === 'Audit').map(x => x.text.slice(0, 40)).join(' ; ')); console.log('AGENTS', labels.join(' | ')) })
+  .then(r => { console.log('STATUS', r.status, '| toReview', r.toReview.length, r.toReview.map(x => x.step).join(',') + (audits ? ` | audits ${audits}` : '')); if (['contest', 'refute', 'scope', 'diverge'].includes(variant)) console.log('REVIEW', r.toReview.filter(x => x.step === 'Audit').map(x => x.text.slice(0, 40)).join(' ; ')); console.log('AGENTS', labels.join(' | ')) })
   .catch(e => { console.log('ERR', e.stack); process.exitCode = 1 })

@@ -112,7 +112,8 @@ const VERDICT = obj({
   responses: arr(obj({ gap: str, answer: { type: 'string', enum: ANSWERS }, text: str })),
 }, ['responses'])
 
-const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str), contested: arr(obj({ gap: str, harm: str })), objections: arr(str) })
+const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str), contested: arr(obj({ gap: str, harm: str })), objections: arr(str), extensions: arr(obj({ file: str, why: str })) })
+const ROUND = obj({ ok: bool, files: arr(str), diff: str, detail: str }, ['detail'])
 
 const REVIEW = obj({
   result: { type: 'string', enum: ['CLEAR', 'GAPS'] },
@@ -143,7 +144,7 @@ const list = xs => (xs && xs.length ? xs.map(x => `\`${x}\``).join(', ') : 'none
 const fileName = line => line.replace(/`/g, '').trim().replace(/^[ MADRCU?!]{1,2}\s+/, '').split(/\s+/)[0] || ''
 const short = (text, n = 40) => (text.length > n ? text.slice(0, n - 1) + '…' : text)
 
-const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], contests: [], review: null, audit: null, toReview: [] }
+const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], contests: [], rounds: [], review: null, audit: null, toReview: [] }
 const toReview = (step, text, why = '') => history.toReview.push({ step, text, why })
 let reviewing = null
 const USER = 'user decision'
@@ -541,6 +542,7 @@ function renderReport(status, reason, verdict) {
     ...(history.verdicts.length
       ? history.verdicts.map((v, i) => `- ${i ? `Resume ${i}` : 'Initial'}: ${v.verdict}${gapsOf(v).length ? ` (${gapsOf(v).map(g => g.severity).join(', ')})` : ''}`)
       : ['No audit.']),
+    ...history.rounds.map(x => `- Round ${x.round}: findings ${x.open} → ${x.after}, files ${x.files.length}${x.diverged ? ' — diverging, rounds stopped' : ''}`),
     ...history.contests.flatMap(x => [
       ...x.contested.map(c => `- Round ${x.round} contested: ${cell(c.gap)} — harm: ${cell(c.harm)} → ${cell(answerOf(x.responses, c) ? `${answerOf(x.responses, c).answer}: ${answerOf(x.responses, c).text}` : 'no response')}`),
       ...x.objections.map(o => `- Round ${x.round} objection, gap applied: ${cell(o)}`),
@@ -589,6 +591,7 @@ async function report(status, reason, verdict) {
             ? `Then one call: \`cctoolkit batch-baseline commit ${workFile} ${batch} --sheet ${sheet} && cctoolkit run-work drop ${workFile} --batch ${batch} --kind preexisting,question,answer; cctoolkit run-work rm-tmp ${batch}\`. \`commit\` = the line the commit printed (stderr included on failure). The commit holds the files of the batch only, the user's earlier changes left out; the \`cycle\` lines stay as the TDD evidence a later correction resumes from. This is the intended end of every finished batch.`
             : `Then one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit run-work rm-tmp ${batch}\`. The run-plan gate commits the batch after its build check. \`commit\` empty.`]
         : [`Then one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer\`: the \`preexisting\` and \`cycle\` lines stay for the resume.`]),
+      ...(history.rounds.length ? [`Before that call, one call: \`${appendRound(history.rounds[history.rounds.length - 1])}\` (the audit's answers to the last round).`] : []),
       'Return the written path.',
       '',
       '~~~~markdown',
@@ -834,7 +837,11 @@ function audit(retry, again = false, part = null, captured = false) {
           : '',
         retry.unanswered ? `A previous attempt left these contests without a response: ${retry.unanswered.map(c => c.gap).join(' ; ')}. Every contest gets Accept, Counter, Refute or Escalate, never the gap repeated.` : '',
         retry.fix.objections.length ? `Objections of the fix, gaps applied anyway (no contest): ${retry.fix.objections.join(' ; ')}.` : '',
-        `Files touched by the fix: ${list(retry.fix.files)} — diff from: \`git diff -- <these files>\`.`,
+        retry.changeSet
+          ? `Change set of the fix, read off the tree by \`cctoolkit audit-round\`, not declared: ${list(retry.changeSet.files)} — diff in \`${retry.changeSet.diff}\`. Read only these files and that diff: a finding whose evidence lies outside them was not touched by the fix.`
+          : `Files the fix declared (the tree could not be read): ${list(retry.fix.files)} — diff from: \`git diff -- <these files>\`.`,
+        retry.outside && retry.outside.length ? `Files the fix changed outside every finding, each already a Scope Major of this verdict, keep it in \`gaps\` unless the file is now back as it was: ${list(retry.outside)}.` : '',
+        retry.fix.extensions && retry.fix.extensions.length ? `Files the fix declared beyond the findings, with why — judge each: a reason a finding's closure required holds; otherwise Scope Major: ${retry.fix.extensions.map(x => `\`${x.file}\` — ${x.why}`).join(' ; ')}.` : '',
         `Validations the fix reran: ${list(retry.fix.validations)}.`,
       ].join('\n')
     : ''
@@ -946,6 +953,7 @@ function fixGaps(verdict, round, answered = []) {
       '',
       'Fix the Blocking and Major gaps of the verdict below, per `<kit>/skills/implement-tdd/references/closing.md` §3 (verdict GAPS).',
       'Each gap is closed when its `Closure` holds; `Expected fix` is one way there, not an order.',
+      'Touch only the files a finding cites as evidence and their tests; a file beyond them goes in `extensions` with the closure that required it — any other changed file becomes a Scope Major the next audit keeps.',
       'Contest a gap only when closing it would do named harm — a behaviour it breaks, an invariant it violates, a cost it adds: `contested` = its Gap cell verbatim and that `harm`, the gap left as is (protocol: `<kit>/skills/verify-ddd-tdd/SKILL.md` § Contested findings). "Complex", "out of scope", "not needed" open no contest: apply the gap, put the objection in `objections`.',
       answered.length ? `Answers of the audit to the earlier contests — Counter and Refute are fixed this round: ${answered.map(a => `${a.gap} → ${a.answer}: ${a.text}`).join(' ; ')}` : '',
       'A fix that adds a rule or a branch goes through a red test first.',
@@ -986,6 +994,43 @@ function settle(v, contested, round) {
 }
 
 const lastContest = () => history.contests[history.contests.length - 1] || null
+
+// The change set of a fix is read off the tree around it by a relay of `cctoolkit audit-round`,
+// never taken from the fixer's `files`. One relay before the fix, one after.
+const roundLine = x => JSON.stringify({ kind: 'audit-round', batch, round: x.round, open: x.open, files: x.files, contested: x.contested, responses: x.responses || [] })
+const appendRound = x => `cctoolkit run-work append ${workFile} <<'ROUND_LINE'\n${roundLine(x)}\nROUND_LINE`
+
+function openRound(round) {
+  const earlier = history.rounds[history.rounds.length - 1]
+  return agent(
+    [FRAME, '', `Run, one call each, nothing else: ${earlier ? `\`${appendRound(earlier)}\` then ` : ''}\`cctoolkit audit-round open ${workFile} ${batch} ${round}\`. \`ok\` = exit 0 of the last, \`files\` empty, \`diff\` empty, \`detail\` = its output.`].join('\n'),
+    { schema: ROUND, phase: 'Audit', label: `round ${round} open`, model: 'haiku', effort: 'low' },
+  ).catch(() => null)
+}
+
+function closeRound(round, open, contested) {
+  return agent(
+    [FRAME, '', `One call: \`cctoolkit audit-round close ${workFile} ${batch} ${round} <<'ROUND_JSON'\` then the line \`${JSON.stringify({ open, contested })}\` then \`ROUND_JSON\`.`, 'Exit 0 → it printed one JSON line: `ok` true, `files` and `diff` = its fields as-is. Otherwise `ok` false, `files` empty, `diff` empty, `detail` = the output verbatim.'].join('\n'),
+    { schema: ROUND, phase: 'Audit', label: `round ${round} close`, model: 'haiku', effort: 'low' },
+  ).catch(() => null)
+}
+
+const pathsIn = text => [...String(text || '').matchAll(/[\w./-]+\.[A-Za-z]\w*/g)].map(m => m[0].replace(/^\.\//, ''))
+const stem = p => p.split('/').pop().replace(/\.[^.]+$/, '')
+
+// A file the fix changed that no finding cites, that is no test of a cited file, and that the
+// fix did not declare as an extension: a Scope Major, decided here without judgment.
+function outsideFindings(files, verdict, extensions) {
+  const cited = verdict.gaps.flatMap(g => pathsIn(`${g.evidence} ${g.gap}`))
+  const declared = new Set((extensions || []).map(x => fileName(x.file)))
+  return files.filter(f => !declared.has(f) &&
+    !cited.some(c => f === c || f.endsWith(`/${c}`) || c.endsWith(`/${f}`)) &&
+    !cited.some(c => stem(f).startsWith(stem(c)) && stem(f) !== stem(c)))
+}
+
+const scopeGap = f => ({ severity: 'Major', axis: 'Scope', gap: `Audit fix changed a file outside every finding: \`${f}\``, evidence: `\`${f}\``, closure: 'the file is back as it was before the fix, or tied to a finding', fix: 'revert the change' })
+
+const openCount = v => v.gaps.filter(g => g.severity !== 'Minor').length
 const rebuttals = x => (x ? x.contested.map(c => ({ gap: c.gap, ...(answerOf(x.responses, c) || { answer: '', text: '' }) })).filter(a => a.answer === 'Counter' || a.answer === 'Refute') : [])
 
 phase('Audit')
@@ -994,24 +1039,45 @@ if (!verdict) auditPending()
 else {
   history.verdicts.push(verdict)
   for (let round = 1; round <= 2 && verdict.verdict === GAPS && (round === 1 || wrongProduction(verdict) || rebuttals(lastContest()).length); round++) {
+    const opened = await openRound(round)
     const fix = await fixGaps(verdict, round, rebuttals(lastContest()))
     if (!fix) break
     const { contested, objections } = contestsOf(fix)
     const applied = { ...fix, objections }
     history.fixes.push(applied)
-    let next = await audited({ verdict, fix: applied, round, contested })
+    const before = openCount(verdict)
+    const closed = opened && opened.ok ? await closeRound(round, before, contested) : null
+    const changeSet = closed && closed.ok ? { files: closed.files, diff: closed.diff } : null
+    if (!changeSet) toReview('Audit', `round ${round}: change set of the fix not read off the tree (${closed ? closed.detail || '' : opened ? opened.detail || 'open failed' : 'relay without result'}), the resume audit read the declared files`)
+    const outside = changeSet ? outsideFindings(changeSet.files, verdict, fix.extensions) : []
+    const retry = { verdict, fix: applied, round, contested, changeSet, outside }
+    let next = await audited(retry)
     const unanswered = n => contested.filter(c => !answerOf(n.responses, c))
     if (next && unanswered(next).length) {
       log(`audit retry ${round}: ${unanswered(next).length} contest(s) without a response — audit again`)
-      next = (await audited({ verdict, fix: applied, round, contested, unanswered: unanswered(next) })) || next
+      next = (await audited({ ...retry, unanswered: unanswered(next) })) || next
     }
     if (!next) {
       auditPending()
       break
     }
+    const kept = outside.filter(f => !next.gaps.some(g => g.axis === 'Scope' && g.gap.includes(f)))
+    if (kept.length) next = { ...next, verdict: GAPS, gaps: [...next.gaps, ...kept.map(scopeGap)] }
     history.contests.push({ round, contested, objections, responses: next.responses || [] })
     verdict = settle(next, contested, round)
     history.verdicts.push(verdict)
+    const files = changeSet ? changeSet.files : fix.files
+    const previous = history.rounds[history.rounds.length - 1]
+    history.rounds.push({ round, open: before, files, contested, responses: next.responses || [], after: openCount(verdict) })
+    // Divergence: the findings did not go down while the change set grew — past the previous
+    // round's, or in round 1 past a file and its test per finding — another round would widen the batch.
+    if (openCount(verdict) >= before && files.length > (previous ? previous.files.length : 2 * before)) {
+      const why = `audit rounds stopped, diverging: round ${round} changed ${files.length} file(s) for ${before} finding(s), ${openCount(verdict)} still open`
+      log(why)
+      toReview('Audit', why, files.join(', '))
+      history.rounds[history.rounds.length - 1].diverged = true
+      break
+    }
   }
   if (verdict.verdict === GAPS) {
     if (wrongProduction(verdict)) {

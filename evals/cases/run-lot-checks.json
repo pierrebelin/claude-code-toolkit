@@ -78,7 +78,23 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js refute | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 3;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites | pre-audit | next batch review | audit | fix 1 | audit retry 1 | fix 2 | audit retry 2 | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 3;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites | pre-audit | next batch review | audit | round 1 open | fix 1 | round 1 close | audit retry 1 | round 2 open | fix 2 | round 2 close | audit retry 2 | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: the change set of an audit fix is read off the tree around it (relays round N open/close), handed to the resume audit with its diff; a file no finding cites becomes a Scope Major the run adds itself, carried for review",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js scope | grep -E 'STATUS|REVIEW|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Audit | audits 3;REVIEW Major — Scope — Audit fix changed a file;"
+      }
+    },
+    {
+      "name": "run-lot flow: findings that do not go down while the fix's change set grows stop the rounds, the divergence listed for review",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js diverge | grep -E 'STATUS|REVIEW|ERR|WARN|UNHANDLED|log: audit rounds' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "log: audit rounds stopped, diverging: round 1 changed 5 file(s) for 2 finding(s), 3 still open;"
       }
     }
   ]

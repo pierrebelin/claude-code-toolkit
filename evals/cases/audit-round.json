@@ -1,0 +1,22 @@
+{
+  "fixtures": [],
+  "cases": [
+    {
+      "name": "audit-round: the change set of a fix is read off the tree — a file dirty before the fix and left alone is out, a modified and a created file are in, their diff written, one audit-round line appended",
+      "cmd": "R={{FIX}}/ar-{{SID}}; rm -rf $R $R.tmp; mkdir -p $R/src/A $R/tests/T $R.tmp && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/a.cs && printf 'v0\\n' > src/A/dirty.cs && git add -A && git commit -qm init && printf 'before\\n' > src/A/dirty.cs && export CLAUDE_PROJECT_DIR=$R TMPDIR=$R.tmp && python3 {{KIT}}/scripts/audit-round.py open $R/run/.work.jsonl F1 1 >/dev/null && printf 'v1\\n' > src/A/a.cs && printf 'n\\n' > tests/T/newTests.cs && out=$(printf '{\"open\": 2, \"contested\": []}' | python3 {{KIT}}/scripts/audit-round.py close $R/run/.work.jsonl F1 1) && d=$(printf '%s' \"$out\" | jq -r .diff) && echo \"$(printf '%s' \"$out\" | jq -c .files)|$(grep -c '^+v1' $d)|$(jq -c '[.kind,.round,.open,(.files|length)]' $R/run/.work.jsonl)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "[\"src/A/a.cs\",\"tests/T/newTests.cs\"]|1|[\"audit-round\",1,2,2]"
+      }
+    },
+    {
+      "name": "audit-round: close without open exits 2 and appends nothing",
+      "cmd": "R={{FIX}}/ar2-{{SID}}; rm -rf $R $R.tmp; mkdir -p $R $R.tmp && cd $R && git init -q && export CLAUDE_PROJECT_DIR=$R TMPDIR=$R.tmp && echo '{}' | python3 {{KIT}}/scripts/audit-round.py close $R/run/.work.jsonl F1 3; echo \"exit=$? lines=$(test -f $R/run/.work.jsonl && wc -l < $R/run/.work.jsonl || echo 0)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "exit=2 lines=0",
+        "stderr": "no open round 3"
+      }
+    }
+  ]
+}

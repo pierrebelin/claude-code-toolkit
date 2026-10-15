@@ -161,16 +161,44 @@ def sweep():
 
 
 # --- start ----------------------------------------------------------------------------
-def start(cfg, agent_id, agent_type):
-    sweep()
+def snapshot(cfg, copies):
+    """{path: hash} of the dirty files under the roots, each copied under `copies` for a
+    later diff or restore. Also used by `cctoolkit audit-round`."""
     snap = tree(cfg)
-    copies = os.path.join(state_dir(), agent_id)
     for path, digest in snap.items():
         src = os.path.join(cfg.root, path)
         if digest != "-" and os.path.getsize(src) <= COPY_MAX:
             dst = os.path.join(copies, path)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(src, dst)
+    return snap
+
+
+def changed_since(cfg, snap):
+    """Paths under the roots whose content differs from the snapshot (HEAD for a path absent from it)."""
+    now = tree(cfg)
+    out = set()
+    for path in set(snap) | set(now):
+        before = snap[path] if path in snap else head_hash(cfg, path)
+        after = now[path] if path in now else _hash(os.path.join(cfg.root, path))
+        if before != after:
+            out.add(path)
+    return out
+
+
+def text_before(cfg, snap, copies, path):
+    if path in snap:
+        try:
+            with open(os.path.join(copies, path), encoding="utf-8", errors="replace") as fh:
+                return fh.read()
+        except OSError:
+            return ""
+    return _git(cfg, "show", f"HEAD:{path}").decode("utf-8", "replace")
+
+
+def start(cfg, agent_id, agent_type):
+    sweep()
+    snap = snapshot(cfg, os.path.join(state_dir(), agent_id))
     with open(_record_path(agent_id), "w", encoding="utf-8") as fh:
         json.dump({"type": agent_type, "start": time.time(), "snapshot": snap}, fh)
 
@@ -321,14 +349,7 @@ def bash(cfg, d, kind, cmd):
 def changed(cfg, agent_id, record):
     """Files under the roots this agent changed since its snapshot: the tree compared to the
     snapshot, minus every file another TDD agent wrote meanwhile."""
-    snap = record.get("snapshot", {})
-    now = tree(cfg)
-    out = set()
-    for path in set(snap) | set(now):
-        before = snap[path] if path in snap else head_hash(cfg, path)
-        after = now[path] if path in now else _hash(os.path.join(cfg.root, path))
-        if before != after:
-            out.add(path)
+    out = changed_since(cfg, record.get("snapshot", {}))
     since = record.get("start", 0)
     others = set()
     for f in glob.glob(os.path.join(state_dir(), "*.writes")):
@@ -339,23 +360,13 @@ def changed(cfg, agent_id, record):
     return sorted(out - (others - set(_lines(agent_id, "writes"))))
 
 
-def _before_text(cfg, agent_id, record, path):
-    if path in record.get("snapshot", {}):
-        try:
-            with open(os.path.join(state_dir(), agent_id, path), encoding="utf-8", errors="replace") as fh:
-                return fh.read()
-        except OSError:
-            return ""
-    return _git(cfg, "show", f"HEAD:{path}").decode("utf-8", "replace")
-
-
 def added(cfg, agent_id, record, path):
     try:
         with open(os.path.join(cfg.root, path), encoding="utf-8", errors="replace") as fh:
             after = fh.read().splitlines()
     except OSError:
         return []
-    before = _before_text(cfg, agent_id, record, path).splitlines()
+    before = text_before(cfg, record.get("snapshot", {}), os.path.join(state_dir(), agent_id), path).splitlines()
     return [l[1:] for l in difflib.unified_diff(before, after, lineterm="", n=0)
             if l.startswith("+") and not l.startswith("+++")]
 

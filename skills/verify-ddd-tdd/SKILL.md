@@ -18,7 +18,7 @@ $ARGUMENTS
 
 - **Fast**, default: global plan + batch sheet, DDD/APP/PERF coverage, applied ids, diff, modified files, targeted tests.
 - **Full**, with `full` in argument: widens to touched boundaries, adds whole fast suites (§3.4). Never the whole `IntegrationTests` suite.
-- **Resume**, with `resume`: re-audit after correction. Scope = previous verdict's deviation table + diff since, both supplied by the caller. Re-judge only the axes and suites those deviations reach; nothing already verdicted is re-established. A gap the correction contested gets its answer (§ Contested findings).
+- **Resume**, with `resume`: re-audit after correction. Scope = previous verdict's deviation table + the correction's change set, both supplied by the caller — the change set read off the tree (`cctoolkit audit-round`), never the files the correction declared. Read only those files and their diff; re-judge only the axes and suites the deviations reach; nothing already verdicted is re-established. A changed file that is neither cited as a deviation's evidence nor the test of one is a **Scope** Major, unless the correction declared it as an extension whose reason a deviation's closure required. A gap the correction contested gets its answer (§ Contested findings).
 
 Coverage: read the compact indexes `ddd-rules.md` + `architecture-rules.md` (under 6 kB), then the lines of the ids the sheet applies. `ddd-examples.md` only if an id stays ambiguous.
 
