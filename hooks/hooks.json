@@ -42,7 +42,21 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-scope-guard.sh\""
+          },
+          {
+            "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/affected-blast-radius.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "StructuredOutput",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-scope-guard.sh\"",
+            "timeout": 300
           }
         ]
       }
@@ -105,6 +119,16 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/graphify-autosync.sh\"",
             "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-scope-guard.sh\""
           }
         ]
       }

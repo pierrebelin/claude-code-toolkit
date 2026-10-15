@@ -56,7 +56,7 @@ python3 "$(cctoolkit root)/lib/kit_config.py" command test <Suite>
 
 Run the build, then the printed test command narrowed to `*<Class>Tests` with the runner's class filter — both literally, never through `eval`. Filter syntax (`clean-architecture` preset: `--filter-class "*<Class>Tests"`), unset command, full scope, suite selection → `skills/implement-tdd/references/test-scope.md` § Runner.
 
-Fix compilation errors, re-run until green. No green without exit `0`. With final green run, same message: `git diff --stat -- tests/` — must print nothing, or the single `.verified.txt` accepted under `test-scope.md` §6 — output = `Tests diff` line of report; and `cctoolkit access-cost <production files you created or edited>` — `cctoolkit access-cost --base <dir> <files>` when the contract gives a `Baseline` — last line = `Cost` line of report. Orchestrator reads those two lines, not your diff, not your handler.
+Fix compilation errors, re-run until green. No green without exit `0`. With final green run, same message: `git diff --stat -- tests/` — must print nothing, or the single `.verified.txt` accepted under `test-scope.md` §6 — output = `Tests diff` line of report; and `cctoolkit access-cost <production files you created or edited>` — `cctoolkit access-cost --base <dir> <files>` when the contract gives a `Baseline` — last line = `Cost` line of report. `Tests diff` is for the reader: a hook compares the tree to its state at your start and refuses your report while a test file you were not granted differs (`cctoolkit tdd-scope restore` puts it back), and refuses any write through Bash under the source or test roots — files go through `Edit`/`Write`.
 
 ## Access cost
 

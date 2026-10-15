@@ -51,6 +51,7 @@ English, verbatim, whatever `language`.
 | The rule tag's value `{HandlerFolder}/{RM\|RL-xx}`, and each carrier of `lib/kit_testtag.py`: xUnit `[Trait("RM", "…")]`, pytest `@pytest.mark.rm("…")`, JUnit `@Tag("RM:…")`, Jest `[RM …]` in a title | `lib/kit_testtag.py`, read by `hooks/handler-claude-md-check.sh`, `scripts/rules-coverage.py`, `scripts/untagged-tests.py`, `scripts/pre-audit.sh` |
 | `## Verdict — VALID`, `## Verdict — GAPS`, severities `Blocking`/`Major`/`Minor`, axes `Correctness`/`Reuse`/`Simplification`/`Cost`/`Placement`/`Comments`/`Test`/`Plan`/`Scope` | `/verify-ddd-tdd` verdict format, `scripts/learn-candidates.py` |
 | `## RED`, `## GREEN`, `## BLOCKED` and their fields | `tdd-test-author` / `tdd-implementer` reports, `run-lot`, `hooks/subagent-report-shape.sh` |
+| `Test files you may modify, granted: <paths>.` in a GREEN prompt; reasons opening a `BLOCKED` diagnostic `tests modified at GREEN: <paths> — granted: <paths>`, `RED on stub: <marker> in <methods>` | written by `run-lot` (grant) and `lib/tdd_scope.py` (reasons); read by `lib/tdd_scope.py` (grant) and `run-lot` `checkRed`/`checkGreen`/`decide` (reasons) |
 | `→ Batch FX complete — manual validation required` — the closing line | `hooks/implement-tdd-guard.sh` |
 | Output lines `not cited : `, `unknown references : `, `(none)` | `scripts/rules-coverage.py --ids`, then `scripts/pre-audit.sh` |
 | `## Review — GAPS`, `## Review — CLEAR` | `adversarial-reviewer` output, read by the three callers |

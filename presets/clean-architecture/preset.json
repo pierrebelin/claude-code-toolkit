@@ -36,5 +36,10 @@
       "run": "rtk dotnet test --project tests/{product}.ArchitectureTests/{product}.ArchitectureTests.csproj --no-build --no-restore",
       "when": "^src/.*(Handler|Endpoints/|Repositories/|Extensions/|DbContext)"
     }
+  },
+  "tdd": {
+    "failedTest": "^\\s*(?:failed|Failed|FAILED|\\[FAIL\\]|✗|×)\\s+(\\S+)",
+    "stubFailure": "NotImplementedException",
+    "stubLogic": "^\\s*(?:if|else|switch|case|for|foreach|while|catch)\\b|\\?\\?"
   }
 }

@@ -4,7 +4,7 @@ Everything a repo has of its own lives in `<repo>/.claude/kit.config.json`, `<re
 
 ## Presets
 
-One folder per layout. `preset.json` pre-fills `layout`, `testTag` and `commands` of `kit.config.json`.
+One folder per layout. `preset.json` pre-fills `layout`, `testTag`, `commands` and `tdd` of `kit.config.json`.
 
 | Preset | Shape |
 |--------|-------|
@@ -68,6 +68,7 @@ A repo of another shape names its preset and overrides only what differs — obj
 | `testTag.framework` | `xunit` | the carrier of the rule tag: `xunit` `[Trait("RM", "F/RM-01")]`, `pytest` `@pytest.mark.rm("F/RM-01")`, `junit` `@Tag("RM:F/RM-01")`, `jest` `[RM F/RM-01]` in an `it`/`test`/`describe` title (a `describe` tag covers its tests) | the value `<SheetFolder>/<RM\|RL-xx>` |
 | `testTag.regex`, `testTag.files` | the adapter's | carrier regex (one capture group: the value), test file globs | — |
 | `commands.build`, `commands.architectureTest` | `rtk dotnet build {product}.sln --no-restore`; the `ArchitectureTests` run and its `when` path regex | what `audit-capture.sh` runs; empty = section reported "not run" | — |
+| `tdd.failedTest`, `tdd.stubFailure`, `tdd.stubLogic` | .NET: a `failed`/`Failed`/`[FAIL]` line naming the test; `NotImplementedException`; `if`/`switch`/loop/`catch`/`??` at line start. The other presets: the same failed line, `NotImplementedError`/`UnsupportedOperationException`/`not implemented`, branches of each stack | the RED check of `lib/tdd_scope.py`: it reruns the RED's test command, reads each failed test's block, and refuses a test whose block holds `stubFailure` (a RED fails on its assertion, never on the stub); `stubLogic` marks a stub's added lines as evidence for the audit, never a refusal. `stubFailure` unset: no rerun | — |
 | `commands.test` | `rtk dotnet test --project tests/{product}.{suite}/…` | the suite command template, `{suite}` = the suite's name; the skills and agents resolve it with `kit_config.py command test <suite>` and append the runner's filter; empty = suite reported "not run" | — |
 
 Path patterns are segment globs relative to the repo root (`*` stays inside one folder), `layout.aggregate` excepted. `cctoolkit doctor` validates the file; a hook never reports a broken config — it exits 0 in silence.

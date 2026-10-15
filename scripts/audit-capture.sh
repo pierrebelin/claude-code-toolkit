@@ -172,6 +172,16 @@ if [[ $? -ne 2 ]]; then
     python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --summary "$STATE_DIR" --batch "$BATCH" >>"$OUT" 2>&1
 fi
 
+# Stubs whose added lines look like logic, recorded by the RED check of lib/tdd_scope.py
+# since the batch started: evidence for the `Plan` axis (TDD), never a verdict by itself.
+# No record, no section: the capture of a batch without one is unchanged.
+SINCE="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import work_file; r = work_file.of(work_file.read(sys.argv[2]), "preexisting", sys.argv[3]); print(r[0].get("at", 0) if r else 0)' "$SCRIPTS/../lib" "$STATE_DIR" "$BATCH" 2>/dev/null || echo 0)"
+STUBS="$(python3 "$SCRIPTS"/tdd-scope.py evidence --since "${SINCE:-0}" 2>/dev/null)"
+if [[ -n "$STUBS" ]]; then
+    section "stubs with logic (lib/tdd_scope.py, RED check)"
+    printf '%s\n' "$STUBS" >>"$OUT"
+fi
+
 section "RM/CU coverage — rules with no test"
 python3 "$SCRIPTS"/rules-coverage.py --untested >>"$OUT" 2>&1
 

@@ -265,6 +265,14 @@
       }
     },
     {
+      "name": "validate: an invalid tdd.stubFailure regex is a FAIL line; the preset's tdd keys validate",
+      "cmd": "R={{FIX}}/kc-tdd-{{SID}}; rm -rf $R; mkdir -p $R/.claude && printf '%s' '{\"tdd\": {\"stubFailure\": \"(unclosed\"}}' > $R/.claude/kit.config.json && a=$(python3 {{KIT}}/lib/kit_config.py validate $R | grep -c 'FAIL\ttdd.stubFailure') && rm $R/.claude/kit.config.json && b=$(python3 {{KIT}}/lib/kit_config.py validate $R | grep -c 'tdd') ; echo \"invalid=$a preset=$b\"",
+      "expect": {
+        "stdout": "invalid=1 preset=0",
+        "exit": 0
+      }
+    },
+    {
       "name": "command test <suite>: the clean-architecture default, {product} and {suite} expanded",
       "cmd": "R={{FIX}}/kcmd-{{SID}}\nmkdir -p $R/.claude\nprintf '%s' '{\"product\": \"Acme\"}' > $R/.claude/kit.config.json\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py command test UnitTests\n",
       "expect": {

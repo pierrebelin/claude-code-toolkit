@@ -9,6 +9,7 @@
 #
 # Order:
 #   1. guard-git         deny / ask -> terminal, nothing else runs
+#   1b. guard-tdd-scope  deny       -> terminal, the TDD agents write through Edit/Write only
 #   2. guard-cat-bounds  deny       -> terminal, an unbounded dump never reaches rtk
 #   3. guard-diff-bounds deny       -> terminal, a whole patch never reaches rtk either
 #   4. guard-integration deny       -> terminal, a whole IntegrationTests suite never runs
@@ -83,6 +84,7 @@ emit() {
 
 MODULES=(
   "guard-git.sh"
+  "guard-tdd-scope.sh"
   "guard-cat-bounds.sh"
   "guard-diff-bounds.sh"
   "guard-integration-filter.sh"

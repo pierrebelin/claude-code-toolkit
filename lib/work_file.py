@@ -22,14 +22,25 @@ holds an exclusive `flock` on the file itself, and a rewrite truncates in place 
 replace by rename would leave an appender writing to the unlinked inode).
 """
 import fcntl
+import hashlib
 import json
 import re
+import tempfile
 import time
 import unicodedata
 from pathlib import Path
 
 NAME = ".work.jsonl"
 KINDS = ("preexisting", "cycle", "question", "answer", "journal")
+
+
+def tmp_dir(name: str) -> Path:
+    """`$TMPDIR/cctoolkit-run/<repo>-<hash>/<name>`: the run's scratch folder, the same on every
+    call for one repo, outside the repo. `cctoolkit run-work tmp` prints it; hooks keep state there."""
+    import kit_config
+    root = Path(kit_config.project_root()).resolve()
+    repo = f"{root.name}-{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
+    return Path(tempfile.gettempdir()) / "cctoolkit-run" / repo / name
 
 
 def work_path(run_root) -> Path:

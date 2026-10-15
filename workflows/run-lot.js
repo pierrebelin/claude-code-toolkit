@@ -197,8 +197,12 @@ async function ask(kind, context, questions) {
 
 const ALLOW_TEST = /allow-test:\s*`?([^\s`,;]+)`?/g
 const ACCEPT_COST = /accept-cost\b/i
+// lib/tdd_scope.py writes these at the head of a BLOCKED diagnostic, from the tree it checks.
 const TESTS_AT_GREEN = 'tests modified at GREEN: '
 const GRANTED = ' — granted: '
+const RED_ON_STUB = 'RED on stub: '
+const MECHANICAL = [TESTS_AT_GREEN, RED_ON_STUB]
+const GRANT_LINE = 'Test files you may modify, granted: '
 const COST_CLEAR = ['Infrastructure in loop or in-memory filter: none', 'Infrastructure en boucle ou filtre mémoire : aucun']
 
 const noGrants = () => ({ tests: new Set(), cost: false })
@@ -264,7 +268,7 @@ function decided(text, grants = noGrants()) {
     '',
     '',
     `Decision answering the stop of this step, overriding the sheet and the contract: ${text}`,
-    grants.tests.size ? `Test files you may modify, granted: ${[...grants.tests].join(', ')}. List them in \`testsDiff\`.` : '',
+    grants.tests.size ? `${GRANT_LINE}${[...grants.tests].join(', ')}. List them in \`testsDiff\`.` : '',
     grants.cost ? 'The flagged `Cost` line is accepted as is: report it verbatim.' : '',
     'The workflow lists this decision for the user review after the plan: never copy it into the sheet.',
   ].filter(l => l !== '').join('\n')
@@ -298,7 +302,7 @@ function redContract(c, declaratives) {
     '```',
     '',
     'Your `## RED` report goes through the structured output: `tests` = test paths, `exit` = code of the filtered command,',
-    '`productionDiff` = `src/` files you created or modified yourself, no annotation (other agents write in parallel: `git status` cannot tell you apart), `stubs` = paths only of the stubs written, no annotation, `table` = one row per method written or modified',
+    '`productionDiff` = `src/` files you created or modified yourself, no annotation (display only: a hook compares the tree to your start), `stubs` = paths only of the stubs written, no annotation — every source file you changed must be listed there, the hook refuses the output otherwise, `table` = one row per method written or modified',
     '(`test` = `Class.Method`), `removed` = tests removed because already covered, `unreachable` = contract methods not written, site unreachable. `## BLOCKED` = `status: BLOCKED` + `diagnostic` (six RTK lines at most).',
     `Last step before the structured output, except on ## BLOCKED: one call, \`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` then the line \`{"kind": "cycle", "batch": "${batch}", "slug": "${slug(c.behaviour)}", "state": {"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": <your report>}}\` then \`CYCLE_STATE\`, \`<your report>\` = the object you return, same fields and values.`,
   ].filter(l => l !== '').join('\n')
@@ -323,19 +327,26 @@ function greenContract(c, r) {
     'Every `RM` trait id the tests of this cycle cite is a row of its handler table before you report: an id absent from it → add the row, even when your code only refines an existing behaviour (a dedicated error code is a rule).',
     '',
     'Your `## GREEN` report goes through the structured output: `production` = paths modified or created (handler `CLAUDE.md` included), `exit` = code of the final filtered test,',
-    '`testsDiff` = `tests/` files you created or modified yourself, no annotation (empty expected, `.verified.txt` snapshots accepted), `cost` = last line of `cctoolkit access-cost` verbatim,',
+    '`testsDiff` = `tests/` files you created or modified yourself, no annotation (display only: a hook compares the tree to your start and refuses a changed test file not granted), `cost` = last line of `cctoolkit access-cost` verbatim,',
     '`independentOf` = the input the cost is independent of. `## BLOCKED` = `status: BLOCKED` + `diagnostic`.',
     `Last step before the structured output, except on ## BLOCKED: one call, \`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` then the line \`{"kind": "cycle", "batch": "${batch}", "slug": "${slug(c.behaviour)}", "state": {"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": ${JSON.stringify(r)}, "green": <your report>}}\` then \`CYCLE_STATE\`, \`<your report>\` = the object you return, same fields and values.`,
   ].filter(l => l !== '').join('\n')
 }
 
-function checkRed(c, r, writtenBefore) {
+// What a RED or GREEN wrote and how its RED fails is checked on the tree by the hook
+// (lib/tdd_scope.py): it refuses the structured output until the tree matches, or lets a
+// BLOCKED through whose diagnostic starts with the reason it found. That reason is returned
+// as is, so the retry and the arbiter read the hook's words, never the agent's.
+const mechanical = r => (r && r.status === 'BLOCKED' && MECHANICAL.some(m => String(r.diagnostic || '').startsWith(m)) ? r.diagnostic.trim() : null)
+
+function checkRed(c, r) {
   if (!r) return 'RED agent without result'
+  if (mechanical(r)) return mechanical(r)
   if (r.status === 'BLOCKED') return `BLOCKED — ${r.diagnostic || r.expectedFailure}`
   if (r.status === 'ALREADY_GREEN') {
     if (c.refactor || c.guard) return `ALREADY_GREEN on a ${c.refactor ? 'refactor' : 'guard'} cycle`
     if (r.exit !== 0) return `ALREADY_GREEN with exit ${r.exit} on \`${r.command}\``
-    if (r.stubs.length || r.productionDiff.length) return `ALREADY_GREEN with code written: ${[...r.stubs, ...r.productionDiff].join(', ')}`
+    if (r.stubs.length) return `ALREADY_GREEN with stubs written: ${r.stubs.join(', ')}`
     if (!r.table.length) return 'ALREADY_GREEN without the methods run'
     return null
   }
@@ -343,11 +354,8 @@ function checkRed(c, r, writtenBefore) {
   if (!r.table.length && (r.removed.length || unreachable.length)) return null
   if (c.refactor && r.exit !== 0) return `safety net red: exit ${r.exit} on \`${r.command}\``
   if (c.guard && r.exit !== 0) return `guard red on the current code: exit ${r.exit} on \`${r.command}\``
-  if (c.guard && (r.stubs.length || r.productionDiff.length)) return `guard with production code: ${[...r.stubs, ...r.productionDiff].join(', ')}`
+  if (c.guard && r.stubs.length) return `guard with stubs: ${r.stubs.join(', ')}`
   if (!c.refactor && !c.guard && r.exit === 0) return `RED not observed: exit 0 on \`${r.command}\` — already in place on disk → status ALREADY_GREEN`
-  const stubs = new Set([...r.stubs.map(fileName).map(repoPath), ...writtenBefore()])
-  const beyondStubs = r.productionDiff.map(fileName).map(repoPath).filter(f => f && !stubs.has(f))
-  if (beyondStubs.length) return `production code beyond the stubs: ${beyondStubs.join(', ')}`
   const sameMethod = (a, b) => a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`)
   const missing = c.methods.filter(m => {
     const name = fileName(m)
@@ -363,11 +371,9 @@ const repoPath = p => p.replace(/^.*?(^|\/)((src|tests)\/)/, '$2')
 
 function checkGreen(r, grants = noGrants()) {
   if (!r) return 'GREEN agent without result'
+  if (mechanical(r)) return mechanical(r)
   if (r.status === 'BLOCKED') return `BLOCKED — ${r.diagnostic || r.cost}`
   if (r.exit !== 0) return `GREEN not observed: exit ${r.exit} on \`${r.command}\``
-  const tests = r.testsDiff.map(fileName).filter(Boolean).map(repoPath)
-  const forbidden = tests.filter(f => !f.endsWith('.verified.txt') && !grants.tests.has(f))
-  if (forbidden.length) return `${TESTS_AT_GREEN}${forbidden.join(', ')}${GRANTED}${grants.tests.size ? [...grants.tests].join(', ') : 'none'}`
   if (!grants.cost && !COST_CLEAR.some(x => r.cost.includes(x))) return `Cost line malformed or flagged: ${r.cost}`
   return null
 }
@@ -382,7 +388,7 @@ function escalation(reasons, earlier, grants) {
     `Last attempt at this step, after ${reasons.length} rejected one(s). Earlier attempts may have left files on disk: Read the contract paths in one message first, keep what is right, never rewrite from scratch.`,
     `Why each earlier attempt was rejected, in order: ${reasons.map((r, i) => `${i + 1}. ${r}`).join(' ; ')}.`,
     earlier.length ? `Decisions applied in between, none lifted the stop: ${earlier.map(e => `« ${e.text} »`).join(' ; ')}. They stay in force.` : '',
-    grants.tests.size ? `Test files you may modify, granted: ${[...grants.tests].join(', ')}. List them in \`testsDiff\`.` : '',
+    grants.tests.size ? `${GRANT_LINE}${[...grants.tests].join(', ')}. List them in \`testsDiff\`.` : '',
     grants.cost ? 'The flagged `Cost` line is accepted as is: report it verbatim.' : '',
     'Diagnose the common cause of these rejections before writing, then fix that cause. Same contract, same report.',
   ].filter(l => l !== '').join('\n')
@@ -426,11 +432,6 @@ async function withRetry(step, launch, check, standing = '') {
   return { result, reason }
 }
 
-const writtenBefore = () => new Set([
-  ...lotIndex.declaratives,
-  ...history.cycles.flatMap(t => [...(t.red?.stubs ?? []), ...(t.green?.production ?? [])]),
-].map(fileName).map(repoPath))
-
 const redLabel = (c, model) => `RED ${c.id} w${c.wave} ${short(c.behaviour)}${model ? ` ${model}` : ''}`
 const greenLabel = (c, model) => `GREEN ${c.id} ${short(c.behaviour)}${model ? ` ${model}` : ''}`
 
@@ -438,12 +439,12 @@ function launchRed(c) {
   const live = () => withRetry(
     `RED ${short(c.behaviour, 60)}`,
     (suffix, options) => agent(redContract(c, lotIndex.declaratives) + suffix, { agentType: 'cctoolkit:tdd-test-author', schema: RED, phase: 'RED', label: redLabel(c, options.model), ...options }),
-    r => checkRed(c, r, writtenBefore),
+    r => checkRed(c, r),
     c.decisions || '',
   )
   if (c.resume) {
     const state = savedOf(c)
-    if (state && !checkRed(c, state.red, writtenBefore)) return Promise.resolve({ result: state.red, reason: null })
+    if (state && !checkRed(c, state.red)) return Promise.resolve({ result: state.red, reason: null })
     log(`${c.behaviour}: saved RED ${state ? 'rejected' : 'missing'}, RED rerun`)
   }
   return live()

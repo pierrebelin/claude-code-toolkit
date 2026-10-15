@@ -42,7 +42,7 @@ import sys
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRESETS = os.path.join(KIT, "presets")
 DEFAULT_PRESET = "clean-architecture"
-TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands"}
+TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd"}
 
 
 class KitConfigError(Exception):
@@ -321,6 +321,16 @@ def validate(root):
             re.compile(at["when"])
         except re.error as e:
             out.append(("FAIL", "commands.architectureTest.when", f"invalid regex: {e}"))
+    tdd = c.data.get("tdd", {})
+    if not isinstance(tdd, dict):
+        out.append(("FAIL", "tdd", "expects {\"failedTest\": \"<regex>\", \"stubFailure\": \"<regex>\", \"stubLogic\": \"<regex>\"}"))
+    else:
+        for k in ("failedTest", "stubFailure", "stubLogic"):
+            if tdd.get(k):
+                try:
+                    re.compile(tdd[k])
+                except (re.error, TypeError) as e:
+                    out.append(("FAIL", f"tdd.{k}", f"invalid regex: {e}"))
     ig = c.layout.get("integrationGuard")
     if ig is not None and not (isinstance(ig, dict) and all(
             isinstance(ig.get(k), list) and ig[k] and all(isinstance(p, str) for p in ig[k]) for k in ("sources", "tests"))):

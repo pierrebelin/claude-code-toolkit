@@ -40,13 +40,11 @@ under `run/`: `tmp` hands out a folder of the system temp directory for them.
 
 Exit 0, 2 on usage error.
 """
-import hashlib
 import json
 import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
@@ -61,10 +59,7 @@ DONE = re.compile(r"^## (STATUS — DONE|STATUT — TERMINÉ)\b", re.M)
 KEEP_RUNS = 3
 
 
-def tmp_dir(name: str) -> Path:
-    root = Path(kit_config.project_root()).resolve()
-    repo = f"{root.name}-{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
-    return Path(tempfile.gettempdir()) / "cctoolkit-run" / repo / name
+tmp_dir = work_file.tmp_dir
 
 
 def rm_tmp(names: list[str]) -> int:

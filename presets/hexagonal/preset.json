@@ -106,5 +106,10 @@
       "run": "",
       "when": ""
     }
+  },
+  "tdd": {
+    "failedTest": "^\\s*(?:failed|Failed|FAILED|FAIL|\\[FAIL\\]|✗|×)\\s+(\\S+)",
+    "stubFailure": "NotImplemented(?:Exception|Error)|UnsupportedOperationException|[Nn]ot implemented",
+    "stubLogic": "^\\s*(?:if|elif|else|switch|case|match|for|foreach|while|catch|except)\\b"
   }
 }
