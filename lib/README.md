@@ -9,7 +9,7 @@ What the [hooks](../hooks/README.md) call but the harness never invokes directly
 | `project-root.sh` | the repo the kit serves: `$CLAUDE_PROJECT_DIR`, else the git top level of the working directory — never the kit's own location |
 | `kit_config.py` | `kit.config.json` resolved over its preset — the one reader every hook and script goes through ([`presets/README.md`](../presets/README.md)) |
 | `kit_testtag.py` | the `testTag` adapters: xUnit, pytest, JUnit, Jest |
-| `work_file.py` | the run work file `run/.work.jsonl` of run-lot and run-plan: one JSON line per event, appended and rewritten under `flock`; read by `batch-baseline`, `run-work`, `run-question`, `sheet-cycles`, `plan-next-batch` |
+| `work_file.py` | the run work file `run/.work.jsonl` of run-lot and run-plan: one JSON line per event, appended and rewritten under `flock`; read by `batch-baseline`, `run-work`, `run-question`, `sheet-cycles`, `plan-next-batch`, `pre-audit` |
 
 ## Modules
 
@@ -27,7 +27,7 @@ What the [hooks](../hooks/README.md) call but the harness never invokes directly
 | `rewrite-rtk.sh` | `bash-dispatch.sh` | strips the `/usr/bin/`, `/bin/`, `/usr/local/bin/` prefix off `grep`/`rg`/`find`/`egrep`/`fgrep`, prefixes `dotnet test\|restore\|format` with `rtk` in command position (`rtk hook claude` only rewrites `dotnet build`, though the `rtk dotnet` filter accepts all four), then pipes the payload to `rtk hook claude` itself. When rtk answers nothing on an already-prefixed command, the module emits the `updatedInput` decision itself. The kit *is* the RTK rewrite plus the normalisation — a repo installing it needs no global `rtk init -g` |
 | `batching-nudge.sh` | `bash-dispatch.sh` | appends one line of `additionalContext` when the last 6 tool-carrying turns each held a single call (`CLAUDE_BATCHING_WINDOW`), once per session since 2026-10-09 — 16 % of turns batched after a reminder against 12 % without, over 609 reminders. Never denies, never rewrites. Wired on Bash but reads the transcript, so it counts every tool. Main chain only: a subagent drops its context after ~30 turns, where the same run costs 32x less |
 | `graphify-freshness.sh` | autosync + statusline | counts the sources newer than `graph.json`, 20 s TTL cache |
-| `context-report.sh` | run by hand | reads the context log back: heaviest files, tokens per load reason. `--session` narrows it to the last session |
+| `context-report.sh` | `cctoolkit context-report`, by hand | reads the context log back: heaviest files, tokens per load reason. `--session` narrows it to the last session |
 
 A module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` / `HOOK_AGENT_ID` / `HOOK_TRANSCRIPT_PATH` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`.
 

@@ -4,6 +4,11 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 1.9.5 — 2026-10-15
+
+- `cctoolkit`: documentation fixes in the folder READMEs. The top `README.md` no longer says `run-plan` never commits: each batch that passes its gate gets its own commit. `cctoolkit bulk-read` and `cctoolkit context-report` are listed among the `cctoolkit` commands, `pre-audit`'s gate 9 is named, the test skills are called by their full names.
+- `run-lot-pane`: its README reads the cycle states where the pane does, the `cycle` lines of `run/.work.jsonl`, no longer the former `run/.work/FX/cycles/` files.
+
 ## 1.9.4 — 2026-10-14
 
 - `cctoolkit`: the batch audit of `run-lot` is faster. Measured on a 27-cycle batch: 24 min of audit, 60 % of it lost.

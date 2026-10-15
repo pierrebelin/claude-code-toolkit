@@ -1,6 +1,6 @@
 # Skills and agents
 
-Installed, each skill is typed with the plugin's prefix — `/cctoolkit:implement-tdd batch F1` — and the agents are `cctoolkit:<name>`; the bare names below designate them. The agents' documentation lives here: the plugin loads every `agents/*.md` as an agent, so that folder holds no README.
+Installed, each skill is typed with the plugin's prefix — `/cctoolkit:implement-tdd batch F1 <plan>` — and the agents are `cctoolkit:<name>`; the bare names below designate them. The agents' documentation lives here: the plugin loads every `agents/*.md` as an agent, so that folder holds no README.
 
 ## Skills
 
@@ -22,7 +22,7 @@ The test-authoring skills — `tests-unit-tests` (handlers/services: business ru
 
 | Agent | Role |
 |-------|------|
-| `tdd-test-author` | writes the RED tests — test files only, applies the repo's `/tests-unit-tests`, `-integration`, `-contract` or `-e2e` |
+| `tdd-test-author` | writes the RED tests — test files only, applies the repo's `/tests-unit-tests`, `/tests-integration-tests`, `/tests-contract-tests` or `/tests-e2e-tests` |
 | `tdd-implementer` | writes the production code in GREEN and REFACTOR — test files are read-only |
 | `ddd-tdd-auditor` | audits a batch, read-only, for `/verify-ddd-tdd` |
 | `adversarial-reviewer` | tries to refute a spec, a plan or the next batch sheet before any code, read-only; returns closed questions ranked `Blocking` / `Major` |
