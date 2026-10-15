@@ -1,6 +1,6 @@
 {
   "name": "spec-pane",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Side pane following a /business-spec: decisions and answers, open questions, use cases, business rules, sections; full content unfolded inline on click",
   "author": {
     "name": "Pierre Belin",
