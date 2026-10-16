@@ -17,7 +17,7 @@ const OPEN_QUESTIONS_TITLE = /^12\. (?:Open questions|Questions ouvertes)/
 const ITEM_PATTERN = /^###\s+([A-Z][A-Z0-9]{1,5}-(?:CU|RM)-\d+|(?:CU|RM)-[\w.]+)\s+—\s+(.*?)\s*(?:<!--.*-->)?\s*$/
 const isRule = (id: string): boolean => /(?:^|-)RM-/.test(id)
 const isUseCase = (id: string): boolean => /(?:^|-)CU-/.test(id)
-const SECTION_PATTERN = /^##\s+(\d+)\.\s*(.*?)\s*(?:<!--\s*kit:([\w-]+)\s*-->|<!--.*-->)?\s*$/
+const SECTION_PATTERN = /^##\s+(?:(\d+)\.\s*)?(.*?)\s*(?:<!--\s*kit:([\w-]+)\s*-->|<!--.*-->)?\s*$/
 const SEVERITY_PATTERN = /\*\*(?:s[ée]v[ée]rit[ée]|severity)\*\*\s*:?\s*([^·\n]+)/i
 const RECOMMENDED_PATTERN = /\((?:recommand[ée]e?|recommended)\)/i
 const EDITING_TOOLS = ['Edit', 'Write', 'MultiEdit']
@@ -106,11 +106,15 @@ export const questionsSection = (sections: SpecSection[]): SpecSection | undefin
   sections.find(one => one.anchor === OPEN_QUESTIONS_ANCHOR) ??
   sections.find(one => one.anchor === undefined && OPEN_QUESTIONS_TITLE.test(`${one.number}. ${one.title}`))
 
+// A section without a number (`## Notes`) is keyed by its position, shown by its title alone.
+export const sectionKey = (section: SpecSection, index: number): string => section.number || `#${index + 1}`
+export const sectionLabel = (section: SpecSection): string => (section.number ? `${section.number}. ${section.title}` : section.title)
+
 export const sectionCounts = (doc: SpecDoc): Record<string, number> => {
   const questions = questionsSection(doc.sections)
   return Object.fromEntries(
-    doc.sections.map(section => [
-      section.number,
+    doc.sections.map((section, index) => [
+      sectionKey(section, index),
       section === questions ? doc.openQuestions.length : section.body.split('\n').filter(line => ITEM_PATTERN.test(line)).length,
     ]),
   )
@@ -675,7 +679,7 @@ export const register: Register = on => {
         ]
       }
       if (kind === 'section') {
-        const section = doc.sections.find(one => one.number === id)
+        const section = doc.sections.find((one, index) => sectionKey(one, index) === id)
         return section === undefined ? null : paragraph('s', section.body)
       }
       const item = (kind === 'useCase' ? doc.useCases : doc.rules).find(one => one.id === id)
@@ -772,12 +776,12 @@ export const register: Register = on => {
     const counts = Svg === undefined || doc === null ? {} : sectionCounts(doc)
     const questionsAt = doc === null ? undefined : questionsSection(doc.sections)
     const countTone = questionsTone(doc?.openQuestions ?? [])
-    const sectionRows = (doc?.sections ?? []).flatMap(section => {
-      const count = counts[section.number] ?? 0
+    const sectionRows = (doc?.sections ?? []).flatMap((section, index) => {
+      const count = counts[sectionKey(section, index)] ?? 0
       const isQuestions = section === questionsAt
-      return entry('section', section.number, [
+      return entry('section', sectionKey(section, index), [
         <Text key="text" wrap="truncate-end">
-          {fit(`${section.number}. ${section.title}`, columns - 2 - (count > 0 ? String(count).length + 2 : 0))}
+          {fit(sectionLabel(section), columns - 2 - (count > 0 ? String(count).length + 2 : 0))}
         </Text>,
         ...(count > 0 ? [<Text key="count" color={isQuestions ? countTone : 'inactive'}>{`  ${count}`}</Text>] : []),
       ])

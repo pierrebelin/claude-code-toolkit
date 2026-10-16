@@ -75,7 +75,7 @@ Structure expected by the `run-plan` / `run-lot` workflows. Two levels:
 
 Section order is fixed: why (`Intent`, `Design`, `Decisions`), then how it is verified (`Test policy and scopes`), then the reference (`Code elements`), then the TDD contract (`Cycles`, read by `run-lot` through `cctoolkit sheet-cycles`), then `Assumptions`. About 20 KB at most.
 
-```markdown
+````markdown
 # [CODE]-PLAN-F1 — [Batch name]
 
 > Batch F1 of plan `[CODE]-PLAN.md`. Spec: `[path]`.
@@ -201,4 +201,4 @@ _Empty when the plan is written. The run never writes here: its decisions go to 
 | # | Assumption | To be validated by |
 |---|------------|--------------------|
 | H1 | [what was assumed for lack of an answer] | [who / what] |
-```
+````

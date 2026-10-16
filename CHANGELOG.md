@@ -4,6 +4,15 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.0.2 — 2026-10-16
+
+- `spec-pane`: a spec section without a number (`## Notes`) is read and shown by its title, with the use cases and rules under it; they were skipped.
+- `cctoolkit`: `/cctoolkit:plan-implementation`'s batch sheet template opens its `markdown` block with four backticks, so the `json` block of `## Cycles` inside it no longer closes it early: on GitHub the template's end, `## Assumptions` included, rendered outside the block.
+
+**Rules changed**
+
+- `rules/markdown-output.md`: `spec-pane` reads every `## ` section of a spec, its number optional.
+
 ## 2.0.1 — 2026-10-16
 
 - `run-lot-pane`: a French report's `## À valider` section is read like `## To validate` — the `v` view, the count and the kept sections no longer miss it; an empty section written `Aucune.` reads as empty. The sheet's assumptions are also found by their `<!-- kit:assumptions -->` anchor.

@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { askedOf, fit, isOffRecommendation, isSpecPath, parseSpec, promptTopic, withAnswers } from '../hooks/register'
+import { askedOf, fit, isOffRecommendation, isSpecPath, parseSpec, promptTopic, sectionCounts, sectionKey, sectionLabel, withAnswers } from '../hooks/register'
 
 const PATH = '/repo/todo/catalogue-groupes/SPEC-catalogue-groupes.md'
 
@@ -165,6 +165,25 @@ test('open questions renumbered: the anchored section is read wherever it stands
   expect(doc.sections.map(one => `${one.number}|${one.anchor}`)).toEqual(['3|open-questions', '12|data'])
   expect(doc.openQuestions.map(one => `${one.id} ${one.severity} ${one.question}`)).toEqual(['Q1 Blocking Lock scope?'])
   expect(parseSpec('# X\n\n## 12. Questions ouvertes\n\n| # | Sévérité | Question |\n|---|---|---|\n| Q1 | Bloquant | Q ? |\n').openQuestions.map(one => one.id)).toEqual(['Q1'])
+})
+
+test('a section without a number is read, keyed by its position and shown by its title', () => {
+  const doc = parseSpec(`# X
+
+## 1. Business rules <!-- kit:business-rules -->
+
+### RM-01 — Unique name
+
+## Notes
+
+### RM-02 — Not counted twice
+
+## 2. Glossary
+`)
+  expect(doc.sections.map(sectionLabel)).toEqual(['1. Business rules', 'Notes', '2. Glossary'])
+  expect(doc.sections.map(sectionKey)).toEqual(['1', '#2', '2'])
+  expect(sectionCounts(doc)).toEqual({ '1': 1, '#2': 1, '2': 0 })
+  expect(doc.rules.map(one => one.id)).toEqual(['RM-01', 'RM-02'])
 })
 
 test('item headings: the em dash only, as lib/knowledge.py reads an object heading', () => {
