@@ -8,7 +8,8 @@ the base but belongs to the context whose sync drafts it: staged under
 `<root>/.sync/Catalog/adr/…`, written to `<root>/adr/…`, counted in that context's
 `HISTORY.md` delta. A staged file replaces the base file at the same path, whole; an
 empty staged file deletes it. A new object carries a provisional id — `CAT-CU-?1`,
-`CAT-RM-?2`, `CAT-D-?1`, `ADR-?1`, in a use-case file name too — numbered only at
+`CAT-RM-?2`, `CAT-D-?1`, `ADR-?1`, in a use-case file name too (`~` for `?` there,
+Windows forbids `?` in a file name) — numbered only at
 `apply`, so a draft dropped at validation takes no id. Format:
 `skills/knowledge-sync/references/knowledge-format.md`.
 
@@ -78,6 +79,9 @@ import knowledge_index  # noqa: E402
 STAGING = ".sync"
 LEVELS = ("high", "medium", "low")
 PROVISIONAL = re.compile(r"(?<![A-Za-z0-9-])((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D))|ADR)-\?(\d+)(?![0-9A-Za-z])")
+# Windows forbids `?` in a file name: a staged file may spell the marker `~` there
+# (`CAT-CU-~1-archive-product.md`); it is read back as `?`, its id in the text.
+FILE_MARK = re.compile(r"(?<![A-Za-z0-9-])((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D))|ADR)-~(\d+)(?![0-9A-Za-z])")
 PROV_HEADING = re.compile(r"^(#{1,6})\s+((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D)|ADR)-\?\d+)\s+—\s")
 WIDTH = {"CU": 2, "RM": 3, "D": 3, "ADR": 3}
 IGNORE = (".index/", ".sync/", ".merge/")
@@ -124,7 +128,8 @@ def staged_files():
         for f in files:
             if f.endswith(".md"):
                 p = os.path.join(d, f)
-                out[os.path.relpath(p, top)] = p
+                head = os.path.dirname(os.path.relpath(p, top))
+                out[os.path.join(head, FILE_MARK.sub(r"\1-?\2", f))] = p
     return out
 
 

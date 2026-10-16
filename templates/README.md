@@ -7,6 +7,7 @@ What a plugin cannot set itself. `/cctoolkit:kit-init` merges these into the rep
 | `settings.json` | permissions, env, statusline — merged into the repo's. Its `extraKnownMarketplaces` and `enabledPlugins` show what the project-scope install writes and are never merged: `claude plugin marketplace add … --scope project` and `claude plugin install … --scope project` write them (`INSTALL.md`) |
 | `statusline-command.sh` | one line: git branch, model, effort, caveman badge, graph lag; also drops the current effort in `$TMPDIR` for `implement-tdd-guard.sh` |
 | `claude.gitignore` | the runtime files the hooks write inside `.claude/` |
+| `claude.gitattributes` | LF for the `.claude/` shell scripts, whatever `core.autocrlf` says: a CRLF checkout on Windows breaks the statusline |
 | `settings.local.json` | startup trim, opt-in — see below |
 
 `settings.json` is a shareable template: no one-off session grant, no machine path. Its `allow` list covers the strict minimum (`Edit`, `WebSearch`, `cctoolkit`, `dotnet`, `rtk`, `gh pr`, `xargs`, `python3`, `graphify query|explain|path`, `git check-ignore`). Broad grants — `Bash(rm *)`, `Bash(cd *)` — are deliberately excluded. Tools specific to a repo go into that repo's `permissions.allow`.

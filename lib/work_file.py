@@ -29,16 +29,46 @@ fits in one line of JSON per event:
 
 Concurrent RED and GREEN agents append at the same time: every append and every rewrite
 holds an exclusive `flock` on the file itself, and a rewrite truncates in place (a
-replace by rename would leave an appender writing to the unlinked inode).
+replace by rename would leave an appender writing to the unlinked inode). Windows has no
+`flock`: there the lock is one byte far past the content (`msvcrt.locking`, mandatory, so
+never on the data itself), exclusive for readers too.
 """
-import fcntl
 import hashlib
 import json
+import os
 import re
 import tempfile
 import time
 import unicodedata
 from pathlib import Path
+
+if os.name == "nt":
+    import msvcrt
+
+    _FAR = 0x7FFFFFF0
+
+    def _lock(f, exclusive: bool) -> None:
+        os.lseek(f.fileno(), _FAR, os.SEEK_SET)
+        while True:
+            try:
+                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                break
+            except OSError:  # LK_LOCK gives up after ten tries, one per second
+                time.sleep(0.05)
+        f.seek(0)
+
+    def _unlock(f) -> None:
+        f.flush()
+        os.lseek(f.fileno(), _FAR, os.SEEK_SET)
+        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    def _lock(f, exclusive: bool) -> None:
+        fcntl.flock(f, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+
+    def _unlock(f) -> None:
+        fcntl.flock(f, fcntl.LOCK_UN)
 
 NAME = ".work.jsonl"
 KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker", "ack")
@@ -84,11 +114,11 @@ def read(path) -> list[dict]:
     if not path.is_file():
         return []
     with open(path, encoding="utf-8") as f:
-        fcntl.flock(f, fcntl.LOCK_SH)
+        _lock(f, exclusive=False)
         try:
             return _parse(f)
         finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+            _unlock(f)
 
 
 def append(path, record: dict) -> dict:
@@ -98,12 +128,12 @@ def append(path, record: dict) -> dict:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+        _lock(f, exclusive=True)
         try:
             f.write(_dump(record))
             f.flush()
         finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+            _unlock(f)
     return record
 
 
@@ -115,7 +145,7 @@ def keep(path, predicate) -> int:
     if not path.is_file():
         return 0
     with open(path, "r+", encoding="utf-8") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+        _lock(f, exclusive=True)
         try:
             records = _parse(f)
             kept = [r for r in records if predicate(r)]
@@ -124,7 +154,7 @@ def keep(path, predicate) -> int:
             f.writelines(_dump(r) for r in kept)
             f.flush()
         finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+            _unlock(f)
     return len(records) - len(kept)
 
 

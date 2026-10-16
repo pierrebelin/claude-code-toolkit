@@ -4,6 +4,10 @@
 
 input=$(cat)
 
+# Git Bash on Windows: a native jq writes CRLF unless given -b, and the `\r`
+# would land in every field below.
+case "${OSTYPE:-}" in msys* | cygwin*) jq() { command jq -b "$@"; } ;; esac
+
 # Git branch (skip optional locks)
 cwd=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // empty')
 [ -z "$cwd" ] && cwd=$(pwd)

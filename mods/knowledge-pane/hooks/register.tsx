@@ -182,7 +182,10 @@ export const sliceObject = (text: string, id: string): string | null => {
 
 // `[mtime_ns, size]` per base file in `.index/files.json`: a file whose stamp moved, or one not there, is not indexed yet.
 export const staleOf = (files: { rel: string; size: number; mtimeMs: number }[], cache: unknown): string[] => {
-  const known = ((cache ?? {}) as { files?: Record<string, { stamp?: unknown }> }).files ?? {}
+  // Keys written on Windows by an older kit carry backslashes: read with `/`, as the walk names them.
+  const known = Object.fromEntries(
+    Object.entries(((cache ?? {}) as { files?: Record<string, { stamp?: unknown }> }).files ?? {}).map(([rel, one]) => [rel.replace(/\\/g, '/'), one]),
+  )
   const seen = new Set(files.map(one => one.rel))
   const moved = files
     .filter(one => {
@@ -229,7 +232,7 @@ export const search = (objects: KObject[], query: string): KObject[] => {
 
 export const isOwnRule = (rule: KObject, cu: KObject): boolean => rule.kind === 'RM' && rule.path === cu.path
 
-export const isSharedRule = (rule: KObject): boolean => rule.kind === 'RM' && /(?:^|\/)rules\.md$/.test(rule.path)
+export const isSharedRule = (rule: KObject): boolean => rule.kind === 'RM' && /(?:^|[\\/])rules\.md$/.test(rule.path)
 
 export const contextParts = (objects: KObject[], name: string) => {
   const mine = objects.filter(one => one.context === name)
@@ -409,7 +412,8 @@ async function filesUnder($: EngineInterface, path: string, sub = '', depth = 0)
 
 const readText = async ($: EngineInterface, path: string): Promise<string | null> => {
   try {
-    return await $.fs.read(path)
+    // A Windows checkout may carry CRLF: every parser below splits on `\n`.
+    return (await $.fs.read(path)).replace(/\r\n?/g, '\n')
   } catch {
     return null
   }
@@ -558,7 +562,7 @@ async function rootOf($: EngineInterface, repo: string): Promise<string> {
     const config = JSON.parse((await readText($, join(repo, CONFIG))) ?? '{}') as { product?: unknown; knowledge?: { root?: unknown } }
     const root = config.knowledge?.root
     if (typeof root !== 'string' || root.trim() === '') return DEFAULT_ROOT
-    return root.replaceAll('{product}', typeof config.product === 'string' && config.product !== '' ? config.product : '*').replace(/^\/+|\/+$/g, '')
+    return root.replaceAll('{product}', typeof config.product === 'string' && config.product !== '' ? config.product : '*').replace(/^[\\/]+|[\\/]+$/g, '')
   } catch {
     return DEFAULT_ROOT
   }

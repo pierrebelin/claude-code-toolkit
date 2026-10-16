@@ -1,0 +1,3 @@
+# The statusline script runs in bash, Git Bash on Windows: a CRLF checkout
+# (core.autocrlf, the Git for Windows default) breaks it on its first line.
+*.sh text eol=lf

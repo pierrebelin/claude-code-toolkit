@@ -15,6 +15,7 @@
 # an agent is re-injected whole into the main conversation, so the contract is the
 # only thing standing between a 20-line table and a pasted build log.
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 input=$(cat)
 
 [[ "$(echo "$input" | jq -r '.tool_name // ""')" != "Agent" ]] && exit 0

@@ -24,6 +24,7 @@
 # hookSpecificOutput.additionalContext: on PostToolUse, plain stdout at exit 0 lands in the
 # transcript only and never reaches the model (231 emissions, 0 read, probe of 2026-09-13).
 
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 INPUT=$(cat)
 
 # Cheap bail-out before any python: no file_path in the payload, nothing to check.
@@ -173,6 +174,12 @@ for t, bound in kit_testtag.scan_tree(C, AD):
     methods[t.key] = (t.path, t.cls, t.tags, bound)
     for v in t.tags:
         traits.setdefault(v, []).append(t.key)
+
+# Windows: the payload's path may differ from the walked one by case alone (`c:\` and
+# `C:\`, a folder typed by hand); the comparisons below take the walked spelling.
+if os.name == "nt":
+    walked = {os.path.normcase(p): p for p in all_md} | {os.path.normcase(p): p for p, _, _, _ in methods.values()}
+    target = walked.get(os.path.normcase(target), target)
 
 # --- Report scope ------------------------------------------------------------
 focus = set()

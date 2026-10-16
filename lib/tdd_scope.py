@@ -278,6 +278,8 @@ def _under_root(cfg, token):
     token = token.strip("'\"")
     if not token or token.startswith("-") or token.startswith("/dev/"):
         return False
+    if os.name == "nt":  # Git Bash spells `C:\x` or `/c/x` what Python reads as `C:/x`
+        token = re.sub(r"^/([A-Za-z])(?=/|$)", r"\1:", token.replace("\\", "/"))
     try:
         return cfg.under(token, roots(cfg)) is not None
     except ValueError:
@@ -394,7 +396,7 @@ def rerun(cfg, agent_id):
     if not seg:
         return None
     try:
-        p = subprocess.run(["bash", "-c", seg], cwd=cfg.root, capture_output=True, text=True, timeout=RERUN_TIMEOUT)
+        p = subprocess.run([shutil.which("bash") or "bash", "-c", seg], cwd=cfg.root, capture_output=True, text=True, timeout=RERUN_TIMEOUT)
     except subprocess.TimeoutExpired:
         return seg, 124, ""
     except OSError:

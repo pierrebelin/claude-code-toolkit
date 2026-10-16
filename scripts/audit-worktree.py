@@ -89,7 +89,8 @@ def create(ref):
     prune()
     path = os.path.join(os.path.realpath(tempfile.gettempdir()), f"{PREFIX}{repo_tag()}-{sha[:12]}")
     shutil.rmtree(path, ignore_errors=True)
-    git("worktree", "add", "--detach", path, sha)
+    # core.longpaths: under %TEMP% a deep .NET tree passes Windows' 260-character limit; ignored elsewhere.
+    git("-c", "core.longpaths=true", "worktree", "add", "--detach", path, sha)
     copied = []
     for rel in UNTRACKED:
         src, dst = os.path.join(ROOT, rel), os.path.join(path, rel)

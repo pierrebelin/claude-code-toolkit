@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { askedOf, fit, isOffRecommendation, isSpecPath, parseSpec, promptTopic, sectionCounts, sectionKey, sectionLabel, withAnswers } from '../hooks/register'
+import { askedOf, fit, isAbsolutePath, isOffRecommendation, isSpecPath, parseSpec, promptTopic, relativePath, sectionCounts, sectionKey, sectionLabel, withAnswers } from '../hooks/register'
 
 const PATH = '/repo/todo/catalogue-groupes/SPEC-catalogue-groupes.md'
 
@@ -208,6 +208,17 @@ test('spec path, typed command and expanded command', () => {
   expect(promptTopic('/business-spec')).toBeNull()
   expect(promptTopic('<command-name>/business-spec</command-name><command-args>produit</command-args>')).toBe('produit')
   expect(promptTopic('relis la /business-spec')).toBeUndefined()
+})
+
+test('Windows paths: a backslashed spec is followed, shown relative with `/`, the drive case aside', () => {
+  expect(isSpecPath('C:\\repo\\todo\\x\\SPEC-x.md')).toBe(true)
+  expect(isSpecPath('C:\\repo\\todo\\x\\X-PLAN.md')).toBe(false)
+  expect(relativePath('C:\\repo\\todo\\x\\SPEC-x.md', 'c:/repo')).toBe('todo/x/SPEC-x.md')
+  expect(relativePath('/repo/todo/x/SPEC-x.md', '/repo')).toBe('todo/x/SPEC-x.md')
+  expect(relativePath('/Repo/todo/x/SPEC-x.md', '/repo')).toBe('/Repo/todo/x/SPEC-x.md')
+  expect(isAbsolutePath('C:\\repo\\SPEC.md')).toBe(true)
+  expect(isAbsolutePath('C:/repo/SPEC.md')).toBe(true)
+  expect(isAbsolutePath('todo/x/SPEC.md')).toBe(false)
 })
 
 test('decision: recommended option, answer, gap from the recommendation', () => {

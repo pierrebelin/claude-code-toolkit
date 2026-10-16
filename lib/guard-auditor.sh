@@ -48,7 +48,7 @@ marker="${HOOK_SUITES_MARKER:-}"
 if [ -z "$marker" ]; then
   tmp="${TMPDIR:-/tmp}"
   tmp="${tmp%/}"
-  base="$tmp/cctoolkit-run/$(basename "$root")-$(printf '%s' "$root" | shasum | cut -c1-8)"
+  base="$tmp/cctoolkit-run/$(basename "$root")-$(printf '%s' "$root" | { shasum 2>/dev/null || sha1sum; } | cut -c1-8)"
   marker="$(ls -t "$base"/*/suites-green 2>/dev/null | head -1)"
 fi
 [ -n "$marker" ] && [ -f "$marker" ] || exit 0

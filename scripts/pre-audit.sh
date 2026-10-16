@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Pre-audit gate — the mechanical half of /verify-ddd-tdd, in five seconds

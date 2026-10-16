@@ -18,7 +18,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/project-root.sh"
 REPO="${GRAPHIFY_REPO:-$PROJECT_ROOT}"
 GRAPH="$REPO/graphify-out/graph.json"
-CACHE="/tmp/graphify-fresh-$(echo "$REPO" | md5 -q 2>/dev/null || echo default)"
+CACHE="/tmp/graphify-fresh-$(echo "$REPO" | { md5 -q 2>/dev/null || md5sum 2>/dev/null | cut -c1-32; } || echo default)"
 TTL=20
 
 compute() {
@@ -34,7 +34,7 @@ compute() {
 cached_count() {
   if [ "$1" != "--refresh" ] && [ -f "$CACHE" ]; then
     local age
-    age=$(( $(date +%s) - $(stat -f %m "$CACHE" 2>/dev/null || echo 0) ))
+    age=$(( $(date +%s) - $(stat -c %Y "$CACHE" 2>/dev/null || stat -f %m "$CACHE" 2>/dev/null || echo 0) ))
     if [ "$age" -lt "$TTL" ]; then
       cat "$CACHE"
       return

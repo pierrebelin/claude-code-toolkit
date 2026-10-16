@@ -17,10 +17,15 @@ after a bounded time, so the workflow loops on short calls:
 folder is `<temp>/cctoolkit-bg/<name>/`: `pid`, `exit`, `log`. `wait` prints one line,
 `DONE exit=0`, `FAILED exit=<n>` or `RUNNING <seconds>s`, then the last log lines.
 Exit 2: unknown job or bad arguments.
+
+On Windows the job is a detached Git Bash (`bash` looked up on PATH: CreateProcess would
+find WSL's `bash.exe` in System32 first), probed through its process handle and stopped
+with `taskkill /T`: neither `os.kill(pid, 0)` nor `os.killpg` exists there.
 """
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -45,6 +50,17 @@ def read(path):
 
 
 def alive(pid):
+    if os.name == "nt":
+        import ctypes
+        kernel = ctypes.windll.kernel32
+        handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        try:
+            return bool(kernel.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel.CloseHandle(handle)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -102,14 +118,17 @@ def start(name, words):
     for f in ("pid", "exit", "log"):
         try:
             os.remove(os.path.join(d, f))
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             pass
     command = words[0] if len(words) == 1 else shlex.join(words)
-    exit_file = shlex.quote(os.path.join(d, "exit"))
+    exit_file = shlex.quote(os.path.join(d, "exit").replace(os.sep, "/"))
     wrapped = f"( {command} ); echo $? > {exit_file}"
+    detach = {"start_new_session": True}
+    if os.name == "nt":
+        detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
     with open(os.path.join(d, "log"), "w") as log:
-        proc = subprocess.Popen(["bash", "-c", wrapped], stdout=log, stderr=subprocess.STDOUT,
-                                stdin=subprocess.DEVNULL, start_new_session=True, cwd=os.getcwd())
+        proc = subprocess.Popen([shutil.which("bash") or "bash", "-c", wrapped], stdout=log, stderr=subprocess.STDOUT,
+                                stdin=subprocess.DEVNULL, cwd=os.getcwd(), **detach)
     with open(os.path.join(d, "pid"), "w") as f:
         f.write(str(proc.pid))
     print(f"STARTED {name} pid={proc.pid} log={os.path.join(d, 'log')}")
@@ -132,7 +151,10 @@ def stop(names):
             print(f"{name}: not running")
             continue
         try:
-            os.killpg(int(pid), signal.SIGTERM)
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", pid, "/T", "/F"], capture_output=True)
+            else:
+                os.killpg(int(pid), signal.SIGTERM)
         except (ProcessLookupError, PermissionError):
             pass
         print(f"{name}: stopped")

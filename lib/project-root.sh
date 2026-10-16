@@ -4,6 +4,8 @@
 # hook; otherwise the kit copied into a repo's `.claude/` serves that repo (eval
 # fixtures, a manual copy); otherwise the git top level of the working directory, which
 # is how a script launched through `cctoolkit` from the Bash tool finds the repo.
+# Both are in kit_path's form (lib/platform.sh): `C:/x/repo` on Windows.
+. "${BASH_SOURCE[0]%/*}/platform.sh"
 KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
   PROJECT_ROOT="$CLAUDE_PROJECT_DIR"
@@ -13,3 +15,5 @@ else
     *) PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)" ;;
   esac
 fi
+kit_path KIT_DIR
+kit_path PROJECT_ROOT

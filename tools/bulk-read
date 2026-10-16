@@ -27,6 +27,7 @@
 # CLAUDE_BULK_READ_TIMEOUT (180 s — the dollar cap bounds the spend, not the
 # wait), CLAUDE_BULK_READ_BIN (claude — the evals point it at a stub).
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 usage() {
   sed -n '2,20p' "$0" | sed -e 's/^# \{0,1\}//'

@@ -159,9 +159,8 @@ def default_root(plan):
 
 
 def outside_batch(repo, plan, sheet):
-    listing = subprocess.run(
-        ["bash", "-c", "git diff --name-only; git ls-files --others --exclude-standard"],
-        cwd=repo, capture_output=True, text=True).stdout.split()
+    listing = [f for args in (["diff", "--name-only"], ["ls-files", "--others", "--exclude-standard"])
+               for f in subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True).stdout.split()]
     plan_dir = plan.parent.relative_to(repo).as_posix() if plan.parent.is_relative_to(repo) else None
     named = sheet.read_text(encoding="utf-8") if sheet.is_file() else ""
     config = kit_config.load(str(repo))
@@ -262,7 +261,7 @@ def next_batches(batches, done, in_scope, excluded, skipped, repo_dir, sheet):
     for b in pending:
         if b["id"] not in excluded and set(b["deps"]) <= done and repo_dir(b) not in repos:
             repos.add(repo_dir(b))
-            launched.append({"batch": b["id"], "repo": str(repo_dir(b)), "sheet": str(sheet(b["id"]))})
+            launched.append({"batch": b["id"], "repo": repo_dir(b).as_posix(), "sheet": sheet(b["id"]).as_posix()})
     if launched:
         return "BATCHES", "\n".join(f"{x['batch']} {x['repo']} {x['sheet']}" for x in launched), launched, held
     if all(b["id"] in held_by for b in pending):

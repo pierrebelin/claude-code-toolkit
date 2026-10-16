@@ -25,6 +25,7 @@
 # name) while `ProductId` resolves clean. A hook that narrates its own
 # misses trains the reader to skip it.
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 # Paused 2026-10-09 to 2026-10-23, for a comparison: 300 injections (210 kB) over
 # 30 days with no measurable effect, while graphify was called by choice 151 times
@@ -38,6 +39,7 @@ case "$tool_name" in Edit|Write) ;; *) exit 0 ;; esac
 
 file_path=$(echo "$input" | jq -r '.tool_input.file_path // ""')
 [ -n "$file_path" ] || exit 0
+kit_path file_path
 
 # Domain aggregates and value objects only. An Application handler or an EF
 # mapper has a fan-out of one or two callers — the model already holds it.

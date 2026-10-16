@@ -48,7 +48,7 @@ else
   SID=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unknown)
 fi
 say() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1 (session=$SID)" >> "$LOG"; }
-mtime() { stat -f %m "$GRAPH" 2>/dev/null || echo 0; }
+mtime() { stat -c %Y "$GRAPH" 2>/dev/null || stat -f %m "$GRAPH" 2>/dev/null || echo 0; }
 
 [ -x "$GRAPHIFY" ] || { say "graphify not found, skip"; exit 0; }
 

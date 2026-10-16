@@ -20,6 +20,7 @@
 # re-issuing the identical launch lets it through. The first attempt drops a marker,
 # the second consumes it.
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 input=$(cat)
 
 event=$(echo "$input" | jq -r '.hook_event_name // ""')

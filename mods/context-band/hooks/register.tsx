@@ -22,6 +22,7 @@ const HINT_INDENT = 4
 const CHARS_PER_TOKEN = 4
 const TICK_MS = 15_000
 const GRAPHIFY_LOCK = '/tmp/graphify-autosync.lock'
+const GRAPHIFY_LOCK_NAME = 'graphify-autosync.lock'
 const HOOKS_LABEL = 'hook reminders'
 const TEXT_LABEL = 'text'
 
@@ -87,7 +88,7 @@ export const nextStreak = (streak: number, toolsInStep: number): number => {
 export const estimate = (chars: number): number => Math.round(chars / CHARS_PER_TOKEN)
 
 const basename = (path: unknown): string =>
-  typeof path === 'string' ? (path.split('/').pop() ?? path) : ''
+  typeof path === 'string' ? (path.split(/[\\/]/).pop() ?? path) : ''
 
 const clip = (text: unknown, length: number): string => {
   if (typeof text !== 'string') return ''
@@ -213,10 +214,14 @@ export const register: Register = on => {
   let pending: { label: string; tokens: number }[] = []
 
   on('session.start', async ($, e, next) => {
+    // graphify-autosync.sh takes its lock in Git Bash's /tmp, which on Windows is
+    // %TEMP%: the engine would read `/tmp` as `C:\tmp`.
+    const temp = /^[A-Za-z]:/.test($.plugin.root) ? await $.env.get('TEMP') : undefined
+    const lock = temp === undefined ? GRAPHIFY_LOCK : `${temp}\\${GRAPHIFY_LOCK_NAME}`
     const tick = async () => {
       const at = await $.clock.now()
       await update($, now, () => at)
-      const isLocked = await $.fs.exists(GRAPHIFY_LOCK)
+      const isLocked = await $.fs.exists(lock)
       await update($, isRebuilding, () => isLocked)
     }
     $.clock.every(TICK_MS, () => void tick())

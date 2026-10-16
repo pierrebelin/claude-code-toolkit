@@ -21,6 +21,7 @@
 # project_root()): $CLAUDE_PROJECT_DIR, else the git top level of the working
 # directory. Run it from inside the repo.
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 list() {
@@ -40,13 +41,13 @@ case "$cmd" in
   list) list; exit 0 ;;
   doctor|bulk-read) exec bash "$KIT/tools/$cmd" "$@" ;;
   context-report) exec bash "$KIT/lib/context-report.sh" "$@" ;;
-  config) exec python3 "$KIT/lib/kit_config.py" "$@" ;;
+  config) exec "${CCTOOLKIT_PYTHON:-python3}" "$KIT/lib/kit_config.py" "$@" ;;
   evals) exec bash "$KIT/evals/run.sh" "$@" ;;
 esac
 case "$cmd" in
   */*|.*) echo "cctoolkit: invalid command '$cmd'" >&2; exit 2 ;;
 esac
 [ -f "$KIT/scripts/$cmd.sh" ] && exec bash "$KIT/scripts/$cmd.sh" "$@"
-[ -f "$KIT/scripts/$cmd.py" ] && exec python3 "$KIT/scripts/$cmd.py" "$@"
+[ -f "$KIT/scripts/$cmd.py" ] && exec "${CCTOOLKIT_PYTHON:-python3}" "$KIT/scripts/$cmd.py" "$@"
 echo "cctoolkit: unknown command '$cmd' — cctoolkit list" >&2
 exit 2

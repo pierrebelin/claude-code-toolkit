@@ -41,7 +41,7 @@ Global from the spec on, taken with `cctoolkit next-id`, never given twice: a re
 
 `<PREFIX>` comes from `knowledge.contexts` (`{"Catalog": "CAT"}`), the context being the folder name.
 
-**Provisional ids.** A draft of `/knowledge-sync` gives a new object `<PREFIX>-CU-?n`, `<PREFIX>-RM-?n`, `<PREFIX>-D-?n` or `ADR-?n` — in a use-case file name too (`CAT-CU-?1-archive-product.md`) — and cites it under that form. `cctoolkit knowledge-write apply` numbers them as `next-id` would, in reading order: use cases, `rules.md`, `decisions.md`, the other files, ADRs last. A draft dropped at validation takes no id; an object already in the base keeps its own.
+**Provisional ids.** A draft of `/knowledge-sync` gives a new object `<PREFIX>-CU-?n`, `<PREFIX>-RM-?n`, `<PREFIX>-D-?n` or `ADR-?n` — in a use-case file name too, `~` standing for `?` there (`CAT-CU-~1-archive-product.md`: Windows forbids `?` in a file name) — and cites it under that form. `cctoolkit knowledge-write apply` numbers them as `next-id` would, in reading order: use cases, `rules.md`, `decisions.md`, the other files, ADRs last. A draft dropped at validation takes no id; an object already in the base keeps its own.
 
 ## Staging
 

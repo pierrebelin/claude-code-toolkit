@@ -15,6 +15,7 @@
 # Warning only, exit 0. Speaks through additionalContext: on PostToolUse plain stdout
 # never reaches the model.
 
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 input=$(cat)
 case "$input" in *'"file_path"'*) ;; *) exit 0 ;; esac
 command -v jq >/dev/null 2>&1 || exit 0
@@ -23,6 +24,7 @@ command -v python3 >/dev/null 2>&1 || exit 0
 IFS=$'\x1f' read -r session_id agent_id file_path <<<"$(printf '%s' "$input" | jq -j '[(.session_id // "unknown"), (.agent_id // ""), (.tool_input.file_path // "")] | join("\u001f")' 2>/dev/null)"
 [ -z "$agent_id" ] || exit 0
 [ -n "$file_path" ] || exit 0
+kit_path file_path
 
 seen_file="/tmp/claude-knowledge-seen-${session_id}"
 if [ -f "$seen_file" ] && grep -Fxq "$file_path" "$seen_file" 2>/dev/null; then

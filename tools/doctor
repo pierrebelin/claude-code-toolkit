@@ -21,6 +21,7 @@
 # Exit 1 when any check FAILs, 0 otherwise. The SessionStart registration appends
 # `|| true`: a doctor must never block a session, only report.
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 QUIET=0
 EVALS=0

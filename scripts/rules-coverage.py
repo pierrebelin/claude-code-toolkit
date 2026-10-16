@@ -142,7 +142,7 @@ def handlers():
             continue
         if not C.is_use_case_dir(base):
             continue
-        yield os.path.relpath(base, C.root_of(base, C.use_case_roots)), os.path.join(base, C.rule_sheet)
+        yield os.path.relpath(base, C.root_of(base, C.use_case_roots)).replace(os.sep, "/"), os.path.join(base, C.rule_sheet)
 
 
 def declared_values():

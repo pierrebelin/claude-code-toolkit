@@ -35,7 +35,7 @@ Reads in parallel: every `Read`, `Grep` and `Bash` of a step that does not depen
 
 ## Provisional ids
 
-Every new object takes a provisional id: `<PREFIX>-CU-?n`, `<PREFIX>-RM-?n`, `<PREFIX>-D-?n`, `ADR-?n` — in a use-case file name too (`CAT-CU-?1-archive-product.md`). One series per stem; start after the highest `?n` already staged for that stem — `grep -rhoE '(<PREFIX>-(CU|RM|D)|ADR)-\?[0-9]+' <staging>`, ADRs being shared with the contexts done before you. An object the base already holds keeps its id.
+Every new object takes a provisional id: `<PREFIX>-CU-?n`, `<PREFIX>-RM-?n`, `<PREFIX>-D-?n`, `ADR-?n` — in a use-case file name too, its `?` written `~` there (`CAT-CU-~1-archive-product.md`: Windows forbids `?` in a file name). One series per stem; start after the highest `?n` already staged for that stem — `grep -rhoE '(<PREFIX>-(CU|RM|D)|ADR)-\?[0-9]+' <staging>`, ADRs being shared with the contexts done before you. An object the base already holds keeps its id.
 
 Every provisional id you cite is defined in a staged file, once. The last step checks it.
 

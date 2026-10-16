@@ -16,7 +16,11 @@ export const meta = {
   ],
 }
 
-const sheet = (typeof args === 'string' ? args : (args && args.sheet) || '').trim().replace(/^@/, '')
+// On Windows a path may come with `\` (Python, the engine, an agent): Git Bash eats an unquoted one, and
+// the regexes below split on `/`. Paths are carried with `/`.
+const slashed = p => String(p || '').replace(/\\/g, '/')
+
+const sheet = slashed(typeof args === 'string' ? args : (args && args.sheet) || '').trim().replace(/^@/, '')
 const naming = /^(.*)-(F\d+)\.md$/.exec(sheet)
 if (!naming) throw new Error('expected argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`')
 const plan = `${naming[1]}.md`
@@ -381,7 +385,7 @@ function checkRed(c, r) {
   return null
 }
 
-const repoPath = p => p.replace(/^.*?(^|\/)((src|tests)\/)/, '$2')
+const repoPath = p => slashed(p).replace(/^.*?(^|\/)((src|tests)\/)/, '$2')
 
 function checkGreen(r, grants = noGrants()) {
   if (!r) return 'GREEN agent without result'
@@ -478,7 +482,7 @@ let lotIndex = null
 const savedOf = c => saved.cycles.find(x => x.behaviour === c.behaviour) || null
 
 const cell = text => String(text ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ').trim()
-const relative = p => fileName(p).replace(/^.*?(?=(src|tests|todo)\/)/, '')
+const relative = p => slashed(fileName(p)).replace(/^.*?(?=(src|tests|todo)\/)/, '')
 const projectOf = p => (/^(src|tests)\/([^/]+)\//.exec(p) || [])[2] || ''
 const withinLayer = p => p.replace(/^(src|tests)\/[^/]+\//, '')
 function sharedPrefix(projects) {
@@ -516,7 +520,7 @@ function renderReport(status, reason, verdict) {
   for (const c of cycles) {
     for (const t of c.red?.table ?? []) {
       const parts = t.test.replace(/`/g, '').split('.')
-      const klass = parts.length > 1 ? parts[parts.length - 2] : (fileName((c.red.tests ?? [])[0] || '').split('/').pop() || '').replace(/\.cs$/, '')
+      const klass = parts.length > 1 ? parts[parts.length - 2] : (fileName((c.red.tests ?? [])[0] || '').split(/[\\/]/).pop() || '').replace(/\.cs$/, '')
       tests.set(klass, [...(tests.get(klass) ?? []), [`\`${parts[parts.length - 1]}\``, c.rmcu, short(t.case, 50)]])
     }
   }
@@ -651,7 +655,7 @@ const loading = agent(
 
 const readIndex = (target, phaseName) => agent(
   `${FRAME}\n\nRun \`${indexCommand(target)}\` once. Return the JSON line it printed, verbatim, whatever its exit code.`,
-  { schema: INDEX, phase: phaseName, label: `index ${fileName(target).split('/').pop()}`, model: 'haiku', effort: 'low' },
+  { schema: INDEX, phase: phaseName, label: `index ${fileName(target).split(/[\\/]/).pop()}`, model: 'haiku', effort: 'low' },
 ).catch(() => null)
 
 function designPrompt(target, targetBatch) {
@@ -1030,7 +1034,7 @@ function closeRound(round, open, contested) {
   ).catch(() => null)
 }
 
-const pathsIn = text => [...String(text || '').matchAll(/[\w./-]+\.[A-Za-z]\w*/g)].map(m => m[0].replace(/^\.\//, ''))
+const pathsIn = text => [...String(text || '').matchAll(/[\w./\\-]+\.[A-Za-z]\w*/g)].map(m => slashed(m[0]).replace(/^\.\//, ''))
 const stem = p => p.split('/').pop().replace(/\.[^.]+$/, '')
 
 // A file the fix changed that no finding cites, that is no test of a cited file, and that the

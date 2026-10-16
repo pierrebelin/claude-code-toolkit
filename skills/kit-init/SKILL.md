@@ -6,7 +6,7 @@ argument-hint: "[optional preset name]"
 
 # Set up cctoolkit in this repo
 
-A plugin ships skills, agents and hooks — never rules, settings or config, nor a skill bound to one layout. This skill writes the repo's side: `.claude/kit.config.json`, `.claude/rules/`, the preset's `.claude/skills/`, the merged `.claude/settings.json`, `.claude/statusline-command.sh`, `.claude/.gitignore`, and on request `.caveman.json`. Nothing else.
+A plugin ships skills, agents and hooks — never rules, settings or config, nor a skill bound to one layout. This skill writes the repo's side: `.claude/kit.config.json`, `.claude/rules/`, the preset's `.claude/skills/`, the merged `.claude/settings.json`, `.claude/statusline-command.sh`, `.claude/.gitignore`, `.claude/.gitattributes`, and on request `.caveman.json`. Nothing else.
 
 $ARGUMENTS
 
@@ -90,6 +90,7 @@ Source: `$(cctoolkit root)/templates/`. Edit with the Edit tool, never a script:
 - `.claude/settings.json` — merge `templates/settings.json`: `permissions.allow` / `deny` as a union (drop `Bash(dotnet *)` off a .NET repo), `env` keys absent only, `statusLine` only when none is set. Never write `enabledPlugins` or `extraKnownMarketplaces` yourself — the classifier refuses an agent enabling plugins. Plugin enabled at user scope only (doctor `plugin enabled` line names `~/.claude/settings.json`) → tell the user to run `! claude plugin marketplace add pierrebelin/claude-code-toolkit --scope project` then `! claude plugin install cctoolkit@cctoolkit --scope project`, so clones and worktrees get it. Enabled at local scope → no such advice while the marketplace is a local path (it would commit an `enabledPlugins` key teammates cannot resolve): worktrees get it through `cctoolkit install-git-hooks`, project scope comes with a GitHub marketplace (`INSTALL.md`).
 - `.claude/statusline-command.sh` — copy of `templates/statusline-command.sh` when absent.
 - `.claude/.gitignore` — append the lines of `templates/claude.gitignore` it lacks.
+- `.claude/.gitattributes` — append the lines of `templates/claude.gitattributes` it lacks.
 - `templates/settings.local.json` — startup trim, opt-in: mention it in the summary, never apply it (`templates/README.md` § Startup trim).
 - `.caveman.json` — only when the caveman mode is in use (`${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.caveman-active` exists) and the repo holds neither `.caveman.json` nor `.caveman/config.json`. AskUserQuestion, in the same call as the file questions: terse output for this repo — keep each user's own default (Recommended) / `ultra` / `full`. A mode chosen → write `{"defaultMode": "<mode>"}` at the repo root: caveman reads it before the user's config, for this repo only, and it is committed — every teammate's sessions here start in that mode. Never write the global `.caveman-active` flag.
 
@@ -106,7 +107,7 @@ Then `cctoolkit doctor`. Then one summary:
 | `.claude/skills/tests-*` | copied / kept / replaced / merged, one row each |
 | anchors | `migrate-anchors`: n written across m files / none needed / skipped |
 | copy removed | folders and settings keys deleted (§2), mods to re-enable |
-| `.claude/settings.json`, statusline, `.gitignore` | merged / created / kept |
+| `.claude/settings.json`, statusline, `.gitignore`, `.gitattributes` | merged / created / kept |
 | `.caveman.json` | written with its mode / not asked (caveman unused) / declined |
 
 Then each doctor `FAIL` / `WARN` line verbatim with its fix, the §2.5 lines shown with their proposed replacement, the ADDED files to bring into the toolkit repo, drafted rules listed as "to review", and the next step: no knowledge base yet (no `knowledge.root` folder) → `/cctoolkit:knowledge-sync` first, which builds it from the rule sheets, the code and the tests, then `/cctoolkit:business-spec <feature>`. Last line, opt-in: `cctoolkit install-git-hooks --pre-commit` reminds at each commit that the base may lag behind the staged handlers — never blocking. `!` lines left to the user (§2.3 `remove-copy --apply`, §7 refusals) → the next step comes after them: `cctoolkit doctor` again, no `legacy copy` line left. Nothing committed.

@@ -15,6 +15,7 @@
 # /clear, so the nudge asks it to say so to the user at the end of the reply when
 # the phase is done. Same shape as batching-nudge: a number the reader recognises.
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 STEP=${CLAUDE_CLEAR_NUDGE_STEP:-150000}
 

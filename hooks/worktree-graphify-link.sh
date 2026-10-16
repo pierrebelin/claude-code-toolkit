@@ -15,6 +15,7 @@
 # Do NOT run `graphify update` from a worktree: it would rewrite the shared graph
 # from the worktree branch state.
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 command -v git >/dev/null 2>&1 || exit 0
 
@@ -35,5 +36,12 @@ fi
 
 [ -e "$link" ] || [ -L "$link" ] && exit 0
 
-ln -s "$main/graphify-out" "$link" 2>/dev/null
+if [ "$_KIT_PLATFORM" = windows ]; then
+  # Git Bash copies the tree when it cannot make a native symlink (Developer Mode
+  # off): a stale copy is worse than no graph. A junction needs no privilege.
+  MSYS=winsymlinks:nativestrict ln -s "$main/graphify-out" "$link" 2>/dev/null \
+    || cmd //c mklink /J "$(cygpath -w "$link")" "$(cygpath -w "$main/graphify-out")" >/dev/null 2>&1
+else
+  ln -s "$main/graphify-out" "$link" 2>/dev/null
+fi
 exit 0

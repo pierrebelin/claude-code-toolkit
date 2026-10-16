@@ -241,7 +241,7 @@ def npm_vulnerabilities(sha):
         return vulnerabilities_missing(sha, "missing", "npm not found")
     if not os.path.isfile(os.path.join(ROOT, "package-lock.json")):
         return vulnerabilities_missing(sha, "missing", "no package-lock.json: npm audit needs one")
-    code, out, err = run(["npm", "audit", "--json"])
+    code, out, err = run([shutil.which("npm"), "audit", "--json"])  # npm.cmd on Windows
     try:
         data = json.loads(out)
     except ValueError:

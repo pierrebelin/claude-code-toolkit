@@ -30,6 +30,7 @@
 # `exit` and `set -u` stay in that subshell, and `. file args` hands the module
 # its positional parameters, so nothing in the modules changed.
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 

@@ -6,7 +6,7 @@ import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
   figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, currentShapeSamples, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles,
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
-  callBrief, clockOf, closedCall, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
+  callBrief, clockOf, closedCall, relativePath, samePath, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
   activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples,
 } from '../hooks/register'
@@ -1241,6 +1241,18 @@ describe('batch plan through run-plan', () => {
     expect(claudeHomeOf(undefined)).toBeNull()
     expect(childScriptPathsOf('run-lot', '/repo', '/k')).toEqual(['/k/workflows/run-lot.js', '/repo/.claude/workflows/run-lot.js'])
     expect(childScriptPathsOf('run-lot', '/repo', null)).toEqual(['/repo/.claude/workflows/run-lot.js'])
+  })
+
+  test('Windows paths: journal, Claude home, project key, run root and relative paths read through backslashes', () => {
+    const dir = 'C:\\Users\\x\\.claude\\projects\\C--repo\\s1\\subagents\\workflows\\wf_1'
+    expect(journalPathOf(dir, 'wf_1')).toBe('C:\\Users\\x\\.claude\\projects\\C--repo\\s1\\workflows\\wf_1.json')
+    expect(claudeHomeOf(dir)).toBe('C:\\Users\\x\\.claude')
+    expect(figuresKeyOf(dir, 'C:\\repo\\todo\\cat\\CAT-PLAN-F1.md')).toBe('lot:C--repo:CAT-F1')
+    expect(lotOf('C:\\repo\\todo\\cat\\CAT-PLAN-F2.md')).toEqual({ lot: 'F2', code: 'CAT' })
+    expect(workFileOf('C:\\repo\\todo\\cat\\CAT-PLAN-F2.md')).toBe('C:\\repo\\todo\\cat\\run/.work.jsonl')
+    expect(relativePath('C:\\repo\\src\\A.cs', 'c:/repo')).toBe('src/A.cs')
+    expect(samePath('C:\\repo\\', 'c:/repo')).toBe(true)
+    expect(samePath('/repo', '/Repo')).toBe(false)
   })
 
   test('batch figures: counted from its agents, keyed by project and sheet, read back only when well formed', () => {

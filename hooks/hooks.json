@@ -114,6 +114,14 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-graphify-link.sh\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/windows-env.sh\""
+          }
+        ]
       }
     ],
     "Stop": [

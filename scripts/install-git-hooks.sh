@@ -24,6 +24,7 @@
 # ship with a clone, and why this installer exists.
 
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 pre_commit=0
 if [ "${1:-}" = "--pre-commit" ]; then
@@ -53,9 +54,15 @@ if [ "$pre_commit" = 1 ]; then
 # first, then the kit the hook was installed from. Neither found: silent.
 scan=$(ls -t "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/cctoolkit/*/scripts/knowledge-scan.py 2>/dev/null | head -1)
 [ -n "$scan" ] || scan="@KIT@/scripts/knowledge-scan.py"
-[ -f "$scan" ] && command -v python3 >/dev/null 2>&1 || exit 0
-python3 "$scan" --reminder --staged >&2 2>/dev/null
-python3 "${scan%/*}/knowledge-index.py" --check >&2 2>/dev/null
+[ -f "$scan" ] || exit 0
+# python3, else python or py: Windows has no python3, or only the Store stub.
+for py in python3 python py ""; do
+  [ -n "$py" ] && "$py" -c '' >/dev/null 2>&1 && break
+done
+[ -n "$py" ] || exit 0
+export PYTHONUTF8=1
+"$py" "$scan" --reminder --staged >&2 2>/dev/null
+"$py" "${scan%/*}/knowledge-index.py" --check >&2 2>/dev/null
 exit 0
 HOOK
   chmod +x "$target"
@@ -101,7 +108,8 @@ here=$(git rev-parse --show-toplevel 2>/dev/null)
 [ -f "$main_worktree/$CONFIG" ] || exit 0          # nothing to link to
 
 mkdir -p "$here/.claude" 2>/dev/null || exit 0
-ln -sfn "$main_worktree/$CONFIG" "$here/$CONFIG" 2>/dev/null \
+# MSYS: Git Bash on Windows makes a native symlink when it may, a copy otherwise.
+MSYS=winsymlinks:native ln -sfn "$main_worktree/$CONFIG" "$here/$CONFIG" 2>/dev/null \
   && echo "[claude] $CONFIG linked from $main_worktree"
 
 exit 0

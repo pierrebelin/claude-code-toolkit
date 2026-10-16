@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Audit capture — deterministic material for /verify-ddd-tdd

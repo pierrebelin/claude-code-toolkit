@@ -21,6 +21,7 @@
 # The reason is always written in English, with the English labels.
 
 # The heredoc is python's own stdin, so the payload travels through the environment.
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 INPUT=$(cat)
 
 HOOK_INPUT="$INPUT" python3 <<'PYEOF'

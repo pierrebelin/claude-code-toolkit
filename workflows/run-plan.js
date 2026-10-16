@@ -13,7 +13,15 @@ export const meta = {
   ],
 }
 
-const words = (typeof args === 'string' ? args : (args && args.plan) || '').trim().replace(/^@/, '').split(/\s+/).filter(Boolean)
+// On Windows a path may come with `\` (Python, the engine, the user): Git Bash eats an unquoted one, and two
+// spellings of one folder compare unequal. Paths are carried with `/`, compared with the drive's case aside.
+const slashed = p => String(p || '').replace(/\\/g, '/')
+const samePath = (a, b) => {
+  const [x, y] = [slashed(a).replace(/\/$/, ''), slashed(b).replace(/\/$/, '')]
+  return /^[A-Za-z]:/.test(x) ? x.toLowerCase() === y.toLowerCase() : x === y
+}
+
+const words = slashed(typeof args === 'string' ? args : (args && args.plan) || '').trim().replace(/^@/, '').split(/\s+/).filter(Boolean)
 const scope = words.slice(1).join(' ')
 if (!/-PLAN\.md$/.test(words[0] || '') || (scope && !/^--(until|only) F\d+$/.test(scope))) {
   throw new Error('expected argument: `todo/<code>/<CODE>-PLAN.md [--until FX | --only FX]`')
@@ -93,8 +101,8 @@ const pre = await agent(
     FRAME,
     '',
     `Plan argument: \`${words[0]}\`.`,
-    '1. `plan` = absolute path of the plan (`realpath`), `root` = `git rev-parse --show-toplevel`, `kit` = `cctoolkit root`.',
-    '2. First, one call: `command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && [ "$(uname)" = Darwin ] && open -a Docker; true` (Docker Desktop boots during the build, no wait loop).',
+    '1. `plan` = absolute path of the plan (`realpath`; under Git Bash on Windows `cygpath -m "$(realpath <p>)"`, a `C:/…` path the Write tool reads), `root` = `git rev-parse --show-toplevel`, `kit` = `cctoolkit root`.',
+    '2. First, one call: `command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && case "$(uname)" in Darwin) open -a Docker ;; MINGW*|MSYS*) (\"/c/Program Files/Docker/Docker/Docker Desktop.exe\" >/dev/null 2>&1 &) ;; esac; true` (Docker Desktop boots during the build, no wait loop).',
     '   Then in one message, from `root`: `cctoolkit plan-next-batch <plan> --check`, `cctoolkit doctor --quiet`, and the build configured by kit-init (`commands.build`, empty for a stack without one): `b=$(cctoolkit config command build); if [ -z "$b" ]; then echo build=none; else out=$(eval "$b" 2>&1); echo "build=$?"; printf \'%s\\n\' "$out" | grep -m1 -iE \'(^|[^a-z])error([^a-z]|$)\'; fi; command -v docker >/dev/null && { docker info >/dev/null 2>&1; echo "docker=$?"; } || echo docker=absent` (timeout 600000).',
     '3. `--check` exit ≠ 0, a doctor `FAIL` line, `docker` neither 0 nor `absent`, or `build` neither 0 nor `none` → `ok: false`, `failure` = the failing line verbatim (for the build: `build=<code>` followed by the first error line, the working tree must compile before any batch starts), `runRoot` and `stamp` empty, stop. No test suite runs here: each batch runs the tests its diff reaches, in its own global green.',
     `4. Otherwise \`stamp\` = \`$(date +%Y-%m-%d-%H%M)\`, \`runRoot\` = \`<plan folder>/run\` (absolute). One call: \`cctoolkit run-work purge <runRoot> <stamp> && cctoolkit run-validate apply <runRoot>/.work.jsonl && cctoolkit run-work journal <runRoot>/.work.jsonl <stamp> "start $(date '+%Y-%m-%d %H:%M') — plan <plan> — scope ${scope || 'whole plan'}"\` (purge: older layouts migrated, lines no run needs dropped, the 3 most recent runs kept; run-validate: the answers given in the run-lot-pane mod written into the sheets). \`ok: true\`, \`failure\` empty.`,
@@ -104,7 +112,7 @@ const pre = await agent(
 if (!pre) throw new Error('preflight agent without result')
 if (!pre.ok) return { status: BLOCKED, reason: pre.failure, batches: [] }
 
-const runRoot = pre.runRoot.replace(/\/$/, '')
+const runRoot = slashed(pre.runRoot).replace(/\/$/, '')
 const reportFile = `${runRoot}/${pre.stamp}.md`
 const work = `${runRoot}/.work.jsonl`
 const patchOf = batch => `${runRoot}/${pre.stamp}-aside-${batch}.patch`
@@ -225,7 +233,7 @@ while (!stop) {
   if (next.kind === 'PAUSED') { stop = 'paused by user'; log('⏸ paused by user between two batches'); break }
   if (next.kind !== 'BATCHES') { stop = next.line; break }
 
-  const b = next.batches.find(x => x.repo.replace(/\/$/, '') === pre.root.replace(/\/$/, ''))
+  const b = next.batches.find(x => samePath(x.repo, pre.root))
   if (!b) {
     stop = `batches of another repo (${next.batches.map(x => `${x.batch} ${x.repo}`).join(', ')}): run run-plan from that repo`
     break
@@ -237,7 +245,7 @@ while (!stop) {
   }
 
   log(`→ ${b.batch} launched`)
-  const result = await workflow('cctoolkit:run-lot', { sheet: b.sheet, commit: false }).catch(e => ({ status: BLOCKED, reason: `run-lot failed: ${e.message}`, report: null }))
+  const result = await workflow('cctoolkit:run-lot', { sheet: slashed(b.sheet), commit: false }).catch(e => ({ status: BLOCKED, reason: `run-lot failed: ${e.message}`, report: null }))
   const entry = { batch: b.batch, status: result.status, reason: result.reason, report: result.report, audit: result.audit || null, hypotheses: result.hypotheses || [], minors: result.minors || [] }
   ran.push(entry)
   for (const x of result.toReview || []) toReview.push({ batch: b.batch, ...x })

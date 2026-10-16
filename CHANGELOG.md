@@ -4,6 +4,29 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.0.3 — 2026-10-16
+
+Native Windows support, through Git Bash (`INSTALL.md` § Windows).
+
+- `cctoolkit`: new `lib/platform.sh`, sourced first by every hook, `cctoolkit`, the tools and the shell scripts. On macOS and Linux it changes nothing. Under Git Bash on Windows it does four things. `python3` runs the first of `python3`, `python` and `py` that really runs Python 3.10+, which skips the Store stub. `jq` gets `-b`, so it no longer writes CRLF. Python runs in UTF-8 mode and writes LF. Payload paths are rewritten to `C:/x/repo` form.
+- `cctoolkit`: new `windows-env.sh` `SessionStart` hook, Windows only. It hands the same setup to the Bash tool through `$CLAUDE_ENV_FILE`, so the skills' `python3 -c …` and `jq` commands run there too.
+- `cctoolkit`: `.gitattributes` keeps the plugin in LF whatever `core.autocrlf` says. A CRLF checkout broke every hook on its first line.
+- `cctoolkit`: `/cctoolkit:kit-init` also writes `.claude/.gitattributes` (`*.sh` in LF). The statusline command quotes `$CLAUDE_PROJECT_DIR`, and the statusline passes `-b` to a native jq. A statusline already installed is kept: re-run `/cctoolkit:kit-init` or copy `templates/statusline-command.sh` to get the fix.
+- `cctoolkit`: the run work file is locked with `msvcrt` on Windows, where `fcntl` does not exist. Before this, the TDD scope guard and every run script failed to import.
+- `cctoolkit`: `cctoolkit bg` works on Windows. The job is a detached Git Bash, found on `PATH` rather than WSL's `bash.exe`. It is probed through its process handle and stopped with `taskkill /T`.
+- `cctoolkit`: the scripts print and store repo paths with `/` (`Config.rel`, `plan-next-batch`, `run-work tmp`, `batch-baseline`, `rules-coverage`, `access-cost`, `kit-diff`). On Windows the TDD scope guard, the knowledge index contexts, `ask`, the knowledge reminder and the batch's run folder exclusion all compared backslashed paths with git's.
+- `cctoolkit`: a provisional id in a staged file name may be written `~` in place of `?` (`CAT-CU-~1-archive-product.md`), and `knowledge-write` reads it back as `?`. Windows forbids `?` in a file name, and `knowledge-extractor` now writes `~` there.
+- `cctoolkit`: the Bash parts that only worked on macOS now run on both. The cache stamp of `graphify-freshness` reads with `stat -c` or `stat -f`. Hashing tries `md5`, then `md5sum`, then `sha1sum`. The worktree link to `graphify-out/` falls back to a junction. `run-plan` and `run-audit` start Docker Desktop on Windows. The audit worktree enables `core.longpaths`. `npm` is resolved through `PATH`, since it is `npm.cmd` on Windows.
+- `cctoolkit`: `run-lot`, `run-plan` and `run-audit` carry their paths with `/`. They compare the repo paths without regard to drive case, and accept `C:/…` as an absolute `--checkout`.
+- `run-lot-pane`: these now read through backslashed engine paths: the sheet, the run folder, the final journal (a run now turns completed or failed), the Claude home, the project key, the past runs, and relative paths. Files are read with CRLF turned into LF.
+- `spec-pane`: a backslashed spec path is followed. `/spec-pane C:\…` is taken as absolute. Paths are shown relative with `/`. The spec is read with CRLF turned into LF.
+- `knowledge-pane`: files are read with CRLF turned into LF. Shared rules are found through a backslashed path, and index keys written with backslashes still match.
+- `context-band`: the graph rebuild lock is looked up in `%TEMP%` on Windows, the folder Git Bash's `/tmp` points to.
+
+**Rules changed**
+
+- `rules/markdown-output.md`: the provisional ids' file names may carry `~` for `?`.
+
 ## 2.0.2 — 2026-10-16
 
 - `spec-pane`: a spec section without a number (`## Notes`) is read and shown by its title, with the use cases and rules under it; they were skipped.

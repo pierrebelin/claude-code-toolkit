@@ -1,0 +1,60 @@
+{
+  "cases": [
+    {
+      "name": "posix: kit_path leaves a path as it is, python3 and jq stay the binaries",
+      "cmd": "bash -c '. {{KIT}}/lib/platform.sh; v=\"C:\\\\a\\\\b\"; kit_path v; printf \"%s %s %s\" \"$v\" \"$(type -t python3)\" \"$(type -t jq)\"'",
+      "expect": {
+        "stdout": "C:\\a\\b file file",
+        "exit": 0
+      }
+    },
+    {
+      "name": "windows: a payload path with backslashes, a /c/ path and a lowercase drive all come out as C:/…",
+      "cmd": "bash -c 'OSTYPE=msys; CCTOOLKIT_PYTHON=python3; . {{KIT}}/lib/platform.sh; for x in \"C:\\\\Users\\\\a b\\\\x.cs\" /c/Users/x c:/x/y /d; do v=$x; kit_path v; printf \"[%s]\" \"$v\"; done'",
+      "expect": {
+        "stdout": "[C:/Users/a b/x.cs][C:/Users/x][C:/x/y][D:/]",
+        "exit": 0
+      }
+    },
+    {
+      "name": "windows: CLAUDE_PROJECT_DIR is rewritten on load",
+      "cmd": "CLAUDE_PROJECT_DIR='c:\\repo\\app' bash -c 'OSTYPE=msys; CCTOOLKIT_PYTHON=python3; . {{KIT}}/lib/platform.sh; printf %s \"$CLAUDE_PROJECT_DIR\"'",
+      "expect": {
+        "stdout": "C:/repo/app",
+        "exit": 0
+      }
+    },
+    {
+      "name": "windows: python3 and jq become functions a child bash inherits, Python in UTF-8 mode",
+      "cmd": "bash -c 'OSTYPE=msys; CCTOOLKIT_PYTHON=python3; . {{KIT}}/lib/platform.sh; bash -c \"printf %s-%s-%s \\$(type -t python3) \\$(type -t jq) \\$(python3 -c \\\"import sys; print(sys.flags.utf8_mode)\\\")\"'",
+      "expect": {
+        "stdout": "function-function-1",
+        "exit": 0
+      }
+    },
+    {
+      "name": "windows-env: nothing written outside Windows",
+      "cmd": "f=$(mktemp); CLAUDE_ENV_FILE=$f bash {{KIT}}/hooks/windows-env.sh </dev/null; printf 'exit=%s size=%s' $? $(wc -c <$f | tr -d ' '); rm -f $f",
+      "expect": {
+        "stdout": "exit=0 size=0",
+        "exit": 0
+      }
+    },
+    {
+      "name": "windows-env: one source line in CLAUDE_ENV_FILE, never twice",
+      "cmd": "f=$(mktemp); for i in 1 2; do CLAUDE_ENV_FILE=$f bash -c 'OSTYPE=msys; . {{KIT}}/hooks/windows-env.sh' </dev/null; done; grep -c 'lib/platform.sh' $f; rm -f $f",
+      "expect": {
+        "stdout": "1",
+        "exit": 0
+      }
+    },
+    {
+      "name": "windows-env: an empty stdin and no CLAUDE_ENV_FILE exit 0",
+      "cmd": "printf '' | bash -c 'OSTYPE=msys; unset CLAUDE_ENV_FILE; . {{KIT}}/hooks/windows-env.sh'; echo $?",
+      "expect": {
+        "stdout": "0",
+        "exit": 0
+      }
+    }
+  ]
+}

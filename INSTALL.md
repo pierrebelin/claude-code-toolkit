@@ -3,7 +3,8 @@
 ## Requirements
 
 - Claude Code with plugin support
-- `jq` and `python3`
+- `jq` and Python 3.10+ (`python3`)
+- on Windows: Git for Windows — Claude Code runs the hooks and the statusline in its Git Bash — see [Windows](#windows)
 - the `Workflow` tool (`disableWorkflows` absent or `false`): `/implement-tdd` launches `/cctoolkit:run-lot` or `/cctoolkit:run-plan`, there is no manual implementation path
 
 ## 1. Install the plugin
@@ -59,6 +60,17 @@ It **never overwrites** a file that differs: it shows the difference and asks ke
 | `graphify` | blast radius on aggregate edits, graph autosync | silently skipped |
 | `rtk` | output compression of Bash commands | drop the `rtk ` prefix from `kit.config.json` `commands` |
 | `caveman` plugin | terse output, per repo through `.caveman.json` when `/cctoolkit:kit-init` writes one; statusline badge | no effect |
+
+## Windows
+
+Native Windows works through Git Bash, which Claude Code uses for hooks, the statusline and the Bash tool once Git for Windows is installed. Without Git Bash, Claude Code falls back to PowerShell and no hook runs.
+
+- **Python**: the python.org installer (`python`, `py`) or the Store one. The kit takes the first of `python3`, `python`, `py` that really runs Python 3.10+, so the Store's `python3` stub, which only prints an install hint, is skipped.
+- **jq**: `winget install jqlang.jq`, or Scoop or Chocolatey. The kit passes `-b` to it, because a native jq otherwise writes CRLF.
+- **Symlinks** (optional): with Developer Mode on, a worktree gets a real link to `graphify-out/`. With it off, it gets a junction, and `.claude/settings.local.json` is copied instead of linked.
+- **Line endings**: the plugin and the `.claude/` scripts check out as LF whatever `core.autocrlf` says (`.gitattributes`), so the hooks still run on a CRLF clone.
+
+Desktop notifications at the end of a batch use `osascript` on macOS. On Windows the batch finishes without one.
 
 ## Updating
 

@@ -36,9 +36,9 @@ const PANE_COLUMNS = 100
 const MODEL_WIDTH = 14
 const WIDE_COLUMNS = 56
 const SHEET_PATTERN = /-PLAN-(F\d+)\.md$/
-const LOT_PATTERN = /(?:^|\/)([^/]+?)-PLAN-(F\d+)\.md$/
+const LOT_PATTERN = /(?:^|[\\/])([^\\/]+?)-PLAN-(F\d+)\.md$/
 const CHILD_PLUGIN = /\bworkflow\(\s*['"]([\w-]+):[\w.-]+['"]/
-const CHILD_CALL = /\bworkflow\(\s*(?:['"](?:[\w-]+:)?([\w.-]+)['"]|\{\s*scriptPath:[^)]*?\/([\w.-]+)\.js)/
+const CHILD_CALL = /\bworkflow\(\s*(?:['"](?:[\w-]+:)?([\w.-]+)['"]|\{\s*scriptPath:[^)]*?[\\/]([\w.-]+)\.js)/
 const PROMPT_LOT = /Workflow run-lot, batch (F\d+)\.[\s\S]*?Batch sheet: (\S+?\.md)\./
 const REVIEW_LOT = /^mode: (?:lot-suivant|next-batch) \S+ (\S*?-PLAN-(F\d+)\.md)/
 const PLAN_SECTIONS = ['### Execution des lots', '### Batch execution']
@@ -148,7 +148,7 @@ export const lotFiguresFrom = (value: unknown): LotFigures | null => {
 export const figuresKeyOf = (transcriptDir: string | null, sheet: string | null): string | null => {
   const found = lotOf(sheet)
   if (found === null) return null
-  const project = /\/projects\/([^/]+)\//.exec(transcriptDir ?? '')?.[1] ?? ''
+  const project = /[\\/]projects[\\/]([^\\/]+)[\\/]/.exec(transcriptDir ?? '')?.[1] ?? ''
   return `lot:${project}:${found.code}-${found.lot}`
 }
 
@@ -166,8 +166,23 @@ export const toolSummary = (counts: Record<string, number>): string =>
     .map(([tool, count]) => `${tool} ${count}`)
     .join(' · ')
 
-export const relativePath = (path: string, root: string | null): string =>
-  root !== null && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path
+// On Windows the engine's paths come as `C:\x\repo\…`, git's and the kit's as `C:/x/repo/…`: paths are
+// compared with `/`, the drive's case aside, and a drive path is shown with `/`.
+const slashed = (path: string): string => path.replace(/\\/g, '/')
+const isDrive = (path: string): boolean => /^[A-Za-z]:/.test(path)
+export const isAbsolutePath = (path: string): boolean => /^(?:[A-Za-z]:)?[\\/]/.test(path)
+export const samePath = (a: string, b: string): boolean => {
+  const [one, two] = [slashed(a).replace(/\/$/, ''), slashed(b).replace(/\/$/, '')]
+  return isDrive(one) ? one.toLowerCase() === two.toLowerCase() : one === two
+}
+const lastSeparator = (path: string): number => Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+
+export const relativePath = (path: string, root: string | null): string => {
+  if (root === null) return path
+  const [file, base] = [slashed(path), slashed(root).replace(/\/$/, '')]
+  const cased = (one: string): string => (isDrive(base) ? one.toLowerCase() : one)
+  return cased(file).startsWith(`${cased(base)}/`) ? file.slice(base.length + 1) : path
+}
 
 const EDITING_TOOLS = ['Edit', 'Write', 'NotebookEdit']
 const KEPT_FILES = 12
@@ -474,7 +489,7 @@ export const nestedPhaseOf = (child: ChildWorkflow | null, label: string, phase:
   child === null ? phase : labelledPhaseOf(child.labels ?? {}, label, phase)
 
 export const journalPathOf =(transcriptDir: string, runId: string): string =>
-  transcriptDir.replace(new RegExp(`/subagents/workflows/${runId}/?$`), `/workflows/${runId}.json`)
+  transcriptDir.replace(new RegExp(`([\\\\/])subagents[\\\\/]workflows[\\\\/]${runId}[\\\\/]?$`), `$1workflows$1${runId}.json`)
 
 const STATUSES: RunStatus[] = ['completed', 'failed', 'killed']
 
@@ -513,7 +528,7 @@ export const childWorkflowOf = (script: string): string | null => {
 export const childPluginOf = (script: string): string | null => CHILD_PLUGIN.exec(script)?.[1] ?? null
 
 export const claudeHomeOf = (path: string | null | undefined): string | null => {
-  const at = path?.indexOf('/projects/') ?? -1
+  const at = path?.search(/[\\/]projects[\\/]/) ?? -1
   return at > 0 ? path!.slice(0, at) : null
 }
 
@@ -525,7 +540,7 @@ export const installPathOf = (installed: string, plugin: string, root: string): 
     const entries = Object.entries(plugins)
       .filter(([key]) => key.startsWith(`${plugin}@`))
       .flatMap(([, list]) => list)
-    const chosen = entries.find(one => one.projectPath === root) ?? entries.find(one => one.scope === 'user')
+    const chosen = entries.find(one => typeof one.projectPath === 'string' && samePath(one.projectPath, root)) ?? entries.find(one => one.scope === 'user')
     return chosen?.installPath ?? null
   } catch {
     return null
@@ -594,7 +609,7 @@ export const mergeLots = (known: PlanLot[], planned: PlanLot[]): PlanLot[] => [
 export const withLot = (lots: PlanLot[], lot: string, change: (one: PlanLot) => PlanLot): PlanLot[] =>
   lots.some(one => one.lot === lot) ? lots.map(one => (one.lot === lot ? change(one) : one)) : [...lots, change(blankLot(lot))]
 
-const runRootOf = (sheet: string): string => `${sheet.slice(0, sheet.lastIndexOf('/') + 1)}run`
+const runRootOf = (sheet: string): string => `${sheet.slice(0, lastSeparator(sheet) + 1)}run`
 
 export const reportPathsOf = (sheet: string, lot: string): string[] => [
   ...BATCH_REPORT_DIRS.map(dir => `${runRootOf(sheet)}/${dir}/${lot}.md`),
@@ -2116,7 +2131,7 @@ export const toValidateOf = (text: string, batch: string | null, sheetOf: (batch
     })
 }
 
-export const reportLotOf = (path: string): string | null => /\/(F\d+)(?:-[\w]+)?\.md$/.exec(path)?.[1] ?? null
+export const reportLotOf = (path: string): string | null => /[\\/](F\d+)(?:-[\w]+)?\.md$/.exec(path)?.[1] ?? null
 
 export type FeedView = {
   work: WorkLine[]
@@ -2900,7 +2915,8 @@ async function openPane($: EngineInterface): Promise<void> {
 
 async function readText($: EngineInterface, path: string): Promise<string | null> {
   try {
-    return await $.fs.read(path)
+    // A Windows checkout may carry CRLF: the parsers split on `\n`.
+    return (await $.fs.read(path)).replace(/\r\n?/g, '\n')
   } catch {
     return null
   }
@@ -3108,8 +3124,8 @@ async function listDirectory($: EngineInterface, path: string): Promise<FsEntry[
 async function learnHistory($: EngineInterface, run: WorkflowRun): Promise<void> {
   if (run.transcriptDir === null) return
   const own = journalPathOf(run.transcriptDir, run.runId)
-  const sessionDir = own.slice(0, own.lastIndexOf('/workflows/'))
-  const projectDir = sessionDir.slice(0, sessionDir.lastIndexOf('/'))
+  const sessionDir = own.slice(0, Math.max(own.lastIndexOf('/workflows/'), own.lastIndexOf('\\workflows\\')))
+  const projectDir = sessionDir.slice(0, lastSeparator(sessionDir))
   if (own === run.transcriptDir || projectDir === '') return
   const sessions = (await listDirectory($, projectDir)).filter(entry => entry.kind === 'dir').slice(0, SCANNED_SESSIONS)
   const journals: { path: string; mtimeMs: number }[] = []
@@ -3117,7 +3133,7 @@ async function learnHistory($: EngineInterface, run: WorkflowRun): Promise<void>
     const folder = `${projectDir}/${session.name}/workflows`
     for (const entry of await listDirectory($, folder)) {
       const path = `${folder}/${entry.name}`
-      if (entry.kind === 'file' && entry.name.endsWith('.json') && path !== own) journals.push({ path, mtimeMs: entry.mtimeMs })
+      if (entry.kind === 'file' && entry.name.endsWith('.json') && !samePath(path, own)) journals.push({ path, mtimeMs: entry.mtimeMs })
     }
   }
   const newest = journals.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, KEPT_JOURNALS)
@@ -3886,7 +3902,7 @@ export const register: Register = on => {
             planRun.lots.find(entry => !isDoneLot(entry) && !(entry.lot in steer.asides)) ??
             planRun.lots[0])?.lot ?? null)
     const workPath = runFeed === null ? null : `${runFeed.root}/.work.jsonl`
-    const absolute = (path: string) => (path.startsWith('/') || root === null ? path : `${root}/${path}`)
+    const absolute = (path: string) => slashed(isAbsolutePath(path) || root === null ? path : `${root}/${path}`)
     const togglePause = () =>
       planRun === null
         ? update($, nav, state => ({ ...state, notice: 'pause applies to run-plan only' }))
@@ -4545,7 +4561,7 @@ export const register: Register = on => {
       const planElapsed = planRun.durationMs ?? at - planRun.startedAt
       const planTotals = totalsOf(planRun.agents)
       const supervisors = planRun.agents.filter(agent => agent.lot === null)
-      const code = planRun.plan === null ? null : (planRun.plan.split('/').pop() ?? '').replace(/\.md$/, '')
+      const code = planRun.plan === null ? null : (planRun.plan.split(/[\\/]/).pop() ?? '').replace(/\.md$/, '')
       const planOutcome = planRun.outcome
       const attention = states.filter(
         ({ entry, state }) => (state === 'waiting' || state === 'failed') && entry.outcome !== null && entry.outcome.reason !== null,

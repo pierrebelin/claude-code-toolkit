@@ -77,7 +77,7 @@ def project_root():
     """The repo the kit serves — same order as lib/project-root.sh."""
     env = os.environ.get("CLAUDE_PROJECT_DIR")
     if env:
-        return os.path.abspath(env)
+        return os.path.abspath(env).replace(os.sep, "/")
     if os.path.basename(KIT) == ".claude":
         return os.path.dirname(KIT)
     try:
@@ -188,12 +188,14 @@ class Config:
         return found
 
     def rel(self, path):
+        """Relative to the root, always with `/`: compared with git's paths, matched
+        against the `/` patterns, written to JSON — on Windows too."""
         path = path if os.path.isabs(path) else os.path.join(self.root, path)
-        return os.path.relpath(os.path.normpath(path), self.root)
+        return os.path.relpath(os.path.normpath(path), self.root).replace(os.sep, "/")
 
     def under(self, path, patterns):
         """The pattern `path` sits under (segment match), or None."""
-        parts = self.rel(path).split(os.sep)
+        parts = self.rel(path).split("/")
         for p in patterns:
             segs = p.split("/")
             if len(parts) > len(segs) and all(fnmatch.fnmatchcase(a, b) for a, b in zip(parts, segs)):
@@ -206,7 +208,7 @@ class Config:
         if p is None:
             return None
         n = len(p.split("/"))
-        return os.path.join(self.root, *self.rel(path).split(os.sep)[:n])
+        return os.path.join(self.root, *self.rel(path).split("/")[:n])
 
     def walk(self, patterns):
         """(base, files) under every matching directory, skipDirs pruned, each visited once."""
@@ -261,7 +263,7 @@ class Config:
     def suite_of(self, path):
         """First segment under the test root holding `path`, the product prefix dropped."""
         p = self.under(path, self.test_roots)
-        parts = self.rel(path).split(os.sep)
+        parts = self.rel(path).split("/")
         seg = parts[len(p.split("/"))] if p is not None and len(parts) > len(p.split("/")) else parts[0]
         if self.product:
             return seg.replace(self.product + ".", "")

@@ -121,7 +121,7 @@ def context_of_use_case(rel):
         return None
     if C.context_depth == 0:
         return single_name()
-    parts = C.rel(rel).split(os.sep)
+    parts = C.rel(rel).split("/")
     i = len(p.split("/")) + C.context_depth - 1
     # A file directly in the root, above the context level, belongs to no context.
     return parts[i] if i < len(parts) - 1 else None

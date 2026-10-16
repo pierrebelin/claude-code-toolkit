@@ -14,6 +14,14 @@ export const meta = {
   ],
 }
 
+// On Windows a path may come with `\` (Python, the engine, the user): Git Bash eats an unquoted one, and two
+// spellings of one folder compare unequal. Paths are carried with `/`, compared with the drive's case aside.
+const slashed = p => String(p || '').replace(/\\/g, '/')
+const samePath = (a, b) => {
+  const [x, y] = [slashed(a).replace(/\/$/, ''), slashed(b).replace(/\/$/, '')]
+  return /^[A-Za-z]:/.test(x) ? x.toLowerCase() === y.toLowerCase() : x === y
+}
+
 const words = (typeof args === 'string' ? args : '').trim().split(/\s+/).filter(Boolean)
 const flag = name => {
   if (args && typeof args === 'object') return args[name] || ''
@@ -22,8 +30,8 @@ const flag = name => {
 }
 const mode = flag('stryker') || 'off'
 const date = flag('date')
-const checkout = flag('checkout').replace(/\/$/, '')
-if (!['off', 'full', 'since'].includes(mode) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !checkout.startsWith('/')) {
+const checkout = slashed(flag('checkout')).replace(/\/$/, '')
+if (!['off', 'full', 'since'].includes(mode) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^(?:[A-Za-z]:)?\//.test(checkout)) {
   throw new Error('expected argument: `--stryker off|full|since --date YYYY-MM-DD --checkout <absolute path of the main checkout>`')
 }
 
@@ -81,7 +89,7 @@ const pre = await agent(
     '   - `project`: the `.sln` name without extension (dotnet) or `name` of `package.json` (js);',
     `   - \`tmp\` = \`cctoolkit run-work tmp audit-<C>\`, \`cache\` = \`cctoolkit run-work tmp stryker-<C>\`, both run from \`${checkout}\` (absolute paths, created: \`mkdir -p\`);`,
     `   - \`sinceTarget\`: \`metadata.commit\` of the newest \`${checkout}/docs/metrics/quality-report-*.json\` (else its \`stryker.since_target\`), else \`git -C <worktree> rev-list -1 HEAD~50\`, else empty;`,
-    '   - Docker: `command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && [ "$(uname)" = Darwin ] && open -a Docker; true` (it boots during the build).',
+    '   - Docker: `command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && case "$(uname)" in Darwin) open -a Docker ;; MINGW*|MSYS*) (\"/c/Program Files/Docker/Docker/Docker Desktop.exe\" >/dev/null 2>&1 &) ;; esac; true` (it boots during the build).',
     '4. `ok: true`, `failure` empty.',
   ].join('\n'),
   { schema: PREFLIGHT, phase: 'Preflight', label: 'preflight', ...SHELL },
@@ -89,12 +97,12 @@ const pre = await agent(
 if (!pre) throw new Error('preflight agent without result')
 if (!pre.ok) return { status: BLOCKED, reason: pre.failure, report: null }
 
-const wt = pre.worktree.replace(/\/$/, '')
+const wt = slashed(pre.worktree).replace(/\/$/, '')
 const sha = pre.commit
 const C = sha.slice(0, 12)
 const stack = pre.stack
-const tmp = pre.tmp.replace(/\/$/, '')
-const cache = pre.cache.replace(/\/$/, '')
+const tmp = slashed(pre.tmp).replace(/\/$/, '')
+const cache = slashed(pre.cache).replace(/\/$/, '')
 const reportBase = `${checkout}/docs/metrics/quality-report-${date}`
 const jsonPath = `${reportBase}.json`
 const mdPath = `${reportBase}.md`
@@ -160,7 +168,7 @@ try {
       [
         FRAME,
         '',
-        `Run the block of section \`### Collected by script\` of the stack commands once, with \`--ref ${sha} --out ${tmp}/collect.json\` and its stdout redirected to \`${tmp}/collect.stdout.json\` (Bash timeout 600000). Then \`python3 -c "import json,sys; d=json.load(open(sys.argv[1])); open(sys.argv[2],'w').write(d['hotspots_markdown'])" ${tmp}/collect.stdout.json ${tmp}/hotspots.md\`.`,
+        `Run the block of section \`### Collected by script\` of the stack commands once, with \`--ref ${sha} --out ${tmp}/collect.json\` and its stdout redirected to \`${tmp}/collect.stdout.json\` (Bash timeout 600000). Then \`jq -j .hotspots_markdown ${tmp}/collect.stdout.json > ${tmp}/hotspots.md\`.`,
         '`statuses` = one entry per block of the output (`activity.hotspots`, then each key of `codebase`): its `status` and `reason`, copied. Exit ≠ 0 → `ok: false`, `failure` = the last stderr line.',
       ].join('\n'),
       { schema: COLLECT, phase: 'Measures', label: 'audit-collect', ...SHELL },

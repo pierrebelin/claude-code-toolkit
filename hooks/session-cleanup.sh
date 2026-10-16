@@ -11,6 +11,7 @@
 #   - drop this session's files (glob, subagents included)
 #   - purge anything older than 2 days, since nothing else ever cleans /tmp
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 sid=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unknown)
 

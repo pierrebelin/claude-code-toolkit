@@ -26,6 +26,7 @@
 # ran four more: 31 ms per Read for the pair. The nudge was then sourced from here
 # until 2026-10-09, removed after 44 reminders for 1 delegation that followed.
 set -u
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 # shellcheck source=../lib/bounds-common.sh
@@ -39,6 +40,7 @@ IFS=$'\x1f' read -r tool_name session_id agent_id file_path has_offset has_limit
 
 [ "$tool_name" = "Read" ] || exit 0
 [ -n "$file_path" ] || exit 0
+kit_path file_path
 [ -f "$file_path" ] || exit 0
 
 pass() { exit 0; }

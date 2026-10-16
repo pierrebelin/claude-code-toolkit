@@ -7,7 +7,7 @@ const PANE = 'spec-pane'
 const TITLE = 'Spec'
 const SKILL = 'business-spec'
 const TICK_MS = 3_000
-const SPEC_PATTERN = /(?:^|\/)todo\/[^/]+\/SPEC(?:-[^/]+)?\.md$/
+const SPEC_PATTERN = /(?:^|[\\/])todo[\\/][^\\/]+[\\/]SPEC(?:-[^\\/]+)?\.md$/
 // The open questions: the section whose heading carries the anchor, else, in a spec written before
 // the anchors, the title the `/plan-implementation` gate reads (`skills/plan-implementation/SKILL.md`).
 const OPEN_QUESTIONS_ANCHOR = 'open-questions'
@@ -43,8 +43,18 @@ export const fold = (text: string): string =>
 
 export const isSpecPath = (path: string): boolean => SPEC_PATTERN.test(path)
 
-export const relativePath = (path: string, root: string | null): string =>
-  root !== null && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path
+// On Windows a tool's `file_path` comes as `C:\x\repo\todo\…`, the root maybe as `C:/x/repo`:
+// both are compared with `/`, the drive's case aside.
+const slashed = (path: string): string => path.replace(/\\/g, '/')
+const isDrive = (path: string): boolean => /^[A-Za-z]:/.test(path)
+export const isAbsolutePath = (path: string): boolean => /^(?:[A-Za-z]:)?[\\/]/.test(path)
+
+export const relativePath = (path: string, root: string | null): string => {
+  if (root === null) return path
+  const [file, base] = [slashed(path), slashed(root).replace(/\/$/, '')]
+  const cased = (one: string): string => (isDrive(base) ? one.toLowerCase() : one)
+  return cased(file).startsWith(`${cased(base)}/`) ? file.slice(base.length + 1) : path
+}
 
 export const severityTone = (severity: string | null): 'error' | 'warning' | 'inactive' => {
   const folded = fold(severity ?? '')
@@ -469,7 +479,7 @@ async function reload($: EngineInterface, path: string): Promise<void> {
     const stat = await $.fs.stat(path)
     const text = await $.fs.read(path)
     const at = await $.clock.now()
-    await update($, tracked, state => ({ ...state, isArmed: true, path, mtimeMs: stat.mtimeMs, doc: parseSpec(text), readAt: at }))
+    await update($, tracked, state => ({ ...state, isArmed: true, path, mtimeMs: stat.mtimeMs, doc: parseSpec(text.replace(/\r\n?/g, '\n')), readAt: at }))
   } catch {
     await update($, tracked, state => ({ ...state, path }))
   }
@@ -534,7 +544,7 @@ export const register: Register = on => {
     }
     const asked = e.args.trim().replace(/^@/, '')
     if (asked !== '') {
-      const path = asked.startsWith('/') || root === null ? asked : `${root}/${asked}`
+      const path = isAbsolutePath(asked) || root === null ? asked : `${root}/${asked}`
       if (!isSpecPath(path)) return { text: `Not a spec: ${asked} (expected todo/<code>/SPEC-<code>.md or todo/<slug>/SPEC.md).` }
       await update($, tracked, () => ({ ...IDLE, isArmed: true }))
       await update($, decisions, () => [])

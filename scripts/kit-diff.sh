@@ -31,6 +31,7 @@
 # Exit 0 = identical and clean. 1 = drift or anonymisation alert. 2 = usage error.
 # ══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ $# -lt 1 || ! -d "$1" ]]; then
@@ -90,7 +91,7 @@ def files_under(base, rel):
         for f in files:
             if f in IGNORE_FILES or f.endswith(".pyc"):
                 continue
-            out.add(os.path.relpath(os.path.join(b, f), base))
+            out.add(os.path.relpath(os.path.join(b, f), base).replace(os.sep, "/"))
     return out
 
 
@@ -169,7 +170,7 @@ try:
     for base, files in C.walk(C.source_roots):
         for f in files:
             full = os.path.join(base, f)
-            if any(fnmatch.fnmatchcase(full, p) for p in C.aggregate):
+            if any(fnmatch.fnmatchcase(full.replace(os.sep, "/"), p) for p in C.aggregate):
                 names.add(f.split(".")[0])
 except Exception as e:  # no lib, broken config: product name only
     print(f"note: repo vocabulary not read ({e.__class__.__name__}: {e}) — product name only")

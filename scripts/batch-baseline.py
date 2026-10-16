@@ -233,7 +233,7 @@ def main(argv: list[str]) -> int:
     command, work, batch = argv[0], Path(argv[1]), argv[2]
     work = (work if work.is_absolute() else Path.cwd() / work).resolve()
     try:
-        RUN_DIR = str(work.parent.relative_to(ROOT)) + "/"
+        RUN_DIR = work.parent.relative_to(ROOT).as_posix() + "/"
     except ValueError:
         RUN_DIR = ""
     if command == "snapshot":

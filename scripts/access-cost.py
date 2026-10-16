@@ -143,7 +143,7 @@ def scan(binary, files):
 
 
 def rel(path):
-    return os.path.relpath(path, ROOT) if os.path.isabs(path) else path
+    return (os.path.relpath(path, ROOT) if os.path.isabs(path) else path).replace(os.sep, "/")
 
 
 def analyse(matches, path, added):

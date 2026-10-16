@@ -65,7 +65,7 @@ tmp_dir = work_file.tmp_dir
 
 
 def rm_tmp(names: list[str]) -> int:
-    bad = [n for n in names if not n or "/" in n or n in (".", "..")]
+    bad = [n for n in names if not n or any(c in n for c in "/\\:") or n in (".", "..")]
     if bad or not names:
         print(f"rm-tmp: invalid name(s): {bad or 'none given'}", file=sys.stderr)
         return 2
@@ -295,7 +295,7 @@ def main(argv: list[str]) -> int:
     if command == "tmp":
         folder = tmp_dir(argv[1])
         folder.mkdir(parents=True, exist_ok=True)
-        print(folder)
+        print(folder.as_posix())
         return 0
     if command == "rm-tmp":
         return rm_tmp(argv[1:])

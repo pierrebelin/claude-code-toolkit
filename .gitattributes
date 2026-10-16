@@ -1,0 +1,5 @@
+# LF everywhere, whatever core.autocrlf says: Git for Windows checks text out as
+# CRLF by default, and bash then reads `set -u\r` — every hook fails on its first
+# line. The Markdown and JSON the hooks, scripts and mods parse keep LF too.
+* text=auto eol=lf
+*.png binary
