@@ -8,12 +8,16 @@ const TITLE = 'Spec'
 const SKILL = 'business-spec'
 const TICK_MS = 3_000
 const SPEC_PATTERN = /(?:^|\/)todo\/[^/]+\/SPEC(?:-[^/]+)?\.md$/
-const OPEN_QUESTIONS = ['questions ouvertes', 'open questions']
-// `CU-01`, or a knowledge-base id `CAT-CU-01`; the delta anchor ending the heading (`<!-- kit:new -->`) is not part of the name.
-const ITEM_PATTERN = /^###\s+((?:[A-Z][A-Z0-9]{1,5}-)?(?:CU|RM)-[\w.]+)\s*[—–-]\s*(.*?)\s*(?:<!--.*-->)?\s*$/
+// The open questions: the section whose heading carries the anchor, else, in a spec written before
+// the anchors, the title the `/plan-implementation` gate reads (`skills/plan-implementation/SKILL.md`).
+const OPEN_QUESTIONS_ANCHOR = 'open-questions'
+const OPEN_QUESTIONS_TITLE = /^12\. (?:Open questions|Questions ouvertes)/
+// `CU-01`, or a knowledge-base id `CAT-CU-01` as `lib/knowledge.py` (`HEADING`) reads it: the em dash only.
+// The delta anchor ending the heading (`<!-- kit:new -->`) is not part of the name.
+const ITEM_PATTERN = /^###\s+([A-Z][A-Z0-9]{1,5}-(?:CU|RM)-\d+|(?:CU|RM)-[\w.]+)\s+—\s+(.*?)\s*(?:<!--.*-->)?\s*$/
 const isRule = (id: string): boolean => /(?:^|-)RM-/.test(id)
 const isUseCase = (id: string): boolean => /(?:^|-)CU-/.test(id)
-const SECTION_PATTERN = /^##\s+(\d+)\.\s*(.*?)\s*(?:<!--.*-->)?\s*$/
+const SECTION_PATTERN = /^##\s+(\d+)\.\s*(.*?)\s*(?:<!--\s*kit:([\w-]+)\s*-->|<!--.*-->)?\s*$/
 const SEVERITY_PATTERN = /\*\*(?:s[ée]v[ée]rit[ée]|severity)\*\*\s*:?\s*([^·\n]+)/i
 const RECOMMENDED_PATTERN = /\((?:recommand[ée]e?|recommended)\)/i
 const EDITING_TOOLS = ['Edit', 'Write', 'MultiEdit']
@@ -99,7 +103,8 @@ export const parseOpenQuestions = (body: string): OpenQuestion[] =>
 const trimBlank = (lines: string[]): string => lines.join('\n').trim()
 
 export const questionsSection = (sections: SpecSection[]): SpecSection | undefined =>
-  sections.find(one => OPEN_QUESTIONS.some(title => fold(one.title).startsWith(title))) ?? sections.find(one => one.number === '12')
+  sections.find(one => one.anchor === OPEN_QUESTIONS_ANCHOR) ??
+  sections.find(one => one.anchor === undefined && OPEN_QUESTIONS_TITLE.test(`${one.number}. ${one.title}`))
 
 export const sectionCounts = (doc: SpecDoc): Record<string, number> => {
   const questions = questionsSection(doc.sections)
@@ -121,7 +126,7 @@ export const parseSpec = (text: string): SpecDoc => {
     .trim()
   const sections: SpecSection[] = []
   const items: SpecItem[] = []
-  let section: { number: string; title: string; lines: string[] } | null = null
+  let section: { number: string; title: string; anchor: string | undefined; lines: string[] } | null = null
   let item: { id: string; name: string; lines: string[] } | null = null
   const closeItem = () => {
     if (item === null) return
@@ -132,14 +137,14 @@ export const parseSpec = (text: string): SpecDoc => {
   }
   const closeSection = () => {
     closeItem()
-    if (section !== null) sections.push({ number: section.number, title: section.title, body: trimBlank(section.lines) })
+    if (section !== null) sections.push({ number: section.number, title: section.title, ...(section.anchor === undefined ? {} : { anchor: section.anchor }), body: trimBlank(section.lines) })
     section = null
   }
   for (const line of lines) {
     const heading = /^##\s/.test(line) ? SECTION_PATTERN.exec(line) : null
     if (/^##\s/.test(line)) {
       closeSection()
-      if (heading !== null) section = { number: heading[1] ?? '', title: (heading[2] ?? '').trim(), lines: [] }
+      if (heading !== null) section = { number: heading[1] ?? '', title: (heading[2] ?? '').trim(), anchor: heading[3], lines: [] }
       continue
     }
     if (section === null) continue

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Batching nudge — reminds the main chain to group independent tool calls.
 #
-# Measured on session 1a39aeca (lot F5, 2026-09-09): 110 of 124 tool-carrying
+# Measured on session 1a39aeca (batch F5, 2026-09-09): 110 of 124 tool-carrying
 # turns held a single call, mean 1.23. A turn is one billed round trip that
 # resends the whole accumulation, so a run of mono-call turns pays the same
 # context N times for N calls that could have shipped in one message. The three

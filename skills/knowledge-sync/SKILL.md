@@ -31,7 +31,7 @@ Show one table: context, handlers (commands, queries), rule sheets and their rul
 - **Contexts and prefixes** — "As proposed (Recommended)", "Change a prefix", "Leave contexts out". A change or an exclusion comes through the answer's text. A prefix: 2 to 6 capitals or digits, not `ADR`, unique.
 - **Order** — "Smallest first (Recommended)": the first drafts come back fast and show whether the format suits before the large contexts run; "Most rule sheets first"; "Alphabetical".
 
-Add the confirmed prefixes to `knowledge.contexts` in `.claude/kit.config.json`, the existing entries kept. `python3 "$(cctoolkit root)/lib/kit_config.py" validate .` — a `FAIL` on `knowledge` → fix it before going on. Then `cctoolkit knowledge-write init`: it prints the staging path.
+Add the confirmed prefixes to `knowledge.contexts` in `.claude/kit.config.json`, the existing entries kept. `cctoolkit config validate .` — a `FAIL` on `knowledge` → fix it before going on. Then `cctoolkit knowledge-write init`: it prints the staging path.
 
 ## 3. Per context
 

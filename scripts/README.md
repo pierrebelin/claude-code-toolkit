@@ -4,7 +4,7 @@ Repo-wide scanners and one-shots — never a hook: a hook fires per edit, a scan
 
 ## `bin/cctoolkit`
 
-On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs `scripts/<script>`, `cctoolkit doctor` and `cctoolkit bulk-read` the [tools](../tools/README.md), `cctoolkit context-report` `lib/context-report.sh`, `cctoolkit evals` the [evals](../evals/README.md), `cctoolkit list` every command, `cctoolkit root` the plugin directory. Skills, agents and references call scripts only through it, never by path.
+On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs `scripts/<script>`, `cctoolkit doctor` and `cctoolkit bulk-read` the [tools](../tools/README.md), `cctoolkit context-report` `lib/context-report.sh`, `cctoolkit config` `lib/kit_config.py` (`validate`, `command`), `cctoolkit evals` the [evals](../evals/README.md), `cctoolkit list` every command, `cctoolkit root` the plugin directory. Skills, agents and references call scripts only through it, never by path.
 
 ## Scripts
 

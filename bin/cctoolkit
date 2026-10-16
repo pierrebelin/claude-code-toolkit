@@ -12,6 +12,7 @@
 #   cctoolkit doctor [args]     tools/doctor
 #   cctoolkit bulk-read [args]  tools/bulk-read
 #   cctoolkit context-report    lib/context-report.sh
+#   cctoolkit config <cmd>      lib/kit_config.py: validate, command, root
 #   cctoolkit evals [args]      evals/run.sh
 #   cctoolkit root              the kit directory (plugin cache or toolkit checkout)
 #   cctoolkit list              every command
@@ -23,7 +24,7 @@ set -u
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 list() {
-  printf '%s\n' doctor bulk-read context-report evals root
+  printf '%s\n' doctor bulk-read context-report config evals root
   for f in "$KIT"/scripts/*.sh "$KIT"/scripts/*.py; do
     [ -f "$f" ] || continue
     b=$(basename "$f"); printf '%s\n' "${b%.*}"
@@ -39,6 +40,7 @@ case "$cmd" in
   list) list; exit 0 ;;
   doctor|bulk-read) exec bash "$KIT/tools/$cmd" "$@" ;;
   context-report) exec bash "$KIT/lib/context-report.sh" "$@" ;;
+  config) exec python3 "$KIT/lib/kit_config.py" "$@" ;;
   evals) exec bash "$KIT/evals/run.sh" "$@" ;;
 esac
 case "$cmd" in

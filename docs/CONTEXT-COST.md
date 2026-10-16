@@ -239,7 +239,7 @@ Changes made on 2026-09-12, to be measured against the table above after five ba
    rest is contract templates and rules — cutting further cuts instructions.
 10. Sheet ticks: one `Edit` per behaviour after COST, one per file at closing.
 
-Second round, same day, from the transcripts of sessions `7df05023` (lot F4, 2026-09-10, 138
+Second round, same day, from the transcripts of sessions `7df05023` (batch F4, 2026-09-10, 138
 turns, $26.8), `123817d9` and `eb3b18a4` (plans) and the subagent runs of 2026-09-10:
 
 11. **`/implement-tdd` takes the plan path as text.** Launched as `lot4 de @todo/…-PLAN.md`, the

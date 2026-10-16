@@ -179,6 +179,15 @@ test('an object sliced from its file, to the next heading of its level', () => {
   expect(sliceObject(RULES, 'CAT-RM-009')).toBeNull()
 })
 
+test('an object heading takes the em dash only, as lib/knowledge.py reads it', () => {
+  const text = '# Rules\n\n## CAT-RM-001 — Em dash\n\nOne.\n\n## CAT-RM-002 – En dash\n\nTwo.\n\n## CAT-RM-003 - Hyphen\n\nThree.\n\n####### CAT-RM-004 — Not a heading\n'
+  expect(sliceObject(text, 'CAT-RM-001')).toBe('One.')
+  expect(sliceObject(text, 'CAT-RM-002')).toBeNull()
+  expect(sliceObject(text, 'CAT-RM-003')).toBeNull()
+  expect(sliceObject(text, 'CAT-RM-004')).toBeNull()
+  expect(sliceObject('## ADR-?1 — Provisional\n\nDraft.\n', 'ADR-?1')).toBe('Draft.')
+})
+
 test('stale: a stamp moved, a file not indexed, an indexed file gone', () => {
   const cache = { files: { 'docs/business/a.md': { stamp: [5_000_000, 10] }, 'docs/business/b.md': { stamp: [5_000_000, 10] }, 'docs/business/gone.md': { stamp: [1, 1] } } }
   expect(

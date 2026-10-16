@@ -11,7 +11,8 @@ export type Decision = {
 
 export type SpecItem = { id: string; name: string; tag: string | null; body: string }
 
-export type SpecSection = { number: string; title: string; body: string }
+// `anchor`: the `<!-- kit:<name> -->` ending the heading, when it carries one.
+export type SpecSection = { number: string; title: string; anchor?: string; body: string }
 
 export type OpenQuestion = { id: string; severity: string; question: string; impact: string; options: string }
 

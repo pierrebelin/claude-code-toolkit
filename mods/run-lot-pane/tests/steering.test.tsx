@@ -124,6 +124,18 @@ describe('run files', () => {
     expect(keptSections('# R\n\n## To validate\n\n- a — b\n\n## Audit gaps\n\n- c\n')).toBe('## To validate\n\n- a — b\n')
   })
 
+  test('to validate: the French alias `## À valider` read like the English heading, kept, `Aucune.` empty', () => {
+    const report = '## STATUT — TERMINÉ\n\n## À valider\n\n- Design — verrou sur le catalogue (aucune règle ne nomme le propriétaire)\n\n## Écarts d’audit\n\n- pas une entrée\n'
+    expect(toValidateOf(report, 'F2').map(one => [one.batch, one.step, one.text, one.why])).toEqual([
+      ['F2', 'Design', 'verrou sur le catalogue', 'aucune règle ne nomme le propriétaire'],
+    ])
+    expect(toValidateOf('## A\u0300 valider\n\n- Design — d\n', 'F2').map(one => one.text)).toEqual(['d'])
+    expect(toValidateOf('## À valider\n\nAucune.\n', 'F2')).toEqual([])
+    expect(keptSections('# R\n\n## À valider\n\n- F3 — x\n\n## Autre\n\ny\n')).toBe('## À valider\n\n- F3 — x\n')
+    const feed = { runId: 'r', root: 'todo/cat/run', work: '', pane: '', reports: { 'todo/cat/run/batches/F2.md': '## À valider\n\n- Design — d\n' } }
+    expect(validateEntriesOf(feed, () => null, ['F2']).map(one => [one.batch, one.step, one.text])).toEqual([['F2', 'Design', 'd']])
+  })
+
   test('entries: the reports first, then a divergence, a batch set aside and the breaker stop the reports do not say yet, then the notes taken', () => {
     const feed = {
       runId: 'r', root: 'todo/cat/run', reports: { 'todo/cat/run/batches/F2.md': '## To validate\n\n- Design — d\n' },

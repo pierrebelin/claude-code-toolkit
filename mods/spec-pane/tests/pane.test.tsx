@@ -126,22 +126,59 @@ test('fit cuts to the width without wrapping', () => {
   expect(fit('court', 20)).toBe('court')
 })
 
-test('catalogue spec: SPEC.md, open questions in §10 without severity', () => {
+test('catalogue spec: SPEC.md, open questions in §10 without severity, found by their anchor only', () => {
   expect(isSpecPath('/repo/todo/catalogue/SPEC.md')).toBe(true)
-  const doc = parseSpec(`# Catalogue
+  const spec = (heading: string) => `# Catalogue
 
 ## 5. Règles métier
 
 ### RM-01 — Un gestionnaire par catalogue
 - **Énoncé** : un seul. · **Origine** : choix produit · **Concerne** : CU-01
 
-## 10. Questions ouvertes
+${heading}
 | # | Question | Impact | Options |
 |---|---|---|---|
 | Q1 | Choix caché en solo ? | Lisibilité | a) oui ; b) non |
-`)
+`
+  const doc = parseSpec(spec('## 10. Points en suspens <!-- kit:open-questions -->'))
   expect(doc.rules.map(one => one.name)).toEqual(['Un gestionnaire par catalogue'])
   expect(doc.openQuestions.map(one => `${one.id}|${one.severity}|${one.question}`)).toEqual(['Q1||Choix caché en solo ?'])
+  // Without the anchor, only the `/plan-implementation` gate's title is read: `## 12. Questions ouvertes`.
+  expect(parseSpec(spec('## 10. Questions ouvertes')).openQuestions).toEqual([])
+})
+
+test('open questions renumbered: the anchored section is read wherever it stands, not section 12', () => {
+  const doc = parseSpec(`# CAT — Catalog
+
+## 3. Open questions <!-- kit:open-questions -->
+
+| # | Severity | Question | Impact | Options |
+|---|----------|----------|--------|---------|
+| Q1 | Blocking | Lock scope? | Deletion | a) org ; b) all |
+
+## 12. Data <!-- kit:data -->
+
+| # | Severity | Question | Impact | Options |
+|---|----------|----------|--------|---------|
+| X1 | Major | Not a question | — | — |
+`)
+  expect(doc.sections.map(one => `${one.number}|${one.anchor}`)).toEqual(['3|open-questions', '12|data'])
+  expect(doc.openQuestions.map(one => `${one.id} ${one.severity} ${one.question}`)).toEqual(['Q1 Blocking Lock scope?'])
+  expect(parseSpec('# X\n\n## 12. Questions ouvertes\n\n| # | Sévérité | Question |\n|---|---|---|\n| Q1 | Bloquant | Q ? |\n').openQuestions.map(one => one.id)).toEqual(['Q1'])
+})
+
+test('item headings: the em dash only, as lib/knowledge.py reads an object heading', () => {
+  const doc = parseSpec(`# X
+
+## 5. Business rules <!-- kit:business-rules -->
+
+### RM-01 — Em dash
+### RM-02 – En dash
+### RM-03 - Hyphen
+### CAT-RM-004 — Base id <!-- kit:new -->
+### CAT-RM-005 - Base id, hyphen
+`)
+  expect(doc.rules.map(one => `${one.id}|${one.name}`)).toEqual(['RM-01|Em dash', 'CAT-RM-004|Base id'])
 })
 
 test('spec path, typed command and expanded command', () => {
@@ -292,5 +329,18 @@ test('/spec-pane <path> follows an existing spec', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'spec-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /CAT — Produits par groupe/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Connaître ses produits$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a renumbered spec shows its anchored open questions and counts them on their own section', async ($, on) => {
+  const renumbered = KIT_SPEC.replace('## 12. Open questions <!-- kit:open-questions -->', '## 7. Questions still open <!-- kit:open-questions -->')
+  const files: Record<string, string> = { [PATH]: renumbered }
+  world(on, files, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect((await $.command.run({ command: 'spec-pane', args: 'todo/catalogue-groupes/SPEC-catalogue-groupes.md' } as never)).text).toBe('Spec pane opened.')
+  const ui = await $.ui.mount({ plugin: 'spec-pane', surface: 'terminal', ...PANE })
+  expect(await ui.find({ type: 'Text', text: /^ 1$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Lock scope\?$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^7\. Questions still open$/ })).toBeDefined()
   await ui.unmount()
 })

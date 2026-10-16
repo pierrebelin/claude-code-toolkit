@@ -60,7 +60,9 @@ const PANE_FILE = '.pane.jsonl'
 const FEED_KINDS = ['question', 'answer', 'audit-round', 'attempt', 'breaker', 'ack', 'journal']
 const STEP_PHASES = ['Global green', 'Closing']
 const ASIDE_LINE = /^(F\d+) ✗ — set aside — (.*?)(?: — patch (\S+))?$/
-const KEPT_SECTIONS = ['## To validate', '## Plan stopped']
+// A section heading and its French aliases (rules/markdown-output.md § French aliases).
+const TO_VALIDATE = ['## To validate', '## À valider']
+const KEPT_SECTIONS = [TO_VALIDATE, ['## Plan stopped']]
 
 type Launched = { status?: string; runId?: string; scriptPath?: string; workflowName?: string; transcriptDir?: string }
 
@@ -90,7 +92,7 @@ export const statusTone = (status: RunStatus): 'claude' | 'success' | 'error' | 
 export const statusGlyph = (status: RunStatus): string =>
   status === 'running' ? '⏺' : status === 'completed' ? '✓' : status === 'killed' ? '⏹' : '✗'
 
-const USER_WAITING = ['BLOQUÉ', 'BLOCKED', 'RELECTURE-BLOQUANTE', 'REVIEW-BLOCKING']
+const USER_WAITING = ['BLOQUÉ', 'BLOCKED']
 
 export const headlineOf = (status: RunStatus, outcome: Outcome | null, asking = 0): { glyph: string; text: string; tone: string } =>
   (status === 'running' && asking > 0) || (status !== 'running' && outcome !== null && USER_WAITING.includes(outcome.label))
@@ -798,7 +800,7 @@ export const mergeRows = (merge: KnowledgeMerge): { text: string; tone: 'warning
 
 export const outcomeTone = (outcome: Outcome, status: RunStatus): 'success' | 'warning' | 'error' | typeof WAITING_TONE => {
   if (['TERMINÉ', 'DONE'].includes(outcome.label)) return 'success'
-  if (['ECARTS', 'ÉCARTS', 'GAPS', 'RELECTURE-BLOQUANTE', 'REVIEW-BLOCKING'].includes(outcome.label)) return 'warning'
+  if (['ECARTS', 'ÉCARTS', 'GAPS'].includes(outcome.label)) return 'warning'
   if (['BLOQUÉ', 'BLOCKED'].includes(outcome.label)) return 'error'
   return status === 'completed' ? 'success' : status === 'killed' ? 'warning' : 'error'
 }
@@ -1023,7 +1025,7 @@ export const parseSheet = (text: string, path: string): Sheet => {
       section = line.slice(3).trim()
       continue
     }
-    if (/^(H[yi]poth[eè]ses|Assumptions)/i.test(section) && /^\s*(?:[-*]\s+)?\**H\d+\b/.test(line)) hypotheses += 1
+    if ((/^(H[yi]poth[eè]ses|Assumptions)/i.test(section) || section.includes('<!-- kit:assumptions -->')) && /^\s*(?:[-*]\s+)?\**H\d+\b/.test(line)) hypotheses += 1
     if (!/^(D[eé]roulement TDD|TDD sequence)/i.test(section)) continue
 
     const step = /^### (?:[EÉ]tape|Step) (\S+) — (.+)$/.exec(line)
@@ -2080,9 +2082,9 @@ export const shortHash = (text: string): string => {
 
 export const entryIdOf = (batch: string, step: string, text: string): string => `v-${shortHash(`${batch}|${step}|${text}`)}`
 
-const sectionOf = (text: string, heading: string): string[] => {
+const sectionOf = (text: string, headings: string[]): string[] => {
   const lines = text.split(/\r?\n/)
-  const start = lines.findIndex(line => line.trim().startsWith(heading))
+  const start = lines.findIndex(line => headings.some(heading => line.trim().normalize('NFC').startsWith(heading)))
   if (start < 0) return []
   const end = lines.findIndex((line, at) => at > start && line.startsWith('## '))
   return lines.slice(start, end < 0 ? undefined : end)
@@ -2095,13 +2097,13 @@ export const keptSections = (text: string): string => KEPT_SECTIONS.map(heading 
 // start with their batch.
 export const toValidateOf = (text: string, batch: string | null, sheetOf: (batch: string) => string | null = () => null): ValidateEntry[] => {
   let section: string | null = null
-  return sectionOf(text, '## To validate')
+  return sectionOf(text, TO_VALIDATE)
     .slice(1)
     .flatMap(line => {
       const heading = /^###\s+(.+)$/.exec(line)
       if (heading !== null) section = heading[1]?.trim() ?? null
       const bullet = /^[-*]\s+(.+)$/.exec(line)?.[1]?.trim()
-      if (bullet === undefined || /^(None|Aucun)\b/i.test(bullet)) return []
+      if (bullet === undefined || /^(None|Aucune?)\b/i.test(bullet)) return []
       const prefixed = batch === null ? /^(F\d+)\b\s*(?:[—:–-]\s*)?(.*)$/.exec(bullet) : null
       const owner = batch ?? prefixed?.[1] ?? ''
       const rest = prefixed?.[2] ?? bullet
@@ -4572,7 +4574,7 @@ export const register: Register = on => {
             </Text>
             <Text color="inactive">
               {'   '}
-              {finished}/{states.length} lots
+              {finished}/{states.length} batches
             </Text>
           </Text>
           {states.length > 0 && (
@@ -4658,7 +4660,7 @@ export const register: Register = on => {
               'lots-title',
               <Text bold color={accent}>
                 {'  '}
-                LOTS
+                BATCHES
               </Text>,
               [
                 cell('lots-count', COUNT_WIDTH, 'agents', 'inactive'),

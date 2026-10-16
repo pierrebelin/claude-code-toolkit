@@ -50,8 +50,8 @@ Default order Domain → Application → Infrastructure → WebAPI: each layer c
 ## Validation
 
 ```bash
-python3 "$(cctoolkit root)/lib/kit_config.py" command build
-python3 "$(cctoolkit root)/lib/kit_config.py" command test <Suite>
+cctoolkit config command build
+cctoolkit config command test <Suite>
 ```
 
 Run the build, then the printed test command narrowed to `*<Class>Tests` with the runner's class filter — both literally, never through `eval`. Filter syntax (`clean-architecture` preset: `--filter-class "*<Class>Tests"`), unset command, full scope, suite selection → `skills/implement-tdd/references/test-scope.md` § Runner.

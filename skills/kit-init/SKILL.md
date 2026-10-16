@@ -61,7 +61,7 @@ Only what differs from the chosen preset's `preset.json`, plus `language`, `pres
 - `commands.build` — preset's empty and a stack known → propose one in the summary (§7): `dotnet build <sln> --no-restore`, `npm run build --if-present`, `mvn -q compile`, `./gradlew compileJava`; Python: none.
 - `layout` overrides — only from §5, or when a `presets[].sourceRoots` / `testRoots` of the chosen preset is empty while the tree has the equivalent folder: name it, override that key alone.
 
-Then `python3 "$(cctoolkit root)/lib/kit_config.py" validate .` — any `FAIL` → fix the file before going on.
+Then `cctoolkit config validate .` — any `FAIL` → fix the file before going on.
 
 Then `cctoolkit migrate-anchors` (dry run): specs and plans written before the `<!-- kit:… -->` anchors are invisible to the skills and gates locating a section by its anchor, and a rule sheet whose titles are not exactly `Business rules` / `Règles métier` (a suffix, another wording) is invisible to the parsers — `rules-coverage` counts 0 rules and reports each tagged test as a dead reference. `anchors to write: 0` → nothing to do. Otherwise show the count and the `UNRECOGNISED HEADING` lines (free-form headings, left as they are), AskUserQuestion: apply (Recommended) / skip. Apply → `cctoolkit migrate-anchors --apply`, then the first two lines of `cctoolkit rules-coverage` go into the report.
 

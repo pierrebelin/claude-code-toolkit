@@ -56,7 +56,7 @@ It **never overwrites** a file that differs: it shows the difference and asks ke
 | Tool | Used for | If missing |
 |------|----------|------------|
 | `perl` | `evals/run.sh` timer; `cctoolkit doctor` reports it `FAIL` | no latency budget in the evals |
-| `graphify` | blast radius on aggregate edits (paused until 2026-10-23), graph autosync | silently skipped |
+| `graphify` | blast radius on aggregate edits, graph autosync | silently skipped |
 | `rtk` | output compression of Bash commands | drop the `rtk ` prefix from `kit.config.json` `commands` |
 | `caveman` plugin | terse output, per repo through `.caveman.json` when `/cctoolkit:kit-init` writes one; statusline badge | no effect |
 

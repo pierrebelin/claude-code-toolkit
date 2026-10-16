@@ -221,10 +221,9 @@ describe('reading the run', () => {
     expect(parseJournal(JSON.stringify({ status: 'completed', result: 'fini\nsuite' }))?.outcome).toEqual({ label: 'fini', reason: null, report: null })
     expect(parseJournal(JSON.stringify({ status: 'failed', error: 'boom' }))?.outcome).toEqual({ label: 'failed', reason: 'boom', report: null })
     const tone = (label: string, status: 'completed' | 'failed' = 'completed') => outcomeTone({ label, reason: null, report: null }, status)
-    expect([tone('TERMINÉ'), tone('ECARTS'), tone('RELECTURE-BLOQUANTE'), tone('BLOQUÉ'), tone('?', 'failed')]).toEqual([
-      'success', 'warning', 'warning', 'error', 'error',
-    ])
-    expect([tone('DONE'), tone('GAPS'), tone('REVIEW-BLOCKING'), tone('BLOCKED')]).toEqual(['success', 'warning', 'warning', 'error'])
+    expect([tone('TERMINÉ'), tone('ECARTS'), tone('BLOQUÉ'), tone('?', 'failed')]).toEqual(['success', 'warning', 'error', 'error'])
+    expect([tone('DONE'), tone('GAPS'), tone('BLOCKED')]).toEqual(['success', 'warning', 'error'])
+    expect([tone('REVIEW-BLOCKING'), tone('RELECTURE-BLOQUANTE')]).toEqual(['success', 'success'])
     expect([tone('ATTENTE-RÉPONSE'), tone('AWAITING-ANSWER')]).toEqual(['success', 'success'])
   })
 
@@ -298,7 +297,8 @@ describe('reading the run', () => {
 
   test('stop or pending question: header reads waiting for user, not failed', () => {
     const outcome = (label: string) => ({ label, reason: null, report: null })
-    expect(['BLOQUÉ', 'BLOCKED', 'RELECTURE-BLOQUANTE'].map(label => headlineOf('failed', outcome(label)).text)).toEqual(Array(3).fill('waiting for user'))
+    expect(['BLOQUÉ', 'BLOCKED'].map(label => headlineOf('failed', outcome(label)).text)).toEqual(Array(2).fill('waiting for user'))
+    expect(['REVIEW-BLOCKING', 'RELECTURE-BLOQUANTE'].map(label => headlineOf('completed', outcome(label)).text)).toEqual(['completed', 'completed'])
     expect(headlineOf('running', null, 1)).toEqual({ glyph: '?', text: 'waiting for user', tone: 'cyan' })
     expect([headlineOf('running', null, 0).text, headlineOf('completed', outcome('AWAITING-ANSWER')).text]).toEqual(['running', 'completed'])
     expect([headlineOf('failed', null).text, headlineOf('completed', outcome('TERMINÉ')).text, headlineOf('running', outcome('BLOQUÉ')).text]).toEqual(['failed', 'completed', 'running'])
@@ -366,6 +366,9 @@ describe('reading the run', () => {
     expect(parseSheet('# X-PLAN-F5 — Verrous — ✅ DONE (2026-10-03)\n', 'todo/x/X-PLAN-F5.md').isDone).toBe(true)
     const english = parseSheet('# X-PLAN-F5 — Locks\n\n## TDD sequence\n\n### Step 1 — Create\n\nTDD: RED ✅ · GREEN ✅ · COST ✅\n', 'todo/x/X-PLAN-F5.md')
     expect(english.steps[0]?.tdd).toEqual({ red: '✅', green: '✅', cost: '✅' })
+
+    const anchored = '# X-PLAN-F5 — Locks\n\n## Hypothèses retenues <!-- kit:assumptions -->\n\n- H1: a\n- H2: b\n\n## Other\n\n- H3: not one\n'
+    expect(parseSheet(anchored, 'todo/x/X-PLAN-F5.md').hypotheses).toBe(2)
   })
 
   test('slow agent: beyond twice the mean of the phase’s finished agents, nothing without history', () => {
@@ -1446,7 +1449,7 @@ const result = await workflow('run-lot', b.sheet)
 
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /^run-plan$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /1\/3 lots/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /1\/3 batches/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / TERMINÉ$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / Design · design$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / after F1, F2$/ })).toBeDefined()
@@ -1459,13 +1462,13 @@ const result = await workflow('run-lot', b.sheet)
   expect(await ui.find({ type: 'Text', text: /0\/3 phases/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^run-lot$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /SHEET F2/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /LOTS/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /BATCHES/ })).toBeUndefined()
 
   await ui.press({ key: 'open-lot-F1' })
   expect(await ui.find({ type: 'Text', text: /completed/ })).toBeDefined()
 
   await ui.press({ key: 'plan' })
-  expect(await ui.find({ type: 'Text', text: /LOTS/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /BATCHES/ })).toBeDefined()
   expect(lotFiguresFrom(kept['lot:p:CAT-F1'])?.agents).toBe(2)
   await ui.unmount()
 })
@@ -1506,7 +1509,7 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await $.command.run({ command: 'run-lot-pane', args: 'demo plan' } as Parameters<typeof $.command.run>[0])
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /1\/6 lots/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /1\/6 batches/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / GREEN · GREEN C3 hide$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / after F2, F3$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Supervisor$/ })).toBeDefined()
@@ -1517,9 +1520,9 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
 
   await $.command.run({ command: 'run-lot-pane', args: 'demo plan end' } as Parameters<typeof $.command.run>[0])
   const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await end.find({ type: 'Text', text: /3\/6 lots/ })).toBeDefined()
+  expect(await end.find({ type: 'Text', text: /3\/6 batches/ })).toBeDefined()
   expect(await end.find({ key: 'outcome' })).toBeDefined()
-  expect(await end.find({ type: 'Text', text: /LOTS/ })).toBeDefined()
+  expect(await end.find({ type: 'Text', text: /BATCHES/ })).toBeDefined()
   await end.unmount()
 })
 
@@ -1529,7 +1532,7 @@ test('plan merge demo: the plan delivered whole, its knowledge-base merge staged
   await $.command.run({ command: 'run-lot-pane', args: 'demo plan merge' } as Parameters<typeof $.command.run>[0])
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
-    expect(await ui.find({ type: 'Text', text: /2\/2 lots/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /2\/2 batches/ })).toBeDefined()
     expect(await ui.find({ key: 'outcome' })).toBeDefined()
     const head = await ui.find({ type: 'Text', text: '◆ Knowledge base — merge staged, not written' })
     expect(head?.props.color).toBe('warning')

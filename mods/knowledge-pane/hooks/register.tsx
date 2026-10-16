@@ -164,16 +164,17 @@ export const deltaId = (token: string): string => token.replace(/^[+~-]/, '')
 export const historyOf = (rows: HistoryRow[], id: string): HistoryRow[] => rows.filter(row => row.delta.some(token => deltaId(token) === id))
 
 // An object's own lines, heading excluded: from its heading to the next heading of the same or a higher level.
+// The heading as `lib/knowledge.py` (`HEADING`) reads it: `<#…> <id> — <title>`, the em dash only.
 export const sliceObject = (text: string, id: string): string | null => {
   const lines = text.split('\n')
   const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const heading = new RegExp(`^(#+)\\s+${escaped}\\s+[—–-]`)
+  const heading = new RegExp(`^(#{1,6})\\s+${escaped}\\s+—\\s`)
   const at = lines.findIndex(line => heading.test(line))
   if (at < 0) return null
   const level = (heading.exec(lines[at] ?? '')?.[1] ?? '#').length
   const rest = lines.slice(at + 1)
   const stop = rest.findIndex(line => {
-    const found = /^(#+)\s/.exec(line)
+    const found = /^(#{1,6})\s/.exec(line)
     return found !== null && (found[1] ?? '').length <= level
   })
   return (stop < 0 ? rest : rest.slice(0, stop)).join('\n').trim()

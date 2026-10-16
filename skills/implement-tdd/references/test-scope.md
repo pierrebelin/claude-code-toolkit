@@ -7,8 +7,8 @@ Single source for the `run-lot` agents and `/verify-ddd-tdd`.
 The build and test commands are the repo's, never written here: `commands.build` and `commands.test` of `.claude/kit.config.json` (the preset's when the repo sets none). `{suite}` is the suite's name — `UnitTests`, `IntegrationTests`… under the `clean-architecture` preset. Resolve once per session, then run the printed command **literally**:
 
 ```bash
-python3 "$(cctoolkit root)/lib/kit_config.py" command build
-python3 "$(cctoolkit root)/lib/kit_config.py" command test UnitTests
+cctoolkit config command build
+cctoolkit config command test UnitTests
 ```
 
 Never `eval "$(…)"` it: the guards and the `rtk` rewrite read the command text. Nothing printed = the key is unset: no run, report `Not run: [suite] — commands.test unset`.

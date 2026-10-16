@@ -51,12 +51,12 @@ import work_file  # noqa: E402
 
 IMPLEMENTER = "tdd-implementer"
 AUTHOR = "tdd-test-author"
-# Frozen literals (rules/markdown-output.md): run-lot.js writes the first, parses the others.
+# Frozen literals (rules/markdown-output.md): run-lot.js writes the first, parses the three after it.
 GRANTED = "Test files you may modify, granted: "
 TESTS_AT_GREEN = "tests modified at GREEN: "
 GRANTED_SEP = " — granted: "
-BEYOND_STUBS = "production code beyond the stubs: "
 RED_ON_STUB = "RED on stub: "
+# Opens a deny message to the agent, parsed by nothing: not frozen.
 EXIT_MISMATCH = "exit observed on rerun: "
 KEPT_SECONDS = 2 * 86400
 RERUN_TIMEOUT = 240

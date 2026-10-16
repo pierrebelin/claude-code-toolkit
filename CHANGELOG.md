@@ -4,6 +4,21 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.0.1 — 2026-10-16
+
+- `run-lot-pane`: a French report's `## À valider` section is read like `## To validate` — the `v` view, the count and the kept sections no longer miss it; an empty section written `Aucune.` reads as empty. The sheet's assumptions are also found by their `<!-- kit:assumptions -->` anchor.
+- `run-lot-pane`: the plan view says `BATCHES` and `n/N batches` instead of `LOTS` and `n/N lots`; the screenshots are retaken. The `REVIEW-BLOCKING` status, produced by nothing since it was removed, is no longer matched.
+- `spec-pane`: the open questions are found by their `<!-- kit:open-questions -->` anchor, so a spec whose sections are renumbered still shows them; a spec written before the anchors falls back on the `## 12. Open questions` title `/plan-implementation` reads.
+- `spec-pane`, `knowledge-pane`: an object or item heading takes the em dash only (`### CAT-RM-003 — …`), as `lib/knowledge.py` reads it: a heading the base's parser skips is no longer shown as if it counted.
+- `cctoolkit`: new `cctoolkit config validate|command|root`, so the skills, agents and `run-plan` reach `kit.config.json` without a path into the plugin cache.
+- `cctoolkit`: the batch commit reads `<type>(<plan folder>): batch FX — <title>` instead of `lot FX`; the `Kit-Batch:` trailer is unchanged.
+- `cctoolkit`: `/cctoolkit:plan-implementation` writes `Integration test waiver:` in every language; the French form stays read, never written.
+- `cctoolkit`: README, INSTALL and `presets/README.md` trimmed or completed: the README keeps the pitch and links the run details and pane keys, the `preset` key names `tdd` among what it pre-fills.
+
+**Rules changed**
+
+- `rules/markdown-output.md`: the frozen literals list covers what the kit already parsed without listing it — the plan, sheet and spec file names, the sheet title and the `⬜` heading, the `H<n>` assumptions and their markers, rule ranges, the waiver line, `## Audit gaps`, the outputs of `plan-next-batch --next`, `batch-baseline` and `access-cost`, the grant markers, the JSON outputs read by field, the doctor `FAIL` line, and what `run-lot-pane` reads of a run — and names the real parser of each entry; the French aliases table gains the matching forms.
+
 ## 2.0.0 — 2026-10-16
 
 Upgrading from 1.x: re-run `/cctoolkit:kit-init` to pull the rules changed below; set `knowledge.root` before the first `/cctoolkit:knowledge-sync` unless `docs/business` suits; a whole `Read`, `cat`, `head` or `tail` of a context's `rules.md`, `decisions.md` or `HISTORY.md` is now refused — re-issue it to force.
