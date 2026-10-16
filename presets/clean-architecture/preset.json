@@ -4,7 +4,8 @@
     "sources": {
       "roots": ["src"],
       "extensions": [".cs"],
-      "comment": "//"
+      "comment": "//",
+      "imports": "^\\s*(?:global\\s+)?using\\s+(?:static\\s+)?[\\w.]+(?:\\s*=\\s*[\\w.<>, ]+)?\\s*;\\s*$"
     },
     "aggregate": [
       "*/*.Domain/*/Aggregates/*.cs",
@@ -12,6 +13,7 @@
     ],
     "useCase": {
       "roots": ["src/{product}.Application"],
+      "contextDepth": 1,
       "label": "Application/",
       "marker": [
         {"file": "*Handler.cs", "contains": "^\\s*(?:public|internal)\\s+(?:sealed\\s+|abstract\\s+|partial\\s+)*class\\s+\\w*Handler\\b"}

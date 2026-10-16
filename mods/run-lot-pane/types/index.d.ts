@@ -50,10 +50,20 @@ export type WorkflowAgent = {
 
 export type RunStatus = 'running' | 'completed' | 'failed' | 'killed'
 
+// The knowledge-base merge a run-plan result carries: staged after a plan delivered whole, never
+// written by the run — `next` is the skill that shows the diff and writes it on confirmation.
+export type KnowledgeMerge = {
+  state: 'staged' | 'refused' | 'blocked' | 'failed'
+  lines: string[]
+  warnings: string[]
+  next: string | null
+}
+
 export type Outcome = {
   label: string
   reason: string | null
   report: string | null
+  merge?: KnowledgeMerge
 }
 
 export type AuditVerdict = {

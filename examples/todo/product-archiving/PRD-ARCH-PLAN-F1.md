@@ -5,7 +5,7 @@
 
 ## Intent <!-- kit:intent -->
 
-A catalogue manager archives a published product of their organisation (CU-01). **RM**: RM-01, RM-02 | **CU**: CU-01
+A catalogue manager archives a published product of their organisation (CAT-CU-02). **RM**: CAT-RM-003, CAT-RM-001 | **CU**: CAT-CU-02
 
 ## Design <!-- kit:design -->
 
@@ -13,10 +13,21 @@ A catalogue manager archives a published product of their organisation (CU-01). 
 |-------|----------|
 | Applied rules <!-- kit:applied-rules --> | DDD-01, DDD-02, DDD-03, DDD-08, APP-01, APP-02, PERF-01 |
 | Owning aggregate | `Product`; the handler only orchestrates |
-| Invariants | RM-01; consequence: the handler reads no status, `Archive()` refuses |
+| Invariants | CAT-RM-003; consequence: the handler reads no status, `Archive()` refuses |
 | Consistency | one command modifies and saves `Product` |
 | Events | internal to persistence: `ProductArchived`, payload `ProductId`, `ArchivedAt` |
 | Access cost | 1 read + 1 write |
+
+## Decisions <!-- kit:decisions -->
+
+### ADR-001 — Soft archive through a status column
+Choice: `Product.Status = Archived`; listing queries filter on it.
+Why: one read path, history preserved (CAT-D-001).
+Rejected: archive table (two read paths); event-sourced projection (no event store).
+Consequences: every catalogue query filters on `Status`; index on (OrganisationId, Status).
+Links: T1, CAT-RM-004, CAT-CU-02, CAT-CU-03
+
+- `PublishProduct` mirrored for the handler, the endpoint and the tests: same aggregate, same shape.
 
 ## TDD sequence <!-- kit:tdd-sequence -->
 
@@ -28,11 +39,11 @@ Declarative artefacts with no prior RED: `ArchiveProductRequest` DTO. Covered by
 
 | # | Test | Level | Project | RM |
 |---|------|-------|---------|-----|
-| 1 | `ShouldSaveProductArchivedEvent_WhenProductIsPublished` | UT | `UnitTests` | RM-01 |
-| 2 | `ShouldThrowProductNotPublishedException_WhenProductIsDraft` | UT | `UnitTests` | RM-01 |
-| 3 | `ShouldThrowProductNotPublishedException_WhenProductIsAlreadyArchived` | UT | `UnitTests` | RM-01 |
-| 4 | `ShouldThrowProductNotFoundException_WhenProductBelongsToAnotherOrganisation` | UT | `UnitTests` | RM-02 |
-| 5 | `ShouldPersistArchivedStatus_WhenProductArchivedEventIsSaved` | IT | `IntegrationTests` | RM-01 |
+| 1 | `ShouldSaveProductArchivedEvent_WhenProductIsPublished` | UT | `UnitTests` | CAT-RM-003 |
+| 2 | `ShouldThrowProductNotPublishedException_WhenProductIsDraft` | UT | `UnitTests` | CAT-RM-003 |
+| 3 | `ShouldThrowProductNotPublishedException_WhenProductIsAlreadyArchived` | UT | `UnitTests` | CAT-RM-003 |
+| 4 | `ShouldThrowProductNotFoundException_WhenProductBelongsToAnotherOrganisation` | UT | `UnitTests` | CAT-RM-001 |
+| 5 | `ShouldPersistArchivedStatus_WhenProductArchivedEventIsSaved` | IT | `IntegrationTests` | CAT-RM-003 |
 | 6 | `ShouldReturnNoContent_WhenArchiveRequestIsValid` | contract | `ContractTests` | — |
 
 Docker required from test 5.
@@ -66,19 +77,19 @@ No new test: replay of the scopes named in `## Test policy and scopes`.
 ### Domain
 
 **`Product`** — _modified_
-- `Archive(DateTimeOffset now)`: status `Published` → `Archived` (RM-01) → event `ProductArchived`
-- **Invariants**: only `Published` can be archived — RM-01
+- `Archive(DateTimeOffset now)`: status `Published` → `Archived` (CAT-RM-003) → event `ProductArchived`
+- **Invariants**: only `Published` can be archived — CAT-RM-003
 
 **`ProductArchived`** — payload: `ProductId`, `ArchivedAt`, emitted by `Product.Archive`
 
-**`ProductNotPublishedException`** — raised by RM-01
+**`ProductNotPublishedException`** — raised by CAT-RM-003
 
 ### Application
 
 **`ArchiveProductCommand`** — props: `ProductId`, returns: nothing
 
 **`ArchiveProductCommandHandler`** — deps: `IProductRepository`, `IUserContextAccessor`, `TimeProvider`
-- OrgId → load `Product` (RM-02) → `Archive(now)` → Save events
+- OrgId → load `Product` (CAT-RM-001) → `Archive(now)` → Save events
 
 ### Infrastructure
 

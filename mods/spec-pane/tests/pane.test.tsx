@@ -95,6 +95,32 @@ test('parseSpec also reads the toolkit English spec, kit markers included', () =
   expect(doc.openQuestions.map(one => `${one.id} ${one.severity}`)).toEqual(['Q1 Major'])
 })
 
+test('parseSpec reads knowledge-base ids and drops the delta anchor from the name', () => {
+  const doc = parseSpec(`# PRD-ARCH — Product archiving
+
+## 4. Use cases <!-- kit:use-cases -->
+
+### CAT-CU-02 — Archive a product <!-- kit:new -->
+**Actor** catalogue manager
+
+### CAT-CU-01 — Consult products <!-- kit:modified -->
+**Changes:** the listing applies CAT-RM-004.
+
+## 5. Business rules <!-- kit:business-rules -->
+
+### CAT-RM-003 — Only a published product can be archived <!-- kit:new -->
+- **Statement**: refused · **Origin**: product choice · **Severity**: blocking
+
+## 13. Decisions <!-- kit:decisions -->
+
+### CAT-D-001 — Archive instead of delete <!-- kit:new -->
+Choice: kept, hidden.
+`)
+  expect(doc.useCases.map(one => `${one.id}|${one.name}`)).toEqual(['CAT-CU-02|Archive a product', 'CAT-CU-01|Consult products'])
+  expect(doc.rules.map(one => `${one.id}|${one.name}|${one.tag}`)).toEqual(['CAT-RM-003|Only a published product can be archived|blocking'])
+  expect(doc.rules[0]?.body).not.toContain('Choice')
+})
+
 test('fit cuts to the width without wrapping', () => {
   expect(fit('Un profil lié\net un produit héritent-ils ?', 20)).toBe('Un profil lié et un…')
   expect(fit('court', 20)).toBe('court')

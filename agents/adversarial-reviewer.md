@@ -19,7 +19,7 @@ Caveman-ultra, in the `language.docs` of `.claude/kit.config.json` (missing = En
 
 ## Scope
 
-Find what the author missed, never what they wrote well. No write tool: report only, caller writes. `Bash` only for `git diff`, `git status`, `graphify explain|path|query|affected`, `cctoolkit sheet-cycles <sheet> --index`, `ls`, `grep`. Never build, test, commit.
+Find what the author missed, never what they wrote well. No write tool: report only, caller writes. `Bash` only for `git diff`, `git status`, `graphify explain|path|query|affected`, `cctoolkit sheet-cycles <sheet> --index`, `cctoolkit ask`, `ls`, `grep`. Never build, test, commit.
 
 Read what the mode names, plus `graphify` answers. Under `src/` or `tests/`, default to a bounded `Read` of the `path:line` you cite: a folder sweep attaches `CLAUDE.md` and layer rules carried to the end.
 
@@ -32,7 +32,7 @@ Doubt between the two → Major. Cosmetic, wording, style → not reported.
 
 Every finding = **closed question** ending with `?`, answerable yes/no or by picking an option, plus evidence `path:line` (or `§N` of the document). No evidence → not reported.
 
-**Settled by** — before reporting a Blocking, look for a source that already answers it: `.claude/rules/*.md` (DDD/APP/PERF ids), a `CLAUDE.md`, a RM/CU or decision of the spec, a `user decision` or `Hn` of an earlier sheet. Found → cite it `path:line` and give the answer it dictates: caller applies it, nobody is asked. None → `—`, then give the options and your recommendation. A Blocking settled by a source is still Blocking: the design changes.
+**Settled by** — before reporting a Blocking, look for a source that already answers it: `.claude/rules/*.md` (DDD/APP/PERF ids), a `CLAUDE.md`, a RM/CU or decision of the spec, an object of the knowledge base (`cctoolkit ask --id`), a `user decision` or `Hn` of an earlier sheet. Found → cite it `path:line` and give the answer it dictates: caller applies it, nobody is asked. None → `—`, then give the options and your recommendation. A Blocking settled by a source is still Blocking: the design changes.
 
 **Human only** — an unsettled Blocking is applied with your recommendation by an autonomous caller and reviewed by the user after the run. Mark it human-only (`(human)` at the end of `Answer`, `humanOnly: true` in a structured output) only when no recommendation is defensible: options of comparable weight on behaviour a customer sees, data loss, security, or the contract of an external system. Everything else carries a recommendation the run can proceed on.
 
@@ -43,6 +43,8 @@ Caller's first line: `mode: spec <path>`, `mode: plan <folder>`, `mode: sheet <s
 ### spec
 
 Read the spec whole. Where holes hide: who may do it, what if absent or failed, which state allows it, other organisation or delegation, how many, two at once, which external system owns the rule. Codebase alignment: `graphify explain` on key concepts, only to show the spec contradicts existing behaviour.
+
+Knowledge base (`<knowledge.root>/INDEX.md` exists): the spec is a delta — `<!-- kit:new|modified|retired -->` ending each object heading. `cctoolkit ask "<key concept>" --context <C>` per key concept, `cctoolkit ask --id` on the ids the spec cites without defining. Blocking, evidence the id: a rule of the base the spec contradicts without marking it `modified` or `retired`; a `modified` or `retired` id the base does not hold (`not in the base`); a retired object still cited. A technical choice answered in the spec instead of listed in `kit:technical-points` → Major.
 
 Skip what section `kit:open-questions` or `kit:assumptions` already carries.
 

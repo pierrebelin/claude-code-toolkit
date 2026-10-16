@@ -1,7 +1,7 @@
 {
   "name": "cctoolkit",
-  "version": "1.12.1",
-  "description": "DDD/TDD kit for a clean-architecture repo: spec, plan, TDD batch and audit skills, their agents, the guard and traceability hooks, the layout presets and the cctoolkit command.",
+  "version": "2.0.0",
+  "description": "DDD/TDD kit for a clean-architecture repo: a business knowledge base beside the code, spec, plan, TDD batch and audit skills, their agents, the guard and traceability hooks, the layout presets and the cctoolkit command.",
   "author": {
     "name": "Pierre Belin"
   },

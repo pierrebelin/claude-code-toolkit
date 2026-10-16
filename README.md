@@ -2,7 +2,7 @@
 
 **From a business need to tested, audited code — Claude Code does the work, you make the decisions.**
 
-`cctoolkit` is a Claude Code plugin for DDD / clean-architecture repos. You describe a feature; Claude writes the spec with you, plans it, then builds it batch by batch under strict TDD and audits the result before you commit.
+`cctoolkit` is a Claude Code plugin for DDD / clean-architecture repos. You describe a feature; Claude writes the spec with you, plans it, then builds it batch by batch under strict TDD and audits the result before you commit. What the product does is kept in a business knowledge base beside the code, so every new spec starts from it.
 
 .NET first; Python, Java/Kotlin and TypeScript repos work through their layout and test tags.
 
@@ -69,6 +69,26 @@ A batch that stops short: fix the cause and run `/cctoolkit:run-lot` on the same
 
 Want to see the files? **[`examples/`](examples/README.md)** walks one small feature from spec to report.
 
+## A business knowledge base beside the code
+
+What the product does and why lives in the repo, under `docs/business/` by default: one folder per bounded context, one file per use case with its rules, the business decisions, the ADRs, and a history of every change. Each use case, rule and decision has a global id (`CAT-RM-003`) that the specs and plans cite.
+
+```mermaid
+flowchart LR
+    K[("knowledge base")] -->|read by levels| S["/business-spec<br/>writes a delta"]
+    S --> P["plan, build"]
+    P -->|"plan delivered:<br/>merge staged"| M["/knowledge-merge<br/>you confirm"]
+    M --> K
+    H["code changed<br/>outside the kit"] -->|"/knowledge-sync"| K
+```
+
+- **`/cctoolkit:knowledge-sync`** builds the base from your code the first time, then catches up with what changed outside the kit. Nothing is written until you confirm.
+- **`/cctoolkit:business-spec`** reads the base first and writes the spec as a delta: what the feature adds, changes or retires.
+- When a whole plan is delivered, `run-plan` stages the merge; **`/cctoolkit:knowledge-merge`** shows the diff and writes it on your word.
+- **`/cctoolkit:ask`** answers how the product behaves, or why, from the base, each fact cited by its id.
+
+The base is plain Markdown, so you can review and commit it like code. The worked example is under [`examples/docs/business/`](examples/docs/business/INDEX.md).
+
 ## Watch it run
 
 A batch takes tens of minutes and a dozen agents, a whole plan several times that. The **`run-lot-pane`** mod shows it live inside Claude Code. On a plan, it opens on the plan: each batch with its state, time and tokens, and the supervisor checking between batches.
@@ -83,7 +103,7 @@ A batch takes tens of minutes and a dozen agents, a whole plan several times tha
 claude plugin install run-lot-pane@cctoolkit --scope project
 ```
 
-Two more mods — a live view of the spec as it's written, and a context meter telling you when to `/clear`: [`mods/README.md`](mods/README.md).
+Three more mods — a browser of the knowledge base that spends no model context, a live view of the spec as it's written, and a context meter telling you when to `/clear`: [`mods/README.md`](mods/README.md).
 
 ## Opinionated by design
 
@@ -102,6 +122,7 @@ If your team works differently, half of it will feel like noise. Full list: [`sk
 |---|---|
 | Install, update, dependencies | [INSTALL.md](INSTALL.md) |
 | A feature from spec to report | [`examples/`](examples/README.md) |
+| The knowledge base's format | [`knowledge-format.md`](skills/knowledge-sync/references/knowledge-format.md) |
 | Every skill and agent | [`skills/README.md`](skills/README.md) |
 | Autonomous runs, resuming a stopped batch | [`docs/TOOLING.md`](docs/TOOLING.md) |
 | Layouts and configuration | [`presets/README.md`](presets/README.md) |

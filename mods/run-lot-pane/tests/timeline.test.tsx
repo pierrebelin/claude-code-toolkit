@@ -218,6 +218,7 @@ test('the desktop keeps the phase view and opens the timeline on demand; the ter
     'demo end': /^Phase timeline of run-lot F4: completed in 19m35, 8 of 8 phases reached, 14 agents, 1 retry, 1 interruption, 1 error\.$/,
     'demo plan': /^Batch timeline of run-plan: 1 of 6 batches done, F2 running, F5 waiting for an answer, F3, F4 and F6 pending, 31m10 elapsed\.$/,
     'demo plan end': /^Batch timeline of run-plan: 3 of 6 batches done, F5 waiting for an answer, F4 and F6 pending, completed in 48m30\.$/,
+    'demo plan merge': /^Batch timeline of run-plan: 2 of 2 batches done, completed in 42m46\.$/,
   }
   for (const [args, alt] of Object.entries(alts)) {
     await $.command.run({ command: 'run-lot-pane', args } as Parameters<typeof $.command.run>[0])

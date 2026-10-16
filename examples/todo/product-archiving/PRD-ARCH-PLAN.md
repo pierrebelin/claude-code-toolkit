@@ -11,8 +11,8 @@
 
 | Batch | Intent | RM/CU | Depends on | Execution | Reason |
 |-------|--------|-------|------------|-----------|--------|
-| F1 | A manager archives a published product | RM-01, RM-02 / CU-01 | — | sequential | foundation: adds the archived state |
-| F2 | A manager restores an archived product; the listing hides archived products | RM-03, RM-04 / CU-02 | F1 | sequential | same aggregate and endpoint group as F1 |
+| F1 | A manager archives a published product | CAT-RM-003, CAT-RM-001 / CAT-CU-02 | — | sequential | foundation: adds the archived state |
+| F2 | A manager restores an archived product; the listing hides archived products | CAT-RM-004, CAT-RM-005 / CAT-CU-03, CAT-CU-01 | F1 | sequential | same aggregate and endpoint group as F1 |
 
 ### Batch F1 — Archive a product — ✅ DONE (2026-10-09)
 - [x] 1. A manager archives a published product of their organisation
@@ -32,26 +32,29 @@
 - **Layers**: Domain / Application / Infrastructure / WebAPI / Abstractions.Models
 - **Reuse**: `Product` aggregate and its `ProductStatus`; `ProductRepository.Save` event switch; `PublishProduct` handler as the sibling to mirror
 - **Out of scope**: bulk archiving, customer notification (spec § 10)
-- **Assumptions**: open question 1 of the spec (retention limit) settled as "no limit" with the user on 2026-10-08
+- **Assumptions**: open question 1 of the spec (product in an order not yet delivered) taken as recommended — archiving allowed, the order keeps the product; to be confirmed by the product owner
 - **Non-applicable rules** <!-- kit:na-rules -->: DDD-05: N/A — no cross-aggregate consistency; PERF-02: N/A — no collection loaded
 
 ## 2. Traceability <!-- kit:traceability -->
 
+<!-- kit:cols item,owner,batch -->
 | RM/CU | Code owner(s) | Batch |
 |-------|---------------|-------|
-| RM-01 — only a published product can be archived | `Product.Archive()` + `ProductNotPublishedException` | F1 |
-| RM-02 — visible only to its organisation | `ProductRepository.GetById(orgId, id)` + `ProductNotFoundException` | F1 |
-| CU-01 — archive a product | `ArchiveProductCommand` → `ArchiveProductCommandHandler` → `POST /products/{id}/archive` | F1 |
-| RM-03 — archived product absent from the listing | `ProductRepository.GetPublished(orgId)` | F2 |
-| RM-04 — only an archived product can be restored | `Product.Restore()` + `ProductNotArchivedException` | F2 |
-| CU-02 — restore a product | `RestoreProductCommand` → `RestoreProductCommandHandler` → `POST /products/{id}/restore` | F2 |
+| CAT-RM-003 — only a published product can be archived | `Product.Archive()` + `ProductNotPublishedException` | F1 |
+| CAT-RM-001 — visible only to its organisation | `ProductRepository.GetById(orgId, id)` + `ProductNotFoundException` | F1 |
+| CAT-CU-02 — archive a product | `ArchiveProductCommand` → `ArchiveProductCommandHandler` → `POST /products/{id}/archive` | F1 |
+| CAT-RM-004 — archived product absent from the listing | `ProductRepository.GetPublished(orgId)` | F2 |
+| CAT-CU-01 — consult products, listing without archived products | `ListCatalogueQueryHandler` → `ProductRepository.GetPublished(orgId)` | F2 |
+| CAT-RM-005 — only an archived product can be restored | `Product.Restore()` + `ProductNotArchivedException` | F2 |
+| CAT-CU-03 — restore a product | `RestoreProductCommand` → `RestoreProductCommandHandler` → `POST /products/{id}/restore` | F2 |
+| T1 — storing an archived product, leaving it out of the listing | ADR-001 — soft archive through a status column | F1 |
 
 ## 3. DDD and Architecture design <!-- kit:ddd-design -->
 
 | RM/CU | Owning aggregate | Invariant / code consequence | Consistency | Batch |
 |-------|------------------|------------------------------|-------------|-------|
-| RM-01 / CU-01 | `Product` | status checked in `Archive()` → no status check in the handler | synchronous, 1 aggregate | F1 |
-| RM-04 / CU-02 | `Product` | status checked in `Restore()` | synchronous, 1 aggregate | F2 |
+| CAT-RM-003 / CAT-CU-02 | `Product` | status checked in `Archive()` → no status check in the handler | synchronous, 1 aggregate | F1 |
+| CAT-RM-005 / CAT-CU-03 | `Product` | status checked in `Restore()` | synchronous, 1 aggregate | F2 |
 
 ## 4. Cross-cutting elements (if applicable) <!-- kit:cross-cutting -->
 

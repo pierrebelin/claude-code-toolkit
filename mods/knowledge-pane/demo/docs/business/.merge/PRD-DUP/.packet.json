@@ -1,0 +1,9 @@
+{
+ "code": "PRD-DUP",
+ "partial": false,
+ "objects": [
+  {"id": "CAT-CU-04", "kind": "CU", "change": "new", "context": "Catalog", "title": "Duplicate a product", "status": "todo", "line": 52},
+  {"id": "CAT-RM-006", "kind": "RM", "change": "new", "context": "Catalog", "title": "A duplicate starts as a draft", "status": "todo", "line": 64},
+  {"id": "CAT-RM-001", "kind": "RM", "change": "modified", "context": "Catalog", "title": "A product is visible only to its organisation", "status": "todo", "line": 68}
+ ]
+}

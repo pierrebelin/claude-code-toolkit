@@ -1,0 +1,147 @@
+{
+  "cases": [
+    {
+      "name": "knowledge-reminder fixture: a repo with a knowledge base",
+      "cmd": "K={{KIT}}/scripts; B={{FIX}}/kr-base; rm -rf $B; mkdir -p $B/.claude && cd $B && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false\nmkdir -p src/Shop.Application/Catalog/Products/ArchiveProduct src/Shop.Application/Catalog/Products/GetProduct src/Shop.Application/Studio/Diagrams/AddNode src/Shop.Domain/Catalog/Aggregates tests/Shop.UnitTests/Catalog\nprintf 'using System;\\nnamespace Shop;\\npublic sealed class ArchiveProductCommandHandler\\n{\\n    // load then archive\\n    public void Handle() { var p = new Product(); p.Archive(); }\\n}\\n' > src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs\nprintf '# ArchiveProductCommandHandler\\n\\n## Business rules <!-- kit:rules -->\\n\\n| ID | Rule | Outcome |\\n|----|------|---------|\\n| RM-01 | Only a published product can be archived | `ProductNotPublishedException` |\\n| RM-02 | Partitioned to the organisation | `ProductNotFoundException` |\\n' > src/Shop.Application/Catalog/Products/ArchiveProduct/CLAUDE.md\nprintf 'public sealed class GetProductQueryHandler\\n{\\n    public void Handle() { }\\n}\\n' > src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs\nprintf 'public sealed class AddNodeCommandHandler\\n{\\n    public void Handle() { }\\n}\\n' > src/Shop.Application/Studio/Diagrams/AddNode/AddNodeCommandHandler.cs\nprintf 'public class Product\\n{\\n    public void Archive() { if (false) throw new ProductNotPublishedException(); }\\n}\\npublic class ProductNotPublishedException : Exception {}\\npublic record ProductArchivedEvent;\\n' > src/Shop.Domain/Catalog/Aggregates/Product.cs\nprintf '# Catalog design\\n\\n## Archiving\\n\\nSoft archive.\\n\\n## Listing\\n' > src/Shop.Domain/Catalog/DESIGN.md\nprintf 'public class ArchiveProductCommandHandlerTests\\n{\\n    [Fact]\\n    [Trait(\"RM\", \"ArchiveProduct/RM-01\")]\\n    public void Refuses_a_draft() { }\\n\\n    [Fact]\\n    public void Archives() { }\\n}\\n' > tests/Shop.UnitTests/Catalog/ArchiveProductCommandHandlerTests.cs\nprintf '{\"product\": \"Shop\", \"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > .claude/kit.config.json\ngit add -A && git commit -qm \"feat(catalog): archive a product\"\nexport CLAUDE_PROJECT_DIR=$B\nprintf '{\"product\": \"Shop\", \"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}}}' > .claude/kit.config.json\nST=$(python3 $K/knowledge-write.py init); mkdir -p $ST/Catalog/usecases $ST/Studio/usecases\nprintf '# CAT-CU-?1 — Archive a product\\n\\nWithdraw.\\n\\n## Rules\\n\\n### CAT-RM-?1 — Only a published product can be archived\\nOutcome: `ProductNotPublishedException`\\n\\n## Handlers <!-- kit:handlers -->\\n\\n- `ArchiveProductCommandHandler`: load, archive, save.\\n' > \"$ST/Catalog/usecases/CAT-CU-?1-archive-product.md\"\nprintf '# CAT-CU-?2 — Consult products\\n\\n## Handlers <!-- kit:handlers -->\\n\\n- `GetProductQueryHandler`: load.\\n' > \"$ST/Catalog/usecases/CAT-CU-?2-consult-products.md\"\nprintf '# STU-CU-?1 — Add a node\\n\\n## Handlers <!-- kit:handlers -->\\n\\n- `AddNodeCommandHandler`: add.\\n' > \"$ST/Studio/usecases/STU-CU-?1-add-node.md\"\npython3 $K/knowledge-write.py apply >/dev/null && git add -A && git commit -qm \"docs: knowledge base\"\necho ok\n",
+      "expect": {
+        "stdout": "ok",
+        "exit": 0
+      }
+    },
+    {
+      "name": "main chain edits a handler: the reminder names its use case and the command",
+      "hook": "hooks/knowledge-reminder.sh",
+      "env": {
+        "CLAUDE_PROJECT_DIR": "{{FIX}}/kr-base"
+      },
+      "input": {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "session_id": "{{SID}}",
+        "tool_input": {
+          "file_path": "{{FIX}}/kr-base/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs"
+        }
+      },
+      "expect": {
+        "context": "knowledge base possibly behind: CAT-CU-01 ← ArchiveProductCommandHandler.cs — /cctoolkit:knowledge-sync Catalog. Edited outside a batch"
+      }
+    },
+    {
+      "name": "the same file twice in a session: reminded once",
+      "hook": "hooks/knowledge-reminder.sh",
+      "env": {
+        "CLAUDE_PROJECT_DIR": "{{FIX}}/kr-base"
+      },
+      "input": {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "session_id": "{{SID}}",
+        "tool_input": {
+          "file_path": "{{FIX}}/kr-base/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs"
+        }
+      },
+      "expect": {
+        "no_context": true
+      },
+      "pre": [
+        {
+          "hook_event_name": "PostToolUse",
+          "tool_name": "Edit",
+          "session_id": "{{SID}}",
+          "tool_input": {
+            "file_path": "{{FIX}}/kr-base/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a subagent's edit is the kit's own flow: no reminder",
+      "hook": "hooks/knowledge-reminder.sh",
+      "env": {
+        "CLAUDE_PROJECT_DIR": "{{FIX}}/kr-base"
+      },
+      "input": {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "session_id": "{{SID}}",
+        "agent_id": "a1",
+        "tool_input": {
+          "file_path": "{{FIX}}/kr-base/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs"
+        }
+      },
+      "expect": {
+        "no_context": true
+      }
+    },
+    {
+      "name": "a file outside the use-case roots: no reminder",
+      "hook": "hooks/knowledge-reminder.sh",
+      "env": {
+        "CLAUDE_PROJECT_DIR": "{{FIX}}/kr-base"
+      },
+      "input": {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "session_id": "{{SID}}",
+        "tool_input": {
+          "file_path": "{{FIX}}/kr-base/src/Shop.Domain/Catalog/DESIGN.md"
+        }
+      },
+      "expect": {
+        "no_context": true
+      }
+    },
+    {
+      "name": "main chain edits an aggregate: the use cases whose handlers name it",
+      "hook": "hooks/knowledge-reminder.sh",
+      "env": {
+        "CLAUDE_PROJECT_DIR": "{{FIX}}/kr-base"
+      },
+      "input": {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "session_id": "{{SID}}",
+        "tool_input": {
+          "file_path": "{{FIX}}/kr-base/src/Shop.Domain/Catalog/Aggregates/Product.cs"
+        }
+      },
+      "expect": {
+        "context": "knowledge base possibly behind: CAT-CU-01 ← Product.cs — /cctoolkit:knowledge-sync Catalog. Edited outside a batch"
+      }
+    },
+    {
+      "name": "a test file: no reminder — a test follows a rule, it does not make one",
+      "hook": "hooks/knowledge-reminder.sh",
+      "env": {
+        "CLAUDE_PROJECT_DIR": "{{FIX}}/kr-base"
+      },
+      "input": {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "session_id": "{{SID}}",
+        "tool_input": {
+          "file_path": "{{FIX}}/kr-base/tests/Shop.UnitTests/Catalog/ArchiveProductCommandHandlerTests.cs"
+        }
+      },
+      "expect": {
+        "no_context": true
+      }
+    },
+    {
+      "name": "empty input: silent, exit 0",
+      "hook": "hooks/knowledge-reminder.sh",
+      "env": {
+        "CLAUDE_PROJECT_DIR": "{{FIX}}/kr-base"
+      },
+      "input": {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "session_id": "{{SID}}"
+      },
+      "expect": {
+        "no_context": true,
+        "exit": 0
+      }
+    }
+  ]
+}

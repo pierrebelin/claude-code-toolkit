@@ -50,10 +50,12 @@ Structure expected by the `run-plan` / `run-lot` workflows. Two levels:
 
 ## 2. Traceability <!-- kit:traceability -->
 
+<!-- kit:cols item,owner,batch -->
 | RM/CU | Code owner(s) | Batch |
 |-------|---------------|-------|
 | RM-01 — [statement] | `[Aggregate].[Method]()` + `[Exception]` | F1 |
 | CU-01 — [statement] | `[Command]` → `[Handler]` → `[Endpoint]` | F1 |
+| T1 — [technical point of the spec] | ADR-[nnn] — [choice] / [decision title] | F1 |
 
 ## 3. DDD and Architecture design <!-- kit:ddd-design -->
 
@@ -96,7 +98,20 @@ Section order is fixed: why (`Intent`, `Design`, `Decisions`), then how it is ve
 
 ## Decisions <!-- kit:decisions -->
 
-[Non-obvious choices, trade-offs, reuses, with the date of the user decisions. Omitted if nothing notable.]
+### ADR-[nnn] — [Choice that outlives the plan]
+Choice: [what is done]
+Why: [the reason, one line — the business decision or rule it serves]
+Rejected: [option] ([reason]); [option] ([reason])
+Consequences: [what every later change must respect]
+Links: [T1, the rule and use case ids it serves]
+
+### [Choice local to this batch — no id, it ends with the plan]
+Choice: […]
+Why: […]
+Rejected: […]
+Links: […]
+
+[Then one line per lesser choice, trade-off or reuse, with the date of the user decisions; the run and the review add their lines here too. Section omitted if nothing notable.]
 
 ## Test policy and scopes <!-- kit:test-policy -->
 

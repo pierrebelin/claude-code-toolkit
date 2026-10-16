@@ -22,6 +22,15 @@
         ".ts": "//",
         ".tsx": "//",
         ".js": "//"
+      },
+      "imports": {
+        ".cs": "^\\s*(?:global\\s+)?using\\s+(?:static\\s+)?[\\w.]+(?:\\s*=\\s*[\\w.<>, ]+)?\\s*;\\s*$",
+        ".py": "^\\s*(?:import\\s+[\\w.]+|from\\s+[\\w.]+\\s+import\\s)",
+        ".java": "^\\s*import\\s+(?:static\\s+)?[\\w.*]+\\s*;\\s*$",
+        ".kt": "^\\s*import\\s+[\\w.*]+(?:\\s+as\\s+\\w+)?\\s*$",
+        ".ts": "^\\s*import\\s.*\\bfrom\\s+['\"]|^\\s*import\\s+['\"]|^\\s*export\\s.*\\bfrom\\s+['\"]",
+        ".tsx": "^\\s*import\\s.*\\bfrom\\s+['\"]|^\\s*import\\s+['\"]|^\\s*export\\s.*\\bfrom\\s+['\"]",
+        ".js": "^\\s*import\\s.*\\bfrom\\s+['\"]|^\\s*import\\s+['\"]|^\\s*export\\s.*\\bfrom\\s+['\"]|^\\s*(?:const|let|var)\\s+[\\w{}\\s,]+=\\s*require\\("
       }
     },
     "aggregate": [
@@ -36,6 +45,7 @@
         "src/Features",
         "src/features"
       ],
+      "contextDepth": 1,
       "label": "the feature slices",
       "marker": [
         {

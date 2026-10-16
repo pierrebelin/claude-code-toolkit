@@ -1,0 +1,20 @@
+{
+  "name": "knowledge-pane",
+  "version": "2.0.0",
+  "description": "Side pane browsing the business knowledge base: contexts, use cases and their rules, decisions, ADRs, history, a staged merge or sync; read-only, no model context spent",
+  "author": {
+    "name": "Pierre Belin",
+    "email": "contact@pierrebelin.fr",
+    "url": "https://github.com/pierrebelin"
+  },
+  "homepage": "https://github.com/pierrebelin/claude-code-toolkit/tree/main/mods/knowledge-pane",
+  "repository": "https://github.com/pierrebelin/claude-code-toolkit",
+  "license": "MIT",
+  "keywords": [
+    "knowledge",
+    "business",
+    "pane",
+    "ddd"
+  ],
+  "types": "./types/index.d.ts"
+}

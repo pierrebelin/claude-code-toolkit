@@ -34,8 +34,8 @@ LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 input=$(cat)
 # US (\x1f) separator, not a tab: bash collapses runs of IFS-whitespace, and an
 # empty agent_id — the main chain always has one — would shift every later field.
-PARSED=$(printf '%s' "$input" | jq -j '[(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.tool_input.file_path // ""), ((.tool_input.offset // "") | tostring), ((.tool_input.limit // "") | tostring)] | join("\u001f")')
-IFS=$'\x1f' read -r tool_name session_id agent_id file_path has_offset has_limit <<<"$PARSED"
+PARSED=$(printf '%s' "$input" | jq -j '[(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.tool_input.file_path // ""), ((.tool_input.offset // "") | tostring), ((.tool_input.limit // "") | tostring), (.agent_type // "")] | join("\u001f")')
+IFS=$'\x1f' read -r tool_name session_id agent_id file_path has_offset has_limit agent_type <<<"$PARSED"
 
 [ "$tool_name" = "Read" ] || exit 0
 [ -n "$file_path" ] || exit 0
@@ -48,6 +48,41 @@ pass() { exit 0; }
 [ -n "$has_limit" ] && pass
 
 bounds_skip "$file_path" && pass
+
+# Scope the escape hatch to the agent, not the session. Subagents run under the
+# parent's session_id *and* its transcript_path, so a per-session key let one
+# agent's forcing hand a free unbounded read to every other agent — and to the
+# main chain — none of which ever saw the denial or its advice. Measured on one
+# session: 4 denials in one agent, then a 35 640-character unbounded read waved
+# through in the next one. `agent_id` is the only per-agent field in the payload;
+# the main chain has none, and falls back to the session.
+seen_file="/tmp/claude-readbounds-seen-${session_id}${agent_id:+-$agent_id}"
+
+# Second identical attempt, same agent → let it through, and record that it
+# happened. The denial list alone cannot tell a guard that works from a guard that
+# is merely a speed bump: only the ratio forced/denied can. lib/context-report.sh
+# prints both.
+forced() {
+  if [ -f "$seen_file" ] && grep -Fxq "$file_path" "$seen_file" 2>/dev/null; then
+    echo "$file_path" >> "${seen_file}.forced"
+    return 0
+  fi
+  echo "$file_path" >> "$seen_file"
+  return 1
+}
+
+deny() {
+  jq -n --arg r "$1" \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
+  exit 0
+}
+
+# The knowledge base's rules.md, decisions.md and HISTORY.md: see
+# bounds_knowledge_guarded in lib/bounds-common.sh.
+if bounds_knowledge_guarded "$file_path" "$agent_type"; then
+  forced && pass
+  deny "$(bounds_knowledge_reason Read "$file_path" "Read with offset/limit" "Re-issue this exact Read to force the full read.")"
+fi
 
 lines=$(wc -l < "$file_path" 2>/dev/null | tr -d ' ')
 bytes=$(wc -c < "$file_path" 2>/dev/null | tr -d ' ')
@@ -69,24 +104,7 @@ fi
 # bounds_is_flat in lib/bounds-common.sh.
 bounds_is_flat "$file_path" && pass
 
-# Scope the escape hatch to the agent, not the session. Subagents run under the
-# parent's session_id *and* its transcript_path, so a per-session key let one
-# agent's forcing hand a free unbounded read to every other agent — and to the
-# main chain — none of which ever saw the denial or its advice. Measured on one
-# session: 4 denials in one agent, then a 35 640-character unbounded read waved
-# through in the next one. `agent_id` is the only per-agent field in the payload;
-# the main chain has none, and falls back to the session.
-seen_file="/tmp/claude-readbounds-seen-${session_id}${agent_id:+-$agent_id}"
-
-# Second identical attempt, same agent → let it through, and record that it
-# happened. The denial list alone cannot tell a guard that works from a guard that
-# is merely a speed bump: only the ratio forced/denied can. lib/context-report.sh
-# prints both.
-if [ -f "$seen_file" ] && grep -Fxq "$file_path" "$seen_file" 2>/dev/null; then
-  echo "$file_path" >> "${seen_file}.forced"
-  pass
-fi
-echo "$file_path" >> "$seen_file"
+forced && pass
 
 reason=$(bounds_reason \
   "Unbounded Read on $file_path ($lines lines, ${bytes:-0} bytes > $max_lines lines / $max_bytes bytes). The whole file stays in context until the session ends." \
@@ -95,6 +113,4 @@ reason=$(bounds_reason \
   "Locate the range first (graphify explain/query, grep -n), then Read with offset/limit." \
   "Re-issue this exact Read to force the full read.")
 
-jq -n --arg r "$reason" \
-  '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
-exit 0
+deny "$reason"

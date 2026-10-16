@@ -9,7 +9,10 @@ const SKILL = 'business-spec'
 const TICK_MS = 3_000
 const SPEC_PATTERN = /(?:^|\/)todo\/[^/]+\/SPEC(?:-[^/]+)?\.md$/
 const OPEN_QUESTIONS = ['questions ouvertes', 'open questions']
-const ITEM_PATTERN = /^###\s+((?:CU|RM)-[\w.]+)\s*[—–-]\s*(.*)$/
+// `CU-01`, or a knowledge-base id `CAT-CU-01`; the delta anchor ending the heading (`<!-- kit:new -->`) is not part of the name.
+const ITEM_PATTERN = /^###\s+((?:[A-Z][A-Z0-9]{1,5}-)?(?:CU|RM)-[\w.]+)\s*[—–-]\s*(.*?)\s*(?:<!--.*-->)?\s*$/
+const isRule = (id: string): boolean => /(?:^|-)RM-/.test(id)
+const isUseCase = (id: string): boolean => /(?:^|-)CU-/.test(id)
 const SECTION_PATTERN = /^##\s+(\d+)\.\s*(.*?)\s*(?:<!--.*-->)?\s*$/
 const SEVERITY_PATTERN = /\*\*(?:s[ée]v[ée]rit[ée]|severity)\*\*\s*:?\s*([^·\n]+)/i
 const RECOMMENDED_PATTERN = /\((?:recommand[ée]e?|recommended)\)/i
@@ -123,7 +126,7 @@ export const parseSpec = (text: string): SpecDoc => {
   const closeItem = () => {
     if (item === null) return
     const body = trimBlank(item.lines)
-    const severity = item.id.startsWith('RM-') ? (SEVERITY_PATTERN.exec(body)?.[1]?.trim() ?? null) : null
+    const severity = isRule(item.id) ? (SEVERITY_PATTERN.exec(body)?.[1]?.trim() ?? null) : null
     items.push({ id: item.id, name: item.name, tag: severity, body })
     item = null
   }
@@ -154,8 +157,8 @@ export const parseSpec = (text: string): SpecDoc => {
     title,
     summary,
     sections,
-    useCases: items.filter(one => one.id.startsWith('CU-')),
-    rules: items.filter(one => one.id.startsWith('RM-')),
+    useCases: items.filter(one => isUseCase(one.id)),
+    rules: items.filter(one => isRule(one.id)),
     openQuestions: questions === undefined ? [] : parseOpenQuestions(questions.body),
   }
 }

@@ -106,6 +106,22 @@
       }
     },
     {
+      "name": "run-plan flow: every batch DONE — the knowledge-base merge prepared, drafted by knowledge-merger and staged, never written; the report and the result carry it",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-flow.js {{KIT}}/workflows/run-plan.js merge | grep -E 'STATUS|AGENTS|MERGE|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | —;AGENTS preflight | next batch | run-lot F1 | gate F1 | commit F1 | next batch | run-lot F2 | gate F2 | commit F2 | next batch | run-lot F3 | gate F3 | commit F3 | next batch | final check | merge prepare | merge draft | journal | report;MERGE staged | /cctoolkit:knowledge-merge todo/x/X-PLAN.md — the knowledge base is not written yet: it shows the diff and writes it on the user's confirmation;"
+      }
+    },
+    {
+      "name": "run-plan flow: nothing to merge — no merger agent, no journal line, no merge in the result; a plan with batches set aside prepares no merge",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-flow.js {{KIT}}/workflows/run-plan.js nomerge | grep -E 'STATUS|AGENTS|MERGE|ERR|WARN|UNHANDLED' | tr '\\n' ';'; node {{KIT}}/evals/workflows/run-plan-flow.js {{KIT}}/workflows/run-plan.js distinct | grep -c 'merge prepare' || true",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | —;AGENTS preflight | next batch | run-lot F1 | gate F1 | commit F1 | next batch | run-lot F2 | gate F2 | commit F2 | next batch | run-lot F3 | gate F3 | commit F3 | next batch | final check | merge prepare | report;0"
+      }
+    },
+    {
       "name": "run-plan flow: distinct causes leave the plan going, the next batch runs",
       "cmd": "node {{KIT}}/evals/workflows/run-plan-flow.js {{KIT}}/workflows/run-plan.js distinct | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {

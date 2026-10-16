@@ -18,14 +18,14 @@ Products that are no longer sold can only be deleted today, which breaks the dia
 ```mermaid
 flowchart LR
     D[Draft] -->|publish| P[Published]
-    P -->|"archive (CU-01, RM-01)"| A[Archived]
-    A -->|"restore (CU-02, RM-04)"| P
-    A -.->|"hidden from catalogue (RM-03)"| C[Catalogue listing]
+    P -->|"archive (CAT-CU-02, CAT-RM-003)"| A[Archived]
+    A -->|"restore (CAT-CU-03, CAT-RM-005)"| P
+    A -.->|"hidden from catalogue (CAT-RM-004)"| C[Catalogue listing]
 ```
 
 ## 4. Use cases <!-- kit:use-cases -->
 
-### CU-01 — Archive a product
+### CAT-CU-02 — Archive a product <!-- kit:new -->
 
 **Actor** catalogue manager · **Intent** withdraw a product no longer sold without losing its history · **Frequency** a few times a month
 
@@ -34,9 +34,9 @@ flowchart LR
 2. They ask to archive it.
 3. The product becomes archived and leaves the catalogue listing.
 
-**Errors:** product not published → refused (RM-01); product of another organisation → reported as not found (RM-02).
+**Errors:** product not published → refused (CAT-RM-003); product of another organisation → reported as not found (CAT-RM-001).
 
-### CU-02 — Restore an archived product
+### CAT-CU-03 — Restore an archived product <!-- kit:new -->
 
 **Actor** catalogue manager · **Intent** put back on sale a product archived by mistake · **Frequency** rare
 
@@ -45,32 +45,32 @@ flowchart LR
 2. They ask to restore it.
 3. The product is published again and reappears in the catalogue listing.
 
-**Errors:** product not archived → refused (RM-04).
+**Errors:** product not archived → refused (CAT-RM-005); product of another organisation → reported as not found (CAT-RM-001).
+
+### CAT-CU-01 — Consult products <!-- kit:modified -->
+
+**Changes:** the catalogue listing now applies CAT-RM-004; reading one product by its identifier still returns it when archived.
 
 ## 5. Business rules <!-- kit:business-rules -->
 
-### RM-01 — Only a published product can be archived
+### CAT-RM-003 — Only a published product can be archived <!-- kit:new -->
 - **Statement**: archiving a draft or an already archived product is refused · **Origin**: product choice · **Severity**: blocking
-- **Applies to**: CU-01
+- **Applies to**: CAT-CU-02
 
-### RM-02 — A product is visible only to its organisation
-- **Statement**: a product of another organisation is reported as not found, never as forbidden · **Origin**: existing product behaviour · **Severity**: blocking
-- **Applies to**: cross-cutting
-
-### RM-03 — An archived product is absent from the catalogue listing
+### CAT-RM-004 — An archived product is absent from the catalogue listing <!-- kit:new -->
 - **Statement**: the catalogue listing returns published products only; an archived product stays readable by its identifier · **Origin**: product choice · **Severity**: blocking
-- **Applies to**: CU-01, CU-02
+- **Applies to**: CAT-CU-01, CAT-CU-02, CAT-CU-03
 
-### RM-04 — Only an archived product can be restored
+### CAT-RM-005 — Only an archived product can be restored <!-- kit:new -->
 - **Statement**: restoring a product that is not archived is refused · **Origin**: product choice · **Severity**: blocking
-- **Applies to**: CU-02
+- **Applies to**: CAT-CU-03
 
 ## 7. States & transitions <!-- kit:states -->
 
 | State | Event | Next state | Condition |
 |-------|-------|------------|-----------|
-| Published | archive | Archived | RM-01 |
-| Archived | restore | Published | RM-04 |
+| Published | archive | Archived | CAT-RM-003 |
+| Archived | restore | Published | CAT-RM-005 |
 
 ## 9. Relations <!-- kit:relations -->
 
@@ -96,4 +96,19 @@ flowchart LR
 <!-- kit:cols n,severity,question,impact,options -->
 | # | Severity | Question | Impact | Options |
 |---|----------|----------|--------|---------|
-| 1 | Major | Should an archived product be restorable after a set period (e.g. 2 years)? | A retention limit would add a rule to CU-02 | No limit (recommended) / 2 years / configurable |
+| 1 | Major | May a product sitting in an order not yet delivered be archived? | A refusal would add a rule to CAT-CU-02 | Yes, the order keeps it (recommended) / No, refused until delivery |
+
+## 13. Decisions <!-- kit:decisions -->
+
+### CAT-D-001 — Archive instead of delete <!-- kit:new -->
+Choice: an archived product stays in the database, hidden from the catalogue listing.
+Why: past orders and diagrams must stay readable.
+Rejected: hard delete (breaks history); restore limited in time (no demand).
+Links: CAT-RM-004, CAT-CU-02, CAT-CU-03
+
+## 14. Technical points <!-- kit:technical-points -->
+
+<!-- kit:cols n,point,raised-by -->
+| # | Point | Raised by |
+|---|-------|-----------|
+| T1 | How an archived product is stored, and how the listing leaves it out | CAT-D-001, CAT-RM-004 |

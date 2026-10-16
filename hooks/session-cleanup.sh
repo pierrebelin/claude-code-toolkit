@@ -15,7 +15,7 @@ set -u
 sid=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unknown)
 
 # Every family a hook or the statusline writes under claude-<prefix>-<session>.
-PREFIXES="readbounds-seen catbounds-seen diffbounds-seen affected-seen batching-nudge batching-tick clearnudge implement-tdd-guard implement-tdd-effort effort"
+PREFIXES="readbounds-seen catbounds-seen diffbounds-seen affected-seen knowledge-seen batching-nudge batching-tick clearnudge implement-tdd-guard implement-tdd-effort effort"
 
 # Two directories, not one: implement-tdd-guard.sh and the effort state write to
 # ${TMPDIR:-/tmp}, which on macOS is /var/folders/... and never /tmp. Deduplicated

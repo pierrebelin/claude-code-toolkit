@@ -1,0 +1,150 @@
+{
+  "cases": [
+    {
+      "name": "knowledge-index: rebuilds the example's INDEX.md byte for byte",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\nrm docs/business/INDEX.md; $I; cmp docs/business/INDEX.md {{KIT}}/examples/docs/business/INDEX.md && echo SAME\n",
+      "expect": {
+        "stdout": "indexed: 10 object(s) — 7 file(s) parsed, 0 unchanged; INDEX.md written\nSAME",
+        "exit": 0
+      }
+    },
+    {
+      "name": "knowledge-index: incremental — an untouched base parses nothing, an edited file alone is parsed again",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$I >/dev/null; $I; sed -i.bak 's/Archive instead of delete/Archive, never delete/' docs/business/Catalog/decisions.md; rm docs/business/Catalog/decisions.md.bak; $I\n",
+      "expect": {
+        "stdout": "0 file(s) parsed, 7 unchanged; INDEX.md unchanged\nindexed: 10 object(s) — 1 file(s) parsed, 6 unchanged; INDEX.md unchanged",
+        "exit": 0
+      }
+    },
+    {
+      "name": "knowledge-index --check: an OVERVIEW.md edited by hand leaves INDEX.md stale, nothing written",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$I --check; echo rc=$?; sed -i.bak 's/^Catalog holds the products/Catalog lists the products/' docs/business/Catalog/OVERVIEW.md; $I --check; echo rc=$?; grep -c 'Catalog holds' docs/business/INDEX.md\n",
+      "expect": {
+        "stdout": "rc=0\nINDEX.md stale — cctoolkit knowledge-index\nrc=1\n1",
+        "exit": 0
+      }
+    },
+    {
+      "name": "knowledge-index: no base, exit 1 with the sync to run",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\nrm -rf docs/business; $I; echo rc=$?\n",
+      "expect": {
+        "stdout": "rc=1",
+        "stderr": "no knowledge base under docs/business — /cctoolkit:knowledge-sync builds it",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask: a question ranks cards by BM25 — archived, archive and archives share a stem; --kind narrows",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A restore archived --kind rule\n",
+      "expect": {
+        "stdout": "- CAT-RM-005 — Only an archived product can be restored · rule · CAT-CU-03\n  Outcome: `ProductNotArchivedException`\n  docs/business/Catalog/usecases/CAT-CU-03-restore-product.md:9\n",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask: an id written in the question comes first; the answer ends with shown N of M",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A 'what does CAT-RM-002 say about the listing' | head -1; $A 'what does CAT-RM-002 say about the listing' | tail -1\n",
+      "expect": {
+        "stdout": "- CAT-RM-002 — The catalogue listing is sorted by name · rule · CAT-CU-01 · observed medium\nshown 10 of 10",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask: nothing found is shown 0 of 0",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A invoices\n",
+      "expect": {
+        "stdout": "shown 0 of 0",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask --id: the object whole with what it applies to and what cites it; a retired id names its HISTORY.md row",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\nprintf '| 2026-10-20 | sync abc1234 | -CAT-RM-007 |\\n' >> docs/business/Catalog/HISTORY.md; $A --id CAT-RM-003,CAT-RM-007,CAT-RM-099\n",
+      "expect": {
+        "stdout": "docs/business/Catalog/usecases/CAT-CU-02-archive-product.md:9\n### CAT-RM-003 — Only a published product can be archived\nOutcome: `ProductNotPublishedException`\napplies to: CAT-CU-02 · handlers: `ArchiveProductCommandHandler`\nCAT-RM-007: retired — Catalog/HISTORY.md, 2026-10-20 sync abc1234\nCAT-RM-099: not in the base\nshown 3 of 3",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask --handler: its use case whole, the rules of other files it cites whole, decisions and ADRs as cards",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A --handler ArchiveProductCommandHandler | grep -E '^(# |### |- |docs|shown)' | grep -v '^- `'\n",
+      "expect": {
+        "stdout": "docs/business/Catalog/usecases/CAT-CU-02-archive-product.md:1\n# CAT-CU-02 — Archive a product\n### CAT-RM-003 — Only a published product can be archived\ndocs/business/Catalog/rules.md:3\n### CAT-RM-001 — A product is visible only to its organisation\ndocs/business/Catalog/rules.md:6\n### CAT-RM-004 — An archived product is absent from the catalogue listing\n- CAT-D-001 — Archive instead of delete · decision · CAT-CU-02, CAT-CU-03\n- ADR-001 — Soft archive through a status column · adr · CAT-CU-02, CAT-CU-03\nshown 5 of 5",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask --handler: a handler no use case lists says so and names the sync",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A --handler PublishProductCommandHandler\n",
+      "expect": {
+        "stdout": "no use case lists `PublishProductCommandHandler` — a new handler, or the base is behind: /cctoolkit:knowledge-sync\nshown 0 of 0",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask --context: the context's summary, use cases with their rules, cross-cutting rules, decisions, ADRs",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A --context Catalog\n",
+      "expect": {
+        "stdout": "# Catalog (CAT) — 3 use case(s), 5 rule(s), 1 decision(s) · docs/business/Catalog/OVERVIEW.md\nCAT-CU-01 — Consult products · `GetProductQueryHandler`, `ListCatalogueQueryHandler`\n  CAT-RM-002 — The catalogue listing is sorted by name [observed medium]\nCAT-CU-02 — Archive a product · `ArchiveProductCommandHandler`\n  CAT-RM-003 — Only a published product can be archived\nCAT-CU-03 — Restore an archived product · `RestoreProductCommandHandler`\n  CAT-RM-005 — Only an archived product can be restored\nCAT-RM-001 — A product is visible only to its organisation · CAT-CU-01, CAT-CU-02, CAT-CU-03\nCAT-RM-004 — An archived product is absent from the catalogue listing · CAT-CU-01, CAT-CU-02, CAT-CU-03\nCAT-D-001 — Archive instead of delete\nADR-001 — Soft archive through a status column\nshown 7 of 7",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask: the budget cuts after the first item and says so",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A archive --budget 60\n",
+      "expect": {
+        "stdout": "shown 1 of 7 — budget reached: narrow with --context, --kind or --id",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask --history --id: the HISTORY.md rows naming the id, newest first",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A --history --id CAT-RM-001\n",
+      "expect": {
+        "stdout": "2026-10-01 · Catalog · sync 3f9e2c1 · +CAT-CU-01 +CAT-RM-001 +CAT-RM-002\nshown 1 of 1",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask: a base edited by hand is reindexed before answering; INDEX.md is never written",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A --id CAT-D-001 >/dev/null; sed -i.bak 's/Archive instead of delete/Archive, never delete/' docs/business/Catalog/decisions.md; $A --id CAT-D-001 | sed -n 2p; cmp -s docs/business/INDEX.md {{KIT}}/examples/docs/business/INDEX.md && echo INDEX-UNTOUCHED\n",
+      "expect": {
+        "stdout": "### CAT-D-001 — Archive, never delete\nINDEX-UNTOUCHED",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask --stats: count, median and cut share, overall and per mode, from .index/ask.jsonl",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A --stats; $A archive >/dev/null; $A archive --budget 60 >/dev/null; $A --context Catalog >/dev/null; $A --stats | sed 's/median ~[0-9]* tokens · p90 ~[0-9]*/median/'\n",
+      "expect": {
+        "stdout": "no question logged yet\nasks: 3 · median · cut by the budget 1 (33 %) · nothing found 0\n  context: 1 · median · cut by the budget 0 (0 %) · nothing found 0\n  question: 2 · median · cut by the budget 1 (50 %) · nothing found 0",
+        "exit": 0
+      }
+    },
+    {
+      "name": "ask: a filter that does not apply, two modes, or an unknown context is a usage error",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A --kind rule --id CAT-RM-001; echo rc=$?; $A archive --handler X; echo rc=$?; $A --context Studio; echo rc=$?\n",
+      "expect": {
+        "stdout": "rc=2\nrc=2\nrc=2",
+        "stderr": "no context Studio in docs/business — contexts: Catalog",
+        "exit": 0
+      }
+    },
+    {
+      "name": "doctor: an INDEX.md behind the base is a WARN, a fresh one an ok line, no base no line; .index/ never written",
+      "cmd": "R={{FIX}}/ki-doc-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\nexport CLAUDE_DOCTOR_ROOT=$R; D=\"bash {{KIT}}/tools/doctor\"\n$D | grep -c 'ok   knowledge INDEX.md'; [ -e $R/docs/business/.index ] && echo indexed || echo untouched; sed -i.bak 's/^Catalog holds the products/Catalog lists the products/' $R/docs/business/Catalog/OVERVIEW.md; $D --quiet | grep 'knowledge INDEX.md'; rm -rf $R/docs/business; $D | grep -c 'knowledge INDEX.md'; :\n",
+      "expect": {
+        "stdout": "1\nuntouched\nWARN knowledge INDEX.md           behind the base after a change by hand — cctoolkit knowledge-index\n0",
+        "exit": 0
+      }
+    },
+    {
+      "name": "pre-commit hook: a base edited by hand prints INDEX.md stale on stderr, exit 0",
+      "cmd": "R={{FIX}}/ki-pc-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; git init -q .; unset CLAUDE_PROJECT_DIR; export CLAUDE_CONFIG_DIR=$R/.no-config; bash {{KIT}}/scripts/install-git-hooks.sh --pre-commit $R >/dev/null\n.git/hooks/pre-commit 2>&1; echo rc=$?; sed -i.bak 's/^Catalog holds the products/Catalog lists the products/' docs/business/Catalog/OVERVIEW.md; .git/hooks/pre-commit 2>&1; echo rc=$?\n",
+      "expect": {
+        "stdout": "rc=0\nINDEX.md stale — cctoolkit knowledge-index\nrc=0",
+        "exit": 0
+      }
+    }
+  ]
+}

@@ -29,7 +29,8 @@ at the start or has changed since.
         index the user staged before left out (`git commit --only`). Message
         `<type>(<plan folder>): lot FX — <sheet title>`, type `refactor` when every cycle
         of the sheet is a refactor, `fix` when the title starts with fix/corrig, else
-        `feat`. A preexisting file the batch also modified is committed whole and listed.
+        `feat`, then the trailer `Kit-Batch: <plan folder>/FX`, which `knowledge-scan`
+        reads to skip the commit. A preexisting file the batch also modified is committed whole and listed.
         The one commit the kit makes: `lib/guard-git.sh` still denies `git commit` typed
         in a Bash command.
 
@@ -191,7 +192,10 @@ def message(batch: str, sheet: Path) -> str:
         cycles = []
     kind = ("refactor" if cycles and all(c.get("refactor") for c in cycles)
             else "fix" if re.match(r"(fix|corrig)", title, re.I) else "feat")
-    return f"{kind}({sheet.resolve().parent.name}): lot {batch} — {title}"
+    plan = sheet.resolve().parent.name
+    # The trailer marks the commit as covered by the knowledge base: `/knowledge-sync` skips it,
+    # the merge at the end of the plan brings its change in (knowledge-format.md § HISTORY.md).
+    return f"{kind}({plan}): lot {batch} — {title}\n\nKit-Batch: {plan}/{batch}"
 
 
 def commit(work: Path, batch: str, sheet: Path) -> int:

@@ -248,6 +248,28 @@ else
   report FAIL "kit.config.json" "validation crashed: $(printf '%s' "$out" | tail -1)"
 fi
 
+# --- knowledge base index ---------------------------------------------------------
+# INDEX.md is committed, rewritten by knowledge-write and knowledge-index: a base edited
+# by hand leaves it behind, and nothing else says so. No base, no line. --check writes
+# nothing, .index/ included.
+if kout=$(CLAUDE_PROJECT_DIR="$ROOT" python3 "$KIT/scripts/knowledge-index.py" --check 2>/dev/null); then
+  report ok "knowledge INDEX.md" "matches the base"
+else
+  case "$kout" in
+    "INDEX.md stale"*) report WARN "knowledge INDEX.md" "behind the base after a change by hand — cctoolkit knowledge-index" ;;
+  esac
+fi
+
+# run-plan stages a feature's merge and never writes it: one left staged means the base
+# misses a delivered feature, and the next sync skips its batch commits as covered.
+kmerge=$(CLAUDE_PROJECT_DIR="$ROOT" python3 -c 'import os, sys
+sys.path.insert(0, sys.argv[1])
+import kit_config
+c = kit_config.load()
+d = os.path.join(c.root, c.knowledge_root, ".merge")
+print(" ".join(sorted(x for x in os.listdir(d) if not x.startswith("."))) if os.path.isdir(d) else "")' "$KIT/lib" 2>/dev/null)
+[ -n "$kmerge" ] && report WARN "knowledge merge" "staged, not written: $kmerge — /cctoolkit:knowledge-merge todo/<code>/<CODE>-PLAN.md"
+
 # --- /tmp leftovers ------------------------------------------------------------
 # session-cleanup.sh purges at `-mtime +2`, and BSD find counts whole 24 h
 # periods: a file 71 h old at SessionStart survives, and would trip a `+2` here
@@ -280,7 +302,8 @@ fi
 
 # --- evals on demand -----------------------------------------------------------
 if [ "$EVALS" -eq 1 ] && [ -f "$KIT/evals/run.sh" ]; then
-  summary=$(bash "$KIT/evals/run.sh" 2>&1 | tail -1)
+  # The summary line, not the last one: the latency table follows it.
+  summary=$(bash "$KIT/evals/run.sh" 2>&1 | grep -E '^[0-9]+ passed, [0-9]+ failed$' | tail -1)
   case "$summary" in
     *", 0 failed") report ok "hook evals" "$summary" ;;
     *) report FAIL "hook evals" "$summary — cctoolkit evals for the detail" ;;

@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, FsEntry, ModelUsage, Register, TurnStepChunk } from 'claude-code'
 
 import type {
-  AuditVerdict, ChildWorkflow, Journal, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet,
+  AuditVerdict, ChildWorkflow, Journal, KnowledgeMerge, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet,
   LotFigures, PlanLot, Prompted, RunFeed, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun,
 } from '../types'
 
@@ -769,8 +769,32 @@ const outcomeOf = (result: unknown): Outcome | null => {
   const label = OUTCOME_KEYS.map(key => textOf(fields[key])).find(found => found !== null) ?? null
   if (label === null) return null
   const reason = textOf(fields.raison) ?? textOf(fields.reason)
-  return { label, reason: reason === '—' ? null : reason, report: textOf(fields.rapport) ?? textOf(fields.report) }
+  const merge = mergeOf(fields.merge)
+  return { label, reason: reason === '—' ? null : reason, report: textOf(fields.rapport) ?? textOf(fields.report), ...(merge === null ? {} : { merge }) }
 }
+
+const MERGE_STATES = ['staged', 'refused', 'blocked', 'failed'] as const
+
+// `merge` of a run-plan result (workflows/run-plan.js): absent when the plan had nothing to merge.
+export const mergeOf = (value: unknown): KnowledgeMerge | null => {
+  if (value === null || typeof value !== 'object') return null
+  const fields = value as Record<string, unknown>
+  const state = MERGE_STATES.find(one => one === fields.state)
+  if (state === undefined) return null
+  const texts = (list: unknown): string[] => (Array.isArray(list) ? list.flatMap(one => (textOf(one) === null ? [] : [textOf(one) as string])) : [])
+  const next = textOf(fields.next)
+  return { state, lines: texts(fields.lines), warnings: texts(fields.warnings), next: next === null ? null : (next.split(' — ')[0] ?? next) }
+}
+
+// A staged merge waits for the user: the plan is green, the base is not written yet.
+export const mergeRows = (merge: KnowledgeMerge): { text: string; tone: 'warning' | 'error' | 'inactive' | undefined; bold: boolean }[] => [
+  merge.state === 'staged'
+    ? { text: '◆ Knowledge base — merge staged, not written', tone: 'warning', bold: true }
+    : { text: `✗ Knowledge base — merge ${merge.state}`, tone: 'error', bold: true },
+  ...merge.lines.map(text => ({ text, tone: 'inactive' as const, bold: false })),
+  ...merge.warnings.map(text => ({ text, tone: 'warning' as const, bold: false })),
+  ...(merge.next === null ? [] : [{ text: `→ ${merge.next}`, tone: undefined, bold: false }]),
+]
 
 export const outcomeTone = (outcome: Outcome, status: RunStatus): 'success' | 'warning' | 'error' | typeof WAITING_TONE => {
   if (['TERMINÉ', 'DONE'].includes(outcome.label)) return 'success'
@@ -2474,30 +2498,27 @@ export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
   ]
 }
 
-export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
+const DEMO_PLAN = 'todo/product-archiving/PRD-ARCH-PLAN.md'
+
+const demoMarks = (red: boolean, green: boolean, cost: boolean): TddMarks => ({ red: red ? DONE : '⬜', green: green ? DONE : '⬜', cost: cost ? DONE : '⬜' })
+const demoStep = (number: string, title: string, tdd: TddMarks): Step => ({ number, title, isDone: false, tdd, corrections: [] })
+const demoPlanSheet = (lot: string, name: string, steps: Step[], isDone: boolean): Sheet => ({ lot, name, isDone, hypotheses: 0, steps })
+
+// The phases run-plan declares (workflows/run-plan.js), each detail shortened.
+const DEMO_PLAN_PHASES = ['Preflight', 'Batch', 'Gate', 'Aside', 'Final check', 'Merge', 'Report']
+const DEMO_PLAN_DETAILS: Record<string, string> = {
+  Preflight: 'plan check, doctor, docker, kit root, run folder',
+  Batch: 'next batch, out-of-batch check, run-lot',
+  Gate: 'report status, plan heading, fast suites, out-of-batch, snapshot',
+  Aside: 'blocked batch: patch, tree restored, dependents skipped',
+  'Final check': 'every suite run whole once after the last batch: reported, never blocking',
+  Merge: 'whole plan delivered: knowledge-merger drafts and stages the merge, never writes it',
+  Report: 'run report and notification',
+}
+
+// The agents of a demo plan, placed from its start: a supervisor step, or a batch's run-lot agents in phase order.
+const demoPlanCast = (begin: number, loadedAt: number) => {
   const t = inMs
-  const total = t(48, 30)
-  const begin = isFinished ? at - total : at - t(31, 10)
-  const loadedAt = at
-  const [lotRunTemplate] = demoRuns(at)
-  const childPhases = lotRunTemplate?.phases ?? []
-  const childDetails = lotRunTemplate?.details ?? {}
-  const marks = (red: boolean, green: boolean, cost: boolean): TddMarks => ({ red: red ? DONE : '⬜', green: green ? DONE : '⬜', cost: cost ? DONE : '⬜' })
-  const step = (number: string, title: string, tdd: TddMarks): Step => ({ number, title, isDone: false, tdd, corrections: [] })
-  const sheet = (lot: string, name: string, steps: Step[], isDone: boolean): Sheet => ({ lot, name, isDone, hypotheses: 0, steps })
-  const all = marks(true, true, true)
-  const views: Record<string, Sheet> = {
-    F1: sheet('F1', 'Create a product', [step('1', 'Create the product', all), step('2', 'Refuse a duplicate name', all)], true),
-    F2: sheet('F2', 'Archive a product', [
-      step('1', 'Archive the product', all),
-      step('2', 'Refuse archiving twice', isFinished ? all : marks(true, true, false)),
-      step('3', 'Hide archived items', isFinished ? all : marks(true, false, false)),
-    ], isFinished),
-    F3: sheet('F3', 'Restore a product', [step('1', 'Restore the product', marks(isFinished, isFinished, isFinished)), step('2', 'Refuse a deleted one', marks(isFinished, isFinished, isFinished))], isFinished),
-    F4: sheet('F4', 'Product history', [step('1', 'List the events', marks(false, false, false)), step('2', 'Page the events', marks(false, false, false))], false),
-    F5: sheet('F5', 'Export the products', [step('1', 'Export the catalog', marks(false, false, false))], false),
-    F6: sheet('F6', 'Export schedule', [step('1', 'Schedule the export', marks(false, false, false))], false),
-  }
   const agent = (
     id: string, index: number, lot: string | null, label: string, phase: string, from: number, to: number | null,
     state: WorkflowAgent['state'], model = 'Sonnet', options: DemoAgentOptions = {},
@@ -2545,8 +2566,40 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
   }
   const supervisor = (id: string, index: number, label: string, phase: string, from: number, length: number) =>
     agent(id, index, null, label, phase, from, from + length, 'done', 'Haiku')
+  const endOf = (agents: WorkflowAgent[]) => Math.max(0, ...agents.map(one => (one.endedAt ?? 0) - begin))
+  return { agent, lotAgents, supervisor, endOf }
+}
+
+const demoPlanRun = (at: number, fields: Pick<WorkflowRun, 'runId' | 'argument' | 'startedAt' | 'durationMs' | 'status' | 'lots' | 'outcome' | 'agents'>): WorkflowRun => {
+  const [lotRunTemplate] = demoRuns(at)
+  return {
+    name: 'run-plan', phases: DEMO_PLAN_PHASES, details: DEMO_PLAN_DETAILS, transcriptDir: null, launchedAt: fields.startedAt,
+    child: { name: 'run-lot', phases: lotRunTemplate?.phases ?? [], details: lotRunTemplate?.details ?? {}, labels: {} },
+    plan: DEMO_PLAN, audit: null, sheet: null, ...fields,
+  }
+}
+
+export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
+  const t = inMs
+  const total = t(48, 30)
+  const begin = isFinished ? at - total : at - t(31, 10)
+  const { agent, lotAgents, supervisor, endOf } = demoPlanCast(begin, at)
+  const all = demoMarks(true, true, true)
+  const none = demoMarks(false, false, false)
+  const views: Record<string, Sheet> = {
+    F1: demoPlanSheet('F1', 'Create a product', [demoStep('1', 'Create the product', all), demoStep('2', 'Refuse a duplicate name', all)], true),
+    F2: demoPlanSheet('F2', 'Archive a product', [
+      demoStep('1', 'Archive the product', all),
+      demoStep('2', 'Refuse archiving twice', isFinished ? all : demoMarks(true, true, false)),
+      demoStep('3', 'Hide archived items', isFinished ? all : demoMarks(true, false, false)),
+    ], isFinished),
+    F3: demoPlanSheet('F3', 'Restore a product', [demoStep('1', 'Restore the product', demoMarks(isFinished, isFinished, isFinished)), demoStep('2', 'Refuse a deleted one', demoMarks(isFinished, isFinished, isFinished))], isFinished),
+    F4: demoPlanSheet('F4', 'Product history', [demoStep('1', 'List the events', none), demoStep('2', 'Page the events', none)], false),
+    F5: demoPlanSheet('F5', 'Export the products', [demoStep('1', 'Export the catalog', none)], false),
+    F6: demoPlanSheet('F6', 'Export schedule', [demoStep('1', 'Schedule the export', none)], false),
+  }
   const f1 = lotAgents('F1', 3, t(1, 10), null, ['create', 'duplicate name'], 1)
-  const f1End = Math.max(...f1.map(one => (one.endedAt ?? 0) - begin))
+  const f1End = endOf(f1)
   // F5 stops at its design and is set aside: the plan goes on with F2, F6 held back behind it.
   const f5Start = f1End + t(1, 40)
   const f5 = [
@@ -2556,9 +2609,9 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
   const f5End = f5Start + t(2, 20)
   const f2Start = f5End + t(1, 40)
   const f2 = lotAgents('F2', 20, f2Start, isFinished ? null : 'GREEN C3 hide', ['archive', 'twice', 'hide'], 1.15)
-  const f2End = Math.max(...f2.map(one => (one.endedAt ?? 0) - begin))
+  const f2End = endOf(f2)
   const f3 = isFinished ? lotAgents('F3', 40, f2End + t(1, 40), null, ['restore', 'deleted'], 0.8) : []
-  const f3End = f3.length > 0 ? Math.max(...f3.map(one => (one.endedAt ?? 0) - begin)) : 0
+  const f3End = endOf(f3)
   const supervisors = [
     supervisor('pre', 1, 'preflight', 'Preflight', 0, t(0, 50)),
     supervisor('n1', 2, 'next batch', 'Batch', t(0, 50), t(0, 20)),
@@ -2581,13 +2634,9 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
     audit: outcome === null ? null : { verdict: 'VALID', blocking: 0, major: 0 }, view: views[id] ?? null,
   })
   return [
-    {
-      runId: `${DEMO}plan`, name: 'run-plan', argument: 'todo/product-archiving/PRD-ARCH-PLAN.md --until F3',
-      phases: ['Preflight', 'Batch', 'Gate', 'Aside', 'Report'],
-      details: { Preflight: 'plan check, doctor, docker, kit root, run folder', Batch: 'next batch, out-of-batch check, run-lot', Gate: 'report status, plan heading, fast suites, out-of-batch, snapshot', Aside: 'blocked batch: patch, tree restored, dependents skipped', Report: 'REPORT.md and notification' },
-      transcriptDir: null, startedAt: begin, launchedAt: begin, durationMs: isFinished ? total : null, status: isFinished ? 'completed' : 'running',
-      child: { name: 'run-lot', phases: childPhases, details: childDetails, labels: {} },
-      plan: 'todo/product-archiving/PRD-ARCH-PLAN.md',
+    demoPlanRun(at, {
+      runId: `${DEMO}plan`, argument: `${DEMO_PLAN} --until F3`,
+      startedAt: begin, durationMs: isFinished ? total : null, status: isFinished ? 'completed' : 'running',
       lots: [
         lot('F1', [], done('F1')), lot('F2', ['F1'], isFinished ? done('F2') : null), lot('F3', ['F1'], isFinished ? done('F3') : null), lot('F4', ['F2', 'F3'], null),
         { ...lot('F5', ['F1'], aside), audit: null }, lot('F6', ['F5'], null),
@@ -2595,16 +2644,96 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
       outcome: isFinished
         ? { label: 'BLOCKED', reason: 'batches set aside: F5 (holds back F6) — F1, F2, F3 done, paused by user before F4', report: DEMO_RUN_REPORT }
         : null,
-      audit: null,
-      sheet: null,
       agents: [...supervisors, ...f1, ...f5, ...f2, ...f3].sort((a, b) => a.index - b.index),
-    },
+    }),
+  ]
+}
+
+// The `merge` a run-plan result carries once `stage` laid the drafts (scripts/knowledge-merge.py,
+// agents/knowledge-merger.md): the `staged:` line, a `+n −n <file>` line per file, the WARN left.
+const DEMO_MERGE = {
+  state: 'staged',
+  lines: [
+    'staged: 7 file(s) — cctoolkit knowledge-write apply --merge PRD-ARCH',
+    '+6 −2 docs/business/Catalog/OVERVIEW.md',
+    '+7 −0 docs/business/Catalog/decisions.md (new)',
+    '+3 −0 docs/business/Catalog/rules.md',
+    '+2 −0 docs/business/Catalog/usecases/CAT-CU-01-consult-products.md',
+    '+14 −0 docs/business/Catalog/usecases/CAT-CU-02-archive-product.md (new)',
+    '+14 −0 docs/business/Catalog/usecases/CAT-CU-03-restore-product.md (new)',
+    '+7 −0 docs/business/adr/ADR-001-soft-archive-through-a-status-column.md (new)',
+  ],
+  warnings: ['WARN CAT-CU-01: rewritten without a line removed — say what is no longer true'],
+  next: `/cctoolkit:knowledge-merge ${DEMO_PLAN} — the knowledge base is not written yet: it shows the diff and writes it on the user's confirmation`,
+}
+
+// The plan delivered whole, as examples/ tells it: F1 archives, F2 restores and hides archived
+// products; every batch DONE, so the final check runs and the merge is staged, never written.
+export const demoMergeRuns = (at: number): WorkflowRun[] => {
+  const t = inMs
+  const cast = (begin: number) => {
+    const { agent, lotAgents, supervisor, endOf } = demoPlanCast(begin, at)
+    const f1 = lotAgents('F1', 3, t(1, 10), null, ['archive', 'refuse a draft', 'other organisation'], 1)
+    const f1End = endOf(f1)
+    const f2Start = f1End + t(1, 30)
+    const f2 = lotAgents('F2', 20, f2Start, null, ['restore', 'refuse not archived', 'hide archived'], 1.1)
+    const f2End = endOf(f2)
+    const checkEnd = f2End + t(1, 10) + t(3, 20)
+    const draftFrom = checkEnd + t(0, 40)
+    const draft = agent('md', 40, null, 'merge draft', 'Merge', draftFrom, draftFrom + t(4, 10), 'done', 'Sonnet', {
+      type: 'cctoolkit:knowledge-merger', answer: `merge draft: ${DEMO_MERGE.lines[0]}`,
+    })
+    const supervisors = [
+      supervisor('pre', 1, 'preflight', 'Preflight', 0, t(0, 50)),
+      supervisor('n1', 2, 'next batch', 'Batch', t(0, 50), t(0, 20)),
+      supervisor('g1', 15, 'gate F1', 'Gate', f1End, t(1, 10)),
+      supervisor('n2', 16, 'next batch', 'Batch', f1End + t(1, 10), t(0, 20)),
+      supervisor('g2', 35, 'gate F2', 'Gate', f2End, t(1, 10)),
+      supervisor('fc', 37, 'final check', 'Final check', f2End + t(1, 10), t(3, 20)),
+      supervisor('mp', 38, 'merge prepare', 'Merge', checkEnd, t(0, 40)),
+      { ...draft, effort: 'medium' },
+      supervisor('rp', 41, 'report', 'Report', draftFrom + t(4, 10), t(0, 40)),
+    ]
+    const agents = [...supervisors, ...f1, ...f2].sort((a, b) => a.index - b.index)
+    return { agents, total: endOf(agents) }
+  }
+  const { total } = cast(0)
+  const begin = at - total
+  const { agents } = cast(begin)
+  const all = demoMarks(true, true, true)
+  const views: Record<string, Sheet> = {
+    F1: demoPlanSheet('F1', 'Archive a product', [
+      demoStep('1', 'A manager archives a published product of their organisation', all),
+      demoStep('2', 'Handler documentation', all),
+      demoStep('3', 'Build + test verification', all),
+    ], true),
+    F2: demoPlanSheet('F2', 'Restore a product', [
+      demoStep('1', 'A manager restores an archived product', all),
+      demoStep('2', 'The catalogue listing hides archived products', all),
+      demoStep('3', 'Build + test verification', all),
+    ], true),
+  }
+  const lot = (id: string, deps: string[]): PlanLot => ({
+    lot: id, sheet: `todo/product-archiving/PRD-ARCH-PLAN-${id}.md`, deps, isDone: false,
+    outcome: { label: 'DONE', reason: null, report: `todo/product-archiving/run/batches/${id}.md` },
+    audit: { verdict: 'VALID', blocking: 0, major: 0 }, view: views[id] ?? null,
+  })
+  const merge = mergeOf(DEMO_MERGE)
+  return [
+    demoPlanRun(at, {
+      runId: `${DEMO}plan-merge`, argument: DEMO_PLAN, startedAt: begin, durationMs: total, status: 'completed',
+      lots: [lot('F1', []), lot('F2', ['F1'])],
+      outcome: { label: 'DONE', reason: null, report: DEMO_MERGE_REPORT, ...(merge === null ? {} : { merge }) },
+      agents,
+    }),
   ]
 }
 
 const DEMO_ASIDE = 'design blocked: no defensible export format, CSV or the catalog JSON feed'
 const DEMO_STAMP = '2026-10-10-0912'
 const DEMO_RUN_REPORT = `todo/product-archiving/run/${DEMO_STAMP}.md`
+const DEMO_MERGE_STAMP = '2026-10-15-0840'
+const DEMO_MERGE_REPORT = `todo/product-archiving/run/${DEMO_MERGE_STAMP}.md`
 const DEMO_LOT_SHEET = 'todo/catalog-lifecycle/CAT-LIFECYCLE-PLAN-F4.md'
 
 const DEMO_LOT_REPORT = `## STATUS — GAPS
@@ -2647,11 +2776,26 @@ const DEMO_RUN_TEXT = `## To validate
 - F3 — Design — restoring keeps the archive date in the history (the audit trail is never rewritten)
 `
 
+const DEMO_MERGE_REPORTS: Record<string, string> = {
+  F1: DEMO_PLAN_REPORTS.F1 ?? '',
+  F2: `## To validate
+
+- Design — a restored product goes back to Published, never to Draft (CAT-RM-005 names no other state)
+`,
+}
+
+const DEMO_MERGE_TEXT = `## To validate
+
+### Assumptions
+
+- F1 — H1: \`ArchivedAt\` comes from \`TimeProvider\`, not from the request (tech lead)
+`
+
 const jsonLine = (record: Record<string, unknown>): string => JSON.stringify(record)
 
 // The run files of each demo, as the workflow and the pane would have left them: the views read
 // them like any run's; the pane's answers go into this copy, never to disk.
-export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFinished: boolean): RunFeed => {
+export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFinished: boolean, isMerged = false): RunFeed => {
   const s = Math.floor(at / 1000)
   const root = runRootOfRun(run) ?? 'run'
   if (!isPlan) {
@@ -2704,6 +2848,20 @@ export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFini
         : []),
     ]
     return { runId: run.runId, root, work: work.join('\n'), pane: pane.join('\n'), reports: isFinished ? { [report]: keptSections(DEMO_LOT_REPORT) } : {} }
+  }
+  if (isMerged) {
+    const merged = toValidateOf(DEMO_MERGE_REPORTS.F1 ?? '', 'F1')[0]
+    const reports = Object.fromEntries(Object.entries(DEMO_MERGE_REPORTS).map(([lot, text]) => [`${root}/batches/${lot}.md`, text]))
+    const work = [
+      jsonLine({ kind: 'journal', run: DEMO_MERGE_STAMP, text: `knowledge base: merge staged — ${DEMO_MERGE.lines[0]}`, at: s - 60 }),
+      jsonLine({ kind: 'ack', batch: 'F1', ref: 'n-demo-m1', what: 'note-taken', at: s - 1500 }),
+      jsonLine({ kind: 'ack', batch: 'F1', ref: merged?.id ?? '', what: 'applied', at: s - 1400 }),
+    ]
+    const pane = [
+      jsonLine({ kind: 'note', id: 'n-demo-m1', batch: 'F1', text: 'archiving keeps the product readable by its id', at: s - 1600 }),
+      jsonLine({ kind: 'validation', id: merged?.id ?? '', entry: { batch: 'F1', step: merged?.step ?? '', text: merged?.text ?? '', sheet: `todo/product-archiving/PRD-ARCH-PLAN-F1.md` }, decision: 'keep', text: '', at: s - 1500 }),
+    ]
+    return { runId: run.runId, root, work: work.join('\n'), pane: pane.join('\n'), reports: { ...reports, [DEMO_MERGE_REPORT]: DEMO_MERGE_TEXT } }
   }
   const reports: Record<string, string> = Object.fromEntries(
     Object.entries(DEMO_PLAN_REPORTS)
@@ -3217,7 +3375,7 @@ export const register: Register = on => {
     root = e.cwd
     await $.command.register({
       name: 'run-lot-pane',
-      description: 'Open the Workflow progress pane (clear forgets the finished run, demo loads a sample run, demo end a finished one, demo plan and demo plan end a run-plan run)',
+      description: 'Open the Workflow progress pane (clear forgets the finished run, demo loads a sample run, demo end a finished one, demo plan and demo plan end a run-plan run, demo plan merge a plan delivered whole with its knowledge-base merge staged)',
     })
     $.clock.every(TICK_MS, () => void tick($))
     for (const run of await read($, runs)) {
@@ -3235,14 +3393,17 @@ export const register: Register = on => {
       await update($, runs, list => list.filter(run => run.status === 'running' && !run.runId.startsWith(DEMO)))
       return { text: 'Finished workflow run cleared.' }
     }
-    const demo = /^demo( plan)?( end)?$/.exec(e.args.trim())
+    const demo = /^demo(?: (end|plan|plan end|plan merge))?$/.exec(e.args.trim())
     if (demo !== null) {
       const at = await $.clock.now()
-      const isFinished = demo[2] !== undefined
-      const loaded = demo[1] === undefined ? demoRuns(at, isFinished) : demoPlanRuns(at, isFinished)
+      const variant = demo[1] ?? ''
+      const isPlan = variant.startsWith('plan')
+      const isMerged = variant === 'plan merge'
+      const isFinished = variant !== '' && variant !== 'plan'
+      const loaded = isMerged ? demoMergeRuns(at) : isPlan ? demoPlanRuns(at, isFinished) : demoRuns(at, isFinished)
       await update($, runs, list => [...list.filter(run => !run.runId.startsWith(DEMO)), ...loaded].slice(-KEPT_RUNS))
       const shown = loaded[loaded.length - 1]
-      if (shown !== undefined) await update($, feed, () => demoFeedOf(shown, at, demo[1] !== undefined, isFinished))
+      if (shown !== undefined) await update($, feed, () => demoFeedOf(shown, at, isPlan, isFinished, isMerged))
       await update($, nav, state => ({ ...state, lot: null, screen: 'run' as const, prompted: null, notice: null }))
       await update($, history, () => demoHistory())
       await update($, now, () => at)
@@ -3501,6 +3662,13 @@ export const register: Register = on => {
           {content}
         </Button>
       )
+
+    const mergeBlock = (key: string, merge: KnowledgeMerge) =>
+      mergeRows(merge).map((row, index) => (
+        <Text key={`${key}-${index}`} wrap="wrap" bold={row.bold} color={row.tone}>
+          {row.text}
+        </Text>
+      ))
 
     const reasonBlock = (key: string, reason: string) =>
       reasonLines(reason, columns - 7).map((line, index) => (
@@ -4452,6 +4620,7 @@ export const register: Register = on => {
                   Report: {relativePath(planOutcome.report, root)}
                 </Text>
               )}
+              {planOutcome.merge !== undefined && mergeBlock('plan-merge', planOutcome.merge)}
             </Box>
           )}
           {attention.map(({ entry, state }) => (
@@ -4611,6 +4780,7 @@ export const register: Register = on => {
                 Report: {relativePath(outcome.report, root)}
               </Text>
             )}
+            {outcome.merge !== undefined && mergeBlock('merge', outcome.merge)}
           </Box>
         )}
         <Box marginTop={1} flexDirection="column">

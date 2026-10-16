@@ -42,7 +42,11 @@ import sys
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRESETS = os.path.join(KIT, "presets")
 DEFAULT_PRESET = "clean-architecture"
-TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd"}
+TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd", "knowledge"}
+# The knowledge base is stack-neutral: its defaults live here, not in a preset.
+KNOWLEDGE_DEFAULTS = {"root": "docs/business", "contexts": {}, "overviewBudget": 1500, "syncBudget": 12000, "askBudget": 1500}
+PREFIX_RE = re.compile(r"[A-Z][A-Z0-9]{1,5}")
+CONTEXT_RE = re.compile(r"[A-Z][A-Za-z0-9]*")
 
 
 class KitConfigError(Exception):
@@ -131,9 +135,11 @@ class Config:
         self.source_roots = self._list(layout["sources"]["roots"])
         self.source_ext = list(layout["sources"].get("extensions", []))
         self.comment = layout["sources"].get("comment", "//")
+        self.imports = layout["sources"].get("imports", "")
         uc = layout["useCase"]
         self.use_case_roots = self._list(uc["roots"])
         self.use_case_label = uc.get("label", "the use cases")
+        self.context_depth = uc.get("contextDepth", 1)
         self.markers = [(m["file"], re.compile(m["contains"], re.M) if m.get("contains") else None)
                         for m in uc.get("marker", [])]
         t = layout["tests"]
@@ -143,6 +149,15 @@ class Config:
         self.aggregate = [self.expand(p) for p in layout.get("aggregate", [])]
         self.commands = data.get("commands", {})
         self.test_tag = data.get("testTag", {})
+        # A malformed value is kept as is for validate_knowledge() to name, never raised here:
+        # the hooks load this config and must not go silent over a key they do not read.
+        k = data.get("knowledge")
+        k = merge(KNOWLEDGE_DEFAULTS, k if isinstance(k, dict) else {})
+        self.knowledge_root = self.expand(k["root"]).strip("/") if isinstance(k["root"], str) else k["root"]
+        self.contexts = dict(k["contexts"]) if isinstance(k["contexts"], dict) else k["contexts"]
+        self.overview_budget = k["overviewBudget"]
+        self.sync_budget = k["syncBudget"]
+        self.ask_budget = k["askBudget"]
 
     # --- paths ------------------------------------------------------------------
     def expand(self, s):
@@ -235,6 +250,14 @@ class Config:
             return self.comment.get(os.path.splitext(path)[1])
         return self.comment
 
+    def imports_of(self, path):
+        """The import-line regex of the file's extension, compiled, or None."""
+        rx = self.imports.get(os.path.splitext(path)[1], "") if isinstance(self.imports, dict) else self.imports
+        try:
+            return re.compile(rx) if rx else None
+        except (re.error, TypeError):
+            return None
+
     def suite_of(self, path):
         """First segment under the test root holding `path`, the product prefix dropped."""
         p = self.under(path, self.test_roots)
@@ -243,6 +266,13 @@ class Config:
         if self.product:
             return seg.replace(self.product + ".", "")
         return seg.rsplit(".", 1)[-1]
+
+    # --- knowledge base ---------------------------------------------------------------
+    def prefix_of(self, name):
+        """The id prefix of a context given by name or by prefix, or None."""
+        if name in self.contexts:
+            return self.contexts[name]
+        return name if name in self.contexts.values() else None
 
     def command(self, name, suite=None):
         c = self.commands.get(name, "")
@@ -331,6 +361,15 @@ def validate(root):
                     re.compile(tdd[k])
                 except (re.error, TypeError) as e:
                     out.append(("FAIL", f"tdd.{k}", f"invalid regex: {e}"))
+    imp = c.imports
+    for ext, rx in (imp.items() if isinstance(imp, dict) else [("", imp)]):
+        try:
+            re.compile(rx)
+        except (re.error, TypeError) as e:
+            out.append(("FAIL", f"layout.sources.imports{' ' + ext if ext else ''}", f"invalid regex: {e}"))
+    cd = c.context_depth
+    if not isinstance(cd, int) or isinstance(cd, bool) or cd < 0:
+        out.append(("FAIL", "layout.useCase.contextDepth", "expects 0 (one context) or the depth of the context folder under a use-case root"))
     ig = c.layout.get("integrationGuard")
     if ig is not None and not (isinstance(ig, dict) and all(
             isinstance(ig.get(k), list) and ig[k] and all(isinstance(p, str) for p in ig[k]) for k in ("sources", "tests"))):
@@ -347,6 +386,42 @@ def validate(root):
         out.append(("WARN", "layout.tests.roots", f"{', '.join(c.test_roots)} matches no directory"))
     if not c.product:
         out.append(("ok", "product", "unset — {product} expands to * (one match expected)"))
+    return out + validate_knowledge(c, cfg.get("knowledge"))
+
+
+def validate_knowledge(c, raw):
+    if raw is not None and not isinstance(raw, dict):
+        return [("FAIL", "knowledge", "expects {\"root\": \"<path>\", \"contexts\": {\"<Context>\": \"<PREFIX>\"}, \"overviewBudget\": <tokens>, \"syncBudget\": <tokens>, \"askBudget\": <tokens>}")]
+    out = []
+    root = c.knowledge_root
+    if not isinstance(root, str) or not root or root.startswith("..") or os.path.isabs(root):
+        out.append(("FAIL", "knowledge.root", "expects a path relative to the repo root"))
+        root = None
+    contexts = c.contexts
+    if not isinstance(contexts, dict):
+        return out + [("FAIL", "knowledge.contexts", "expects {\"<Context>\": \"<PREFIX>\"}")]
+    for name, prefix in contexts.items():
+        if not CONTEXT_RE.fullmatch(name):
+            out.append(("FAIL", "knowledge.contexts", f"context '{name}': a folder name, PascalCase (Catalog)"))
+        if not isinstance(prefix, str) or not PREFIX_RE.fullmatch(prefix) or prefix == "ADR":
+            out.append(("FAIL", "knowledge.contexts", f"{name}: prefix {prefix!r} — 2 to 6 capitals or digits, not ADR"))
+    taken = [p for p in contexts.values() if isinstance(p, str)]
+    for p in sorted({p for p in taken if taken.count(p) > 1}):
+        out.append(("FAIL", "knowledge.contexts", f"prefix {p} given to several contexts"))
+    for key, b in (("overviewBudget", c.overview_budget), ("syncBudget", c.sync_budget), ("askBudget", c.ask_budget)):
+        if not isinstance(b, int) or isinstance(b, bool) or b <= 0:
+            out.append(("FAIL", f"knowledge.{key}", "expects a positive number of tokens"))
+    if out or root is None:
+        return out
+    base = os.path.join(c.root, root)
+    if not os.path.isdir(base):
+        return [("ok", "knowledge.root", f"{root} absent — no knowledge base yet")]
+    folders = sorted(d for d in os.listdir(base)
+                     if os.path.isdir(os.path.join(base, d)) and not d.startswith(".") and d != "adr")
+    for d in folders:
+        if d not in contexts:
+            out.append(("WARN", "knowledge.contexts", f"{root}/{d} has no prefix — add \"{d}\": \"<PREFIX>\""))
+    out.append(("ok", "knowledge.root", f"{root} — {len(folders)} context{'s' if len(folders) != 1 else ''}"))
     return out
 
 

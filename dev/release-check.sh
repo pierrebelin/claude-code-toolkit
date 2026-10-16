@@ -6,8 +6,12 @@
 # a push that changes shipped files under the same version never reaches the
 # users who already installed it. The kit and its mods share one version:
 #   FAIL  a plugin.json whose version differs from the others (`bash dev/bump.sh`)
+#   FAIL  the knowledge-pane demo behind examples/docs/business (`bash dev/knowledge-pane-demo.sh`)
 # Then, for each plugin of the marketplace:
-#   FAIL  shipped files changed since the current version was released
+#   FAIL  shipped files changed since the current version was released, or no
+#         release found for a committed version
+#   FAIL  a plugin new to the marketplace under a version already released, or
+#         one its CHANGELOG section does not name
 #   FAIL  a pending version whose release changes rules, with no
 #         "Rules changed" in its CHANGELOG section; same for the preset
 #         skills and "Skills changed" (both copied into repos by kit-init)
@@ -36,6 +40,8 @@ if [ "$(cut -f1 <<<"$versions" | sort -u | wc -l)" -gt 1 ]; then
   sed $'s/^/        /; s/\t/  /' <<<"$versions"
   fail=1
 fi
+# The `/knowledge-pane demo` base is a copy of the kit example and of the index it gives.
+bash dev/knowledge-pane-demo.sh --check || fail=1
 changed_since() { # <ref> <paths…> — committed, staged, unstaged and untracked
   local ref=$1; shift
   { git diff --name-only "$ref" -- "$@"; git ls-files --others --exclude-standard -- "$@"; } | sort -u
@@ -54,9 +60,20 @@ while IFS=$'\t' read -r name source; do
   committed=$(git show "HEAD:$manifest" 2>/dev/null | jq -r '.version // empty')
   [ -n "$ver" ] || { echo "FAIL  $name: no version in $manifest"; fail=1; continue; }
 
-  base=$(release_ref "$name" "$committed" "$manifest")
-  # shellcheck disable=SC2086
-  files=$(changed_since "$base" $paths | grep -v -e '/screenshots/' -e 'README.md$' -e '\.claude-plugin/plugin.json$')
+  # A plugin new to the marketplace has no release yet: nothing shipped to compare with,
+  # but it ships with the next version, never under one already released.
+  base=""; files=""
+  if [ -z "$committed" ]; then
+    if git rev-parse -q --verify "refs/tags/cctoolkit--v$ver" >/dev/null; then
+      echo "FAIL  $name new under $ver, already released — bump: bash dev/bump.sh <version>"
+      fail=1; continue
+    fi
+  else
+    base=$(release_ref "$name" "$committed" "$manifest")
+    [ -n "$base" ] || { echo "FAIL  $name $committed: no tag $name--v$committed and no commit introducing it"; fail=1; continue; }
+    # shellcheck disable=SC2086
+    files=$(changed_since "$base" $paths | grep -v -e '/screenshots/' -e 'README.md$' -e '\.claude-plugin/plugin.json$')
+  fi
 
   if [ "$ver" = "$committed" ]; then
     if [ -n "$files" ]; then
@@ -77,6 +94,10 @@ while IFS=$'\t' read -r name source; do
   # Pending version: what its release changes.
   section=$(awk -v h="## $ver " 'index($0, h) == 1 {p = 1; next} /^## / {p = 0} p' CHANGELOG.md 2>/dev/null)
   [ -n "$section" ] || { echo "FAIL  $name $ver: no '## $ver — …' section in CHANGELOG.md"; fail=1; continue; }
+  if [ -z "$committed" ] && ! grep -q -- "\`$name\`" <<<"$section"; then
+    echo "FAIL  $name new under $ver: its CHANGELOG section does not name \`$name\`"
+    fail=1; continue
+  fi
   if [ -z "$dir" ]; then
     # shellcheck disable=SC2086
     rules=$(changed_since "$base" $RULE_PATHS)
@@ -94,7 +115,7 @@ while IFS=$'\t' read -r name source; do
     fi
   fi
   next="claude plugin tag --push ${dir:-.}"; [ -z "$dir" ] && next="$next, then its GitHub release"
-  echo "OK    $name $committed → $ver (pending: commit, then $next)"
+  echo "OK    $name ${committed:-new} → $ver (pending: commit, then $next)"
 done < <(jq -r '.plugins[] | [.name, .source] | @tsv' .claude-plugin/marketplace.json)
 
 exit $fail

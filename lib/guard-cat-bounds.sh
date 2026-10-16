@@ -58,6 +58,7 @@ oversized=""
 verb_of_hit=""
 lines_of_hit=""
 bytes_of_hit=""
+knowledge=""
 while IFS= read -r segment; do
   segment="${segment#"${segment%%[![:space:]]*}"}"
   case "$segment" in
@@ -139,6 +140,15 @@ while IFS= read -r segment; do
         fi ;;
     esac
 
+    # The whole of a knowledge base's growing file: refused whatever its size, as for
+    # Read — bounds_knowledge_guarded in bounds-common.sh.
+    if [ "$eff_lines" -ge "$n" ] && bounds_knowledge_guarded "$arg" "${HOOK_AGENT_TYPE:-}"; then
+      oversized="$arg"
+      verb_of_hit="$verb"
+      knowledge=1
+      break
+    fi
+
     if [ "$eff_lines" -le "$max_lines" ] 2>/dev/null && [ "$eff_bytes" -le "$max_bytes" ] 2>/dev/null; then
       continue
     fi
@@ -166,12 +176,16 @@ if [ -f "$seen_file" ] && grep -Fxq "$oversized" "$seen_file" 2>/dev/null; then
 fi
 echo "$oversized" >> "$seen_file"
 
-reason=$(bounds_reason \
-  "Unbounded $verb_of_hit on $oversized ($lines_of_hit lines, $bytes_of_hit bytes > $max_lines lines / $max_bytes bytes). Everything dumped stays in context until the session ends." \
-  "$oversized" \
-  "read the range you need with sed -n 'A,Bp' around one of them" \
-  "Locate the range first (grep -n, graphify), then read it with sed -n 'A,Bp' or Read with offset/limit." \
-  "Re-issue this exact command to force the full dump.")
+if [ -n "$knowledge" ]; then
+  reason=$(bounds_knowledge_reason "$verb_of_hit" "$oversized" "sed -n 'A,Bp' $oversized" "Re-issue this exact command to force the full dump.")
+else
+  reason=$(bounds_reason \
+    "Unbounded $verb_of_hit on $oversized ($lines_of_hit lines, $bytes_of_hit bytes > $max_lines lines / $max_bytes bytes). Everything dumped stays in context until the session ends." \
+    "$oversized" \
+    "read the range you need with sed -n 'A,Bp' around one of them" \
+    "Locate the range first (grep -n, graphify), then read it with sed -n 'A,Bp' or Read with offset/limit." \
+    "Re-issue this exact command to force the full dump.")
+fi
 
 jq -n --arg r "$reason" \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'

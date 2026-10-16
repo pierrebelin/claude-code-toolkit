@@ -45,6 +45,27 @@ subagents' `Read` bytes per call jump past the saving, lower the bar.
 `guard-diff-bounds` stays despite zero denials: it exits on any command without `git`, adds
 no instruction, and the patch it guards against was measured at 109 kB.
 
+## Knowledge base questions
+
+The base is read by levels, each one bounded: `INDEX.md` (~200 tokens, fixed), a context's
+`OVERVIEW.md` (under `knowledge.overviewBudget`) or its summary
+(`cctoolkit ask --context`, one line per object), ranked cards (`cctoolkit ask "<question>"`,
+~50 tokens a card), an object whole (`--id`, ~100). A context's `rules.md`, `decisions.md` and
+`HISTORY.md` grow with the repo and are never read whole ([`lib/README.md`](../lib/README.md) § `bounds-common.sh`).
+One answer is capped by `knowledge.askBudget` ([`presets/README.md`](../presets/README.md)).
+
+Not measured yet: the first figures come from a real base. Every call is logged to
+`<root>/.index/ask.jsonl`; after two weeks of use:
+
+```bash
+cctoolkit ask --stats
+```
+
+Record here the median and 90th percentile of tokens per answer, per mode, and the share cut by
+the budget. A cut share above ~20 % on questions means the ranking returns too much to read: look
+at what the cut questions asked before raising the budget. A median close to the budget on
+`--handler` means use cases carry too many rules: split them, not the budget.
+
 ## Batching
 
 **Independent calls → a single message.** Two `Read`/`Bash`/`Grep` that do not wait on each

@@ -31,7 +31,7 @@ Plan split by feature, not layer:
    ```
 
    The section is found by its anchor, or by the title of a spec written before the anchors (`## 12. Questions ouvertes`, severity `Bloquant`). Any line → **stop**: list them, end with `→ Open blocking questions: /business-spec to settle them.` No plan while a `Blocking` is open — same contract as `## BLOCKED` in a batch, moved before design.
-1. Read spec fully.
+1. Read spec fully. Its business decisions (`kit:decisions`) are inputs: a technical choice that would contradict one → AskUserQuestion. Its technical points (`kit:technical-points`) are the questions this plan answers, each in a sheet (step 3.4).
 2. Read `references/ddd-rules.md` + `references/architecture-rules.md`. Each id → applied in the owning batch sheet (`## Design`), or listed once in global plan `1. Scope` as `N/A — reason`. `references/ddd-examples.md` only if id ambiguous.
 3. Inventory the bounded context by delegation: a `Read` under `src/` or `tests/` attaches layer rules to every later turn. `graphify explain "<Aggregate>"` first, then one `Explore` subagent (`model: sonnet`, the inventory includes local conventions):
 
@@ -46,6 +46,8 @@ Plan split by feature, not layer:
    ```
 
    You open only the folder `CLAUDE.md` of the handler owning the same business act, its `kit:rules` table — rewrite vs twin = your call. Inventory → "1. Scope > Reuse".
+
+   With a knowledge base, the spec's `modified` use cases and the base ids it cites name their handlers: one `cctoolkit ask --id <id>,<id>…` before the `Explore`, its `handlers:` lines handed to it as item 2's starting point.
 4. Blast radius per existing type modified: one `graphify affected "<Type>"` per aggregate, VO, domain interface already in `src/`; new type: skip. Roll up per project (`grep -oE '(src|tests)/[^/]+' | sort | uniq -c | sort -rn`), never paste file:line. Rollup → "1. Scope" as measured cost; drives split (step 2) — radius over four test projects = own batch.
 5. Blocking technical ambiguity → AskUserQuestion before planning (≤4 decisions/call, recommended answer first).
 6. Technical challenge — ≤3 AskUserQuestion questions, only if answer removes work:
@@ -74,9 +76,10 @@ Status per batch: `sequential` default, or `parallelisable with F?` (two worktre
 
    A few dozen lines. `run-lot` hands the names and paths of `## Cycles` to its agents verbatim: a wrong name here becomes a wrong file there, caught only at GREEN.
 3. Handler doc — per handler created/modified: its folder `CLAUDE.md` in the `production` of the cycle that changes its rules (business rules, flow + access cost, events), written by that cycle's GREEN. Parent feature index `CLAUDE.md` only when its two or three sentences on the bounded context no longer hold — no handler list, no link, no table. Format: `/implement-tdd` `references/claude-md-handler.md`.
-4. Self-validation: re-read plan vs checklist. Deviation → fix plan. Doubt on business intent → ask user.
-5. **Adversarial review.** In one message, one `Agent` per batch sheet with `subagent_type: cctoolkit:adversarial-reviewer`, a `description`, prompt starting `mode: sheet todo/<code>/<CODE>-PLAN-FX.md`, plus one prompt starting `mode: plan todo/<code>/` for cross-batch issues. `Blocking` → fix plan per its `Settled by` source, else AskUserQuestion: the plan never closes with a Blocking unanswered; `Major` → fix, or keep with one line in the sheet's `## Decisions` saying why. Never re-run it on the corrected plan. Settle here everything `run-plan` would otherwise ask mid-run: the run asks only `humanOnly` questions, so a choice left open now is taken without the user and reviewed after the plan.
-6. Summary: batch count, RM/CU traced, files produced, folder path, review rows settled and how.
+4. **Decisions** — every technical point of the spec, and every choice a reader of the sheet would otherwise ask about, is one entry of `## Decisions` in the sheet of the batch it governs, in the four-line format of `references/plan-template.md`. A decision that outlives the plan — it shapes code beyond this feature: storage model, contract with another context, a pattern the next features will follow — is an ADR: heading `### ADR-nnn — …` and a `Consequences` line. Its id: one `cctoolkit next-id ADR --count <n>` once every ADR of the plan is known; the sheet under `todo/` keeps it taken until the merge. Any other decision: heading without id, it ends with the plan. `2. Traceability` maps each technical point to its decision and batch.
+5. Self-validation: re-read plan vs checklist. Deviation → fix plan. Doubt on business intent → ask user.
+6. **Adversarial review.** In one message, one `Agent` per batch sheet with `subagent_type: cctoolkit:adversarial-reviewer`, a `description`, prompt starting `mode: sheet todo/<code>/<CODE>-PLAN-FX.md`, plus one prompt starting `mode: plan todo/<code>/` for cross-batch issues. `Blocking` → fix plan per its `Settled by` source, else AskUserQuestion: the plan never closes with a Blocking unanswered; `Major` → fix, or keep with one line in the sheet's `## Decisions` saying why. Never re-run it on the corrected plan. Settle here everything `run-plan` would otherwise ask mid-run: the run asks only `humanOnly` questions, so a choice left open now is taken without the user and reviewed after the plan.
+7. Summary: batch count, RM/CU traced, technical points settled and ADRs taken, files produced, folder path, review rows settled and how.
 
 ## Execution-plan rules (`0. Summary` > `### Batch FX`)
 
@@ -120,6 +123,7 @@ In plan: every "new" element justifies why existing insufficient. Weak justifica
 - DDD naming and folder layout conform (`Naming` / `Folder layout` tables loaded at step 3.2)
 - Every DDD/APP/PERF id applied in a sheet `## Design` or listed `N/A — reason` in global plan `1. Scope`; every sheet cites its applied ids with aggregate, invariants, consistency, internal event, cost
 - Every RM/CU → ≥1 named test; every step carried by a cycle of `## Cycles`, existing paths from inventory, never guessed; `cctoolkit sheet-cycles <sheet> --index` exit 0
+- Every technical point of the spec (`kit:technical-points`) → one decision of a sheet, traced in `2. Traceability`; every ADR id from `cctoolkit next-id ADR`; no decision contradicts a business decision of the spec
 - Element in `src/{{PRODUCT}}.Infrastructure/` → ≥1 integration scenario, or the `Integration test waiver: <reason>` sheet line
 - Feasibility: dependencies resolved, no unflagged breaking change; no EF migration planned (other project — schema change flagged, not scheduled)
 - `## Test policy and scopes` names test scope in Microsoft.Testing.Platform form (`--project` + `--filter-class`): VSTest `--filter "FullyQualifiedName~..."` doesn't exist here

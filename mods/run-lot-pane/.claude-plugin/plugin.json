@@ -1,7 +1,7 @@
 {
   "name": "run-lot-pane",
-  "version": "1.12.1",
-  "description": "Side pane following a run-lot run, or a run-plan run with a plan view and navigation between its batches: phases as columns, agents (model, duration, cost split per agent, slowness, stalls, retries, interruptions), estimated end, batch sheet, audit verdict, run outcome, end toast",
+  "version": "2.0.0",
+  "description": "Side pane following a run-lot run, or a run-plan run with a plan view and navigation between its batches: phases as columns, agents (model, duration, tokens per agent, slowness, stalls, retries, interruptions), estimated end, batch sheet, audit verdict and rounds, run outcome with the knowledge-base merge a plan staged, end toast; steers the run: entries to validate, pause, notes, dependency graph",
   "author": {
     "name": "Pierre Belin",
     "email": "contact@pierrebelin.fr",

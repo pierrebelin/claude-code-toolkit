@@ -10,7 +10,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 |--------|------|
 | `skills/`, `agents/` | the skills and the subagents they delegate to |
 | `hooks/` | guards, bounds, traceability, context nudges, wired in `hooks.json` |
-| `lib/` | modules the hooks call, config and test-tag readers |
+| `lib/` | modules the hooks call, config and test-tag readers, the knowledge base's parser and index |
 | `scripts/`, `bin/` | repo-wide scanners and one-shots, run as `cctoolkit <name>` |
 | `tools/` | `doctor` |
 | `presets/`, `rules/` | layouts, `kit.config.json`, layer and universal rules, the preset's test skills |
@@ -20,7 +20,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
 | `docs/` | context cost, tooling |
-| `dev/` | maintainer tools: `bump.sh`, `release-check.sh` |
+| `dev/` | maintainer tools: `bump.sh`, `release-check.sh`, `knowledge-pane-demo.sh` (the mod's demo copy of `examples/docs/business/`) |
 
 ## Anonymisation — do not break it
 
@@ -42,7 +42,7 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 |--------|------|
 | layer convention (naming, pattern, ban) | `presets/<preset>/rules/<layer>.md` — single source, never copied into a skill; the installed copy is the repo's own and no hook or script parses it |
 | stack-neutral behaviour rule | `rules/` — only `markdown-output.md`, `context-discipline.md` and `cctoolkit.md` live there; a plugin cannot load rules, `/cctoolkit:kit-init` copies them into the repo |
-| a path, glob, marker, tag carrier or command that differs between repos | a key of `kit.config.json`, its default in each `presets/<name>/preset.json`, read through `lib/kit_config.py` — never a constant in a hook or a script |
+| a path, glob, marker, tag carrier or command that differs between repos | a key of `kit.config.json`, its default in each `presets/<name>/preset.json` — or in `lib/kit_config.py` for a stack-neutral key (`knowledge.*`) —, read through `lib/kit_config.py` — never a constant in a hook or a script |
 | procedure (TDD cycle, audit steps) | the relevant `SKILL.md` |
 | how to write tests of one level (bound to a layout and a test stack) | `presets/<preset>/skills/tests-*/` — copied into the repo by `/cctoolkit:kit-init`, never under `skills/` |
 | wiring (event, matcher, hook order) | `hooks/hooks.json` — commands written `bash "${CLAUDE_PLUGIN_ROOT}/hooks/x.sh"` |
@@ -60,7 +60,7 @@ Two sources that drift make the choice random: a fact lives in exactly one place
 - A hook or script needing a path, a marker or the test tag reads it through `lib/kit_config.py` / `lib/kit_testtag.py`. With the `clean-architecture` preset its output must stay byte-identical: replay the old and new copies on the same fixture repo and diff the outputs before calling the change done.
 
 - Must exit 0 on empty JSON input and when its dependency is missing, save the guards that block by design (`hooks/README.md` § Dependencies).
-- Test after editing: `echo '{}' | bash hooks/<name>.sh`. Recorded cases live in `evals/cases/*.json` and `bash evals/run.sh` replays them from this checkout (`{{KIT}}` in a case = the kit directory): a hook change without a case is not finished. A hook or script resolves the repo through `lib/project-root.sh` / `kit_config.project_root()`, never from its own location: installed, the kit sits in the plugin cache, outside the repo. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` / `HOOK_AGENT_ID` / `HOOK_TRANSCRIPT_PATH` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`. A module that decides prints hook JSON; `lib/batching-nudge.sh` prints plain text, which the dispatcher grafts onto the decision.
+- Test after editing: `echo '{}' | bash hooks/<name>.sh`. Recorded cases live in `evals/cases/*.json` and `bash evals/run.sh` replays them from this checkout (`{{KIT}}` in a case = the kit directory): a hook change without a case is not finished. A hook or script resolves the repo through `lib/project-root.sh` / `kit_config.project_root()`, never from its own location: installed, the kit sits in the plugin cache, outside the repo. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` / `HOOK_AGENT_ID` / `HOOK_AGENT_TYPE` / `HOOK_BACKGROUND` / `HOOK_TRANSCRIPT_PATH` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`. A module that decides prints hook JSON; `lib/batching-nudge.sh` prints plain text, which the dispatcher grafts onto the decision.
 - Do not run `graphify-autosync.sh` idly: it rebuilds the graph and blocks for several minutes.
 
 ## Releasing

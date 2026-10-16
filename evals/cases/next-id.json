@@ -1,0 +1,68 @@
+{
+  "cases": [
+    {
+      "name": "next-id: one above the largest id of the base, in a context's own series",
+      "cmd": "R={{FIX}}/nid-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs $R/todo/feat\ncp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}}}' > $R/.claude/kit.config.json\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/next-id.py Catalog RM; CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/next-id.py CAT CU; CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/next-id.py Catalog D\n",
+      "expect": {
+        "stdout": "CAT-RM-006\nCAT-CU-04\nCAT-D-002",
+        "exit": 0
+      }
+    },
+    {
+      "name": "next-id: an id held by a spec under todo/ is taken; --count gives consecutive ids",
+      "cmd": "R={{FIX}}/nid-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs $R/todo/feat\ncp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}}}' > $R/.claude/kit.config.json\nprintf 'RM new: CAT-RM-007\\n' > $R/todo/feat/SPEC-feat.md\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/next-id.py Catalog RM --count 2 | tr '\\n' ' '\n",
+      "expect": {
+        "stdout": "CAT-RM-008 CAT-RM-009 ",
+        "exit": 0
+      }
+    },
+    {
+      "name": "next-id: a retired id survives in HISTORY.md and is never given again",
+      "cmd": "R={{FIX}}/nid-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs $R/todo/feat\ncp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}}}' > $R/.claude/kit.config.json\nprintf '| 2026-10-20 | PRD-X | -STU-D-004 |\\n' >> $R/docs/business/Catalog/HISTORY.md\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/next-id.py Studio D\n",
+      "expect": {
+        "stdout": "STU-D-005",
+        "exit": 0
+      }
+    },
+    {
+      "name": "next-id: an id is read whole, never inside a longer token",
+      "cmd": "R={{FIX}}/nid-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs $R/todo/feat\ncp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}}}' > $R/.claude/kit.config.json\nprintf 'XCAT-RM-090 CAT-RM-091x CAT-RM-0920\\n' > $R/todo/feat/notes.md\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/next-id.py Catalog RM\n",
+      "expect": {
+        "stdout": "CAT-RM-921",
+        "exit": 0
+      }
+    },
+    {
+      "name": "next-id: ADR is global, padded to 3, and needs no context table",
+      "cmd": "R={{FIX}}/nid-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs $R/todo/feat\ncp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}}}' > $R/.claude/kit.config.json\nprintf '{}' > $R/.claude/kit.config.json\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/next-id.py ADR\n",
+      "expect": {
+        "stdout": "ADR-002",
+        "exit": 0
+      }
+    },
+    {
+      "name": "next-id: a prefix absent from knowledge.contexts is refused with the table",
+      "cmd": "R={{FIX}}/nid-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs $R/todo/feat\ncp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}}}' > $R/.claude/kit.config.json\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/next-id.py CTA RM\n",
+      "expect": {
+        "stderr": "unknown context or prefix 'CTA' — knowledge.contexts: Catalog=CAT, Studio=STU",
+        "exit": 3
+      }
+    },
+    {
+      "name": "next-id: a malformed knowledge key stops with the cause, not a traceback",
+      "cmd": "R={{FIX}}/nid-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs $R/todo/feat\ncp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}}}' > $R/.claude/kit.config.json\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"cat\"}}}' > $R/.claude/kit.config.json\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/next-id.py Catalog RM\n",
+      "expect": {
+        "stderr": "Catalog: prefix 'cat'",
+        "exit": 3
+      }
+    },
+    {
+      "name": "validate: one prefix for two contexts is a FAIL, a context folder without prefix a WARN",
+      "cmd": "R={{FIX}}/nid-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs $R/todo/feat\ncp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}}}' > $R/.claude/kit.config.json\nmkdir -p $R/docs/business/Billing\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"CAT\"}}}' > $R/.claude/kit.config.json\npython3 {{KIT}}/lib/kit_config.py validate $R | grep knowledge | tr '\\n' ' '; printf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\npython3 {{KIT}}/lib/kit_config.py validate $R | grep knowledge | tr '\\n' ' '\n",
+      "expect": {
+        "stdout": "FAIL\tknowledge.contexts\tprefix CAT given to several contexts WARN\tknowledge.contexts\tdocs/business/Billing has no prefix — add \"Billing\": \"<PREFIX>\" ok\tknowledge.root\tdocs/business — 2 contexts",
+        "exit": 0
+      }
+    }
+  ]
+}

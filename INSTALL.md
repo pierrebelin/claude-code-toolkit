@@ -37,13 +37,15 @@ This step is the one that matters. The plugin brings skills, agents and hooks, b
 | Rules | copies the universal rules and the preset's layer rules into `.claude/rules/`, `{{PRODUCT}}` substituted, dead `paths:` globs rewritten from your layout. **No preset fits?** It drafts one rule per layer from your most-changed files, each convention cited `file:line`, marked "review before trusting" |
 | Skills | copies the preset's test skills (`tests-*`) into `.claude/skills/`, `{{PRODUCT}}` substituted; a local copy that differs is shown and kept unless you choose otherwise |
 | Settings | merges permissions and env into `.claude/settings.json`, installs the statusline, completes `.claude/.gitignore` |
-| Report | applies the doctor's mechanical fixes, re-runs `cctoolkit doctor`, prints one summary table and the next step |
+| Report | applies the doctor's mechanical fixes, re-runs `cctoolkit doctor`, prints one summary table and the next step — `/cctoolkit:knowledge-sync` first when the repo has no knowledge base yet |
 
 It **never overwrites** a file that differs: it shows the difference and asks keep / replace / merge. It **never commits**. Re-run it whenever you want to change the preset or the language, or pull a rule changed by a release. Configuration keys: [`presets/README.md`](presets/README.md).
 
 ## 3. Optional
 
 - **Mods** — the in-terminal panes: [`mods/README.md`](mods/README.md).
+- **Knowledge base location**: `docs/business/` by default; to put it elsewhere, set `knowledge.root` in `.claude/kit.config.json` before the first `/cctoolkit:knowledge-sync` ([`presets/README.md`](presets/README.md)).
+- **Pre-commit reminder**: `cctoolkit install-git-hooks --pre-commit` prints, at each commit, the use cases the staged changes touch and the sync to run; it never blocks ([`scripts/README.md`](scripts/README.md)).
 - **Startup trim**: [`templates/README.md`](templates/README.md#startup-trim).
 - Add `graphify-out/` to the repo's `.gitignore`.
 

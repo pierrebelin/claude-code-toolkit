@@ -134,3 +134,29 @@ bounds_reason() {
     printf '%s %s\n\n%s\n%s\n' "$header" "$without_map" "$force" "$BOUNDS_BULK_READ"
   fi
 }
+
+# The knowledge base's rules.md, decisions.md and HISTORY.md grow with the repo: read
+# through `cctoolkit ask`, whatever their size. The basename filters first, so python3
+# runs for those three names only. knowledge-extractor rewrites them whole in its
+# staging: exempt.
+#   $1 path        absolute (Read) or relative to the cwd (cat)
+#   $2 agent_type  the payload's, empty on the main chain
+bounds_knowledge_guarded() {
+  case "$1" in
+    */rules.md|*/decisions.md|*/HISTORY.md|rules.md|decisions.md|HISTORY.md) ;;
+    *) return 1 ;;
+  esac
+  case "${2:-}" in *knowledge-extractor) return 1 ;; esac
+  python3 "${BASH_SOURCE[0]%/*}/knowledge.py" guarded "$1" 2>/dev/null
+}
+
+# The refusal of a whole read of one of those files.
+#   $1 verb   "Read" or "cat", named in the refusal
+#   $2 path   the file
+#   $3 range  how to read the lines around one id ("Read with offset/limit")
+#   $4 force  how to force the full read
+bounds_knowledge_reason() {
+  local verb=$1 file=$2 range=$3 force=$4 ctx
+  ctx=$(cd "$(dirname "$file")" 2>/dev/null && basename "$PWD")
+  printf '%s' "Whole $verb of $file refused: the knowledge base's rules.md, decisions.md and HISTORY.md are read through cctoolkit ask, whatever their size. cctoolkit ask \"<question>\" --context $ctx (ranked cards), --id <id> (one object whole), --context $ctx alone (the context's summary), --history --context $ctx (its HISTORY.md rows). A range around one id: grep -n '<id>' $file, then $range. $force"
+}

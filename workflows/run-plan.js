@@ -8,6 +8,7 @@ export const meta = {
     { title: 'Gate', detail: 'report status, plan heading, build green, one repair, batch commit, journal' },
     { title: 'Aside', detail: 'blocked batch: partial work saved as a patch, tree restored to the batch start, dependents skipped; from the second, an arbiter looks for a cause common to the batches set aside — one stops the plan' },
     { title: 'Final check', detail: 'every test suite run whole once, integration included, after the last batch: reported, never blocking' },
+    { title: 'Merge', detail: 'whole plan delivered, spec written against the knowledge base: its merge drafted and staged by knowledge-merger, never written — /cctoolkit:knowledge-merge shows it and writes it on confirmation' },
     { title: 'Report', detail: 'run/<stamp>.md: every decision taken without the user first, then batches, final check and journal; run lines of run/.work.jsonl removed, notification' },
   ],
 }
@@ -58,6 +59,8 @@ const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str) })
 const REPORT = obj({ path: str, lastLine: str })
 const FINAL = obj({ suites: arr(obj({ name: str, exit: int, failed: arr(str) })) })
 const BREAKER = obj({ commonCause: bool, cause: str, batches: arr(str), fixBeforeRelaunch: str })
+const PREPARED = obj({ exit: int, nothing: str, refused: arr(str) })
+const MERGED = obj({ staged: bool, stagedLine: str, files: arr(str), warnings: arr(str), blocked: str })
 const FINAL_TIMEOUT_MIN = 40
 
 function newFailures(build) {
@@ -328,6 +331,48 @@ if (finalCheck === null && ran.some(r => r.status === DONE) && !scope.startsWith
 for (const x of finalRed) toReview.push({ batch: '—', step: 'Final check', text: `${x.name} exit=${x.exit}${x.failed.length ? `: ${x.failed.join(', ')}` : ''} — not attributed: a batch of this run or a failure already on the starting tree; output removed with the temp folder of the run, rerun filtered to inspect` })
 if (finalRed.length) log(`final check red: ${finalRed.map(x => x.name).join(', ')}`)
 
+// The base changes once per feature, when its plan is delivered whole: the merge is drafted and
+// staged here, autonomously, and written only by /cctoolkit:knowledge-merge on the user's word.
+// A stop, a batch set aside or a partial scope leaves the spec under todo/ for the run that ends it.
+let merge = null
+if (!reason && !scope && ran.some(r => r.status === DONE)) {
+  phase('Merge')
+  const prep = await agent(
+    [
+      FRAME,
+      '',
+      `One call: \`cctoolkit knowledge-merge prepare ${pre.plan} 2>&1; echo "exit=$?"\`.`,
+      '`exit` = the code on the last line; `nothing` = the line starting `nothing to merge: `, empty when none; `refused` = every line starting `refused: ` or `collision: `, verbatim.',
+    ].join('\n'),
+    { schema: PREPARED, phase: 'Merge', label: 'merge prepare', ...SHELL },
+  ).catch(() => null)
+  const skill = `/cctoolkit:knowledge-merge ${words[0]}`
+  if (!prep) merge = { state: 'failed', lines: ['prepare agent without result'], next: skill }
+  else if (prep.exit === 0 && prep.nothing) merge = { state: 'nothing', lines: [prep.nothing] }
+  else if (prep.exit !== 0) merge = { state: 'refused', lines: prep.refused.length ? prep.refused : [`exit=${prep.exit}`], next: skill }
+  else {
+    const m = await agent(
+      [
+        'Workflow run-plan, knowledge-base merge after the last batch. Autonomous mode: nobody answers. Never AskUserQuestion, never a Git command that writes, never `cctoolkit knowledge-write`: the user confirms the merge after the run. Return the report fields through the structured output.',
+        '',
+        `plan: ${pre.plan} · partial: no`,
+        '`staged` true with `## MERGE STAGED`: `stagedLine` = the `staged:` line, `files` = the `+n −n <file>` lines, `warnings` = the `WARN` lines left, `blocked` empty. `## BLOCKED`: `staged` false, `blocked` = the cause, `files` = its output lines.',
+      ].join('\n'),
+      { agentType: 'cctoolkit:knowledge-merger', schema: MERGED, phase: 'Merge', label: 'merge draft' },
+    ).catch(e => ({ staged: false, stagedLine: '', files: [], warnings: [], blocked: `knowledge-merger failed: ${e.message}` }))
+    merge = m && m.staged
+      ? { state: 'staged', lines: [m.stagedLine, ...m.files], warnings: m.warnings, next: skill }
+      : { state: 'blocked', lines: [m ? m.blocked : 'agent without result', ...(m ? m.files : [])], next: skill }
+  }
+  if (merge.state !== 'nothing') {
+    log(`knowledge base: merge ${merge.state}${merge.next ? ` — ${merge.next}` : ''}`)
+    await journal(`knowledge base: merge ${merge.state} — ${merge.lines[0]}`)
+  }
+  if (merge.state === 'refused' || merge.state === 'blocked' || merge.state === 'failed') {
+    toReview.push({ batch: '—', step: 'Knowledge base', text: `merge not staged: ${merge.lines.join(' ; ')} — ${merge.next}` })
+  }
+}
+
 phase('Report')
 if (!ran.length) {
   await agent(
@@ -337,7 +382,7 @@ if (!ran.length) {
   return { status: reason ? BLOCKED : DONE, reason: reason || '—', report: null, batches: [] }
 }
 const payload = JSON.stringify({ plan: pre.plan, scope: scope || 'whole plan', report: reportFile, stop: reason, batches: ran, aside, finalCheck: finalCheck ? finalCheck.suites : null }, null, 1)
-const review = JSON.stringify({ stop: reason, breaker, toReview, audits: ran.filter(r => r.audit).map(r => ({ batch: r.batch, audit: r.audit, report: r.report })), hypotheses: ran.flatMap(r => r.hypotheses.map(h => ({ batch: r.batch, h }))) }, null, 1)
+const review = JSON.stringify({ stop: reason, breaker, merge, toReview, audits: ran.filter(r => r.audit).map(r => ({ batch: r.batch, audit: r.audit, report: r.report })), hypotheses: ran.flatMap(r => r.hypotheses.map(h => ({ batch: r.batch, h }))) }, null, 1)
 const rep = await agent(
   [
     FRAME,
@@ -349,8 +394,9 @@ const rep = await agent(
     `- \`## To validate\` — from the second JSON, everything the run decided without the user (marked \`${TO_REVIEW}\`), to review after the plan, one \`###\` per kind: \`### Stop\` (\`stop\` verbatim, only when not null), \`### Batches set aside\` (\`toReview\` entries of step \`Set aside\`), \`### Start\` (\`toReview\` entries of step \`Start\`), \`### Final check\` (\`toReview\` entries of step \`Final check\`), \`### Audits to redo\` (\`audit\` = \`to redo\`: batch, report, command \`/verify-ddd-tdd batch FX\`), \`### Audit gaps carried\` (\`toReview\` entries of step \`Audit\`, and \`audit\` = \`GAPS carried\`), \`### Arbiter and design decisions\` (other \`toReview\` entries, step and why kept), \`### Assumptions\` (every \`h\`). One bullet per entry, prefixed by its batch; \`None.\` for an empty section.`,
     '- `## Minor` — every minor of the first JSON, prefixed by its batch; `None.` when none',
     '- `## Final check` — table `| Suite | Exit | Failed tests |` from `finalCheck`; `Not run.` when `finalCheck` is null',
+    '- `## Knowledge base` — from `merge` of the second JSON: `state` staged → its `lines` verbatim one bullet each, then its `warnings`, then the line `Staged, not written: <next> shows the diff and writes it on confirmation.`; refused, blocked or failed → its `lines` verbatim, then `Not staged: <next>.`; nothing → its line verbatim; `merge` null → `Not run.`',
     '- `## Journal` — the journal lines verbatim, in order',
-    `\`lastLine\` = \`Plan stopped — <stop>\` when stop is not null, else \`Plan done — review of ${reportFile} required.\`${finalRed.length ? `, followed by \` — final check red: ${finalRed.map(x => x.name).join(', ')}\`` : ''}.`,
+    `\`lastLine\` = \`Plan stopped — <stop>\` when stop is not null, else \`Plan done — review of ${reportFile} required.\`${finalRed.length ? `, followed by \` — final check red: ${finalRed.map(x => x.name).join(', ')}\`` : ''}${merge && merge.state === 'staged' ? ', followed by ` — knowledge base merge staged`' : ''}.`,
     `Then one call: \`cctoolkit run-work drop ${work} --run ${pre.stamp}; ${rmTmp('final')}; command -v osascript >/dev/null && osascript -e 'display notification "<lastLine, double quotes removed>" with title "run-plan"' || true\` (the journal of the run, now copied into the report).`,
     '',
     '```json',
@@ -373,4 +419,5 @@ return {
   ...(reason ? { setAside: aside.map(x => ({ batch: x.batch, reason: x.reason, patch: x.patch, dependents: x.dependents })), next: RESTART } : {}),
   batches: ran.map(r => ({ batch: r.batch, status: r.status, hypotheses: r.hypotheses.length, minors: r.minors.length })),
   finalCheck: finalCheck ? finalCheck.suites.map(x => ({ name: x.name, exit: x.exit, failed: x.failed.length })) : null,
+  ...(merge && merge.state !== 'nothing' ? { merge: { state: merge.state, lines: merge.lines, warnings: merge.warnings || [], next: `${merge.next} — the knowledge base is not written yet: it shows the diff and writes it on the user's confirmation` } } : {}),
 }

@@ -7,7 +7,7 @@ import {
   figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, currentShapeSamples, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles,
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
-  parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
+  mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
   activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples,
 } from '../hooks/register'
 
@@ -194,6 +194,25 @@ describe('reading the run', () => {
     expect(journal?.details).toEqual({ Design: 'comportements' })
     expect(journal?.agentPhases).toEqual({ a1: 'Design', a2: 'RED' })
     expect(parseJournal('{')).toBeNull()
+  })
+
+  test('outcome: a run-plan result carrying its knowledge-base merge — staged waits for the user, the command kept, the prose after it dropped', () => {
+    const next = '/cctoolkit:knowledge-merge todo/x/X-PLAN.md — the knowledge base is not written yet: it shows the diff and writes it on the user\'s confirmation'
+    const result = { status: 'DONE', reason: '—', report: 'r.md', merge: { state: 'staged', lines: ['staged: 2 file(s)', '+3 −0 docs/business/Catalog/rules.md'], warnings: ['WARN CAT-RM-002: rewritten without a line removed'], next } }
+    const outcome = parseJournal(JSON.stringify({ status: 'completed', result }))?.outcome
+    expect(outcome).toEqual({ label: 'DONE', reason: null, report: 'r.md', merge: { ...result.merge, next: '/cctoolkit:knowledge-merge todo/x/X-PLAN.md' } })
+    expect(outcome && outcomeTone(outcome, 'completed')).toBe('success')
+    expect(mergeRows(outcome!.merge!).map(row => [row.text, row.tone])).toEqual([
+      ['◆ Knowledge base — merge staged, not written', 'warning'],
+      ['staged: 2 file(s)', 'inactive'],
+      ['+3 −0 docs/business/Catalog/rules.md', 'inactive'],
+      ['WARN CAT-RM-002: rewritten without a line removed', 'warning'],
+      ['→ /cctoolkit:knowledge-merge todo/x/X-PLAN.md', undefined],
+    ])
+    const refused = mergeOf({ state: 'refused', lines: ['collision: CAT-RM-004'], next })
+    expect(refused && mergeRows(refused)[0]).toEqual({ text: '✗ Knowledge base — merge refused', tone: 'error', bold: true })
+    expect([mergeOf({ state: 'nothing', lines: [] }), mergeOf(null), mergeOf('staged')]).toEqual([null, null, null])
+    expect(parseJournal(JSON.stringify({ status: 'completed', result: { status: 'DONE', reason: '—', report: 'r.md' } }))?.outcome).toEqual({ label: 'DONE', reason: null, report: 'r.md' })
   })
 
   test('outcome: French or English keys, dash ignored, bare text, journal error, tone per status', () => {
@@ -1501,6 +1520,32 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
   expect(await end.find({ type: 'Text', text: /3\/6 lots/ })).toBeDefined()
   expect(await end.find({ key: 'outcome' })).toBeDefined()
   expect(await end.find({ type: 'Text', text: /LOTS/ })).toBeDefined()
+  await end.unmount()
+})
+
+test('plan merge demo: the plan delivered whole, its knowledge-base merge staged under the outcome, the Final check and Merge steps', async ($, on) => {
+  world(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'run-lot-pane', args: 'demo plan merge' } as Parameters<typeof $.command.run>[0])
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
+    expect(await ui.find({ type: 'Text', text: /2\/2 lots/ })).toBeDefined()
+    expect(await ui.find({ key: 'outcome' })).toBeDefined()
+    const head = await ui.find({ type: 'Text', text: '◆ Knowledge base — merge staged, not written' })
+    expect(head?.props.color).toBe('warning')
+    expect(head?.props.bold).toBe(true)
+    expect(await ui.find({ type: 'Text', text: 'staged: 7 file(s) — cctoolkit knowledge-write apply --merge PRD-ARCH' })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /^\+14 −0 docs\/business\/Catalog\/usecases\/CAT-CU-02-archive-product\.md \(new\)$/ }))?.props.color).toBe('inactive')
+    expect((await ui.find({ type: 'Text', text: /^WARN CAT-CU-01: rewritten without a line removed/ }))?.props.color).toBe('warning')
+    expect(await ui.find({ type: 'Text', text: /^→ \/cctoolkit:knowledge-merge todo\/product-archiving\/PRD-ARCH-PLAN\.md$/ })).toBeDefined()
+    for (const label of ['final check', 'merge prepare', 'merge draft']) expect(await ui.find({ type: 'Text', text: label })).toBeDefined()
+    await ui.unmount()
+  }
+
+  await $.command.run({ command: 'run-lot-pane', args: 'demo plan end' } as Parameters<typeof $.command.run>[0])
+  const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  expect(await end.find({ key: 'outcome' })).toBeDefined()
+  expect(await end.find({ type: 'Text', text: /Knowledge base/ })).toBeUndefined()
   await end.unmount()
 })
 
