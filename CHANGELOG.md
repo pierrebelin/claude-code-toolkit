@@ -4,6 +4,14 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## Unreleased
+
+Code review, from how Anthropic reviews Claude Code: findings verified before they are fixed, a bug class fixed whole, one security pass per plan.
+
+- `cctoolkit` `run-lot`: before a fix round, each Blocking or Major on `Correctness`, `Reuse` or `Placement` is checked once by a fresh read-only agent, in parallel. A refuted finding is not fixed, is not reported again, and is listed under `## To validate`. A verdict left with Minors only passes `VALID`. This costs nothing on a `VALID` audit; it saves the fix round and the re-audit a false finding used to cost.
+- `cctoolkit` `/verify-ddd-tdd`: a `Correctness`, `Cost` or `Placement` deviation is a pattern. The auditor greps it over the batch's files and reports every instance in one gap, so the class is not fixed one round at a time.
+- `cctoolkit` `run-plan`: new `Security` phase after the final check. One read-only pass over the plan's batch commits (authorisation, cross-organisation access, injection, leaked secrets or personal data, unvalidated input). Its findings go under `### Security` of the run report's `## To validate`, never a stop.
+
 ## 2.0.4 — 2026-10-19
 
 Windows hardening, before a first install on a real Windows machine.

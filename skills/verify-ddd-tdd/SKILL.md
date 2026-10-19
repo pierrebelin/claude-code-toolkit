@@ -48,6 +48,8 @@ One table, one pass, over the batch diff. A green test proves nothing here. Ids 
 
 Locating the existing element behind a `Reuse` or `Placement` deviation: `graphify explain|affected "X"` first, `grep -rn` scoped to the layer folder otherwise.
 
+**Bug class** — a Correctness, Cost or Placement deviation is a pattern, not a line. Before reporting it, `git grep -n` that pattern over the files the batch changed: every instance goes in the same gap, `Evidence` listing each `path:line`, `Closure` covering them all. Fixed one instance at a time, the class comes back each round.
+
 **`Worsened`** — pre-existing defect the batch makes measurably worse, judged as if batch introduced it: severity of its axis, `Gap` cell prefixed `(worsened)`. Worse means one more of the same thing: one more repository call in an already looping path, one more branch in an already defensive chain, one more copy of an already duplicated block, one more caller of a pre-existing unbounded read. Evidence: pre-existing state (context line of hunk, or `path:line` at base) **and** batch line adding to it. Untouched pre-existing defect, or one batch merely sits next to, stays Minor. Fix expected: only what batch added, never pre-existing part — outside scope.
 
 No evidence → finding not reported. Symmetrically, missing evidence never a favourable assumption: cite file and line where deviation observed, or say point could not be verified.

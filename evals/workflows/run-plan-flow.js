@@ -4,6 +4,7 @@
 // paused: the scheduler answers PAUSED after F1 — the plan stops cleanly, reason `paused by user`.
 // merge: every batch DONE — the merge is prepared, drafted by knowledge-merger and staged, the report
 // given its knowledge-base section, the result its `merge`. nomerge: every batch DONE, nothing to merge.
+// A security pass reads the batch commits after the final check; its findings (merge) go to `## To validate`.
 // Usage: node run-plan-flow.js <run-plan.js> common|distinct|paused|merge|nomerge
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
@@ -28,8 +29,12 @@ const agent = async (prompt, o) => {
   }
   if (l === 'journal') return { ok: true }
   if (l.startsWith('gate')) return { statusLine: '## STATUS — DONE', verdictLine: 'Verdict: VALID', planDone: true, build: 0 }
-  if (l.startsWith('commit')) return { ok: true, commit: 'abc123: batch' }
+  if (l.startsWith('commit')) return { ok: true, commit: `committed abc12${labels.length % 10}f: 3 file(s)` }
   if (l === 'final check') return { suites: [] }
+  if (l === 'security') {
+    if (!/Batch commits of the plan: abc12\df( abc12\df)*\./.test(prompt)) console.log('WARN security pass without the batch commits')
+    return { findings: variant === 'merge' ? [{ severity: 'Major', finding: 'archive reachable from another organisation', evidence: 'src/A.cs:12', fix: 'check the organisation link' }] : [] }
+  }
   if (l === 'merge prepare') {
     if (!prompt.includes('cctoolkit knowledge-merge prepare /r/todo/x/X-PLAN.md')) console.log('WARN merge prepare without the plan')
     return variant === 'merge' ? { exit: 0, nothing: '', refused: [] } : { exit: 0, nothing: 'nothing to merge: the spec carries no delta anchor', refused: [] }
@@ -41,6 +46,7 @@ const agent = async (prompt, o) => {
   if (l === 'report') {
     if (variant === 'common' && !prompt.includes('## Plan stopped — common cause')) console.log('WARN report without the common-cause section')
     if (variant === 'merge' && (!prompt.includes('## Knowledge base') || !prompt.includes('"state": "staged"'))) console.log('WARN report without the knowledge-base merge')
+    if (variant === 'merge' && (!prompt.includes('### Security') || !prompt.includes('"step": "Security"'))) console.log('WARN report without the security findings')
     return { path: '/r/todo/x/run/2026-10-15-1000.md', lastLine: 'x' } }
   if (l === 'cleanup') return { ok: true }
   console.log('UNHANDLED', l); return null
