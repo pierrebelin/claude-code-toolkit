@@ -1,11 +1,5 @@
 #!/bin/bash
-# cctoolkit — one entry point for the kit's scripts and tools.
-#
-# Why. Installed as a plugin, the kit lives in a versioned cache directory whose
-# path changes on every update. Claude Code puts the plugin's bin/ on the Bash
-# tool's PATH, so `cctoolkit pre-audit FX` reads the same in a skill, a reference
-# file, an agent or a terminal — where `bash <kit>/scripts/pre-audit.sh` would need
-# a path no reference file can know.
+# cctoolkit — one entry point for the kit's scripts and tools (plugin bin/ is on PATH).
 #
 # Usage:
 #   cctoolkit <script> [args]   scripts/<script>.sh or scripts/<script>.py
@@ -17,9 +11,7 @@
 #   cctoolkit root              the kit directory (plugin cache or toolkit checkout)
 #   cctoolkit list              every command
 #
-# The repo is resolved by each script (lib/project-root.sh, kit_config.py
-# project_root()): $CLAUDE_PROJECT_DIR, else the git top level of the working
-# directory. Run it from inside the repo.
+# Run it from inside the repo: $CLAUDE_PROJECT_DIR, else the git top level.
 set -u
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,10 +25,10 @@ list() {
 }
 
 cmd="${1:-}"
-[ -n "$cmd" ] || { sed -n '2,20p' "$0" | sed -e 's/^# \{0,1\}//'; exit 2; }
+[ -n "$cmd" ] || { sed -n '2,14p' "$0" | sed -e 's/^# \{0,1\}//'; exit 2; }
 shift
 case "$cmd" in
-  -h|--help) sed -n '2,20p' "$0" | sed -e 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,14p' "$0" | sed -e 's/^# \{0,1\}//'; exit 0 ;;
   root) printf '%s\n' "$KIT"; exit 0 ;;
   list) list; exit 0 ;;
   doctor|bulk-read) exec bash "$KIT/tools/$cmd" "$@" ;;

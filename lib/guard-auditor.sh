@@ -1,26 +1,9 @@
 #!/bin/bash
-# bash-dispatch module — the batch auditor spends its turns judging, not waiting.
-#
-# Measured on a 27-cycle batch on 2026-10-14: the audit took 24 min, 8.4 of them
-# in tools of one auditor alone. Two habits made that time, each against an
-# instruction the auditor already had:
-#   - a recursive grep over the source and test roots without --include read
-#     every bin/ and obj/ binary: 121 s, where the same `git grep` answered in 3 s;
-#   - suites the global green had just run green were run again, filtered
-#     differently, about 6 min, one of them in the background and then polled
-#     for 181 s;
-# So, for the auditor only (agent_type ending in ddd-tdd-auditor):
-#   1. run_in_background is refused: the auditor has nothing else to do meanwhile;
-#   2. a recursive grep is refused, `git grep` skips ignored build output;
-#   3. a test command on a suite listed in the newest `suites-green` marker is
-#      refused while no file of the source or test roots changed after it.
-#      `cctoolkit audit-capture --suites-green` writes the marker beside the
-#      capture; an audit fix touches code after it, so the resume audit that
-#      must rerun suites is let through. No marker (a manual /verify-ddd-tdd)
-#      never denies.
-#
-# Contract: reads $HOOK_CMD, $HOOK_AGENT_TYPE, $HOOK_BACKGROUND, prints the hook
-# JSON when it decides, nothing when it passes. A deny is terminal in the chain.
+# bash-dispatch module — the batch auditor (agent_type *ddd-tdd-auditor) spends its
+# turns judging, not waiting. Denies run_in_background, a recursive grep, and a test
+# command on a suite of the newest `suites-green` marker (audit-capture --suites-green)
+# while no file of the roots changed after it. No marker never denies.
+# Reads $HOOK_CMD, $HOOK_AGENT_TYPE, $HOOK_BACKGROUND.
 set -u
 
 case "${HOOK_AGENT_TYPE:-}" in *ddd-tdd-auditor) ;; *) exit 0 ;; esac

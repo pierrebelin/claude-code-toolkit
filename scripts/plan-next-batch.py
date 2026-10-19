@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Next runnable batches of a global *-PLAN.md, read by the run-plan workflow.
 
-Reads the `### Batch execution` table (columns `Batch`, `Depends on`, optional
-`Repo`) and the `### Batch FX — … — ✅ DONE` headings. A plan written in French reads
-the same: `### Execution des lots`, `Lot` / `Depend de` / `Dépôt`, `### Lot FX — … —
-✅ DONE`. Prints, for the batches in scope:
+Reads the `### Batch execution` table (`Batch`, `Depends on`, optional `Repo`; French
+headings too) and the `### Batch FX — … — ✅ DONE` headings. Prints, for the batches in scope:
 
     FX <repo-dir> <sheet>     one line per batch to launch now
     END                       every batch in scope is ✅ DONE, or only batches set aside by
@@ -12,34 +10,26 @@ the same: `### Execution des lots`, `Lot` / `Depend de` / `Dépôt`, `### Lot FX
     WAITING FX:F1,F3 …        batches remain, none has its dependencies done
                               (`FX:excluded` for a batch removed by --exclude)
 
-At most one batch per repository: two batches of one repo share a working tree,
-its build output and its test containers, whatever the plan says.
+At most one batch per repository: two batches of one repo share a working tree.
 
     cctoolkit plan-next-batch <plan> [--until FX | --only FX] [--exclude FX,FY] [--skip FX,FY] [--root DIR] [--check]
 
 --until FX    scope = FX and its transitive dependencies
 --only FX     scope = FX alone; its dependencies must already be ✅ DONE
---exclude     batches suspended on an open question: never launched, nor any batch depending
-              on them, even transitively
---skip        batches set aside by this run (blocked, tree restored): read as not done even when
-              their heading says ✅ DONE, never launched, nor any batch depending on them; when
-              only those remain the plan ends (END)
+--exclude     batches suspended on an open question: never launched, nor their dependents
+--skip        batches set aside by this run: read as not done, never launched, nor their
+              dependents; when only those remain the plan ends (END)
 --check       validate the plan (ids, dependencies, cycles, sheets, repos), exit 1 on error
---outside FX  modified paths of FX's repo that `cctoolkit pre-audit` will flag as outside
-              the batch (not under the source or test roots of kit.config.json, .claude/,
-              todo/, basename absent from the sheet); exit 1 when any
+--outside FX  modified paths of FX's repo `cctoolkit pre-audit` will flag as outside the
+              batch; exit 1 when any
 --next WORK   next batch, out-of-batch check and journal in one JSON line for run-plan:
-              `kind` END|WAITING|BATCHES|PAUSED, `line` = the text output (PAUSED: the user
-              asked for a pause in the run-lot-pane mod, `run/.pane.jsonl`; spent once answered), `batches`, `held` = the
-              pending batches --skip holds back with the skipped batches they depend on
-              (`[{"batch", "by"}]`), then for the launchable batch of the current repository
-              `outsideBatch` and `outsidePaths`; when nothing is outside, appends the
-              journal line `FX launched — <sheet>` of run --run STAMP to the run work file WORK
---context FX  design context of FX for run-lot: `## Audit gaps` of the earlier batches'
-              run/batches/FY.md, `user decision`/GAPS lines of the sheets, FX's stopped
-              report and saved cycles (`cycle` lines of run/.work.jsonl), source and
-              test paths the sheet cites
-              that do not exist
+              `kind` END|WAITING|BATCHES|PAUSED (a pause asked in the run-lot-pane mod),
+              `line` = the text output, `batches`, `held` (`[{"batch", "by"}]`), then
+              `outsideBatch` and `outsidePaths`; when nothing is outside, appends the journal
+              line `FX launched — <sheet>` of run --run STAMP to WORK
+--context FX  design context of FX for run-lot: earlier batches' audit gaps, the sheets'
+              `user decision`/GAPS lines, FX's stopped report and saved cycles, the sheet's
+              source and test paths that do not exist
 --root        directory `Repo` paths resolve against (default: git toplevel of the plan)
 """
 import argparse
@@ -59,15 +49,13 @@ import work_file  # noqa: E402
 
 DONE = re.compile(r"^### (?:Batch|Lot) (F\d+)\b.*✅ DONE", re.M)
 SECTION = "### Batch execution"
-# Frozen literals read in both vocabularies, compared folded (case, accents):
-# English first, the French of plans written before the switch after it.
+# Frozen literals, English and French, compared folded (case, accents).
 SECTIONS = {"batch execution", "execution des lots"}
 COLUMN_BATCH = {"batch", "lot"}
 COLUMN_DEPENDS = {"depends on", "depend de"}
 COLUMN_REPO = {"repo", "depot"}
 AUDIT_GAPS = {"## audit gaps", "## ecarts d'audit"}
 DECISION_MARKS = re.compile(r"user decision|décision user|décision utilisateur|GAPS|ECARTS")
-# Run files, newest layout first; the earlier layouts stay readable.
 REPORTS = ("batches/{b}.md",)
 
 

@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
-"""cctoolkit audit-round — the change set of one audit fix round, read off the tree.
-
-Why. The resume audit used to judge the files the fix declared (`fix.files`): a file the fix
-touched and did not list was never judged. `run-lot` now brackets each fix with this script,
-run by a relay agent, never by the fixer:
+"""cctoolkit audit-round — the change set of one audit fix round, read off the tree, never the fix's own list.
 
     cctoolkit audit-round open <work> <batch> <round>
         before the fix: snapshot of every modified or untracked file under the source and
-        test roots (content hash, a copy of each), in the batch's temp folder
+        test roots, in the batch's temp folder
     cctoolkit audit-round close <work> <batch> <round>  <<'ROUND_JSON' {"open": N, "contested": [...]} ROUND_JSON
-        after the fix: the files whose content changed since `open`, their diff written to
-        `<tmp>/audit-round-<round>.diff`, and one `audit-round` line appended to the work file
-        `{"kind": "audit-round", "batch", "round", "open", "files", "contested"}`; prints
-        `{"files": [...], "diff": "<path>"}` on one line. Without `open`: exit 2.
+        after the fix: the files changed since `open`, their diff in
+        `<tmp>/audit-round-<round>.diff`, one `audit-round` line appended to the work file;
+        prints `{"files": [...], "diff": "<path>"}` on one line. Without `open`: exit 2.
 
-`open` = Blocking and Major findings the fix answered; the line of a round is rewritten by
-`run-lot`'s report with the audit's responses (the last line of a batch and round wins).
+`open` = Blocking and Major findings the fix answered. Exit 2 bad arguments, 3 unreadable kit.config.json.
 """
 import difflib
 import json

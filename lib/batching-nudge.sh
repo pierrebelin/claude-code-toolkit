@@ -1,27 +1,8 @@
 #!/bin/bash
 # Batching nudge — reminds the main chain to group independent tool calls.
-#
-# Measured on session 1a39aeca (batch F5, 2026-09-09): 110 of 124 tool-carrying
-# turns held a single call, mean 1.23. A turn is one billed round trip that
-# resends the whole accumulation, so a run of mono-call turns pays the same
-# context N times for N calls that could have shipped in one message. The three
-# largest lines of that session — replayed output 19%, Bash 18%, Read 17% — are
-# all proportional to the turn count, not to the calls.
-#
-# The hook never blocks and never rewrites. It appends one line of
-# additionalContext when the recent history shows a run of mono-call turns.
-#
-# Trigger vs. scope. It is wired on Bash only (the dispatcher is the single Bash
-# entry point) but it reads the transcript, so it counts every tool — a
-# Read/Read/Read run is caught by the next Bash call. Batching is a property of
-# the turn, not of the tool.
-#
-# Main chain only. A subagent carries its context for 30 turns then drops it;
-# the same run costs 32x less there (measured: $0.049/kB main against $0.0015/kB
-# subagent). Nudging it would spend tokens to fix what is not a problem.
-#
-# Contract: reads HOOK_* from the environment, prints the nudge text on stdout
-# (not JSON — the dispatcher merges it), prints nothing when it passes.
+# Main chain only, once per session. Wired on Bash but reads the transcript, so it
+# counts every tool. Reads HOOK_* from the environment, prints the nudge as plain
+# text (not JSON — the dispatcher merges it), nothing when it passes.
 set -u
 
 WINDOW=${CLAUDE_BATCHING_WINDOW:-6}   # consecutive mono-call turns before nudging
@@ -33,11 +14,7 @@ transcript="${HOOK_TRANSCRIPT_PATH:-}"
 [ -f "$transcript" ] || exit 0
 
 session="${HOOK_SESSION_ID:-unknown}"
-# Sampling gate, in pure bash, before the python spawn. Measured 2026-09-11:
-# `python3 -c pass` alone costs 16 ms of the module's 29, and it was paid on every
-# single Bash call. What the module looks for is a RUN of WINDOW consecutive
-# mono-call turns — a state that persists across several calls — so evaluating one
-# call in SAMPLE catches it, at worst one turn later than before.
+# Sampling gate before the python spawn: one call in SAMPLE is evaluated.
 SAMPLE=${CLAUDE_BATCHING_SAMPLE:-3}
 tick_file="/tmp/claude-batching-tick-${session}"
 tick=0
@@ -47,9 +24,7 @@ tick=$(( (tick + 1) % SAMPLE ))
 printf '%s' "$tick" > "$tick_file"
 [ "$tick" -eq 0 ] || exit 0
 
-# One reminder per session. Measured 2026-10-09 over 609 reminders: 16 % of the
-# turns after one batched calls, 12 % without — a real but small effect that a
-# second reminder does not add to. The state file marks it sent.
+# One reminder per session: the state file marks it sent.
 state="/tmp/claude-batching-nudge-${session}"
 [ -f "$state" ] && exit 0
 
@@ -59,17 +34,12 @@ import sys, json
 transcript, window, state = sys.argv[1:4]
 window = int(window)
 
-# One entry per assistant message that carried at least one tool call.
-# Claude Code rewrites each assistant message several times (streaming deltas):
-# dedupe on message.id, and dedupe tool_use on its own id, or the same call is
-# counted twice and every turn looks batched.
+# One entry per assistant message with a tool call. Streaming rewrites a message
+# several times: dedupe on message.id and on tool_use id.
 seen_msg, seen_tu, turns = {}, set(), []
 with open(transcript, encoding="utf-8", errors="replace") as fh:
     for line in fh:
-        # Substring pre-filter before the parse. Behaviour-preserving: a line
-        # carrying no tool_use yields an empty `new` below and is dropped by the
-        # `if not new` guard anyway — but json.loads ran on it first, on every
-        # line of a transcript that reaches 10 MB, on every Bash call.
+        # Substring pre-filter before the parse.
         if '"tool_use"' not in line:
             continue
         try:

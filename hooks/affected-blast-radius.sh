@@ -1,37 +1,13 @@
 #!/bin/bash
 # PreToolUse Edit|Write hook — attach the measured blast radius of a domain type.
 #
-# graphify affected is the one subcommand the graph exists for and the one nobody
-# calls: 4 invocations against 56 explain and 54 query over 180 sessions of
-# transcripts. Nothing ever triggered it, so nothing ever used it. This hook
-# triggers it, on the only edits where the answer is not guessable — an aggregate
-# or a value object in the Domain, where the reference count runs into the
-# hundreds (ProductId 142 edges, DiagramNodeId 229) and the fan-out crosses
-# every layer plus four test projects.
-#
-# It does not deny. The edit is legitimate; only the map is missing. The rollup
-# rides along as additionalContext, same channel bash-dispatch.sh uses, so it
-# costs no turn — unlike read-bounds.sh, where the read itself is the cost and a
-# denial is the only lever.
-#
-# The raw output is never injected. `graphify affected ProductId` prints 421
-# lines / 65 kB — roughly 16k tokens, more than the aggregate being edited and far
-# more than the decision needs. Rolled up per project it is 8 lines: which
-# assemblies move, and how hard. That is the whole signal; the file:line list is a
-# follow-up the model can ask for by hand.
-#
-# Symbols the graph cannot disambiguate are dropped in silence. `Product`
-# answers "No unique node match" (aggregate, entity, DTO and table all carry the
-# name) while `ProductId` resolves clean. A hook that narrates its own
-# misses trains the reader to skip it.
+# Never denies: injects the per-project rollup (never the raw output) as
+# additionalContext. Symbols the graph cannot disambiguate are dropped in silence.
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
-# Paused 2026-10-09 to 2026-10-23, for a comparison: 300 injections (210 kB) over
-# 30 days with no measurable effect, while graphify was called by choice 151 times
-# against 6 929 greps. CCTOOLKIT_BLAST_RADIUS=1 turns it back on; drop this block,
-# or the hook, once the two periods are compared.
+# Paused: CCTOOLKIT_BLAST_RADIUS=1 turns it back on.
 [ "${CCTOOLKIT_BLAST_RADIUS:-0}" = "1" ] || exit 0
 
 input=$(cat)
@@ -42,13 +18,7 @@ file_path=$(echo "$input" | jq -r '.tool_input.file_path // ""')
 [ -n "$file_path" ] || exit 0
 kit_path file_path
 
-# Domain aggregates and value objects only. An Application handler or an EF
-# mapper has a fan-out of one or two callers — the model already holds it.
-#
-# Which files those are is `layout.aggregate` of kit.config.json, shell-`case`
-# patterns on the full path (clean-architecture: `*/*.Domain/*/Aggregates/*.cs`,
-# `*/*.Domain/*/ValueObjects/*.cs` — any `*.Domain` project, so one copy serves a
-# repo split in several bounded contexts). Missing python3, lib or config: exit 0.
+# Domain aggregates and value objects only (`layout.aggregate`). Missing python3, lib or config: exit 0.
 kit_lib="$(dirname "${BASH_SOURCE[0]}")/../lib"
 python3 "$kit_lib/kit_config.py" match aggregate "$file_path" 2>/dev/null || exit 0
 
@@ -57,11 +27,7 @@ command -v graphify >/dev/null 2>&1 || exit 0
 symbol=$(basename "$file_path"); symbol=${symbol%.*}
 [ -n "$symbol" ] || exit 0
 
-# Once per (agent, symbol). A refactor touches the same value object across a
-# dozen edits and the radius does not move between them; repeating it would cost
-# more context than the first copy saved. Scoped to the agent, not the session,
-# for the reason read-bounds.sh documents: subagents share the parent session_id,
-# so a session key would let one agent's copy silence every other agent.
+# Once per (agent, symbol): subagents share the parent session_id.
 session_id=$(echo "$input" | jq -r '.session_id // "unknown"')
 agent_id=$(echo "$input" | jq -r '.agent_id // ""')
 seen_file="/tmp/claude-affected-seen-${session_id}${agent_id:+-$agent_id}"
@@ -70,22 +36,13 @@ if [ -f "$seen_file" ] && grep -Fxq "$symbol" "$seen_file" 2>/dev/null; then
 fi
 echo "$symbol" >> "$seen_file"
 
-# graphify resolves its graph from the working directory, so the query must run
-# from the repository that owns the edited file — not from wherever the session
-# happens to sit. Without this the hook answers from the wrong graph in a
-# worktree, and answers nothing at all when the file belongs to another
-# repository than the current one.
+# graphify resolves its graph from the cwd: run from the repo that owns the file.
 repo_root=$(cd "$(dirname "$file_path")" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)
 [ -n "$repo_root" ] || repo_root=$(dirname "$file_path")
 [ -d "$repo_root/graphify-out" ] || exit 0
 
-# graphify 0.9.58 path-qualifies node IDs (#1504), which fixes same-name-file
-# collisions and breaks label lookup at the same time: `ProductId` now
-# matches 7 nodes, so `affected ProductId` answers "No unique node match"
-# and this hook went silent on every value object it exists for. `explain` prints
-# the ambiguity as `<source file>` / `id: <node id>` pairs, and the edited file is
-# its own disambiguator — its path picks the definition node out of that list.
-# Falls back to the bare label, which still works on a symbol that is unique.
+# Path-qualified node ids make a label ambiguous: `explain` lists `<source file>` /
+# `id: <node id>` pairs and the edited file's path picks one. Falls back to the label.
 rel=${file_path#"$repo_root"/}
 target=$symbol
 explained=$(cd "$repo_root" && graphify explain "$symbol" 2>/dev/null)
@@ -113,10 +70,7 @@ ctx="graphify affected \"$symbol\" — measured blast radius, $total references 
 
 $rollup
 "
-# Only claim the test projects break when the rollup actually names one. A radius
-# confined to the Domain is the common case on a young value object, and a line
-# about tests that are not there reads as boilerplate — which is how injected
-# context stops being read at all.
+# Only claim the test projects break when the rollup names one.
 case "$rollup" in
   *tests/*) ctx="$ctx
 The test projects listed break just as the src ones do." ;;

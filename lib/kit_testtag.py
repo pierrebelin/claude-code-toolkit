@@ -1,22 +1,8 @@
 #!/usr/bin/env python3
-"""testTag adapters — how a test declares the business rule it covers.
+"""testTag adapters — how a test declares the business rule it covers (`<RuleSheetFolder>/<RM|RL-xx>`).
 
-The value is the contract and never moves: `<RuleSheetFolder>/<RM|RL-xx>`. Only its
-carrier changes with the test framework, chosen by `testTag.framework`:
-
-    xunit   [Trait("RM", "CreateProduct/RM-01")]          on the line after [Fact]/[Theory]
-    pytest  @pytest.mark.rm("CreateProduct/RM-01")         decorator of a test_* function
-    junit   @Tag("RM:CreateProduct/RM-01")                 annotation next to @Test
-    jest    it("[RM CreateProduct/RM-01] rejects …")       in the title of the test or of
-                                                           an enclosing describe
-
-`testTag.regex` overrides the carrier regex (one capture group: the value);
-`testTag.files` overrides the test file globs. Every scanner, the traceability hook
-and the four scripts read tests through `adapter(config).scan(path)` — one copy of
-the parsing, never one per caller.
-
-A scanned test: `Test(path, cls, method, line, tags)` — `line` is the 1-based line of
-the method or call.
+Every caller reads tests through `adapter(config).scan(path)`, which yields
+`Test(path, cls, method, line, tags)` — `line` 1-based, of the method or call.
 """
 import fnmatch
 import os
@@ -101,7 +87,7 @@ class XUnit(Adapter):
         self.line_tag = re.compile(r"\s*(?:" + self.regex.pattern + ")")
 
     def classes_of(self, path):
-        # The test file is named after its class: the stem alone, as before the adapters.
+        # The test file is named after its class.
         return {stem(path)}
 
     def scan(self, path):

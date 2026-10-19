@@ -2,35 +2,12 @@
 set -uo pipefail
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Audit capture — deterministic material for /verify-ddd-tdd
-# ══════════════════════════════════════════════════════════════════════════════
-# The auditor used to spend ~30 turns collecting what it needs before judging
-# anything, one tool call per turn. A turn resends the whole accumulated
-# context: those turns were the bulk of the audit's bill. This script gathers
-# the same material in a single call, into one file the auditor opens once.
-#
-# What it does NOT do: choose the targeted test filters. `/verify-ddd-tdd` §3
-# holds that the volume of tests executed is an audit decision, not a reflex.
-# Only the deterministic floor lives here — build, and ArchitectureTests when
-# the diff makes it mandatory.
-#
+# Audit capture — the deterministic material for /verify-ddd-tdd, in one file.
 # Usage:
 #   cctoolkit audit-capture <batch> <sheet.md> <output> [--base <work>] [--suites-green <S1,S2>]
-#
-# --base: the run work file holding the `batch-baseline snapshot` of the batch. The diff
-# is then the batch's own, files the user had modified before the batch left out: a diff
-# three batches wide once reached the auditor at 6802 lines, truncated to 1200.
-#
-# --suites-green: the suites the global green ran green just before. Written as
-# `suites-green` beside the output, it lets lib/guard-auditor.sh refuse the
-# auditor a rerun of them while no source or test file changed (2026-10-14: about
-# 6 min of reruns in one audit).
-#
-# Example:
-#   cctoolkit audit-capture F1 todo/<feature>/PLAN-F1.md \
-#        "$SCRATCHPAD/audit-F1.txt"
-# ══════════════════════════════════════════════════════════════════════════════
+# --base: run work file with the batch's `batch-baseline snapshot`: the diff is the batch's own.
+# --suites-green: writes `suites-green` beside the output, read by lib/guard-auditor.sh.
+# Targeted test filters are left to the audit: only build and ArchitectureTests run here.
 
 usage() {
     echo "Usage: cctoolkit audit-capture <batch> <sheet.md> <output> [--base <work>] [--suites-green <S1,S2>]" >&2
@@ -51,8 +28,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# kit_config.py beside scripts/ (plugin, toolkit); under .claude/lib/ in a copy
-# predating the plugin, where scripts/ sat at the repo root.
 KIT_PY="$HERE/lib/kit_config.py"
 [[ -f "$KIT_PY" ]] || KIT_PY="$HERE/.claude/lib/kit_config.py"
 SCRIPTS="$HERE/scripts"
@@ -64,7 +39,6 @@ if [[ ! -f "$SHEET" ]]; then
     exit 2
 fi
 
-# Paths and commands come from .claude/kit.config.json, resolved by kit_config.py.
 if ! KIT_VARS="$(python3 "$KIT_PY" shell "$ROOT")"; then
     echo "kit.config.json unreadable — cctoolkit doctor" >&2
     exit 2
@@ -85,16 +59,13 @@ if [[ -n "$GREEN" ]]; then
     } >"$MARKER"
 fi
 
-# Bounded on purpose: this file is read by a model that pays for every line of
-# it on every later turn. A raw log has no place here.
+# Bounded: the auditor pays for every line of this file on every later turn.
 DIFF_MAX=1200
 LOG_MAX=6
 
 section() { printf '\n=== %s ===\n' "$1" >>"$OUT"; }
 
-# Runs a command line (a `commands.*` string of kit.config.json), records its exit
-# code, and keeps at most LOG_MAX useful lines when it fails — nothing at all when
-# it passes.
+# Runs a `commands.*` string, records its exit code, keeps at most LOG_MAX lines on failure.
 run_check() {
     local label="$1" cmd="$2"
     local log rc
@@ -120,15 +91,8 @@ git status --short >>"$OUT" 2>&1
 section "git diff --check"
 git diff --check >>"$OUT" 2>&1 || true
 
-# The diff drives everything below: the auditor walks it hunk by hunk, and the
-# mandatory suites are read off the paths it touches.
-# `git diff` alone ignores untracked files, and a batch's new handler and new tests
-# are exactly that: each one is appended as a /dev/null → file patch.
-# Code only. Measured runs captured 65-110 kB, most of it outside the batch's
-# code: tooling work left in the tree, the sheet and plan, handler CLAUDE.md
-# tables (pre-audit already gates them), Verify snapshots. Each capture was read
-# 5-7 times in slices, every slice carried to the end of the audit. Those paths
-# stay named under "changed files", never inlined.
+# Code only (.md and *.verified.* named under "changed files", never inlined);
+# untracked files appended as /dev/null patches, `git diff` alone ignores them.
 DIFF_SCOPE=(-- "${CODE_DIRS[@]}" ':(exclude)*.md' ':(exclude)*.verified.*')
 batch_diff() {
     git diff "${DIFF_SCOPE[@]}" 2>/dev/null
@@ -152,9 +116,7 @@ else
 fi
 printf '\n[diff below: code of the source and test folders only; .md, *.verified.* and anything outside them are listed here, read them targeted when an axis needs it]\n' >>"$OUT"
 
-# Never truncated: a cut diff was audited on a sample. Past DIFF_MAX the diff stays
-# in its own file and the capture carries an index, one line per file with its line
-# range, so the auditor reads every file by range.
+# Never truncated: past DIFF_MAX the capture carries an index of line ranges into the diff file.
 section "batch diff ($DIFF_LINES lines)"
 if [[ "$DIFF_LINES" -gt "$DIFF_MAX" ]]; then
     printf 'full diff: %s — read it file by file, ranges below (Read offset/limit), no file skipped\n\n' "$DIFF_FILE" >>"$OUT"
@@ -163,9 +125,7 @@ else
     cat "$DIFF_FILE" >>"$OUT"
 fi
 
-# TDD evidence of a sheet with a `## Cycles` block: one line per cycle, read off the
-# `cycle` lines the RED and GREEN agents appended to the run work file. Such a sheet carries no ticks; the
-# `Plan` axis judges RED observed before GREEN from this section.
+# TDD evidence of a sheet with a `## Cycles` block: one line per cycle.
 STATE_DIR="$(dirname "$SHEET")/run/.work.jsonl"
 python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --index >/dev/null 2>&1
 if [[ $? -ne 2 ]]; then
@@ -173,9 +133,7 @@ if [[ $? -ne 2 ]]; then
     python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --summary "$STATE_DIR" --batch "$BATCH" >>"$OUT" 2>&1
 fi
 
-# Stubs whose added lines look like logic, recorded by the RED check of lib/tdd_scope.py
-# since the batch started: evidence for the `Plan` axis (TDD), never a verdict by itself.
-# No record, no section: the capture of a batch without one is unchanged.
+# Stubs carrying logic recorded by lib/tdd_scope.py since the batch started; no record, no section.
 SINCE="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import work_file; r = work_file.of(work_file.read(sys.argv[2]), "preexisting", sys.argv[3]); print(r[0].get("at", 0) if r else 0)' "$SCRIPTS/../lib" "$STATE_DIR" "$BATCH" 2>/dev/null || echo 0)"
 STUBS="$(python3 "$SCRIPTS"/tdd-scope.py evidence --since "${SINCE:-0}" 2>/dev/null)"
 if [[ -n "$STUBS" ]]; then
@@ -189,9 +147,6 @@ python3 "$SCRIPTS"/rules-coverage.py --untested >>"$OUT" 2>&1
 section "DDD/APP/PERF id coverage of the sheet"
 python3 "$SCRIPTS"/rules-coverage.py --ids "$SHEET" >>"$OUT" 2>&1
 
-# Awaited Infrastructure calls per modified file, read off the syntax tree;
-# loop, lambda and in-memory filter flagged, added lines told from pre-existing
-# ones. The `Cost` axis judges this section instead of re-opening the handlers.
 if [[ -n "$BASE" ]]; then
     section "access cost (scripts/access-cost.py --base)"
     python3 "$SCRIPTS"/access-cost.py --base "$BASE" "$BATCH" >>"$OUT" 2>&1 || true
@@ -200,8 +155,7 @@ else
     python3 "$SCRIPTS"/access-cost.py --diff >>"$OUT" 2>&1 || true
 fi
 
-# `commands.build` covers the whole solution; a red build makes every verdict
-# below it meaningless, so it runs first and unconditionally when code moved.
+# Build runs first: a red build makes every verdict below it meaningless.
 if [[ -z "$KIT_BUILD" ]]; then
     section "build"
     printf 'not run — no commands.build in kit.config.json\n' >>"$OUT"
@@ -212,11 +166,7 @@ else
     printf 'not run — the diff touches neither %s\n' "$KIT_NEITHER_LABEL" >>"$OUT"
 fi
 
-# ArchitectureTests whole, exactly under the condition of
-# `implement-tdd/references/test-scope.md` §2: a handler, an endpoint, a
-# repository, a layer boundary or a DI registration changed
-# (`commands.architectureTest.when`, a regex on the changed paths). Deterministic
-# on the diff's paths, so it does not need the model's judgement.
+# ArchitectureTests whole when a changed path matches `commands.architectureTest.when`.
 if [[ -z "$KIT_ARCH_RUN" || -z "$KIT_ARCH_WHEN" ]]; then
     section "ArchitectureTests"
     printf 'not run — no commands.architectureTest in kit.config.json\n' >>"$OUT"

@@ -1,24 +1,13 @@
 #!/usr/bin/env python3
 """The knowledge base's derived index — `<root>/.index/`, git-ignored — and `INDEX.md`.
 
-    refresh(c, save)      re-parses the base files whose stamp changed since the last
-                          run, rewrites `.index/knowledge.jsonl` unless `save` is False;
-                          returns the rows and the count of files parsed and left as
-                          they were
-    index_md(c, rows)     the text of `INDEX.md`
-    write_index_md(c, rows)  writes it when it differs; True when written
+`.index/files.json` keeps per file its stamp, digest and parse; the cross-file fields
+(`usecases`, `handlers`) are recomputed over every row on each refresh.
 
-Incremental: `.index/files.json` keeps, per base file, its stamp (mtime, size), its
-digest and what it defines. A file whose stamp moved is read again; its digest
-unchanged, its parse is kept. What crosses files — the use cases a rule applies to, the
-handlers they carry — is recomputed over every row on each refresh, in memory: a
-citation added in one use case changes the row of a rule defined elsewhere.
-
-A row, one per object: `id`, `kind` (CU, RM, D, ADR), `context` (its folder; none for
-an ADR), `contexts` (an ADR's: the prefixes of the ids it cites), `title`, `text` (its
-own lines, nested objects left out), `status` (`specified` | `observed`), `level`,
-`path`, `line` and `end` (1-based, the object's lines in its file), `cites`,
-`usecases`, `handlers`. `HISTORY.md` is not indexed: `knowledge.history()` reads it.
+A row, one per object: `id`, `kind` (CU, RM, D, ADR), `context` (none for an ADR),
+`contexts` (an ADR's cited prefixes), `title`, `text` (own lines), `status`
+(`specified` | `observed`), `level`, `path`, `line`, `end` (1-based), `cites`,
+`usecases`, `handlers`. `HISTORY.md` is not indexed.
 """
 import hashlib
 import json
@@ -40,8 +29,7 @@ def index_dir(c):
 
 
 def base_files(c):
-    """Repo-relative paths of the base files that hold objects — every `.md` but
-    `INDEX.md` and `HISTORY.md`, staging and index folders left out."""
+    """Repo-relative `.md` paths of the base but `INDEX.md`, `HISTORY.md`, staging and index folders."""
     base = knowledge.base_dir(c)
     return sorted(c.rel(p) for p in knowledge.markdown_files(base) if os.path.basename(p) not in SKIP)
 
@@ -127,8 +115,7 @@ def load_cache(c):
 
 
 def refresh(c, save=True):
-    """(rows, parsed, unchanged). Writes `.index/` only when a file moved, never without
-    `save` (`knowledge-index --check`, read only)."""
+    """(rows, parsed, unchanged). Writes `.index/` only when a file moved and `save` is set."""
     cache = load_cache(c)
     files, parsed, unchanged, moved = {}, 0, 0, False
     for rel in base_files(c):

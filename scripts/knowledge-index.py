@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
 """The knowledge base's index, rebuilt: `<root>/.index/` (git-ignored) and `INDEX.md`.
 
-    cctoolkit knowledge-index           refreshes `.index/knowledge.jsonl` — only the files
-                                        whose stamp changed are parsed again — and writes
-                                        `INDEX.md` when it differs
-    cctoolkit knowledge-index --check   writes nothing: exit 1 and `INDEX.md stale` when the
-                                        committed `INDEX.md` is not what the base gives;
-                                        `cctoolkit doctor` and the opt-in pre-commit run it
-
-`cctoolkit knowledge-write apply` and `mark` run the same refresh; `cctoolkit ask`
-refreshes `.index/` on its own and never writes `INDEX.md`. Run this after editing the
-base by hand. Formats: `skills/knowledge-sync/references/knowledge-format.md`.
+    cctoolkit knowledge-index           refreshes `.index/knowledge.jsonl`, writes `INDEX.md` when it differs
+    cctoolkit knowledge-index --check   writes nothing: exit 1 and `INDEX.md stale` when `INDEX.md` lags
 
 Exit 0, 1 stale (`--check`) or no base, 2 usage, 3 config defect.
 """

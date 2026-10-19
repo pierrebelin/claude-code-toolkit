@@ -1,25 +1,17 @@
 #!/usr/bin/env python3
 """The run work file — `<plan folder>/run/.work.jsonl`, the one scratch file of run-plan and run-lot.
 
-Why. The runs used to leave a tree of drafts under `run/.work/` (a folder per run, a folder
-per batch with a copy of every file being modified, one file per cycle, per question, per
-log) that no purge rule kept small. Every batch is now committed when it ends, so the batch
-diff is `git diff HEAD`: no file copy is needed. What a run must keep between two agents
-fits in one line of JSON per event:
+One line of JSON per event:
 
     {"kind": "preexisting", "batch": "F2", "at": 1760000000.0, "files": {"<path>": "<blob sha>"}}
-        files modified or untracked when the batch started (hash only, `git hash-object`
-        without -w: no content stored anywhere); the batch commit and the set-aside restore
-        leave them alone
+        files dirty when the batch started (hash only); the batch commit and restore leave them alone
     {"kind": "cycle", "batch": "F2", "slug": "<behaviour slug>", "state": {...}}
         RED then GREEN state of one cycle; the last line of a slug wins
     {"kind": "question", "batch": "F2", "id": "F2-1", "at": ..., "payload": {...}}
     {"kind": "answer", "batch": "F2", "id": "F2-1", "at": ..., "answers": [...]}
     {"kind": "journal", "run": "<stamp>", "at": ..., "text": "..."}
     {"kind": "audit-round", "batch": "F2", "round": 1, "open": 3, "files": [...], "contested": [...], "responses": [...], "after": 1, "diverged": false}
-        one audit fix round: findings it answered, files it changed (read off the tree by
-        `cctoolkit audit-round`), contests, the audit's responses and the findings left (`after`, `diverged`, written once
-        the audit answered); the last line of a round wins
+        one audit fix round (`after`, `diverged` written once the audit answered); the last line of a round wins
     {"kind": "attempt", "batch": "F2", "step": "GREEN …", "n": 2, "reason": "..."}
         a rejected attempt of a step and why, written with the next attempt
     {"kind": "breaker", "run": "<stamp>", "asides": [...], "decision": "stop"|"continue", "cause": "..."}
@@ -27,11 +19,8 @@ fits in one line of JSON per event:
     {"kind": "ack", "batch": "F2", "ref": "<id>|pause", "what": "note-taken"|"applied"|"paused"}
         a script's answer to a line of the pane file `run/.pane.jsonl` (lib/pane_file.py)
 
-Concurrent RED and GREEN agents append at the same time: every append and every rewrite
-holds an exclusive `flock` on the file itself, and a rewrite truncates in place (a
-replace by rename would leave an appender writing to the unlinked inode). Windows has no
-`flock`: there the lock is one byte far past the content (`msvcrt.locking`, mandatory, so
-never on the data itself), exclusive for readers too.
+Every append and rewrite holds an exclusive `flock`; a rewrite truncates in place (a rename would
+strand an appender on the unlinked inode). Windows locks one byte past the content (`msvcrt.locking`).
 """
 import hashlib
 import json
@@ -75,8 +64,7 @@ KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round",
 
 
 def tmp_dir(name: str) -> Path:
-    """`$TMPDIR/cctoolkit-run/<repo>-<hash>/<name>`: the run's scratch folder, the same on every
-    call for one repo, outside the repo. `cctoolkit run-work tmp` prints it; hooks keep state there."""
+    """`$TMPDIR/cctoolkit-run/<repo>-<hash>/<name>`: the run's scratch folder, stable per repo, outside it."""
     import kit_config
     root = Path(kit_config.project_root()).resolve()
     repo = f"{root.name}-{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
@@ -139,8 +127,7 @@ def append(path, record: dict) -> dict:
 
 def keep(path, predicate) -> int:
     """Rewrites the file with the records `predicate` keeps; returns how many were dropped.
-    Never removes the file, even empty: an appender blocked on the lock would then write
-    to the unlinked inode. `run-work purge`, run before any agent starts, removes it."""
+    Never removes the file: an appender blocked on the lock would write to the unlinked inode."""
     path = Path(path)
     if not path.is_file():
         return 0

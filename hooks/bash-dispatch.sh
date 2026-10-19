@@ -1,34 +1,9 @@
 #!/bin/bash
 # PreToolUse Bash hook — single entry point for every Bash guard.
-#
-# Why one dispatcher. Each guard used to be its own hook, re-running `cat` + `jq`
-# on the same payload (~75 ms per Bash call for four of them, measured 2026-09-09),
-# and two of them could both rewrite the same command with no defined winner.
-# Here the payload is parsed once, the order is explicit and only one stage ever
-# answers.
-#
-# Order:
-#   1. guard-git         deny / ask -> terminal, nothing else runs
-#   1b. guard-tdd-scope  deny       -> terminal, the TDD agents write through Edit/Write only
-#   2. guard-cat-bounds  deny       -> terminal, an unbounded dump never reaches rtk
-#   3. guard-diff-bounds deny       -> terminal, a whole patch never reaches rtk either
-#   4. guard-integration deny       -> terminal, a whole IntegrationTests suite never runs
-#   5. guard-auditor     deny       -> terminal, the batch auditor neither waits nor reruns
-#   6. piped-filter x2   rewrite    -> terminal, rtk knows neither of these tools
-#   7. rewrite-rtk       rewrite    -> the default path
-#
-# A module entry may carry an argument, which is why MODULES is an array and the
-# expansion below is deliberately unquoted: the strings are ours, not the user's.
-#
-# Module contract: reads HOOK_* from the environment, prints the hook JSON on
-# stdout when it decides, prints nothing when it passes.
-#
-# Modules are sourced inside the command substitution, not run as `bash file`.
-# The substitution is already a fork; `bash file` added an exec and a shell
-# start-up on top, eight times per Bash call. Measured 2026-09-12 on `ls src`,
-# 20 calls: 41.9 ms per call before, 30.8 ms after. A module's
-# `exit` and `set -u` stay in that subshell, and `. file args` hands the module
-# its positional parameters, so nothing in the modules changed.
+# Payload parsed once; modules run in MODULES order and the first that answers wins.
+# Module contract: reads HOOK_* from the environment, prints the hook JSON when it
+# decides, nothing when it passes. Sourced inside the command substitution, so a
+# module's `exit` and `set -u` stay in that subshell.
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
@@ -37,17 +12,9 @@ LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 
 HOOK_INPUT=$(cat)
 
-# Single parse for the whole chain.
-# The separator is US (\x1f), not a tab: a tab is IFS-whitespace, and bash
-# collapses runs of IFS-whitespace into one delimiter even when IFS holds
-# nothing else. An empty agent_id — the main chain always has one — therefore
-# shifted transcript_path into HOOK_AGENT_ID and made every caller look like a
-# subagent. A non-whitespace separator keeps empty fields.
-# One jq for the whole payload. Metadata and command were two spawns (~3.2 ms
-# each); the command is appended behind an RS (\x1e) instead, and split off on
-# the FIRST occurrence — the four metadata fields can hold neither separator.
-# -j, not -r: no trailing newline to strip, and none to inject into the command.
-# agent_type and run_in_background ride along for guard-auditor (2026-10-14).
+# One jq. US (\x1f) separator, not a tab: bash collapses IFS-whitespace runs, so an
+# empty field would shift the rest. The command follows an RS (\x1e), split on the
+# FIRST one. -j, not -r: no trailing newline injected into the command.
 PARSED=$(printf '%s' "$HOOK_INPUT" | jq -j '([(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.transcript_path // ""), (.agent_type // ""), (.tool_input.run_in_background // false | tostring)] | join("\u001f")) + "\u001e" + (.tool_input.command // "")')
 
 IFS=$'\x1f' read -r HOOK_TOOL_NAME HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH HOOK_AGENT_TYPE HOOK_BACKGROUND <<<"${PARSED%%$'\x1e'*}"
@@ -58,8 +25,7 @@ HOOK_CMD="${PARSED#*$'\x1e'}"
 
 export HOOK_INPUT HOOK_CMD HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH HOOK_AGENT_TYPE HOOK_BACKGROUND
 
-# Advisory, not a decision: it never denies and never rewrites, so it runs
-# outside the terminal chain and is merged into whatever that chain answers.
+# Advisory, outside the chain: merged into whatever the chain answers.
 NUDGE=$(. "$LIB/batching-nudge.sh" 2>/dev/null || true)
 
 emit() {
@@ -73,9 +39,7 @@ emit() {
       '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $c}}'
     return
   fi
-  # Graft the nudge onto the decision. A module answer that is not an object
-  # carrying hookSpecificOutput is passed through untouched: the decision always
-  # outranks the advice.
+  # Graft the nudge onto the decision; an answer without hookSpecificOutput passes untouched.
   merged=$(printf '%s' "$1" | jq --arg c "$NUDGE" \
     'if type == "object" and has("hookSpecificOutput")
      then .hookSpecificOutput.additionalContext =
@@ -96,6 +60,7 @@ MODULES=(
   "rewrite-rtk.sh"
 )
 
+# An entry may carry an argument: the unquoted expansion below is deliberate.
 for module in "${MODULES[@]}"; do
   # shellcheck disable=SC2086
   out=$(set -- $module; f=$1; shift; . "$LIB/$f" "$@")

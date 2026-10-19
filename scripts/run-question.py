@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 """Questions a running run-lot / run-plan workflow asks the user, answered in the session.
 
-The workflow appends a `question` line to the run work file `run/.work.jsonl`
-(lib/work_file.py), then polls for the `answer` line of the same id; the session watches
-the run folder, asks through AskUserQuestion and appends the answer. The run never stops
-nor resumes: it waits.
+Lines of `run/.work.jsonl` (lib/work_file.py): the workflow appends a `question` and waits for
+its `answer`, which the session appends after AskUserQuestion.
 
     run-question.py ask <work> FX
-        workflow side: appends the question JSON read on stdin as `FX-<n>`, n the next
-        number of FX, and prints that id
+        workflow side: appends the question JSON read on stdin as `FX-<n>`, prints that id
     run-question.py wait <work> <id> [--seconds N]
         workflow side: exit 0 printing `{"answers": [...]}` as soon as an answer to <id> at
         least as recent as the question exists, exit 3 printing PENDING after N seconds
-        (default 540). An older answer is a leftover of an earlier run: ignored.
+        (default 540)
     run-question.py watch <run folder|work> [--since EPOCH] [--seconds N]
         session side: exit 0 printing `QUESTION <work> <id> since=<epoch> next=<epoch>`
         then the question JSON on the next line, for the first unanswered question asked
         after EPOCH (default: start time); exit 3 printing `TIMEOUT since=<epoch>` after N
-        seconds (default 0 = never). Re-arm with `--since <next>`: the question being
-        answered never fires twice.
+        seconds (default 0 = never). Re-arm with `--since <next>`.
     run-question.py pending <run folder|work>
         unanswered question ids, one per line
     run-question.py answer <work> <id> <answers-json>

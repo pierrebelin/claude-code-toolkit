@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
 """Assembles `docs/metrics/quality-report-YYYY-MM-DD.json` from the fragments the audit wrote.
 
-Each agent of the `run-audit` workflow writes its own block into a fragment file;
-none copies another's figures. This merges them, so no number passes through a
-model twice:
-
     cctoolkit report-assemble --out <report.json> <source>... [--last <file>]
 
 - `<source>` = `<file>` (merged at the root) or `<key.path>=<file>` (placed at that key).
   Objects merge recursively, a later source wins; a `null` replaces a block.
-- `--last <file>`: merged after every source — the workflow's metadata and the `null`
-  of each block whose evidence is not `measured`, which win over any fragment.
-- `tests.total` is recomputed from the per-type entries (passed, failed, skipped,
-  duration_seconds): a sum is never copied.
-- The first-level keys are frozen (`docs/FROZEN-LITERALS.md`): a
-  fragment adding another one is refused, exit 1, nothing written.
+- `--last <file>`: merged after every source, so it wins over any fragment.
+- `tests.total` is recomputed from the per-type entries, never copied.
+- First-level keys are frozen: a fragment adding another is refused, nothing written.
 
 Exit 0 written, 1 refused, 2 bad arguments or unreadable fragment.
 """

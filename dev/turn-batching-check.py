@@ -1,21 +1,13 @@
 #!/usr/bin/env python3
-"""Measures tool-call batching in this project's Claude Code sessions.
-
-The cost of a session follows the number of turns: every turn resends the whole
-accumulated context. Two independent calls made in two turns pay that accumulation
-twice. This script measures what could have fitted in a single message.
+"""Measures tool-call batching in this project's Claude Code sessions (maintainer tool).
 
 Usage:
     python3 <kit checkout>/dev/turn-batching-check.py [--days N] [--until YYYY-MM-DD] [--project <substring>]
                                                       [--save-baseline <file.json>] [--compare <file.json>]
 
-By default the project filter is derived from the repository folder name, which is
-how Claude Code names the transcript directory under ~/.claude/projects. Run it from
-inside the repo measured: a maintainer tool, not shipped as a `cctoolkit` command.
-
-Output: calls per turn, batchable read runs, files read whole more than once — main
-chain — then the read-bounds denials of the subagents, whose transcripts sit under
-<session>/subagents/ (90 % of all denials, measured 2026-10-09).
+Run from inside the repo measured: the default project filter is its folder name.
+Output: calls per turn, batchable read runs, files read whole more than once, read-bounds
+denials — main chain, then subagents (<session>/subagents/).
 """
 
 import argparse
@@ -96,12 +88,7 @@ def is_read_only(name, command):
 
 
 def after_denial(name, command, payload, refused):
-    """Classify the call that follows a guard denial: the only measure of the path taken.
-
-    The forced/denied ratio says whether the guard holds; this says what the model
-    does instead — bounded Read, forcing, subagent, or a cat that moves
-    the volume to Bash (measured 2026-09-09, hence guard-cat-bounds).
-    """
+    """Classify the call that follows a guard denial."""
     if name == "Read":
         if "offset" in payload or "limit" in payload:
             return "bounded Read"
@@ -121,11 +108,7 @@ def after_denial(name, command, payload, refused):
 
 
 def turns_of(path, seen, cutoff=None, until=None, sidechain=False):
-    """Yield (tool_name, command, input, result_size) for each tool call of one chain.
-
-    A session transcript is read for its main chain; a file under subagents/ is all
-    sidechain, read with sidechain=True.
-    """
+    """Yield (turn_id, tool_name, command, input, result_size, denied) per tool call of one chain."""
     order, results = [], {}
     with open(path, encoding="utf-8", errors="ignore") as handle:
         for line in handle:
@@ -198,8 +181,7 @@ def main():
                              "normalised to dashes, like the transcript folders")
     args = parser.parse_args()
 
-    # A transcript folder is the repository path with every non-alphanumeric turned into a dash:
-    # `My.Repo` passed as is matched nothing (measured 2026-09-13).
+    # Transcript folders turn every non-alphanumeric of the repo path into a dash.
     project = re.sub(r"[^A-Za-z0-9*]", "-", args.project)
     pattern = os.path.join(PROJECTS_DIR, f"*{project}*", "*.jsonl")
     files = glob.glob(pattern)
@@ -267,8 +249,7 @@ def main():
         for file_path, entries in session_reads.items():
             reads[file_path].append(entries)
 
-    # Subagents: their own counters, kept out of the main-chain figures above so that
-    # a baseline saved before 2026-10-09 still compares like for like.
+    # Subagents: their own counters, kept out of the main-chain figures so baselines stay comparable.
     sub_turns = collections.Counter()
     sub_calls = sub_denials = sub_forcings = sub_forced_edited = 0
     for path in sub_files:

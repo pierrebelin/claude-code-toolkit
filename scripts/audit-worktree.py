@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
-"""The throwaway worktree `/quality-report` measures in — the main branch's commit, clean.
-
-The working checkout may sit on another branch, hold uncommitted changes, or be
-running a `run-lot`; Stryker rewrites sources while it runs. The audit measures a
-detached worktree of the main branch instead, in the system temp directory, never
-inside the repo:
+"""The throwaway worktree `/quality-report` measures in — the main branch's commit, clean, in the system temp.
 
     cctoolkit audit-worktree create [--ref <branch|sha>]   # one JSON line: path, commit, branch, copied
     cctoolkit audit-worktree remove [<path>]               # this commit's worktree, or <path>
     cctoolkit audit-worktree prune                         # every cctoolkit-audit-* worktree of the repo
 
-`create` first prunes the audit worktrees an interrupted run left behind, then adds
-`<temp>/cctoolkit-audit-<repo>-<sha12>`. The ref defaults to the main branch: the
-target of `origin/HEAD`, else the current branch. Repo files git does not track but
-the kit reads — `.claude/kit.config.json`, `.claude/settings.local.json`,
-`.claude/presets/` — are copied when the commit lacks them, and listed in `copied`.
+`create` prunes leftovers first, then adds `<temp>/cctoolkit-audit-<repo>-<sha12>` detached.
+The ref defaults to the target of `origin/HEAD`, else the current branch. Untracked files
+the kit reads (UNTRACKED) are copied when the commit lacks them, listed in `copied`.
 Exit 0 on success, 1 when git refuses.
 """
 import hashlib

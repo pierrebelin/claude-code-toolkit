@@ -3,11 +3,8 @@
 
     cctoolkit run-notes take <work> <batch>
         prints each note of <batch> not taken yet, one line `Note from the user for <batch>: <text>`,
-        and records it taken (an `ack` line of the work file): a note reaches one agent once.
-        Nothing pending: prints nothing, exit 0.
-
-Notes live in `run/.pane.jsonl` beside the work file (lib/pane_file.py). `run-lot` takes them when
-a batch starts (every contract of the batch carries them), in a retry and in the arbiter.
+        and records it taken (an `ack` line of the work file). Nothing pending: prints nothing, exit 0.
+        Notes live in `run/.pane.jsonl` beside the work file (lib/pane_file.py).
 """
 import os
 import sys

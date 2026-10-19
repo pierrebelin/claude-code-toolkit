@@ -1,27 +1,15 @@
 #!/usr/bin/env python3
 """Danger Zone × coverage × mutation survivors, per file — the head table of §7 Risk zones.
 
-A hotspot is complex and often changed; whether it is a risk depends on what guards
-it. This joins, per Danger Zone file of `activity.hotspots` (both rankings), its line
-and branch coverage and its Stryker mutants:
-
     cctoolkit risk-cross --hotspots <collect.json | hotspots.json>
-                         [--coverage <file>] [--coverage-status missing --coverage-reason <why>]
+                         [--coverage <file>] [--coverage-status missing|not_configured --coverage-reason <why>]
                          [--stryker <mutation-report.json>]... [--stryker-dir <dir>] [--stryker-status skipped|not_configured|missing --stryker-reason <why>]
                          [--commit <sha>]
 
-- `--hotspots`: the `cctoolkit audit-collect` output, or `cctoolkit hotspots --json`.
-- `--coverage`: SonarQube generic coverage XML (ReportGenerator `SonarQube` format),
-  Cobertura XML, or lcov — sniffed from the content.
-- `--stryker`: one or more `mutation-report.json` (the mutation-testing-elements schema
-  both Stryker .NET and StrykerJS write); several runs (Domain, Application) are merged.
-  `--stryker-dir`: every `*.json` of that folder (the audit's Stryker cache).
-
-Report paths are matched on the repo-relative path, longest suffix first: the tools
-write absolute paths from the worktree they ran in. A side not given stays `null` with
-its status — never 0. A file the coverage report does not list was never loaded by a
-test: 0 % lines. A file the mutation reports do not list sits outside the mutation scope:
-its mutant columns stay `null`. Prints the `codebase.hotspot_risk` JSON object. Exit 0; 2 on bad input.
+`--coverage`: SonarQube generic XML, Cobertura XML or lcov, sniffed from the content.
+`--stryker`: mutation-testing-elements reports, merged; `--stryker-dir`: every `*.json` in it.
+Paths are matched on the repo-relative path, longest suffix first. A side not given stays
+`null` with its status, never 0. Prints the `codebase.hotspot_risk` JSON object. Exit 0; 2 on bad input.
 """
 import argparse
 import json
@@ -55,7 +43,6 @@ def matcher(paths):
     return find
 
 
-# --- coverage --------------------------------------------------------------------------
 def coverage_of(path):
     """{path: {lines_covered, lines_total, branches_covered, branches_total}} and the format."""
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -124,7 +111,6 @@ def lcov(path):
     return out
 
 
-# --- mutants ---------------------------------------------------------------------------
 def mutants_of(paths):
     out = {}
     for path in paths:

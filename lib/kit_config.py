@@ -1,23 +1,10 @@
 #!/usr/bin/env python3
-"""kit.config.json, resolved — the one reader every hook and script goes through.
+"""kit.config.json, resolved over its preset — the one reader every hook and script goes through.
 
-Resolution: the preset named by `preset` (default `clean-architecture`) supplies a
-full `layout`, `testTag` and `commands`; the repo's `kit.config.json` overrides it
-key by key — objects merge recursively, a list or a scalar replaces the preset's.
-`{product}` in a path or a command expands to `product`, or to `*` when the key is
-unset: the glob then finds the one `src/*.Application` a repo usually has.
-
-Files: `<repo>/.claude/kit.config.json`, and `<repo>/.claude/presets/<name>/preset.json`
-before `<kit>/presets/<name>/preset.json` — a repo's own preset wins over a shipped one
-of the same name. `<kit>` is the parent of this `lib/`: the plugin's cache directory
-once installed, the toolkit root here. `<repo>` is `project_root()`: `$CLAUDE_PROJECT_DIR`, else the parent of
-`<kit>` when the kit sits in a repo's `.claude/` (eval fixtures, a manual copy), else the git top level of the working directory, else the
-working directory. Missing config file = the preset's defaults. Every path pattern is a segment glob
-relative to the repo root (`tests/*.UnitTests`: `*` stays inside one segment),
-except `layout.aggregate`, matched like a shell `case` against the full path.
-
-Callers never handle a broken setup themselves: `load()` raises `KitConfigError`,
-a hook catches it and exits 0, a script prints it and stops.
+`<repo>/.claude/presets/<name>/` wins over the kit's preset of the same name; `<repo>` is
+`project_root()`: `$CLAUDE_PROJECT_DIR`, else the parent of the kit when it sits in a repo's
+`.claude/`, else the git top level, else the working directory. `load()` raises `KitConfigError`:
+a hook exits 0 on it, a script prints it and stops.
 
 CLI (hooks, shell scripts, and the skills through `cctoolkit root`):
     kit_config.py root                     # the repo root, resolved as above
@@ -149,8 +136,7 @@ class Config:
         self.aggregate = [self.expand(p) for p in layout.get("aggregate", [])]
         self.commands = data.get("commands", {})
         self.test_tag = data.get("testTag", {})
-        # A malformed value is kept as is for validate_knowledge() to name, never raised here:
-        # the hooks load this config and must not go silent over a key they do not read.
+        # Kept malformed for validate_knowledge(): a hook must not die over a key it does not read.
         k = data.get("knowledge")
         k = merge(KNOWLEDGE_DEFAULTS, k if isinstance(k, dict) else {})
         self.knowledge_root = self.expand(k["root"]).strip("/") if isinstance(k["root"], str) else k["root"]
@@ -173,8 +159,7 @@ class Config:
         return out
 
     def dirs(self, patterns):
-        """Existing absolute directories matching the segment globs, each once — by
-        inode, so `src/Features` and `src/features` on a case-insensitive disk are one."""
+        """Existing absolute directories matching the segment globs, each once by inode (case-insensitive disks)."""
         found, seen = [], set()
         for p in patterns:
             for d in sorted(glob.glob(os.path.join(self.root, p))):
@@ -188,8 +173,7 @@ class Config:
         return found
 
     def rel(self, path):
-        """Relative to the root, always with `/`: compared with git's paths, matched
-        against the `/` patterns, written to JSON — on Windows too."""
+        """Relative to the root, always with `/`, on Windows too."""
         path = path if os.path.isabs(path) else os.path.join(self.root, path)
         return os.path.relpath(os.path.normpath(path), self.root).replace(os.sep, "/")
 
@@ -225,8 +209,7 @@ class Config:
 
     # --- use cases ----------------------------------------------------------------
     def is_use_case_dir(self, d):
-        """A use-case folder carries its handler: a file matching a marker glob whose
-        content matches the marker regex. Depth does not discriminate."""
+        """A use-case folder holds a file matching a marker glob whose content matches the marker regex."""
         try:
             names = os.listdir(d)
         except OSError:
@@ -376,7 +359,6 @@ def validate(root):
     if ig is not None and not (isinstance(ig, dict) and all(
             isinstance(ig.get(k), list) and ig[k] and all(isinstance(p, str) for p in ig[k]) for k in ("sources", "tests"))):
         out.append(("FAIL", "layout.integrationGuard", "expects {\"sources\": [\"<glob>\"], \"tests\": [\"<glob>\"]}"))
-    # The layout against the repo: a root that matches nothing makes the traceability silent.
     uc = c.dirs(c.use_case_roots)
     if not uc:
         out.append(("WARN", "layout.useCase.roots", f"{', '.join(c.use_case_roots)} matches no directory — the traceability hook and rules-coverage see nothing"))
@@ -429,8 +411,7 @@ def validate_knowledge(c, raw):
 
 # --- unified diff helpers ------------------------------------------------------------
 def added_lines(diff):
-    """(file, line number, text) of every added line. The file is reset on `+++ b/`
-    only, like the awk it replaces: a deletion's `+++ /dev/null` keeps the last one."""
+    """(file, line number, text) of every added line; the file resets on `+++ b/` only."""
     file, line = None, 0
     for raw in diff.splitlines():
         if raw.startswith("+++ b/"):

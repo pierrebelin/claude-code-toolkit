@@ -1,27 +1,13 @@
 #!/bin/bash
 # bash-dispatch module — hard ban on mutating Git commands.
-#
-# The skills state "Never commit to Git" (skills/README.md), but an instruction is advisory:
-# nothing enforces it. This module makes it deterministic.
-#
-# Covers the forms `permissions.deny` misses, because it matches on a
-# literal prefix:
-#   rtk git commit ...            (the rtk rewrite routes everything through rtk)
-#   git -C /other/repo commit ... (global option before the verb)
-#   cd /elsewhere && git push     (cd prefix)
-#   env FOO=1 git add .
-#
-# Contract: reads $HOOK_CMD, prints the hook JSON when it decides, nothing when
-# it passes. Runs first in the chain — a deny is terminal.
+# Covers what a `permissions.deny` prefix misses: `rtk git`, `git -C x`, `cd x && git`,
+# `env FOO=1 git`. Reads $HOOK_CMD, prints the hook JSON when it decides.
 set -u
 
 cmd="${HOOK_CMD:-}"
 [ -n "$cmd" ] || exit 0
 
-# Fast bail-out, before any subprocess. The normalisation below costs 4 sed
-# spawns (~11 ms measured 2026-09-11) and it ran on every Bash call, git or not.
-# No normalisation can turn a string without the substring `git` into `git <verb>`:
-# every rule it strips (cd, rtk, env assignments, -C) sits *before* the verb.
+# Fast bail-out: the normalisation only strips what sits before the verb.
 case "$cmd" in *git*) ;; *) exit 0 ;; esac
 
 # Normalisation: strip whatever sits between the start of the command and the
@@ -32,18 +18,8 @@ norm=$(printf '%s' "$cmd" \
   | sed -E 's/(^|[;&|][[:space:]]*)(env[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*/\1/g' \
   | sed -E 's/(^|[[:space:]])git[[:space:]]+((-C|-c|--git-dir|--work-tree|--namespace|--exec-path)[[:space:]]*=?[[:space:]]*[^[:space:]]+[[:space:]]+)*/\1git /g')
 
-# --- Exception: bringing a worktree back onto the local branch ---
-#
-# ExitWorktree transfers nothing (keep or remove, never a merge). The
-# commit-free flow is: capture the worktree diff, apply it here.
-#
-#   git -C <worktree> add -N .          # makes new files visible to the diff
-#   git -C <worktree> diff HEAD > p     # read, already allowed
-#   git apply p                         # applies into the working tree, no commit
-#
-# Those two verbs fall through to "ask": the user sees the command and decides.
-# `add -N` (--intent-to-add) records the path without the content — it stages
-# nothing committable, and `commit` stays denied regardless.
+# Worktree hand-back (`add -N` then `diff HEAD`, `git apply` here): `add -N` and
+# `apply` fall through to "ask"; `commit` stays denied.
 ASK_REASON="Worktree hand-back: this command modifies the local working tree without creating a commit. Check the target before approving."
 
 if printf '%s' "$norm" | grep -qE "(^|[;&|][[:space:]]*)git[[:space:]]+add[[:space:]]+([^|;&]*[[:space:]])?(-N|--intent-to-add)([[:space:]]|$)"; then
@@ -56,11 +32,7 @@ if printf '%s' "$norm" | grep -qE "(^|[;&|][[:space:]]*)git[[:space:]]+apply([[:
   exit 0
 fi
 
-# --- Read-only subcommands of an otherwise mutating verb ---
-#
-# `worktree`, `branch`, `remote`, `stash`, `tag`, `reflog` carry both reads and
-# mutations. Only the read form passes, and the regex must cover the command to
-# its end: `git branch -a` passes, `git branch feat/x` (creation) does not.
+# Read-only forms of a mutating verb pass; the regex must cover the command to its end.
 END='[[:space:]]*($|[|;&])'
 READONLY="\
 (worktree[[:space:]]+list([[:space:]]+(--porcelain|-v|--verbose))*)|\

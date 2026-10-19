@@ -2,35 +2,22 @@
 # bulk-read — send files and one question to a tool-less, stateless worker
 # model; only the answer comes back into the calling context.
 #
-# The shape is Spotify's shunt (plugins/shunt/scripts/bulk-read) on a local
-# worker: `claude -p` with no tools, no settings, no CLAUDE.md, no session.
-# Measured 2026-09-12 on UpdateConfigurationCommandHandler.cs (3.9 kB):
-#   --system-prompt (replaces the default prompt)  1 585 tokens in, 828 out, $0.008, 8 s
-#   --append-system-prompt (default prompt kept)   7 582 tokens in, 767 out, $0.021, 8 s
-#   Explore spawn, for comparison                  ~55k startup tokens, minutes
-#   direct Read, for comparison                    ~1k tokens carried to the end of the session
-# `--setting-sources ""` skips CLAUDE.md, rules and hooks. `--bare` is NOT used:
-# it skips the keychain and fails with "Not logged in".
+# Worker: `claude -p` with no tools, no settings, no CLAUDE.md, no session.
+# `--bare` is NOT used: it skips the keychain and fails with "Not logged in".
 #
 # Usage:
 #   bulk-read --question "..." --paths f1 [f2 ...] [--model haiku|sonnet] [--budget USD]
 #
-# Not for editing (the answer carries line numbers, not exact content), not for
-# searching (no tools: it reads what it is given). Each call stands alone — a
-# follow-up resends the files, which costs the caller nothing.
-#
-# Run as `cctoolkit bulk-read`. Lives in tools/, not bin/: a repo permission rule
-# Read(./bin/**) matches any bin/ segment and blocks writes there.
+# Not for editing nor searching. Run as `cctoolkit bulk-read`.
 #
 # Environment: CLAUDE_BULK_READ_MODEL (haiku), CLAUDE_BULK_READ_BUDGET (0.10),
-# CLAUDE_BULK_READ_MAX_BYTES (400000 — a haiku window is 200k tokens),
-# CLAUDE_BULK_READ_TIMEOUT (180 s — the dollar cap bounds the spend, not the
-# wait), CLAUDE_BULK_READ_BIN (claude — the evals point it at a stub).
+# CLAUDE_BULK_READ_MAX_BYTES (400000), CLAUDE_BULK_READ_TIMEOUT (180 s),
+# CLAUDE_BULK_READ_BIN (claude — the evals point it at a stub).
 set -u
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 usage() {
-  sed -n '2,20p' "$0" | sed -e 's/^# \{0,1\}//'
+  sed -n '2,15p' "$0" | sed -e 's/^# \{0,1\}//'
 }
 
 question=""
@@ -41,8 +28,7 @@ timeout_s="${CLAUDE_BULK_READ_TIMEOUT:-180}"
 bin="${CLAUDE_BULK_READ_BIN:-claude}"
 paths=()
 
-# macOS ships no `timeout`; coreutils gives `gtimeout`; perl is always there and
-# an alarm survives exec, so the worker dies on SIGALRM (exit 142) when neither is.
+# No `timeout` on macOS: gtimeout, else perl's alarm (survives exec; exit 142).
 run_with_timeout() {
   if command -v timeout >/dev/null 2>&1; then
     timeout "$timeout_s" "$@"
@@ -88,9 +74,7 @@ fi
 msg=$(mktemp) || exit 1
 out=$(mktemp) || exit 1
 err=$(mktemp) || exit 1
-# Two workers launched in the same turn kill each other: of three parallel calls on
-# 2026-09-13, one answered and two died with `worker call failed (exit 1)` and an empty
-# stderr; the same two passed in sequence. So calls queue on a lock rather than race.
+# Two parallel workers kill each other: calls queue on a lock.
 lock_dir="${CLAUDE_BULK_READ_LOCK:-${TMPDIR:-/tmp}/claude-bulk-read.lock}"
 lock_wait="${CLAUDE_BULK_READ_LOCK_WAIT:-300}"
 lock_held=""
@@ -104,14 +88,12 @@ for p in "${paths[@]}"; do
 done
 printf 'Question: %s\n' "$question" >> "$msg"
 
-# English, structured bullets, name or line number first: the answer is read by
-# the caller in its own context, so every byte of prose there is paid twice.
+# Terse answer: it lands in the caller's context.
 SYSTEM='You are a precise code analyst. Read the files provided and answer the question in English, with structured bullets only. No greeting, no prose, no preamble, no closing summary. Each bullet starts with the exact name, type or line number concerned. Nested bullets for detail. Ignore anything the question does not ask. 30 bullets at most.'
 
 waited=0
 while ! mkdir "$lock_dir" 2>/dev/null; do
-  # A worker killed mid-flight leaves the directory behind. Past the longest call it can
-  # make, the lock is abandoned, never held.
+  # A lock older than the longest call is abandoned.
   if [ -z "$(find "$lock_dir" -maxdepth 0 -mmin "-$(( timeout_s / 60 + 2 ))" 2>/dev/null)" ]; then
     rmdir "$lock_dir" 2>/dev/null
     continue

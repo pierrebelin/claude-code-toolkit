@@ -1,19 +1,7 @@
 #!/bin/bash
 # UserPromptSubmit hook — one line when the replayed context crosses a step.
-#
-# Why. Measured over 30 days on this project (cc-usage, list price, 2026-09-12):
-# cache reads — the context replayed on every turn — are ~60 % of the bill,
-# output ~15 %, and 18 % of requests went past 200k tokens of prompt. Nothing
-# guards that term: read-bounds and cat-bounds shrink what enters, batching-nudge
-# reduces the turns, but the only thing that discards the accumulated tail is
-# `/clear`, and the 1M-context models removed the ceiling that used to force it.
-#
-# The hook reads the last assistant `usage` from the transcript: input +
-# cache_creation + cache_read is the prompt size of the previous turn, i.e. what
-# the next turn replays. It nudges once per step of CLAUDE_CLEAR_NUDGE_STEP tokens
-# (default 150k), never twice for the same step. Advisory: the model cannot run
-# /clear, so the nudge asks it to say so to the user at the end of the reply when
-# the phase is done. Same shape as batching-nudge: a number the reader recognises.
+# Prompt size of the previous turn = input + cache_creation + cache_read of the last
+# assistant `usage`. Once per step of CLAUDE_CLEAR_NUDGE_STEP tokens (default 150k).
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
@@ -25,8 +13,7 @@ transcript=$(printf '%s' "$input" | jq -r '.transcript_path // ""')
 session=$(printf '%s' "$input" | jq -r '.session_id // "unknown"')
 [ -n "$transcript" ] && [ -f "$transcript" ] || exit 0
 
-# The tail is enough: one turn is a handful of lines, and the last assistant
-# entry carries the usage of the whole previous request.
+# The tail is enough: the last assistant entry carries the previous request's usage.
 ctx=$(tail -n 200 "$transcript" 2>/dev/null \
   | jq -r 'select(.type == "assistant") | .message.usage // empty
            | ((.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0))' 2>/dev/null \

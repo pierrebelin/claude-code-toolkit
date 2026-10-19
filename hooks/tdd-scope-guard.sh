@@ -1,9 +1,7 @@
 #!/bin/bash
 # SubagentStart, PreToolUse Edit|Write and PreToolUse StructuredOutput hook — what the two TDD
 # agents may write, checked on the tree (lib/tdd_scope.py holds the why and the checks).
-#
-# Every other agent and the main chain leave at the string match below, before any jq or
-# python: the Edit|Write matcher fires on every edit of every session.
+# Every other agent leaves at the string match below, before any jq or python.
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"

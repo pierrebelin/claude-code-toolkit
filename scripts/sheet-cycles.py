@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""The `## Cycles` block of a batch sheet, read by run-lot, pre-audit and audit-capture.
-
-A batch sheet carries its TDD cycles as one fenced ```json block under `## Cycles`:
-
-    {"declaratives": ["path — mirrors <neighbour>"],
-     "cycles": [{"id": "C1", "wave": 1, "behaviour": "...", "rmcu": "...", "steps": ["Step 1"],
-                 "refactor": false, "guard": false, "level": "UT", "skill": "tests-unit-tests",
-                 "testClass": "...", "fixture": "...", "methods": ["Class.Method"],
-                 "full": [], "bounded": [], "scenarios": "...", "observation": "...",
-                 "outOfScope": "...", "toCreate": [], "production": [], "ripple": [],
-                 "boundedGreen": [], "elements": "...", "appliedIds": "...",
-                 "invariants": "...", "expectedCost": "...", "snapshot": "..."}]}
-
-Why. An Opus design agent used to rebuild these contracts from prose sections
-(`TDD sequence`, `Ancrages`) at the start of every batch: 8 to 13 min per batch, and
-sheets grown to 87-126 KB by every step re-reading and re-writing them. The block is
-written once (plan, or the design fallback at the start of its batch) and checked
-here without any model.
+"""The `## Cycles` block of a batch sheet (one fenced ```json block, fields in REQUIRED / OPTIONAL).
 
     cctoolkit sheet-cycles <sheet> --index [--root DIR]      validate, print the compact index as JSON
     cctoolkit sheet-cycles <sheet> --cycle ID --red|--green  print the RED or GREEN contract of one cycle
@@ -24,15 +7,11 @@ here without any model.
     cctoolkit sheet-cycles <sheet> --done WORK               every cycle reached its final state
     cctoolkit sheet-cycles <sheet> --summary WORK            one line per cycle: RED/GREEN exits (audit capture)
     cctoolkit sheet-cycles <sheet> --states WORK             every saved cycle state, one JSON array (run-lot resume)
+    --batch FX                                               batch of the WORK lines (default: the FX of the sheet name)
 
-WORK is the run work file `run/.work.jsonl` (lib/work_file.py): the RED and GREEN agents
-append one `cycle` line per state, the batch being `--batch FX`, else the `FX` of the sheet name; the last
-line of a behaviour slug wins, so a later correction of a done batch appends again.
-
-Paths count as code when they sit under the source or test roots of kit.config.json
-(`src/`, `tests/` without one). A cycle rewrites test files of one test project at
-most, 4 test files and 8 production files at most; test files under
-`layout.tests.shared` (shared doubles and builders, optional) never count.
+WORK is the run work file `run/.work.jsonl`: one `cycle` line per state, the last line of a
+behaviour slug wins. Code paths are those under the source or test roots of kit.config.json;
+test files under `layout.tests.shared` never count against the per-cycle limits.
 
 Exit 0 ok, 1 invalid or not done, 2 no `## Cycles` block (callers fall back to the old sheet).
 """
@@ -61,9 +40,7 @@ INCOMPLETE_NAME = re.compile(r"…|\.\.\.|[<>{}*]|_$|_?When$")
 TO_CREATE = re.compile(r"to create|\bnew\b|à créer|a creer|nouveau|nouvelle", re.I)
 MAX_TEST_FILES = 4
 MAX_PRODUCTION_FILES = 8
-# A production file in more cycles than this serialises the batch: two cycles sharing
-# a file never share a wave. Measured 2026-10-14: 23 of 29 cycles adding their entry to
-# one error-code registry gave 27 waves of one cycle, 19 min of RED in sequence.
+# Two cycles sharing a production file never share a wave: more than this serialises the batch.
 MAX_CYCLES_PER_FILE = 3
 
 

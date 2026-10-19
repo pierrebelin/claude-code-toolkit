@@ -1,41 +1,22 @@
 #!/usr/bin/env bash
 # PostToolUse hook (Edit|Write): checks the business-rule <-> test traceability.
-#
-# Every use-case folder (kit.config.json `layout.useCase`; clean-architecture: a handler
-# folder under src/<Product>.Application/) carries a rule sheet (`layout.ruleSheet`,
-# CLAUDE.md) with a three-column rules table under the heading anchored
-# `<!-- kit:rules -->`. Sections are found by their anchor, never by their prose: the
-# title is in the language of kit.config.json `language.docs`. A sheet written without
-# anchors is read by its exact title instead, English or French, accents and case
-# folded: `Business rules` / `Règles métier`, `Flow` / `Flux`, `Emitted events` /
-# `Événements émis`; its table header row names the columns (`ID`, `Rule` / `Règle`,
-# `Exception / Outcome` | `Result` / `Résultat`). The rule -> test link lives on the
-# test, as a tag whose value is `<SheetFolder>/<RM|RL-xx>` and whose
-# carrier is the `testTag` adapter (xUnit: `[Trait("RM", "…")]`). The hook builds two
-# global indexes (rules declared / tags placed under the test roots) and reports the
-# gaps. A tag counts in every suite (a persistence rule is only provable by an
-# integration test); only the `layout.tests.bound` suites must tag every test.
-#
-# Paths, markers and the tag carrier come from lib/kit_config.py and lib/kit_testtag.py.
-# A missing python3, lib module, preset or a broken kit.config.json: silent, exit 0
-# (tools/doctor names the cause).
-#
-# Warning only: exit 0 in every case, never blocking. Output goes through
-# hookSpecificOutput.additionalContext: on PostToolUse, plain stdout at exit 0 lands in the
-# transcript only and never reaches the model (231 emissions, 0 read, probe of 2026-09-13).
+# Rules table (`kit:rules`) of each rule sheet vs the `<SheetFolder>/<RM|RL-xx>` tags the
+# tests carry (`testTag` adapter): reports untested rules and orphan tests. A tag counts
+# in every suite; only `layout.tests.bound` suites must tag every test.
+# Missing python3, lib or broken config: silent, exit 0. Warning only, through
+# additionalContext: plain stdout on PostToolUse never reaches the model.
 
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 INPUT=$(cat)
 
-# Cheap bail-out before any python: no file_path in the payload, nothing to check.
+# Cheap bail-out before any python.
 case "$INPUT" in *'"file_path"'*) ;; *) exit 0 ;; esac
 
 KIT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)"
 [ -n "$KIT_LIB" ] || exit 0
 
-# One python for parse + check. Until 2026-10-09 a first python3 spawn parsed the
-# payload alone, on every Edit/Write: the hook was the slowest of the kit (157 ms).
+# One python for parse + check.
 HOOK_INPUT="$INPUT" KIT_LIB="$KIT_LIB" python3 <<'PYEOF' 2>/dev/null
 import json, os, re, sys, unicodedata
 
@@ -81,10 +62,7 @@ is_handler_dir = C.is_use_case_dir
 
 # --- Index 1: rules declared in the handler CLAUDE.md files -------------------
 # rules[claude_md] = [(rule_id, label), ...]  ;  prefix_of[claude_md] = folder name
-# `## <any title> <!-- kit:rules -->`, or the bare title `Business rules` / `Règles métier`;
-# the table under it is read by position, by the schema anchor
-# `<!-- kit:cols id,rule,outcome -->` when one precedes it, else by its header row
-# (`ID`, `Rule` / `Règle`, `Exception / Outcome` / `Résultat`).
+# `## <title> <!-- kit:rules -->` or the bare title; columns by `<!-- kit:cols … -->`, else the header row.
 ANCHOR = re.compile(r"<!--\s*kit:([a-z][a-z0-9-]*)")
 COLS = re.compile(r"<!--\s*kit:cols\s+([\w,-]+)\s*-->")
 RULE_ID = re.compile(r"R[ML]-\d+")
@@ -159,8 +137,7 @@ for base, files in C.walk(C.use_case_roots):
         rules[md] = rows
         prefix_of[md] = os.path.basename(base)
     # A feature or root CLAUDE.md is an index: no fixed structure to check.
-    # Keep the folder carrying a handler, plus any file declaring rules
-    # (a shared folder such as Catalog/Pricing documents its own without being a handler).
+    # Keep a handler folder, plus any shared folder declaring rules.
     if md in rules or is_handler_dir(base):
         all_md.add(md)
         prefix_of.setdefault(md, os.path.basename(base))
@@ -176,8 +153,7 @@ for t, bound in kit_testtag.scan_tree(C, AD):
     for v in t.tags:
         traits.setdefault(v, []).append(t.key)
 
-# Windows: the payload's path may differ from the walked one by case alone (`c:\` and
-# `C:\`, a folder typed by hand); the comparisons below take the walked spelling.
+# Windows: payload and walked paths may differ by case; compare the walked spelling.
 if os.name == "nt":
     walked = {os.path.normcase(p): p for p in all_md} | {os.path.normcase(p): p for p, _, _, _ in methods.values()}
     target = walked.get(os.path.normcase(target), target)
@@ -252,14 +228,12 @@ for md in sorted(focus):
     shared = sorted(f"{k} ({', '.join(carried)})" for k, (_, _, carried, _) in methods.items()
                     if len([v for v in carried if v.split("/")[0] == prefix]) > 1)
 
-    # A cross-cutting class spreads its tests over several handlers: a test bound to
-    # another handler is not an orphan here.
+    # A test bound to another handler is not an orphan here.
     md_classes = {methods[k][1] for v in traits if v.split("/")[0] == prefix for k in traits[v]}
     orphans = sorted(k for k, (_, cls, carried, bound) in methods.items()
                      if bound and cls in md_classes and not carried)
 
-    # The fixed shape only applies to a handler folder. A shared folder (Catalog/Pricing) declares shared
-    # rules without being one: keep its traceability, not its shape.
+    # The fixed shape only applies to a handler folder, not a shared one.
     lines = shape_issues(md) if is_handler_dir(os.path.dirname(md)) else []
     lines = [f"  {i}" for i in lines]
     if untested:

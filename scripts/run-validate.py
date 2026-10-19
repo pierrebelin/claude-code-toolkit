@@ -5,13 +5,10 @@
         applies every answer of `run/.pane.jsonl` (lib/pane_file.py) not applied yet:
         - keep: nothing changes, the entry is marked applied;
         - reject / amend: the user's text goes into `decisions` of the cycles the entry names
-          in the sheet's `## Cycles` block (the cycle whose behaviour the step names; none for a
-          design, audit or gate entry), and as a row `| Hn | <text> | user decision |` of
-          `## Assumptions` — the convention of the `## Resume` section of a batch report; the
-          batch is marked to relaunch.
+          in the sheet's `## Cycles` block, and as a row `| Hn | <text> | user decision |` of
+          `## Assumptions`; the batch is marked to relaunch.
         One line per entry, then `relaunch: <command>` per batch to relaunch. Nothing pending:
-        prints nothing. `run-plan` and `run-lot` run it before any batch starts, so an answer
-        given in the pane reaches the next run without a hand edit.
+        prints nothing.
 """
 import json
 import os

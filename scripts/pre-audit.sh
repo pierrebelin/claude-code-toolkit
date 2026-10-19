@@ -2,31 +2,13 @@
 set -uo pipefail
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Pre-audit gate — the mechanical half of /verify-ddd-tdd, in five seconds
-# ══════════════════════════════════════════════════════════════════════════════
-# Measured on 30 verdicts (2026-09-09 to 09-11): 27 GAPS, and the recurring
-# causes were all deterministic — N ids never classified (8 times,
-# Blocking), `///` rewritten in production code (5), `.claude/` hunks outside
-# the batch (4), a trait citing a rule absent from the handler tables, a sheet
-# left unclosed. Each one cost a five-minute Opus audit
-# plus a correction round plus a `resume` audit. This script fails on every
-# one of them before the audit is forked — except comments, listed for the
-# audit to judge since 2026-10-09, and `.claude/` / `todo/` hunks, never counted
-# as outside the batch since 1.3.1: they were the user's own harness edits.
-#
-# What stays with the audit: correctness, reuse, placement, cost, a stale plan.
-# None of that is decidable by a grep.
-#
-# Frozen literals are read in both vocabularies — the English of the kit and the
-# French of sheets, plans and report labels written before the switch (`RÉFÉRENCE
-# MORTE`, `TEST NON RATTACHÉ`, `non cités : `, `TDD :` ticks with `COUT`).
+# Pre-audit gate — the mechanical half of /verify-ddd-tdd: red means no audit fork.
+# Frozen literals are read in English and in the French of older sheets and labels.
 #
 # Usage:
 #   cctoolkit pre-audit <batch> <sheet.md>
 #
 # Exit 0 = GREEN, the audit may be forked. Exit 1 = RED, fix and re-run.
-# ══════════════════════════════════════════════════════════════════════════════
 
 if [[ $# -ne 2 ]]; then
     echo "usage: $0 <batch> <sheet.md>" >&2
@@ -36,8 +18,6 @@ fi
 BATCH="$1"
 SHEET="$2"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# kit_config.py beside scripts/ (plugin, toolkit); under .claude/lib/ in a copy
-# predating the plugin, where scripts/ sat at the repo root.
 KIT_PY="$HERE/lib/kit_config.py"
 [[ -f "$KIT_PY" ]] || KIT_PY="$HERE/.claude/lib/kit_config.py"
 SCRIPTS="$HERE/scripts"
@@ -49,8 +29,6 @@ if [[ ! -f "$SHEET" ]]; then
     exit 2
 fi
 
-# Paths, comment prefix and tag carrier come from .claude/kit.config.json, resolved
-# by kit_config.py.
 if ! KIT_VARS="$(python3 "$KIT_PY" shell "$ROOT")"; then
     echo "kit.config.json unreadable — cctoolkit doctor" >&2
     exit 2
@@ -66,9 +44,7 @@ ko()   { printf '  ✗ %s\n' "$1"; RED=1; }
 note() { printf '      %s\n' "$1"; }
 
 # Reads test method names on stdin, prints those absent from the test roots.
-# One pass restricted to the source extensions: a grep per method over the whole
-# roots walked the build output (1 GB) at 16 s each — 8 min for 31 methods on a
-# 2026-10-13 run, paid again on every re-run after a fix.
+# One grep pass restricted to the source extensions: never one per method over the build output.
 missing_methods() {
     local wanted found
     wanted="$(grep -v '^$' | sort -u)"
@@ -78,8 +54,7 @@ missing_methods() {
     comm -23 <(printf '%s\n' "$wanted") <(printf '%s\n' "$found") | grep -v '^$'
 }
 
-# `git diff` ignores untracked files, and a batch's new handler and new tests
-# are exactly that: each one is appended as a /dev/null → file patch.
+# Untracked files appended as /dev/null patches: `git diff` alone ignores them.
 batch_diff() {
     git diff 2>/dev/null
     git ls-files --others --exclude-standard -- "${CODE_DIRS[@]}" 2>/dev/null | while IFS= read -r f; do
@@ -103,10 +78,7 @@ else
 fi
 
 # ── 2. Comments added to production code — listed, never failed ──────────────
-# Added lines that *start* with the source comment prefix (`layout.sources.comment`,
-# `//` for C#): a URL inside a string does not match, a rewritten XML doc block does.
-# Whether a comment says what the code cannot is a judgment: the audit's `Comments`
-# axis makes it. Listed with `·`, not `✗`: only `✗` lines are failures.
+# Added lines starting with `layout.sources.comment`; listed with `·`: only `✗` lines fail.
 COMMENTS="$(python3 "$KIT_PY" diff-comments "$ROOT" <"$DIFF_FILE")"
 if [[ -z "$COMMENTS" ]]; then
     ok "production comments: none added"
@@ -116,11 +88,7 @@ else
 fi
 
 # ── 3. Every modified file belongs to the batch ──────────────────────────────
-# The source and test roots, the sheet and its plan folder are the batch. Anything
-# else (scripts/, packages, csproj outside src/tests) is a Scope deviation unless
-# the sheet names it — then the audit reads it as declared. .claude/ and todo/
-# are skipped since 1.3.1: on a real plan, the 3 run-plan stops they caused were
-# the user's own harness edits, never a batch agent's.
+# Outside the code roots, .claude/, todo/ and the plan folder: a deviation unless the sheet names it.
 PLAN_DIR="$(dirname "$SHEET")"
 OUTSIDE=""
 while IFS= read -r f; do
@@ -142,10 +110,7 @@ else
 fi
 
 # ── 4. Trait ↔ handler table consistency, on the batch's test classes only ───
-# Pre-existing unbound tests elsewhere are debt, not this batch's deviation:
-# only a class the diff touches is judged here. Same for a rule left without
-# test: judged only when its handler folder is in the diff (rule rewritten in
-# the batch, its tests deleted).
+# Only classes, tags and handler folders the diff touches are judged: the rest is debt.
 TOUCHED_CLASSES="$(python3 "$KIT_PY" diff-test-classes "$ROOT" <"$DIFF_FILE")"
 TOUCHED_TRAITS="$(python3 "$KIT_PY" diff-tags "$ROOT" <"$DIFF_FILE")"
 UNTESTED="$(python3 "$SCRIPTS"/rules-coverage.py --untested 2>&1)"
@@ -169,9 +134,7 @@ if [[ -z "$STALE" ]]; then
 else
     ko "RM traits inconsistent with the handler rules tables (\`kit:rules\`) — update the handler CLAUDE.md or write the rule's test before the audit"
     while IFS= read -r l; do note "$l"; done <<<"$STALE"
-    # A dead reference is a rule the tests wrote and the table never received. On a
-    # 2026-10-13 run the fixing agent retargeted 12 traits to existing rules and
-    # deleted 4: green, and traceability lost. The draft rows point the other way.
+    # Draft table rows for each dead reference: the fix is the table, not the trait.
     DEAD_IDS="$(sed -nE 's/.*(DEAD REFERENCE|RÉFÉRENCE MORTE): ([^ ]+).*/\2/p' <<<"$STALE" | sort -u)"
     if [[ -n "$DEAD_IDS" ]]; then
         note "draft rows for the handler tables — reword the rule, keep the trait as it is:"
@@ -192,12 +155,8 @@ else
 fi
 
 # ── 5. Every cycle reached its final state ───────────────────────────────────
-# Sheets with a `## Cycles` block (run-lot since 1.7.4) carry no ticks: the cycle
-# state files the RED and GREEN agents write are the evidence, and every method
-# the block names must exist under the test roots (a method a RED reported
-# unreachable or already covered excepted). Older sheets keep their `TDD:` ticks and
-# the tests named by their TDD sequence.
-# Cycle states are the `cycle` lines of the run work file (lib/work_file.py).
+# A `## Cycles` sheet: the `cycle` lines of the run work file, and every method it names on disk.
+# An older sheet: its `TDD:` ticks.
 STATE_DIR="$(dirname "$SHEET")/run/.work.jsonl"
 python3 "$SCRIPTS"/sheet-cycles.py "$SHEET" --index >/dev/null 2>&1
 HAS_BLOCK=$([[ $? -eq 2 ]] && echo 0 || echo 1)
@@ -223,8 +182,7 @@ else
 fi
 
 # ── 5b. Every test named by a sheet without a `## Cycles` block exists ────────
-# Sheets kept citing tests a correction removed or never wrote, steps ticked RED ✅
-# over them. The first `Should…` of the Test cell of each row of the TDD sequence.
+# The first `Should…` of the Test cell of each TDD sequence row.
 if [[ $HAS_BLOCK -eq 0 ]]; then
     MISSING="$(awk '
         /^## / { in_tdd = ($0 ~ /kit:tdd-sequence/ || $0 ~ /^## (TDD sequence|Deroulement TDD|Déroulement TDD)/) }
@@ -250,11 +208,7 @@ else
 fi
 
 # ── 7. Handler tests observe results and SavedEvents, never the double ──────
-# test-scope.md §5 was there, the audit still found a spy or a double's state
-# asserted in 7 batches (2026-09-09 to 10-01): `…Received` captures, a call
-# recorder read back, `Assert.Single(_fixture.Repository.Products)`.
-# Spy names are identifiers holding Received/CallCount/Called that src/ does
-# not already use (`ReceivedFrom` is domain vocabulary, not a spy).
+# Spy names: identifiers holding Received/CallCount/Called that the sources do not already use.
 ADDED_TESTS="$(python3 "$KIT_PY" diff-interaction "$ROOT" <"$DIFF_FILE")"
 DOMAIN_WORDS="$(grep -rhoE "${SOURCE_INCLUDES[@]}" '\b[A-Za-z]*(Received|CallCount|Called)[A-Za-z]*\b' "${SOURCE_DIRS[@]}" 2>/dev/null | sort -u)"
 INTERACTIONS=""
@@ -276,14 +230,9 @@ else
 fi
 
 # ── 8. Production messages stay in English ──────────────────────────────────
-# Opt-in. `layout.sources.languageGuard` in kit.config.json names the architecture
-# test that already fails an accented literal in production code:
-#   {"file": "tests/<Suite>/<GuardTests>.cs", "skip": ["src/*.Migrations/*"]}
-# French written without its accents slips past such a guard (7 literals in 4 files,
-# a Blocking and an audit round). A literal added under the source roots holding two
-# French function words is listed; the production files the guard quotes (its own
-# exclusions) and the `skip` globs are left alone. No `languageGuard`, or its file
-# absent: the gate does not run.
+# Opt-in: `layout.sources.languageGuard` {"file": "<guard test>", "skip": [globs]}. A literal
+# added under the source roots with two French function words is listed; files the guard
+# quotes and `skip` globs are left alone. No guard or no file: the gate does not run.
 FRENCH="$(python3 - "$DIFF_FILE" "$ROOT" "$(dirname "$KIT_PY")" <<'PY'
 import fnmatch, os, re, sys
 diff_path, root, lib = sys.argv[1:4]
@@ -337,14 +286,9 @@ if [[ $FRENCH_RC -eq 0 ]]; then
 fi
 
 # ── 9. Persistence touched → integration test or written waiver ─────────────
-# Opt-in. `layout.integrationGuard` in kit.config.json names the persistence code
-# and the integration suite, segment globs as everywhere else:
-#   {"sources": ["src/{product}.Infrastructure"], "tests": ["tests/{product}.IntegrationTests"]}
-# Audit found persistence hunks with no integration test and no waiver in 4 batches
-# of one repo (2026-09-08 to 09-23). A file changed under `sources` passes when a
-# file under `tests` changed too, or when the sheet carries a waiver line —
-# `Integration test waiver: <reason>`, or its French form `Dérogation TI : <raison>`.
-# No `integrationGuard`: the gate does not run.
+# Opt-in: `layout.integrationGuard` {"sources": [globs], "tests": [globs]}. A change under
+# `sources` passes with a change under `tests` or a waiver line in the sheet
+# (`Integration test waiver: <reason>` / `Dérogation TI : <raison>`). No guard: not run.
 INFRA="$(CHANGED_FILES="$CHANGED" python3 - "$ROOT" "$(dirname "$KIT_PY")" "$SHEET" <<'PY'
 import os, re, sys
 root, lib, sheet = sys.argv[1:4]

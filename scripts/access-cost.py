@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""Access cost of a behaviour — the COST step of the TDD cycle, mechanically.
-
-No test observes the number of Infrastructure calls a handler makes: a handler
-doing 1 query and one doing 2N+2 are equally green. Until 2026-09-12 the
-`tdd-implementer` stated "n reads + n writes" from memory and the
-orchestrator re-opened the handler to check the number — 34 `Read` under
-`src/` after 36 `## GREEN` across 12 batch sessions, 117 kB carried to the end
-of each batch, plus the layer rules every such read attaches.
-
-This script lists what the code actually awaits, from the syntax tree
-(ast-grep, rules under scripts/access-cost/rules/), so the agent states the
-cost from evidence and the orchestrator validates a line instead of a file.
+"""Access cost of a behaviour: the awaited Infrastructure calls, read off the syntax tree by ast-grep.
 
 Usage:
     cctoolkit access-cost <file.cs> [...]   # files the implementer touched
@@ -19,19 +8,13 @@ Usage:
     cctoolkit access-cost --all --json      # every .cs under the source roots, test roots left
                                             # out: counts per file as JSON (quality report)
     cctoolkit access-cost --base <work> FX [<file.cs> ...]
-        # lines added by batch FX (`batch-baseline`, run work file <work>) flagged, the others
-        # listed "(pre-existing)"; no file = every .cs of the batch diff under the
-        # source roots. A loop an earlier batch wrote never blocks the current GREEN.
+        # lines added by batch FX (`batch-baseline`) flagged, the others "(pre-existing)";
+        # no file = every .cs of the batch diff under the source roots.
 
 Exit 0: no Infrastructure call inside a loop or lambda, no in-memory filter on
 an awaited result. Exit 2: at least one (on an added line with --diff). Exit 3:
-ast-grep missing. The last stdout line is the `Cost` line the `## GREEN`
-report copies.
-
-Receiver classification is a naming heuristic (repository, service, wrapper,
-client, provider, unit of work, DbContext…): anything else is listed as
-"to classify" and left to the reader — a validator runner or a stream is not
-Infrastructure, a badly named gateway is.
+ast-grep missing. The last stdout line is the `Cost` line the `## GREEN` report copies.
+Receivers are classified by name (INFRA); anything else is listed "to classify".
 """
 import contextlib
 import difflib

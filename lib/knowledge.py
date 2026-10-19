@@ -1,27 +1,10 @@
 #!/usr/bin/env python3
 """The knowledge base, read — the one parser of `knowledge.root` every script goes through.
 
-What it reads, and nothing else (`skills/knowledge-sync/references/knowledge-format.md`
-§ What a script reads): ids in headings, `kit:` anchors, code in backticks. Labels
-follow `language.docs` and are never matched.
-
-    objects(text)          the objects a file defines: id, kind, heading level, title,
-                           body, `kit:observed` level
-    handlers(text)         the handler names under `## … <!-- kit:handlers -->`
-    use_cases(c)           {handler name: (context, use-case id, path)} across the base
-    history(path)          the rows of a `HISTORY.md` table
-    sync_marks(c, ctx)     the sync rows' commits git still knows that are ancestors of
-                           HEAD — the range of the next sync is HEAD minus all of them
-    largest(c, stem)       the largest number used after `<stem>-` in the base and `todo/`
-    guarded(c, path)       a context's `rules.md`, `decisions.md` or `HISTORY.md`: read
-                           through `cctoolkit ask`, never whole (`hooks/read-bounds.sh`)
-    misplaced(texts)       the rules outside their place: applied by several use cases
-                           and not in `rules.md`, or by one only and still there
+Reads ids in headings, `kit:` anchors and code in backticks only
+(`skills/knowledge-sync/references/knowledge-format.md` § What a script reads). Nothing here writes.
 
     python3 lib/knowledge.py guarded <path>   exit 0 when guarded, 1 otherwise
-
-Callers pass a `kit_config.Config`. Every function reads files and git only; nothing
-here writes.
 """
 import os
 import re
@@ -58,8 +41,7 @@ class Obj:
 
 
 def objects(text):
-    """Objects in heading order. Body = the lines to the next heading of the same or a
-    higher level; `observed` = the level of a `kit:observed` line in it, else None."""
+    """Objects in heading order; body runs to the next heading of the same or a higher level."""
     lines = text.splitlines()
     out, open_ = [], []
     for i, line in enumerate(lines):
@@ -134,8 +116,7 @@ def use_case_files(c, ctx):
 
 
 def use_cases(c, only=None):
-    """{handler name: (context, use-case id, repo-relative path)} — a handler cited by two
-    use cases keeps the first, in file order."""
+    """{handler name: (context, use-case id, repo-relative path)}; the first citing use case wins."""
     out = {}
     for ctx in contexts(c):
         if only and ctx not in only:
@@ -153,8 +134,7 @@ def history_path(c, ctx):
 
 
 def history(path):
-    """[(date, feature, delta)] of the table under `<!-- kit:cols date,feature,delta -->`,
-    read by position, in file order. The header row holds labels, never a date: skipped."""
+    """[(date, feature, delta)] of the table under `<!-- kit:cols date,feature,delta -->`, by position."""
     rows, state = [], "before"
     for line in read(path).splitlines():
         if state == "before":
@@ -183,9 +163,7 @@ def head(root):
 
 
 def sync_marks(c, ctx):
-    """Full hashes of the context's sync rows that git knows and that are ancestors of
-    HEAD. Several survive a merge of two branches that each synced: the next sync
-    reads HEAD minus all of them."""
+    """Full hashes of the context's sync rows that git knows and that are ancestors of HEAD."""
     marks = []
     for _, feature, _ in history(history_path(c, ctx)):
         m = SYNC.match(feature)
@@ -211,10 +189,8 @@ def markdown_files(top):
 
 
 def largest(c, stem):
-    """Largest number used after `<stem>-` (`CAT-RM`, `ADR`) in any `.md` under the base,
-    `HISTORY.md` included, and under `todo/`, paths and contents alike. Bounded on both
-    sides: CAT-RM-012 is read neither inside XCAT-RM-012 nor CAT-RM-012x; `-CAT-RM-007`,
-    a retired id in HISTORY.md, is read."""
+    """Largest number after `<stem>-` in any `.md` path or content under the base and `todo/`.
+    Bounded: not inside XCAT-RM-012 nor CAT-RM-012x; `-CAT-RM-007` (retired) is read."""
     rx = re.compile(rf"(?<![A-Za-z0-9]){re.escape(stem)}-(\d+)(?![0-9A-Za-z])")
     top = 0
     for rel in (c.knowledge_root, PENDING):
@@ -230,11 +206,8 @@ def cites(text, oid):
 
 
 def misplaced(texts):
-    """Rules outside their place, from {path under the base: text}. A use case applies
-    the rules its file defines or cites; a rule two use cases or more apply lives in
-    `<Context>/rules.md`, one a single use case applies lives in that use case's file.
-    A rule of `rules.md` no use case cites stays there. [(rule id, where it is, where it
-    belongs, use-case ids applying it)]."""
+    """[(rule id, where it is, where it belongs, use-case ids applying it)] from {path: text}:
+    a rule two use cases apply belongs in `rules.md`, one applied by a single use case in its file."""
     by_ctx = {}
     for rel, text in texts.items():
         parts = rel.split(os.sep)
@@ -265,9 +238,7 @@ def misplaced(texts):
 
 
 def guarded(c, path):
-    """`<root>/<Context>/rules.md`, `decisions.md` or `HISTORY.md` — the files that grow
-    with the repo. `INDEX.md`, an `OVERVIEW.md`, a use case and an ADR are one bounded
-    read each."""
+    """`<root>/<Context>/rules.md`, `decisions.md` or `HISTORY.md` — the files that grow with the repo."""
     rel = os.path.relpath(os.path.realpath(path), os.path.realpath(c.root)).split(os.sep)
     root = c.knowledge_root.split("/")
     under = rel[len(root):]

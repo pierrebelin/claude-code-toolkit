@@ -3,30 +3,14 @@
 
     cctoolkit audit-collect --stack dotnet|js [--ref <branch|sha>] [--exclude <glob>]... [--out <file>]
 
-`--out` writes the report fragment, `{activity, codebase}`, for `cctoolkit report-assemble`;
-stdout carries it too, with `commit`, `stack` and `hotspots_markdown` (the §2 section).
-
-Run from the audit worktree (`cctoolkit audit-worktree create`), after the tests
-restored the dependencies. Each block carries `{status, reason, commit}` like
-`activity.hotspots`: `measured`, `not_configured` (the stack or the repo has no such
-thing) or `missing` (the tool exists but gave nothing usable — its numbers are `null`).
-
-- `activity.hotspots` — `cctoolkit hotspots --json`, plus its Markdown as `hotspots_markdown`.
-- `codebase.rules_coverage` — `rules-coverage --json` and `untagged-tests --json`, one
-  traceability block: rules with and without a test, dead references, unbound tests,
-  untagged tests per suite. `not_configured` when no rule sheet holds a rules table.
-- `codebase.suppressions` — `#pragma warning disable`, `SuppressMessage`, `NOSONAR`,
-  `eslint-disable`, `@ts-ignore` / `@ts-expect-error` / `@ts-nocheck`, `ReSharper disable`,
-  counted in the sources at the commit (git objects, not the working tree), test roots,
-  `skipDirs` and `--exclude` left out; per kind, per layer, top files.
-- `codebase.vulnerabilities` — `dotnet list package --vulnerable --include-transitive`
-  or `npm audit`; no network or no lock file → `missing`.
-- `codebase.loop_calls` — `access-cost --all --json`: Infrastructure awaited in a loop
-  or a lambda, in-memory filters on an awaited result. C# only: `not_configured` for js.
-
-The blocks that read the working tree (traceability, vulnerabilities, loop calls) are
-`missing` when it does not match the commit: uncommitted changes measure something else.
-Exit 0 whatever the statuses; 2 on bad arguments.
+`--out` writes the fragment `{activity, codebase}` for `cctoolkit report-assemble`; stdout
+carries it too, with `commit`, `stack` and `hotspots_markdown` (the §2 section). Run from
+the audit worktree after the tests restored the dependencies. Each block carries
+`{status, reason, commit}`: `measured`, `not_configured` or `missing` (numbers `null`).
+Blocks: `activity.hotspots`, `codebase.rules_coverage` (rules-coverage + untagged-tests),
+`codebase.suppressions` (at the commit), `codebase.vulnerabilities`, `codebase.loop_calls`
+(access-cost, C# only). Those reading the working tree are `missing` when it differs from
+the commit. Exit 0 whatever the statuses; 2 on bad arguments.
 """
 import argparse
 import collections
@@ -98,8 +82,7 @@ def run(args, timeout=TOOL_TIMEOUT):
 
 
 def tree_differs(sha):
-    """Why the working tree is not the commit, or None. Untracked files do not count:
-    `audit-worktree` copies the untracked kit config in."""
+    """Why the working tree is not the commit, or None. Untracked files do not count (kit config copied in)."""
     head = git("rev-parse", "HEAD").strip()
     if head != sha:
         return f"working tree at {head[:12]}, not at the report commit {sha[:12]}"
@@ -108,7 +91,6 @@ def tree_differs(sha):
     return None
 
 
-# --- hotspots ----------------------------------------------------------------------------
 def hotspots(sha, excludes):
     spec = importlib.util.spec_from_file_location("hotspots", os.path.join(SCRIPTS, "hotspots.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -118,7 +100,6 @@ def hotspots(sha, excludes):
     return report, mod.markdown(report)
 
 
-# --- traceability ------------------------------------------------------------------------
 def rules_coverage(sha, differs):
     if differs:
         return block("missing", sha, differs, **dict.fromkeys(
@@ -150,7 +131,6 @@ def rules_coverage_missing(sha, reason):
                  unbound_tests_count=None, untagged=None)
 
 
-# --- suppressions ------------------------------------------------------------------------
 def layer_of(path):
     parts = path.split("/")
     layer = parts[1] if len(parts) > 2 else "(root)"
@@ -202,7 +182,6 @@ def suppressions(sha, excludes):
                  by_layer=dict(sorted(by_layer.items())), top_files=[{"file": f, "count": n} for f, n in top])
 
 
-# --- vulnerabilities ---------------------------------------------------------------------
 def vulnerabilities_missing(sha, status, reason):
     return block(status, sha, reason, tool=None, total=None, by_severity=None, packages=None)
 
@@ -273,7 +252,6 @@ def vulnerabilities(sha, stack, differs):
     return dotnet_vulnerabilities(sha) if stack == "dotnet" else npm_vulnerabilities(sha)
 
 
-# --- loop calls --------------------------------------------------------------------------
 def loop_calls(sha, stack, differs):
     empty = dict(files_scanned=None, in_loop=None, in_lambda=None, memory_filter=None, files=None)
     if stack != "dotnet":

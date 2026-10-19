@@ -1,59 +1,27 @@
 #!/bin/bash
 # bash-dispatch module — require a bounded read when `cat` dumps a large file.
-#
-# read-bounds.sh guards the Read tool. It has no reach over Bash, and the volume
-# simply moved: measured on session 4d3ad4e4 (2026-09-09), Read fell to 1% of the
-# context fill while Bash rose to 85% — 221 kB over 124 calls, with 21 bare `cat`
-# on top. The single largest addition of the whole session was one `cat` of a
-# 18.3 kB plan. A file dumped this way is carried to the end of the session
-# exactly like an unbounded Read, and pays no hook.
-#
-# Scope is deliberately narrow, to keep false positives at zero:
-#   - only a simple `cat`, `head` or `tail` command, no pipe (`cat f | grep x` is
-#     already bounded by grep) and no redirect (`cat f > out` never enters the
-#     context). `head`/`tail` count for the span they ask for: `head -20 f` is a
-#     bounded read and passes, `head -n 5000 f` or `tail -n +1 f` is a dump in
-#     disguise and is measured like a `cat`. Added 2026-09-12 after Spotify's
-#     shunt hook, which covers the same five verbs (minus the span arithmetic:
-#     it blocks `head -20` on a big file, which is exactly the read we want),
-#   - only files past the line threshold, or past the byte one. The second
-#     trigger exists because Markdown wraps at the paragraph, not at 80 columns:
-#     measured here, a spec of 18.3 kB in 119 lines and a
-#     line count alone waves it through. 8 kB is roughly 2.5k tokens, the point
-#     where one dump is worth locating first.
-#   - binary/rendered formats and instruction files are left alone.
-#
-# Escape hatch, same shape as read-bounds.sh: the
-# denial is recorded per (agent, file), so re-issuing the identical `cat` passes
-# through. That is how you force a full dump when you genuinely want one, and it
-# is scoped to the agent that asked — never handed to its siblings.
-#
-# Thresholds, skip lists, outline and refusal layout are shared with
-# hooks/read-bounds.sh through lib/bounds-common.sh.
+# Only a simple `cat`/`head`/`tail` with no pipe or redirect, past the line or byte
+# threshold; head/tail count for the span they ask for. Re-issuing the identical
+# command forces it (recorded per agent and file). Shared body: lib/bounds-common.sh.
 set -u
 
 cmd="${HOOK_CMD:-}"
 [ -n "$cmd" ] || exit 0
 
-# Fast bail-out before sourcing bounds-common.sh: the loop below only ever looks
-# at segments starting with `cat `, `head ` or `tail `, so a command with none of
-# those substrings cannot produce a hit, and the source is pure cost.
+# Fast bail-out before sourcing bounds-common.sh.
 case "$cmd" in *cat*|*head*|*tail*) ;; *) exit 0 ;; esac
 
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=bounds-common.sh
 . "$LIB/bounds-common.sh"
 
-# A subagent gets read-bounds' higher bar. Until 2026-10-09 only the Read guard
-# had it, so a subagent whose 300-line Read went through was denied the same file
-# through `cat` — the two guards were meant to be one.
+# A subagent gets read-bounds' higher bar.
 max_lines=$BOUNDS_THRESHOLD max_bytes=$BOUNDS_BYTES
 if [ -n "${HOOK_AGENT_ID:-}" ]; then
   max_lines=$BOUNDS_SUBAGENT_THRESHOLD max_bytes=$BOUNDS_SUBAGENT_BYTES
 fi
 
-# Split on the separators that start a new simple command. A `cd x; cat big.md`
-# must be seen as a bare `cat`, not as a `cd`.
+# Split on `;` and `&` so `cd x; cat big.md` is seen as a bare `cat`.
 oversized=""
 verb_of_hit=""
 lines_of_hit=""
@@ -140,8 +108,7 @@ while IFS= read -r segment; do
         fi ;;
     esac
 
-    # The whole of a knowledge base's growing file: refused whatever its size, as for
-    # Read — bounds_knowledge_guarded in bounds-common.sh.
+    # A knowledge base's growing file, read whole: refused whatever its size.
     if [ "$eff_lines" -ge "$n" ] && bounds_knowledge_guarded "$arg" "${HOOK_AGENT_TYPE:-}"; then
       oversized="$arg"
       verb_of_hit="$verb"
@@ -167,8 +134,7 @@ done <<< "$(printf '%s' "$cmd" | tr ';&' '\n\n')"
 
 [ -n "$oversized" ] || exit 0
 
-# Same per-agent scoping as read-bounds.sh: agent_id is the only per-agent field,
-# the main chain has none and falls back to the session.
+# Per agent: the main chain has no agent_id and falls back to the session.
 seen_file="/tmp/claude-catbounds-seen-${HOOK_SESSION_ID:-unknown}${HOOK_AGENT_ID:+-$HOOK_AGENT_ID}"
 if [ -f "$seen_file" ] && grep -Fxq "$oversized" "$seen_file" 2>/dev/null; then
   echo "$oversized" >> "${seen_file}.forced"

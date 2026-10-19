@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""cctoolkit tdd-scope — the CLI side of lib/tdd_scope.py (the hook that checks what the TDD agents write).
+"""cctoolkit tdd-scope — the CLI side of lib/tdd_scope.py.
 
     cctoolkit tdd-scope restore <agent id> <path>...
-        puts each path back as it was when that agent started (its snapshot copy, else HEAD,
-        else removed when it did not exist); a path the agent did not change is left as is.
-        The deny of the RED/GREEN check names the exact command.
+        puts each path back as it was when that agent started (snapshot copy, else HEAD,
+        else removed); a path the agent did not change is left as is.
     cctoolkit tdd-scope evidence [--since EPOCH]
-        prints the evidence the auditor judges, one line each (`stub-logic <file>: <lines>`);
-        `audit-capture` appends it to the capture. Nothing recorded = nothing printed.
+        prints the evidence the auditor judges, one `stub-logic <file>: <lines>` line each.
 """
 import json
 import os

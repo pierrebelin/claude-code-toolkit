@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Inventory of the test methods carrying no rule tag (`testTag` adapter of
-`.claude/kit.config.json`; xUnit: `[Trait("RM", "…")]`).
-
-Two categories, which do not read the same way:
-
-- **in a class that carries some** — this is the `UNBOUND TEST` signal of
-  `rules-coverage.py`: the class documents its rules, this test cites none;
-- **in a class with no trait at all** — outside the mechanism: aggregates, value
-  objects, DSL parser, `Core` library. Useful to spot a forgotten handler, not to
-  put a trait on every test.
+"""Test methods carrying no rule tag: in a class that carries some (the `UNBOUND TEST` signal), or in a class with none.
 
     cctoolkit untagged-tests                        # report on stdout
     cctoolkit untagged-tests -o <file.md>           # report into a file
@@ -21,8 +12,6 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# The kit (plugin cache, toolkit checkout): scripts/ next to lib/. A copy predating
-# the plugin: <repo>/scripts/ next to <repo>/.claude/lib/.
 for _lib in (os.path.join(HERE, "lib"), os.path.join(HERE, ".claude", "lib")):
     if os.path.isfile(os.path.join(_lib, "kit_config.py")):
         sys.path.insert(0, _lib)

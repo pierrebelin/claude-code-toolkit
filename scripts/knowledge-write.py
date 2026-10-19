@@ -1,65 +1,38 @@
 #!/usr/bin/env python3
 """The one writer of the knowledge base: staged drafts in, files, ids and history out.
 
-`/knowledge-sync` and its extraction agent never write under `knowledge.root` directly:
-they write drafts into the staging folder `<root>/.sync/`, git-ignored, one folder per
-context laid out as the base (`<root>/.sync/Catalog/usecases/…`). An ADR is global in
-the base but belongs to the context whose sync drafts it: staged under
-`<root>/.sync/Catalog/adr/…`, written to `<root>/adr/…`, counted in that context's
-`HISTORY.md` delta. A staged file replaces the base file at the same path, whole; an
-empty staged file deletes it. A new object carries a provisional id — `CAT-CU-?1`,
-`CAT-RM-?2`, `CAT-D-?1`, `ADR-?1`, in a use-case file name too (`~` for `?` there,
-Windows forbids `?` in a file name) — numbered only at
-`apply`, so a draft dropped at validation takes no id. Format:
-`skills/knowledge-sync/references/knowledge-format.md`.
+Drafts live in `<root>/.sync/<Context>/`, laid out as the base (an ADR under the `adr/` of
+the context drafting it); a staged file replaces the base file whole, an empty one deletes it.
+New objects carry provisional ids (`CAT-RM-?1`, `~` for `?` in a file name), numbered at `apply`.
+Format: `skills/knowledge-sync/references/knowledge-format.md`.
 
     cctoolkit knowledge-write init
-        creates the staging folder, `<root>/.gitignore` (`.index/`, `.sync/`) and
-        `<root>/.gitattributes` (`*/HISTORY.md merge=union`: two branches that each added
-        a row keep both) when absent; prints the staging path.
+        creates the staging, `<root>/.gitignore` and `<root>/.gitattributes` when absent;
+        prints the staging path.
     cctoolkit knowledge-write status [--context C[,C]]
-        per staged context, its ADRs included: files, new and rewritten objects,
-        `specified` objects by kind, `kit:observed` objects by level, provisional ids
-        cited but defined nowhere.
+        per staged context: files, new and rewritten objects, `specified` by kind,
+        `kit:observed` by level, provisional ids cited but defined nowhere.
     cctoolkit knowledge-write validate --context C[,C] [--accept high[,medium]] [--drop low[,medium]] [--keep <id>[,<id>]]
-        batch validation in the staging: `--accept` deletes the `kit:observed` lines at
-        those levels (their objects become `specified`), `--drop` removes the new objects
-        at those levels, nested ones included — never an object the base already holds.
-        `--keep` leaves the objects named untouched by both: a conflict left open stays
-        `observed`.
+        `--accept` deletes the `kit:observed` lines at those levels, `--drop` removes the new
+        objects at those levels (never one the base holds), `--keep` exempts the ids named.
     cctoolkit knowledge-write rename <Context> <OldHandler> <NewHandler>
     cctoolkit knowledge-write retire <Context> <Handler>
-        the mechanical changes `knowledge-scan` lists, staged: the handler's name in the
-        `kit:handlers` section of its use case; a use case left without handler is
-        staged empty, so `apply` deletes it.
+        the handler's name staged in its use case's `kit:handlers`; a use case left without
+        handler is staged empty.
     cctoolkit knowledge-write apply [--context C[,C]]
-        the staged drafts of the contexts named (all of them without `--context`):
-        numbers their provisional ids (one above the largest in the base and `todo/`, as
-        `next-id`), writes their files, then one `HISTORY.md` row per context —
-        `| <date> | sync <HEAD> | <delta> |`, `—` when nothing changed — on top of its
-        table, and clears their drafts; the other contexts' drafts stay staged. A context
-        named with nothing staged gets its row too: the sync ran, the mark moves on.
-        Refused, nothing written: a provisional id cited but defined nowhere in what is
-        applied, an id defined twice, a prefix outside `knowledge.contexts`, a file staged
-        outside a context folder, a base file staged by two contexts. Warns on an
-        `OVERVIEW.md` above `knowledge.overviewBudget`. Rebuilds the index and `INDEX.md`
-        (`lib/knowledge_index.py`).
+        numbers the provisional ids, writes the files, adds one `| <date> | sync <HEAD> | <delta> |`
+        row per context named (`—` when nothing changed), clears their drafts, rebuilds the
+        index and `INDEX.md`. Refused, nothing written: a dangling provisional id, an id
+        defined twice, an unknown prefix, a file outside a context folder, a base file staged
+        by two contexts, a rule left in a use case's file while several apply it. Warns on an
+        `OVERVIEW.md` above `knowledge.overviewBudget`.
     cctoolkit knowledge-write mark --context C[,C]
-        `apply` for contexts with nothing staged: the row `sync <HEAD> | —`.
+        `apply` with nothing staged: the row `sync <HEAD> | —`.
     cctoolkit knowledge-write status|apply --merge <CODE>
-        the same on the merge of a delivered feature, staged by `cctoolkit
-        knowledge-merge stage` in `<root>/.merge/<CODE>/`: no provisional id, the row's
-        `Feature` is the spec's code (`<CODE> partial` for a partial merge, from
-        `.merge/<CODE>/.feature`), no `HEAD` needed, an `OVERVIEW.md` above budget
-        refused instead of warned; the whole `.merge/<CODE>/` cleared once applied.
+        the same on `<root>/.merge/<CODE>/` (`knowledge-merge stage`): the row's feature is the
+        spec's code (`<CODE> partial` from `.feature`), an `OVERVIEW.md` above budget refused.
 
-`apply` refuses a rule a draft leaves in a use case's file while several use cases apply
-it — its place is `rules.md` (`lib/knowledge.py` `misplaced`); a misplacement the base
-already had, or a rule of `rules.md` a single use case applies, is only warned.
-
-Delta: `+id` defined now and not before, `-id` defined before and not now, `~id` whose
-body changed. An ADR counts in the context that staged it, and only there: a context
-the sync did not look at keeps its mark.
+Delta: `+id` new, `-id` gone, `~id` body changed; an ADR counts in the context that staged it.
 
 Exit 0, 1 refused (nothing written), 2 usage, 3 config defect.
 """
@@ -79,8 +52,7 @@ import knowledge_index  # noqa: E402
 STAGING = ".sync"
 LEVELS = ("high", "medium", "low")
 PROVISIONAL = re.compile(r"(?<![A-Za-z0-9-])((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D))|ADR)-\?(\d+)(?![0-9A-Za-z])")
-# Windows forbids `?` in a file name: a staged file may spell the marker `~` there
-# (`CAT-CU-~1-archive-product.md`); it is read back as `?`, its id in the text.
+# Windows forbids `?` in a file name: a staged file spells it `~`, read back as `?`.
 FILE_MARK = re.compile(r"(?<![A-Za-z0-9-])((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D))|ADR)-~(\d+)(?![0-9A-Za-z])")
 PROV_HEADING = re.compile(r"^(#{1,6})\s+((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D)|ADR)-\?\d+)\s+—\s")
 WIDTH = {"CU": 2, "RM": 3, "D": 3, "ADR": 3}
@@ -134,15 +106,13 @@ def staged_files():
 
 
 def context_of_rel(rel):
-    """Context of a path under the base or the staging: its first folder — none for the
-    base's `adr/` or a loose file."""
+    """First folder of a path under the base or the staging; none for `adr/` or a loose file."""
     parts = rel.split(os.sep)
     return parts[0] if len(parts) > 1 and parts[0] != knowledge.ADR_DIR else None
 
 
 def base_rel(rel):
-    """Where a staged file lands: `<Context>/adr/<f>` in the global `adr/<f>`, any
-    other at the same path."""
+    """Where a staged file lands: `<Context>/adr/<f>` in `adr/<f>`, any other at the same path."""
     parts = rel.split(os.sep)
     return os.path.join(*parts[1:]) if len(parts) > 2 and parts[1] == knowledge.ADR_DIR else rel
 
@@ -469,8 +439,7 @@ def apply(ctxs):
         if rel.split(os.sep)[0] not in applied:
             continue
         line = f"{oid} in {rel}, applied by {', '.join(cus)} — belongs in {home}"
-        # Refused: a rule left in a use case's file that several apply. Warned: one rule of
-        # rules.md a single use case still applies — a retire leaves it so, nothing to draft.
+        # Refused: a rule in a use case's file several apply. Warned: a rules.md rule one use case applies.
         (moved if (oid, rel) not in was and os.path.basename(home) == "rules.md" else kept).append(line)
     if moved:
         return refuse(moved)
@@ -488,8 +457,7 @@ def apply(ctxs):
         if head is None:
             return refuse(["no commit yet: a sync row needs HEAD"])
         label = f"sync {head}"
-    # Rows: the contexts applied and those named. Only a file applied changes, so every
-    # object in the delta sits in one: an ADR counts in the context that staged it.
+    # Rows: the contexts applied and those named; an ADR counts in the context that staged it.
     deltas = {}
     for oid in sorted(set(before) | set(after), key=sort_key):
         if oid in after and oid not in before:

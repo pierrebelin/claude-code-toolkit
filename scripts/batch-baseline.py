@@ -1,40 +1,26 @@
 #!/usr/bin/env python3
-"""The files of one batch: what it changed since it started, its diff, its commit, its undo.
-
-Every batch is committed when it ends, so `HEAD` is the end of the previous batch and
-`git diff HEAD` is the batch's own diff — except for the files the user had already
-modified when the batch started. `snapshot` records those as a `preexisting` line of the
-run work file (`run/.work.jsonl`, lib/work_file.py): path and blob hash only, computed
-with `git hash-object` without `-w`, so no content is copied anywhere. A file of the batch
-is then a file modified or untracked now, outside the run folder, that was either clean
-at the start or has changed since.
+"""The files of one batch against HEAD, those already modified at batch start left out.
 
     cctoolkit batch-baseline snapshot <work> FX
-        records the preexisting files of FX. Kept when FX already has one: a resumed
-        batch keeps the snapshot of its first start.
+        records the preexisting files of FX (path and blob hash) in the work file; an
+        existing snapshot is kept.
     cctoolkit batch-baseline diff <work> FX [--code] [--name-only]
-        unified diff against HEAD of the batch files under the source and test roots,
-        `a/` and `b/` prefixes as git. --code: `.md` and `*.verified.*` left out.
-        --name-only: paths only.
+        unified diff against HEAD of the batch files under the source and test roots.
+        --code: `.md` and `*.verified.*` left out. --name-only: paths only.
     cctoolkit batch-baseline base <work> FX <path>
-        prints the content <path> had at the batch start (HEAD; empty for a file the
-        batch created).
+        prints the content <path> had at batch start (empty for a file the batch created).
     cctoolkit batch-baseline restore <work> FX [--save <patch>]
-        sets a blocked batch aside: --save first writes the diff of the files it puts
-        back, then every batch file under the source and test roots goes back to HEAD
-        (`git show`, never checkout/restore/stash) and the files it created are deleted.
-        A preexisting file the batch also modified is left as is and listed.
+        --save writes the diff first; then every batch file under the source and test
+        roots goes back to HEAD and created files are deleted. A preexisting file the
+        batch also modified is left as is and listed.
     cctoolkit batch-baseline commit <work> FX --sheet <sheet>
-        commits the batch files (whole repo, run folder excluded) and nothing else, the
-        index the user staged before left out (`git commit --only`). Message
+        commits the batch files only (`git commit --only`, run folder excluded). Message
         `<type>(<plan folder>): batch FX — <sheet title>`, type `refactor` when every cycle
-        of the sheet is a refactor, `fix` when the title starts with fix/corrig, else
-        `feat`, then the trailer `Kit-Batch: <plan folder>/FX`, which `knowledge-scan`
-        reads to skip the commit. A preexisting file the batch also modified is committed whole and listed.
-        The one commit the kit makes: `lib/guard-git.sh` still denies `git commit` typed
-        in a Bash command.
+        is a refactor, `fix` when the title starts with fix/corrig, else `feat`, then the
+        trailer `Kit-Batch: <plan folder>/FX`. A preexisting file the batch also modified
+        is committed whole and listed.
 
---root DIR    repository the batch covers (default: the repo `kit_config.project_root()` resolves).
+--root DIR    repository the batch covers (default: `kit_config.project_root()`).
 
 Exit 0, exit 2 on usage error, missing snapshot or unreadable kit.config.json, exit 1
 when git refuses the commit.
@@ -193,8 +179,7 @@ def message(batch: str, sheet: Path) -> str:
     kind = ("refactor" if cycles and all(c.get("refactor") for c in cycles)
             else "fix" if re.match(r"(fix|corrig)", title, re.I) else "feat")
     plan = sheet.resolve().parent.name
-    # The trailer marks the commit as covered by the knowledge base: `/knowledge-sync` skips it,
-    # the merge at the end of the plan brings its change in (knowledge-format.md § HISTORY.md).
+    # Trailer is a frozen literal: knowledge-scan skips commits carrying it.
     return f"{kind}({plan}): batch {batch} — {title}\n\nKit-Batch: {plan}/{batch}"
 
 

@@ -1,19 +1,8 @@
 #!/bin/bash
 # PreToolUse Agent hook — delegation guard for every subagent spawn.
-#
-# Every Agent call goes through two checks, in cost order:
-#
-#   1. every Agent call carries a `description` — a delegation with no name was never scoped
-#   2. the model is chosen, never inherited         (no parameter == Opus)
-#
-# Check 2 covers every type, a custom agent whose file pins no `model:`, and a call
-# with no subagent_type at all, which is where the Opus leak actually sat. When both
-# pass, the report contract is appended to the prompt itself.
-#
-# `additionalContext` would land in the *caller's* context, not the subagent's;
-# only `updatedInput.prompt` reaches the agent being spawned. The final report of
-# an agent is re-injected whole into the main conversation, so the contract is the
-# only thing standing between a 20-line table and a pasted build log.
+# Checks a `description`, then an explicit model (no parameter == Opus). When both
+# pass, appends the report contract to the prompt: `additionalContext` would land in
+# the caller's context, only `updatedInput.prompt` reaches the agent.
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
@@ -35,23 +24,14 @@ LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 subagent=$(echo "$input" | jq -r '.tool_input.subagent_type // ""')
 model=$(echo "$input" | jq -r '.tool_input.model // ""')
 
-# An Agent call that omits subagent_type starts general-purpose (Agent tool
-# description). Until 2026-09-17 the case below matched "" against nothing and
-# exited: a typeless spawn walked past the model check and inherited Opus. That
-# was the whole leak — 83 subagent transcripts on Opus over 14 days, among them
-# the mechanical CA1002 refactors of 2026-09-12, each carrying its own list of
-# files and the rule to apply. Default the type here, before the filter.
+# A call without subagent_type starts general-purpose: default it before the filter.
 [ -n "$subagent" ] || subagent="general-purpose"
 
 case "$subagent" in
   Explore|general-purpose|Plan) ;;
   *)
-    # A custom agent (.claude/agents/<type>.md) that pins `model:` in its
-    # frontmatter needs no parameter — the frontmatter wins, which is how the
-    # two TDD agents have run on sonnet since 2026-09-12. One that pins nothing
-    # inherits Opus like anything else, so it is asked for the parameter.
-    # Plugin agents arrive namespaced (`cctoolkit:tdd-implementer`); the file is
-    # agents/tdd-implementer.md of the kit.
+    # A custom agent pinning `model:` in its frontmatter needs no parameter.
+    # Plugin agents arrive namespaced (`cctoolkit:x` → agents/x.md of the kit).
     if grep -qE '^model:[[:space:]]*[^[:space:]]' "$LIB/../agents/${subagent#cctoolkit:}.md" 2>/dev/null; then
       exit 0
     fi
@@ -62,10 +42,7 @@ esac
 
 prompt=$(echo "$input" | jq -r '.tool_input.prompt // ""')
 
-# The model is made explicit, never forced: an omitted parameter silently
-# inherits Opus, which is the leak this guards. Until 2026-10-09 Explore had to
-# say `haiku`; a search that takes judgment now picks `sonnet` rather than paying
-# a haiku miss plus a second spawn. `Plan` is a design agent: left alone.
+# The model is made explicit, never forced. `Plan` is left alone.
 case "$subagent" in
   Explore|general-purpose)
     [ -n "$model" ] || deny "$subagent blocked: pass an explicit model — \"haiku\" by default for a read-only search, \"sonnet\" when it takes judgment or writes (context-discipline.md). Without the parameter the agent inherits Opus."
@@ -82,10 +59,7 @@ case "$subagent" in
   *)     bound="Hard cap: 20 lines. Prefer a \`file:line — fact\` table. No code excerpt unless explicitly asked, no raw log, no restating of the prompt or of the plan." ;;
 esac
 
-# A caller that sized the report itself keeps its size. /plan-implementation asks
-# its inventory for 60 lines across five tables; until 2026-10-09 the appended
-# "Hard cap: 20 lines" contradicted it in the same prompt, and the agent had to
-# pick one. Only the number goes: the no-log, no-excerpt half still applies.
+# A prompt stating its own size keeps it; the no-log, no-excerpt half still applies.
 if printf '%s' "$prompt" | grep -qiE '[0-9]+ lines? max|max(imum)? [0-9]+ lines|at most [0-9]+ lines'; then
   bound="Size: the one stated above. No raw log, no pasted build output, no code excerpt that was not asked for."
 fi

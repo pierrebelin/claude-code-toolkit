@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Detached jobs a Workflow agent can start and wait for — a run longer than a Bash call.
-
-A Bash call is capped at 10 minutes; a full Stryker run takes two hours, a SonarQube
-scan five. `nohup … &` from an agent loses the exit code, and `run_in_background`
-can be killed with the agent (exit 144). Here the job runs in its own session, its
-exit code and log land in a folder of the system temp directory, and `wait` returns
-after a bounded time, so the workflow loops on short calls:
+"""Detached jobs a Workflow agent starts and waits for in bounded calls — a run longer than a Bash call.
 
     cctoolkit bg start <name> -- <command>     # detached; refused while <name> runs
     cctoolkit bg wait <name> [--seconds 540]   # 0 done, 1 failed, 3 still running
@@ -17,10 +11,6 @@ after a bounded time, so the workflow loops on short calls:
 folder is `<temp>/cctoolkit-bg/<name>/`: `pid`, `exit`, `log`. `wait` prints one line,
 `DONE exit=0`, `FAILED exit=<n>` or `RUNNING <seconds>s`, then the last log lines.
 Exit 2: unknown job or bad arguments.
-
-On Windows the job is a detached Git Bash (`bash` looked up on PATH: CreateProcess would
-find WSL's `bash.exe` in System32 first), probed through its process handle and stopped
-with `taskkill /T`: neither `os.kill(pid, 0)` nor `os.killpg` exists there.
 """
 import os
 import re
@@ -127,6 +117,7 @@ def start(name, words):
     if os.name == "nt":
         detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
     with open(os.path.join(d, "log"), "w") as log:
+        # bash from PATH: on Windows CreateProcess would find WSL's bash.exe in System32 first
         proc = subprocess.Popen([shutil.which("bash") or "bash", "-c", wrapped], stdout=log, stderr=subprocess.STDOUT,
                                 stdin=subprocess.DEVNULL, cwd=os.getcwd(), **detach)
     with open(os.path.join(d, "pid"), "w") as f:

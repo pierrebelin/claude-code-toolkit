@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Report on the context log. Usage: cctoolkit context-report [--session]
-#
-# Not a hook: a manual reader for what hooks/context-log.sh writes. Lived
-# in hooks/ until 2026-09-09, where it read like a dead hook.
+# Not a hook: reads what hooks/context-log.sh writes.
 set -u
 . "$(dirname "${BASH_SOURCE[0]}")/project-root.sh"
 LOG="$PROJECT_ROOT/.claude/context-log.tsv"
@@ -28,7 +26,7 @@ for l in rows:
     if agent: sub += tk
     else:     main += tk
 
-# Rows written before 2026-09-12 carry no agent column and count as main chain.
+# Rows without an agent column count as main chain.
 print(f"{len(per_file)} distinct files · {loads} loads · ~{loaded} tokens loaded "
       f"(main chain ~{main}, subagents ~{sub})\n")
 print("by load reason:")
@@ -40,9 +38,7 @@ for path, (n, tk) in sorted(per_file.items(), key=lambda kv: -kv[1][1])[:20]:
     print(f"  {tk:>7} tk{rep:<4}  {path}")
 PY
 
-# Bound guards: denied vs forced. A guard whose every denial is forced saves no
-# context and costs one turn each time -- it needs a better refusal, not a lower
-# threshold. Counts are per (session, agent) files left in /tmp by the three guards.
+# Bound guards: denied vs forced, from the per-(session, agent) files in /tmp.
 echo
 echo "bound guards (denied / forced):"
 for kind in readbounds catbounds diffbounds; do

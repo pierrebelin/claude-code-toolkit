@@ -1,20 +1,12 @@
 #!/usr/bin/env python3
-"""The model-free half of `/kit-init`: what the repo is made of, and how well each
-preset's layout fits it. One JSON object on stdout; nothing written.
+"""The model-free half of `/kit-init`: the repo's stacks and how well each preset's layout fits it.
 
 Usage:
     cctoolkit detect-stack            # the repo resolved by kit_config.project_root()
     cctoolkit detect-stack <root>
 
-Stacks are read off their manifests (`*.sln`/`*.csproj`, `package.json`,
-`pyproject.toml`/`requirements*.txt`, `pom.xml`/`build.gradle*`), up to four levels
-deep, with the test framework their dependencies name and a product guess (the
-solution, package or artifact name). Each preset — shipped, or the repo's own under
-`.claude/presets/` — is then resolved against the real tree, the product guess and
-the detected test framework applied: how many use-case folders its markers
-recognise, which source and test roots exist. The preset recognising the most
-use-case folders comes first; zero everywhere means none fits and `/kit-init`
-drafts the layer rules from the code instead.
+One JSON object on stdout, nothing written. Presets (shipped or `.claude/presets/`) are
+sorted by use-case folders recognised; zero everywhere (`fits: false`) means none fits.
 """
 import json
 import os
@@ -68,8 +60,7 @@ def stacks(root, m):
         text = " ".join(read(root, p) for p in m["csproj"])
         fw = next((f for f, rx in (("xunit", r"xunit"), ("nunit", r"\bNUnit\b"), ("mstest", r"MSTest"))
                    if re.search(rx, text, re.I)), None)
-        # Shallowest solutions first: one at the top level is the product, a vendored
-        # `externals/Other.sln` below it is a candidate, never a tie.
+        # Shallowest solutions first: a vendored deeper .sln is a candidate, never a tie.
         slns = sorted(m["sln"], key=lambda p: (p.count(os.sep), p))
         names = [os.path.splitext(os.path.basename(p))[0] for p in slns]
         top = [n for p, n in zip(slns, names) if p.count(os.sep) == slns[0].count(os.sep)] if slns else []
@@ -181,12 +172,10 @@ def main(argv):
     presets.sort(key=lambda p: (-p["useCaseFolders"], p["preset"] != kit_config.DEFAULT_PRESET, p["preset"]))
     legacy = [d for d in ("hooks", "lib", "agents", "tools", "presets", "evals")
               if os.path.isdir(os.path.join(cl, d))]
-    # .claude/skills/ also holds the repo's own skills and the preset's, installed by kit-init:
-    # only a folder named after a skill the plugin ships betrays a copy.
+    # .claude/skills/ also holds the repo's own skills: only a plugin skill's name betrays a copy.
     if any(os.path.isdir(os.path.join(cl, "skills", s)) for s in os.listdir(os.path.join(HERE, "skills"))
            if os.path.isdir(os.path.join(HERE, "skills", s))):
         legacy.insert(2, "skills")
-    # Copies that moved the kit's scripts under .claude/, and the mods' own marketplace.
     if os.path.isfile(os.path.join(cl, "scripts", "pre-audit.sh")):
         legacy.append("scripts")
     if os.path.isfile(os.path.join(cl, "mods", ".claude-plugin", "marketplace.json")):

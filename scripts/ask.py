@@ -3,29 +3,22 @@
 beyond `INDEX.md`, an `OVERVIEW.md` or a use-case file.
 
     cctoolkit ask "<question>" [--context C[,C]] [--kind usecase|rule|decision|adr] [--budget N]
-        cards ranked by BM25 over title, text, id and handlers: id, title, kind, use
-        cases, status, its first line, `path:line`. An id written in the question comes
-        first.
+        ranked cards (id, title, kind, use cases, status, first line, `path:line`);
+        an id written in the question comes first.
     cctoolkit ask --id <id>[,<id>]
-        the object whole, from its file, then what it applies to and what cites it. A
-        retired id: the `HISTORY.md` row that retired it.
+        the object whole, what it applies to and what cites it; a retired id, its `HISTORY.md` row.
     cctoolkit ask --handler <Name>
-        the use case listing that handler, whole; the rules of other files it cites,
-        whole; the decisions and ADRs linked to it, as cards. What to read before changing
-        a handler outside the kit's flow.
+        the use case listing that handler and the rules it cites, whole; linked decisions
+        and ADRs as cards.
     cctoolkit ask --context C[,C]
-        the context's summary: its use cases and their rules, cross-cutting rules,
-        decisions, the ADRs that cite it — one line each.
+        the context's summary, one line per use case, rule, decision and citing ADR.
     cctoolkit ask --history [--context C[,C]] [--id <id>]
         `HISTORY.md` rows, newest first.
 
-Every answer ends with `shown N of M`: N items printed, M found. `shown 0 of 0` is
-nothing found; N below M is the budget cutting (`knowledge.askBudget`, 1,500 tokens by
-default, `--budget` for one call) — narrow with `--context`, `--kind`, `--id`. Tokens
-are characters / 4.
+Every answer ends with `shown N of M`: N printed, M found; N below M is the budget
+(`knowledge.askBudget`, `--budget`, tokens = characters / 4) cutting.
 
-`.index/` is refreshed first when a base file changed (`lib/knowledge_index.py`);
-`INDEX.md` is never written here. Exit 0, 1 no base, 2 usage, 3 config defect.
+Refreshes `.index/`, never `INDEX.md`. Exit 0, 1 no base, 2 usage, 3 config defect.
 """
 import math
 import os
@@ -74,8 +67,7 @@ def stem(w):
 
 
 def tokens(s):
-    """Words folded to ASCII lower case, stop words out, stemmed; a CamelCase name gives
-    itself and its parts."""
+    """Words folded to ASCII lower case, stop words out, stemmed; a CamelCase name also gives its parts."""
     out = []
     for w in re.findall(r"[A-Za-z0-9]+", fold(s)):
         parts = re.findall(r"[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])", w)

@@ -1,35 +1,19 @@
 #!/usr/bin/env bash
-# ══════════════════════════════════════════════════════════════════════════════
-# kit-diff — the kit's core files against a manual copy of them in a repo
-# ══════════════════════════════════════════════════════════════════════════════
-# Since the plugin, the core never sits in a repo: what a repo needs of its own
-# lives in `.claude/kit.config.json`, `.claude/rules/` and the files merged from
-# `templates/`. A repo still holding a copy made before the plugin runs this
-# before deleting it (`/cctoolkit:kit-init` § 2): every DRIFT and ADDED file is a local
-# change to bring back into the kit, or to lose knowingly.
+# kit-diff — the kit's core files against a manual copy of them in a repo.
 #
 #   MISSING  in the kit, not installed            ADDED   installed, not in the kit
 #   DRIFT    both, contents differ (+added −removed lines, repo side)
-#   MERGED   settings.json / .gitignore / statusline-command.sh differ from
-#            templates/ — repo files merged from the kit, reviewed by hand
+#   MERGED   settings.json / .gitignore / statusline-command.sh differ from templates/
+#   ANONYMISATION  the repo's product or vocabulary in a DRIFT/ADDED line (repo side)
 #
-# `{{PRODUCT}}` in the kit's instruction files (skills, agents, docs) is replaced
-# by the repo's `product` before comparing: that substitution is the installation,
-# not a drift. Not compared: `kit.config.json` and `rules/` (the repo's own),
-# runtime files (context-log, learn-state, settings.local.json, __pycache__).
-#
-# Then the anonymisation check, on what would flow back into the kit (DRIFT and
-# ADDED files, repo side, added lines only): the repo's product name in any case,
-# and the repo's own vocabulary — use-case folders, their parents, aggregate and
-# value-object file names read through its layout — outside the kit's fictional
-# domain (Product, ModuleDiagram, ProductItem, DiagramNode, Catalog, Studio).
+# `{{PRODUCT}}` is replaced by the repo's `product` before comparing. Not compared:
+# `kit.config.json`, `rules/`, runtime files.
 #
 # Usage (from the toolkit checkout):
 #   bash scripts/kit-diff.sh <repo>            # report
 #   bash scripts/kit-diff.sh <repo> --diff     # also print each drift's unified diff
 #
 # Exit 0 = identical and clean. 1 = drift or anonymisation alert. 2 = usage error.
-# ══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
@@ -55,9 +39,7 @@ KIT, REPO = os.environ["KIT"], os.environ["REPO"]
 SHOW = os.environ["SHOW_DIFF"] == "--diff"
 CL = os.path.join(REPO, ".claude")
 
-# kit path -> installed path. scripts/ is the one folder installed outside .claude/ —
-# or under it, in a copy that moved them to .claude/scripts/: there a file the kit lacks
-# is ADDED — the repo's own script or a local one, kit-init keeps it.
+# scripts/ is installed outside .claude/, or under it in a copy that moved it there.
 LEGACY_SCRIPTS = os.path.isfile(os.path.join(CL, "scripts", "pre-audit.sh"))
 SCRIPTS_HOME = os.path.join(CL if LEGACY_SCRIPTS else REPO, "scripts")
 CORE = ["agents", "hooks", "lib", "presets", "skills", "tools", "docs", "evals/run.sh", "evals/cases"]
@@ -155,7 +137,6 @@ for src, rel in MERGED:
     if k is not None and r is not None and k != r:
         merged.append(rel)
 
-# --- anonymisation -------------------------------------------------------------------
 names = set()
 if product:
     names.add(product)
@@ -185,7 +166,6 @@ if names:
                     alerts.append((rel, n, line.strip()[:100]))
                     break
 
-# --- report --------------------------------------------------------------------------
 print(f"kit-diff — {KIT} vs {REPO}" + (f" (product: {product})" if product else " (no product in kit.config.json)"))
 for rel in missing:
     print(f"MISSING  {rel}")

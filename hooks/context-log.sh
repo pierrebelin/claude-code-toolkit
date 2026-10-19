@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
 # InstructionsLoaded hook — logs what enters the context, as the session goes.
-#
-# Fires at startup AND on every lazy load (sub-folder CLAUDE.md, path-scoped rule,
-# import, reload after /compact). The exit code is ignored by the harness: this
-# hook has no blocking power, it observes.
-#
 # Log:    <repo>/.claude/context-log.tsv   (timestamp, reason, bytes, ~tokens, path, session, agent)
-#         agent is empty on the main chain — added 2026-09-12 so the report can
-#         split what the expensive chain loads from what its subagents load.
+#         agent is empty on the main chain.
 # Report: cctoolkit context-report
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
@@ -20,8 +14,7 @@ RAW="$LOG_DIR/context-log.raw.json"
 
 INPUT=$(cat)
 
-# The exact schema is not documented: keep the first raw payload so the extraction
-# can be refined if the field names differ.
+# The schema is not documented: keep the first raw payload.
 [ -s "$RAW" ] || printf '%s\n' "$INPUT" > "$RAW"
 
 printf '%s' "$INPUT" | LOG="$LOG" python3 -c '

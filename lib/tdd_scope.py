@@ -1,37 +1,21 @@
 #!/usr/bin/env python3
 """What the RED and GREEN agents may write, checked on the tree, never on their word.
 
-Why. Until 1.12.0 `run-lot` judged a GREEN by its `testsDiff` line and a RED by its
-`productionDiff` line, both written by the agent being judged; `Expected failure` was
-declared too, so a RED failing on a stub's `NotImplementedException` passed as red. Every
-check here reads the repo: a snapshot when the agent starts, its Edit/Write calls, the
-tree when it returns, and the test command it ran, rerun.
+Scope: `agent_type` ending in `tdd-implementer` or `tdd-test-author`; every other caller passes.
 
-Scope: the two TDD agents only (`agent_type` ending in `tdd-implementer` or
-`tdd-test-author`); every other caller passes untouched.
-
-    start    SubagentStart          snapshot: content hash of every modified or untracked file
-                                    under the source and test roots, a copy of each for restore
+    start    SubagentStart          snapshot (hash and copy) of every dirty file under the roots
     edit     PreToolUse Edit|Write  implementer under a test root: denied unless granted or
-                                    `.verified.txt`; every write logged under the agent's id
-    bash     bash-dispatch module   a write through Bash under a root is denied for both (the
-                                    Edit/Write log is then the whole story); the test command
-                                    run is logged for the rerun
+                                    `.verified.txt`; every write logged
+    bash     bash-dispatch module   a Bash write under a root denied; the test command logged
     final    PreToolUse StructuredOutput
-                                    the tree since the snapshot, minus files other agents wrote:
-                                    implementer, a test file changed and not granted; author, a
-                                    source file changed and absent from `stubs`; author at RED,
-                                    the test command rerun, a test failing on the stub. Denied
-                                    with the exact reason the agent must restore, fix, or carry
-                                    as `diagnostic` of a `BLOCKED`
+                                    the tree since the snapshot, minus other agents' writes:
+                                    implementer, an ungranted test file; author, a source file
+                                    absent from `stubs`; author at RED, a test failing on the stub
+                                    once the test command is rerun
 
-Grants: `Test files you may modify, granted: <paths>.` in the agent's prompt (run-lot's
-`decided()` and `escalation()`), read from the agent's transcript, never from its report.
-
-State: `work_file.tmp_dir("tdd-scope")`, one `<agent id>.json` (snapshot), `.writes`,
-`.commands`, and a `<agent id>/` copy folder; agents older than two days are swept at start.
-Evidence the auditor judges (a stub whose added lines look like logic) is appended to
-`evidence.jsonl` there; `cctoolkit tdd-scope evidence` prints it for the audit capture.
+Grants: `Test files you may modify, granted: <paths>.` read from the agent's transcript.
+State: `work_file.tmp_dir("tdd-scope")`, swept of agents older than two days at start;
+`evidence.jsonl` there is printed by `cctoolkit tdd-scope evidence`.
 """
 import difflib
 import glob
@@ -162,8 +146,7 @@ def sweep():
 
 # --- start ----------------------------------------------------------------------------
 def snapshot(cfg, copies):
-    """{path: hash} of the dirty files under the roots, each copied under `copies` for a
-    later diff or restore. Also used by `cctoolkit audit-round`."""
+    """{path: hash} of the dirty files under the roots, each copied under `copies`. Also used by `cctoolkit audit-round`."""
     snap = tree(cfg)
     for path, digest in snap.items():
         src = os.path.join(cfg.root, path)
@@ -301,8 +284,7 @@ def without_heredocs(cmd):
 
 
 def bash_write(cfg, cmd):
-    """The path under a root a command would write, or None. A heredoc body is data (the
-    `cycle` line run-lot has the agent append holds arrows and paths): only its command line counts."""
+    """The path under a root a command would write, or None. A heredoc body is data: only its command line counts."""
     cmd = without_heredocs(cmd)
     for m in re.finditer(r"(?<![0-9&])>{1,2}\s*([^\s;&|]+)", cmd):
         if _under_root(cfg, m.group(1)):
@@ -349,8 +331,7 @@ def bash(cfg, d, kind, cmd):
 
 # --- final ----------------------------------------------------------------------------
 def changed(cfg, agent_id, record):
-    """Files under the roots this agent changed since its snapshot: the tree compared to the
-    snapshot, minus every file another TDD agent wrote meanwhile."""
+    """Files under the roots this agent changed since its snapshot, minus other TDD agents' writes."""
     out = changed_since(cfg, record.get("snapshot", {}))
     since = record.get("start", 0)
     others = set()

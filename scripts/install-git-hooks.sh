@@ -4,24 +4,10 @@
 #   cctoolkit install-git-hooks [repo-root]
 #   cctoolkit install-git-hooks --pre-commit [repo-root]
 #
-# Default: `post-checkout`, below. `--pre-commit`, opt-in: a reminder that the knowledge
-# base may lag behind the staged handlers, read off the staged diff by
-# `knowledge-scan --reminder --staged`, and `INDEX.md stale` when a change by hand left
-# it behind (`knowledge-index --check`) — no agent, never blocking, always exit 0. No
-# sync runs in a git hook: it cannot ask for confirmation, it would slow every commit,
-# and it would also fire during a rebase, a merge or in CI.
-#
-# Why a git hook and not a Claude hook. The hooks ship in the plugin, but a repo
-# that enables the plugin at local scope keeps that enablement in
-# `.claude/settings.local.json`, which `.claude/.gitignore` excludes. A worktree is
-# a checkout: it carries none of it, so without help not one kit hook fires
-# there — no git guard, no read bounds, no traceability check. Enabling the plugin
-# in the committed settings.json fixes the worktree and hands the setup to the
-# team, which is not always wanted.
-#
-# `.git/hooks` is the third way: it lives in the common git dir, so every worktree
-# of the repo shares it, and it is never committed. Which is also why it cannot
-# ship with a clone, and why this installer exists.
+# Default: `post-checkout`, linking the gitignored `.claude/settings.local.json` into each new
+# worktree, so a plugin enabled at local scope fires there too. `--pre-commit`, opt-in: the
+# knowledge-base reminder (`knowledge-scan --reminder --staged`, `knowledge-index --check`),
+# never blocking. `.git/hooks` is shared by every worktree and never committed, hence this installer.
 
 set -u
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"

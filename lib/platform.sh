@@ -1,30 +1,10 @@
 # Sourced, never run: lets the rest of the kit run unchanged under Git Bash on
-# native Windows. On macOS and Linux it defines `kit_path` as a no-op and returns:
-# nothing else changes there.
-#
-# Why. Claude Code runs hooks and the statusline in Git Bash on Windows, but the
-# tools the kit calls are native Windows programs that differ from their POSIX
-# selves in four ways, each fixed here once instead of in every hook:
-#   - `python3` is missing (python.org installs `python` and `py`) or is the
-#     Microsoft Store stub, which prints an install hint and exits 9009. The first
-#     interpreter that really runs Python >= 3.10 is cached in /tmp and `python3`
-#     becomes a function calling it.
-#   - native Python writes CRLF on stdout and through open(), and encodes in the
-#     ANSI code page: `$(python3 ...)` would keep a `\r`, and a `—` would crash a
-#     print. PYTHONUTF8=1 plus lib/windows/sitecustomize.py (LF on stdout, stderr
-#     and every text-mode write) make it behave as on POSIX.
-#   - native jq writes CRLF unless given `-b`: `jq` becomes `jq -b`.
-#   - paths arrive as `C:\x\repo\a.cs` (hook payload), `C:/x/repo` (git,
-#     ${CLAUDE_PLUGIN_ROOT}) or `/c/x/repo` (pwd). `kit_path VAR` rewrites VAR in
-#     place to the one form `C:/x/repo/a.cs`, which bash, git and Python all
-#     accept; CLAUDE_PROJECT_DIR and CLAUDE_PLUGIN_ROOT are rewritten on load.
-#     No fork: `printf -v`.
-# A hook finds this file through `${BASH_SOURCE[0]%/*}`, which splits on `/`
-# only. Should Claude Code hand `${CLAUDE_PLUGIN_ROOT}` to bash with backslashes,
-# every hook opens with one `case` line that runs it again from the same path
-# written with `/`, before it reads stdin.
-# The functions are exported (`export -f`), so a `bash child.sh` inherits them;
-# a bash started by a native program may lose them, hence the `declare -F`.
+# native Windows. On macOS and Linux it defines `kit_path` as a no-op and returns.
+# Windows: `python3` → the first interpreter running Python >= 3.10 (cached in /tmp;
+# the Store stub exits 9009); Python in UTF-8 writing LF (windows/sitecustomize.py);
+# `jq -b` (no CRLF); `kit_path VAR` rewrites a path in place to `C:/x/repo` form
+# (no fork: `printf -v`), CLAUDE_PROJECT_DIR and CLAUDE_PLUGIN_ROOT on load.
+# Functions are exported; a bash started by a native program may lose them, hence `declare -F`.
 [ -n "${_KIT_PLATFORM:-}" ] && declare -F kit_path >/dev/null && return 0
 
 case "${OSTYPE:-}" in

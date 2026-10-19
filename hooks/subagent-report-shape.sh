@@ -1,24 +1,9 @@
 #!/usr/bin/env bash
 # SubagentStop hook: checks the SHAPE of the `## RED` / `## GREEN` report a TDD subagent
 # hands back, and makes the agent re-emit it when a required line is missing.
-#
-# Why here and not in the orchestrator: a report missing its `Production diff` line or its
-# table costs the orchestrator a turn to notice plus a `SendMessage` to repair — 1 to 4 per
-# batch (measured 2026-09-13). The agent still holds its context, so it re-emits for free.
-#
-# Form only, never content. A non-empty diff, a cost above zero, an unexpected exit code are
-# deviations the ORCHESTRATOR settles (delete the production code, back to design): the hook
-# must never push an agent to repair those on its own. It only demands a complete report.
-#
-# Channel: `decision: block` + `reason`, documented for Stop and SubagentStop. `stop_hook_active`
-# closes the loop — a second pass never blocks again, whatever the report still lacks.
-# A message carrying neither `## RED` nor `## GREEN` (`## BLOCKED`, or `## BLOQUÉ` of an
-# agent written before the switch, Explore, auditor) passes untouched: the hook recognises
-# the two contracts it knows, never polices the others.
-#
-# Each bullet label is read in English and in French (`Command` / `Commande`): an agent
-# started before the switch answers in French labels and must not be sent back for them.
-# The reason is always written in English, with the English labels.
+# Form only, never content: a deviation is the orchestrator's call. `decision: block` +
+# `reason`; `stop_hook_active` closes the loop. Any other message passes untouched.
+# Labels are read in English and French; the reason is always English.
 
 # The heredoc is python's own stdin, so the payload travels through the environment.
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
@@ -47,8 +32,7 @@ if not heading:
 kind = heading.group(1)
 
 # Bullet labels of `agents/tdd-test-author.md` and `agents/tdd-implementer.md`, as
-# (English, French). Compared on the fold so casing and accents never decide whether a
-# report is complete.
+# (English, French), compared on the fold (case and accents).
 REQUIRED = {
     "RED": [("Tests", "Tests"), ("Command", "Commande"), ("Production diff", "Diff production"),
             ("Expected failure", "Échec attendu")],
@@ -74,8 +58,7 @@ issues = []
 if missing:
     issues.append("missing lines: " + ", ".join(f"`- {lb}:`" for lb in missing))
 
-# `exit N` sits on the `Command` line (`Commande`): without it the orchestrator cannot tick
-# RED or GREEN on observed evidence, and asks for it every time. "commande" holds "command".
+# `exit N` sits on the `Command` line. "commande" holds "command".
 cmd_line = next((l for l in body.splitlines()
                  if re.match(r"^\s*[-*]\s*", l) and fold("Command") in fold(l)), "")
 if cmd_line and not re.search(r"exit\s+\d+", cmd_line, re.I):

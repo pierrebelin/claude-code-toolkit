@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Coherence checks for docs/metrics/quality-report-YYYY-MM-DD.json.
-
-Runs the arithmetic and threshold checks of the quality report (`/quality-report`,
-§ Coherence checks), the `codebase.*` evidence blocks included.
-The judgement checks — status icons, section wording — stay in the skill.
+"""Arithmetic and threshold checks of docs/metrics/quality-report-YYYY-MM-DD.json, `codebase.*` blocks included.
 
 Usage:
     cctoolkit quality-report-check [path/to/report.json]
@@ -141,8 +137,7 @@ def check_stryker(report):
             expected = killed / covered * 100
             if abs(detection - expected) > 0.6:
                 fail(f"stryker.{scope}.detection_pct = {detection}, recomputed = {expected:.1f}")
-        # global_pct is Stryker's own console score: its denominator excludes Ignored and
-        # CompileError mutants, which the JSON does not store. Only its ordering is checked.
+        # global_pct's denominator is not in the JSON: only its ordering is checked.
         global_pct = number(entry.get("global_pct"))
         if None not in (detection, global_pct) and global_pct > detection + 0.6:
             fail(

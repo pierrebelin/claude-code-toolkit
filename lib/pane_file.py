@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """The pane file — `<plan folder>/run/.pane.jsonl`, what the user said through the run-lot-pane mod.
 
-Why a second file. `run/.work.jsonl` is appended by the workflow's agents under `flock`; the mod
-writes a file whole (`$.fs.write`, no append, no lock), so the two never share a file. The mod is
-the only writer here; the scripts answer in the work file with `ack` lines, never here.
+The mod is the only writer (whole-file, no lock); the scripts answer with `ack` lines in the work file.
 
     {"kind": "pause", "on": true|false, "at": <epoch s>}
         the last line wins; `on` is spent once `plan-next-batch --next` paused the plan

@@ -1,20 +1,8 @@
 #!/bin/bash
 # stdin filter for `git grep -n` output, appended by rewrite-piped-filter.sh
 # (profile `git-grep`).
-#
-# Groups matches under a per-file header instead of repeating the path on every
-# line. Nothing is dropped: every match and every full line survives, so grep
-# output is never capped — the saving is pure path repetition. Measured
-# 2026-09-10 on three symbols of a .NET repo: 2063 kB -> -48 %, 145 kB -> -33 %,
-# 52 kB -> -32 %. Paths in that repo run ~130 characters against ~100 for the
-# matched content, hence the ratio.
-#
-# The tradeoff, chosen deliberately: the header path is clickable, the individual
-# matches are not. Truncating long lines was the alternative and buys only 8-10 %.
-#
-# A line that is not `path:NN:content` — `Binary file X matches`, or a `git grep`
-# without -n — is printed untouched and resets the grouping, so the filter degrades
-# to a no-op rather than mangling the output.
+# Groups matches under a per-file header instead of repeating the path; lossless.
+# A line that is not `path:NN:content` is printed untouched and resets the grouping.
 set -u
 
 awk '

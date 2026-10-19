@@ -1,47 +1,25 @@
 #!/usr/bin/env python3
 """The merge of a delivered feature into the knowledge base — its mechanical part.
 
-A spec written against the base carries its delta: `<!-- kit:new|modified|retired -->`
-ends the heading of each use case, rule and decision it changes. The batch sheets of
-its plan carry the ADRs (`### ADR-nnn — …` under `## Decisions`). Once the plan is
-delivered, the merge brings them into the base. This script does what needs no
-judgement; `agents/knowledge-merger.md` writes the prose (spec format to base format);
-`cctoolkit knowledge-write apply --merge <CODE>` alone writes the base, once the user
-confirmed (`/cctoolkit:knowledge-merge`). Format:
-`skills/knowledge-sync/references/knowledge-format.md`.
-
-Staging `<root>/.merge/<CODE>/`, git-ignored, `<CODE>` read from `<CODE>-PLAN.md`:
-`.drafts/<Context>/` holds one fragment per object — a use case or an ADR as its whole
-file, `<id>-<slug>.md`; a rule or a decision as the object alone, `<id>.md`; the
-context's `OVERVIEW.md` whole — and `<Context>/…` the whole files `stage` assembles,
-laid out as the `.sync/` staging of `/knowledge-sync`.
+The spec's delta is `<!-- kit:new|modified|retired -->` on its headings; the plan's sheets carry
+the ADRs. `agents/knowledge-merger.md` writes the prose, `knowledge-write apply --merge <CODE>`
+writes the base. Staging `<root>/.merge/<CODE>/`: `.drafts/<Context>/` one fragment per object
+(a use case or an ADR whole as `<id>-<slug>.md`, a rule or a decision alone as `<id>.md`,
+`OVERVIEW.md` whole), `<Context>/…` the files `stage` assembles.
 
     cctoolkit knowledge-merge prepare <plan> [--partial]
-        checks the plan and the spec, clears the staging, drafts what is mechanical — a
-        decision of the spec, an ADR of a sheet (`T1`-style plan ids dropped, its context
-        the one its ids cite most) — and prints the packet the merger works from:
-        objects to write with their spec line and target file, base files to read,
-        dead citations of the retired objects, contexts whose `OVERVIEW.md` the spec
-        reaches (vocabulary, states, relations). Every batch of the plan ✅ DONE, or
-        with `--partial` only the objects whose batches are all ✅ DONE (section
-        `kit:traceability` of the plan; a decision when every object it links is in).
-        `nothing to merge: ` — a spec without delta, a feature whose `HISTORY.md` row
-        exists. Refused: a batch not done, an id `new` the base holds under another
-        title (`collision: `, with the next free id and the `renumber` command), an
-        id `modified` or `retired` the base lacks.
+        clears the staging, drafts the spec's decisions and the sheets' ADRs, prints the
+        merger's packet. Every batch ✅ DONE, or with `--partial` the objects whose batches
+        are. `nothing to merge: ` — no delta, or the feature's `HISTORY.md` row exists.
+        Refused: a batch not done, a `new` id the base holds under another title
+        (`collision: `, with the next free id), a `modified`/`retired` id the base lacks.
     cctoolkit knowledge-merge stage <plan>
-        assembles the drafts over the base: a whole file replaces its file, an object
-        replaces its own lines wherever the base holds it, a new rule goes to
-        `rules.md`, a new decision to `decisions.md`, a retired object is cut — a use
-        case deleting its file. Refused, nothing staged: an object of the delta without
-        draft, an object no delta announces, a provisional id, a citation of an id
-        defined nowhere that the base did not have, a rule outside its place that the
-        base did not have, an `OVERVIEW.md` above `knowledge.overviewBudget`. Warns on an
-        object rewritten without a line removed. Prints `+added −removed <file>` per
+        assembles the drafts over the base. Refused, nothing staged: a delta object without
+        draft, a draft no delta announces, a provisional id, a new dead citation, a new
+        misplaced rule, an `OVERVIEW.md` over budget. Prints `+added −removed <file>` per
         file, then the `apply` command.
     cctoolkit knowledge-merge renumber <plan> <old id> <new id>
-        after a collision: the id rewritten in the plan folder and under the source and
-        test roots (rule sheets, comments, test tags), the staging cleared.
+        the id rewritten in the plan folder and the source and test roots, the staging cleared.
 
 Exit 0, 1 refused (nothing staged), 2 usage, 3 config defect.
 """
@@ -130,8 +108,7 @@ def sheet_batch(path):
 
 
 def section(text, anchor):
-    """The lines under the heading carrying `<!-- kit:<anchor> -->`, to the next heading
-    of the same or a higher level."""
+    """The lines under the heading carrying `<!-- kit:<anchor> -->`, to the next heading of its level."""
     lines = text.splitlines()
     rx = re.compile(rf"^(#{{1,6}})\s.*<!--\s*kit:{anchor}\s*-->")
     for i, line in enumerate(lines):
@@ -232,8 +209,7 @@ def spec_delta(text):
 
 
 def appliers(oid, spec_objs, base):
-    """Use cases applying a rule: those its spec body cites, those whose spec body cites
-    it, those whose file in the base cites it — the retired ones left out."""
+    """Use cases applying a rule, by citation either way in the spec or in the base; retired ones left out."""
     rule = next((o for o, _ in spec_objs if o.id == oid), None)
     gone = {o.id for o, change in spec_objs if change == "retired"}
     out = [i for i in knowledge.ID_RE.findall(rule.body) if knowledge.kind_of(i) == "CU"] if rule else []
@@ -370,7 +346,6 @@ def prepare(f, partial):
             print(line, file=sys.stderr)
         return refuse(errors + ([f"{len(collisions)} collision(s): renumber, then prepare again"] if collisions else []))
 
-    # Staging, from scratch: what a previous prepare left describes another state.
     shutil.rmtree(f.staging, ignore_errors=True)
     os.makedirs(f.drafts)
     write(os.path.join(f.staging, FEATURE), f"{f.code} partial\n" if partial else f"{f.code}\n")
@@ -466,8 +441,7 @@ def prepare(f, partial):
 
 # --- stage ---------------------------------------------------------------------------------
 def splice(text, o, new):
-    """The text with the object's lines replaced by `new` (empty: cut), one blank line kept
-    before what follows."""
+    """The text with the object's lines replaced by `new` (empty: cut), one blank line kept after."""
     lines = text.splitlines()
     rest = lines[o.end:]
     mid = new.rstrip("\n").splitlines() if new.strip() else []

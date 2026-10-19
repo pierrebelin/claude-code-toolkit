@@ -1,24 +1,9 @@
 #!/bin/bash
 # UserPromptSubmit + PreToolUse:Skill hook — one batch, one session.
-#
-# /implement-tdd relaunched without /clear makes the new batch pay the whole
-# accumulated context of the previous one on every turn. The skill already says so
-# (its closing line), but an instruction addressed to the
-# agent is not a barrier: the orchestrator reads it after the reads it was meant to
-# prevent.
-#
-# Detection reads the transcript, not a state file: the closing literal emitted by
-# /implement-tdd is emitted once per closed batch and by nothing else. Both wordings
-# are matched — the skill emits the English one (`→ Batch FX complete — manual
-# validation required`), the French one (`→ Lot FX terminé — validation manuelle
-# requise`) stays in the transcripts and repos written before the switch — and the
-# reply is English in either case. F<n> requires a digit, so the skill sources and
-# this file, which quote "Lot FX" / "Batch FX", never match. A French launch (`lot F2`)
-# names its batch the same way: the id is the first F<n> of the prompt.
-#
-# Escape hatch, same convention as read-bounds.sh:
-# re-issuing the identical launch lets it through. The first attempt drops a marker,
-# the second consumes it.
+# Denies a second /implement-tdd in a session that already closed a batch, and a
+# launch at effort high or above. A closed batch = the skill's closing literal in the
+# transcript (frozen; English and French wordings). The launch's id is its first F<n>.
+# Escape hatch: re-issuing the identical launch passes (a marker, consumed).
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
@@ -33,8 +18,7 @@ case "$event" in
     ;;
   PreToolUse)
     [[ "$(echo "$input" | jq -r '.tool_name // ""')" == "Skill" ]] || exit 0
-    # Installed as a plugin the skill is `cctoolkit:implement-tdd`; the bare name stays
-    # accepted for a copy predating the plugin.
+    # The bare name is a copy predating the plugin.
     case "$(echo "$input" | jq -r '.tool_input.skill // ""')" in
       implement-tdd|cctoolkit:implement-tdd) ;;
       *) exit 0 ;;
@@ -47,16 +31,7 @@ esac
 session=$(echo "$input" | jq -r '.session_id // "nosession"')
 
 # --- Orchestrator effort ---
-#
-# Measured on ten batches (07-10/09/2026): 155 min of model latency out of 628 min,
-# 8.6 s per turn over 1 087 turns, every one at effort high. Effort is settable
-# neither by a hook nor by a skill frontmatter — only /effort changes it, and it
-# holds for the whole session. So the harness can only refuse the launch, the way
-# it already refuses a batch relaunched without /clear.
-#
-# Channel: the statusline is the only place that receives .effort.level; it drops
-# the value in $TMPDIR (statusline-command.sh). Missing file = unknown effort = let
-# it through: a batch must never be blocked by a statusline that has not run yet.
+# The statusline drops .effort.level in $TMPDIR; no file = unknown = let through.
 # CLAUDE_EFFORT_LEVEL forces the value (evals, troubleshooting).
 state_dir="${CLAUDE_EFFORT_STATE_DIR:-${TMPDIR:-/tmp}}"
 effort="${CLAUDE_EFFORT_LEVEL:-}"

@@ -1,19 +1,7 @@
 #!/bin/bash
 # bash-dispatch module — the IntegrationTests suite never runs whole.
-#
-# `implement-tdd/references/test-scope.md` §2 says it since 2026-09-08: the
-# whole suite rebuilds every fixture and re-seeds the database, more than four
-# minutes where the impacted context fits in one. Advisory only, it was
-# ignored twice on 2026-09-10 (sessions f3d96035 and 24978db7): 602 s each,
-# the single longest tool call of both sessions. This module makes it a deny.
-#
-# Passes: any `dotnet test` on another project, and an IntegrationTests run
-# carrying at least one `--filter-class` or `--filter-method`. `rtk` prefix,
-# `cd … &&`, env assignments and `APP_TEST_MODE=true` in front are all fine —
-# only the project and the presence of a filter are inspected.
-#
-# Contract: reads $HOOK_CMD, prints the hook JSON when it decides, nothing when
-# it passes. A deny is terminal in the chain.
+# Passes another project, or a run carrying `--filter-class` / `--filter-method`.
+# Reads $HOOK_CMD, prints the hook JSON when it decides.
 set -u
 
 cmd="${HOOK_CMD:-}"
@@ -27,8 +15,7 @@ case "$cmd" in
   *--filter-class*|*--filter-method*) exit 0 ;;
 esac
 
-# run-plan's final check runs every suite whole once per plan, after its last
-# batch (2026-10-13): the only whole run allowed, carried by its marker.
+# run-plan's final check: the only whole run allowed, carried by its marker.
 case "$cmd" in
   *KIT_FINAL_CHECK=1*) exit 0 ;;
 esac

@@ -1,30 +1,10 @@
 #!/usr/bin/env python3
 """Gaps of the /verify-ddd-tdd verdicts not yet run through /learn.
 
-Why. A gap fixed inside its batch leaves no trace anywhere but the auditor's
-transcript: the same gap comes back in the next batch, the auditor finds it
-again, it gets fixed again. /learn reads those gaps, draws the recurring motifs
-out of them and has them written into a layer rule after confirmation. This
-script is the model-free half: extract, remember what was treated, count.
-
-Sources. The `## Audit gaps` section of every `/run-lot` report,
-`todo/<code>/run/batches/FX.md`: one line per Blocking/Major gap, written by the
-workflow and kept in the repo, where transcripts are removed after
-`cleanupPeriodDays` (30 days by default). Then the `ddd-tdd-auditor` sub-transcripts (and the /verify-ddd-tdd forks)
-one message of which starts with `## Verdict — GAPS` (`## Verdict — ECARTS` in the
-verdicts written before the kit was translated; their severities `Bloquant`/`Majeur`
-and French axes fold onto the English ones). Measured on 2026-10-02 on
-the repo this kit comes from: 53 verdicts out of 175 sub-transcripts quoting the
-literal, the rest quote it without producing it (skill template loaded, docs
-agent). 1.7 GB of transcripts, 9.5 s for a full grep: the state remembers the
-mtime of every file read, only what moved is read again. A gap already read from
-the other source (same axis, same text) is not counted twice.
-
-State. `.claude/learn-state.json` (ignored by git): files read, rows extracted,
-treated ids, refused motifs. A refused motif is handed back to /learn so that it
-does not propose it again. A state file written with the French row keys (`lot`,
-`severite`, `axe`, `ecart`, `preuve`, `correction`) loads as is and is saved back in
-English.
+Sources: the `## Audit gaps` of every `/run-lot` report (`todo/<code>/run/batches/FX.md`), then
+the `ddd-tdd-auditor` sub-transcripts and /verify-ddd-tdd forks (`## Verdict — GAPS`, or the
+French `ECARTS`); a gap found in both is counted once. State: `.claude/learn-state.json`
+(git-ignored), files read with their mtime, rows, treated ids, refused motifs.
 
 Usage:
   cctoolkit learn-candidates                   # summary per axis
@@ -32,14 +12,8 @@ Usage:
   cctoolkit learn-candidates --count           # one line, for doctor
   cctoolkit learn-candidates --treat-axis Plan # marks the axis treated (`--treat-axe` accepted)
   cctoolkit learn-candidates --refuse "motif"  # refused motif, never proposed again
-  cctoolkit learn-candidates --memory          # mechanical defects of the memory (`--memoire` accepted)
-
-Memory. /learn memory audits the project auto-memory. This script delivers its
-judgement-free half: index (file indexed twice, not indexed, gone), incomplete
-frontmatter, repo paths quoted in backticks that no longer exist. Seen on
-2026-10-02 in the repo this kit comes from: one file indexed twice under two
-contradictory summaries ("frozen", then "unfrozen"), its description still on
-the frozen state, the only part read at recall.
+  cctoolkit learn-candidates --memory          # mechanical defects of the memory (`--memoire` accepted):
+                                               # index, frontmatter, dead repo paths
 """
 
 import argparse
@@ -73,15 +47,10 @@ AUDIT_GAPS = ("## audit gaps", "## ecarts d'audit")
 # or `; not applied.` — the line renderReport() of workflows/run-lot.js writes.
 REPORT_GAP = re.compile(r"^- (\w+) — ([^—]+?) — (.*) \(evidence: (.*)\)\. Fix: (.*?)(?:; applied in round \d+: .*?|; not applied)\.(?: Closure: .*\.)?$")
 AUDITORS = {"ddd-tdd-auditor", "fork"}
-# Severities and axes in both vocabularies, folded onto the English ones; French
-# verdicts and state files predate the translation and stay readable.
+# French severities and axes fold onto the English ones.
 SEVERITIES = {"Blocking": "Blocking", "Major": "Major", "Bloquant": "Blocking", "Majeur": "Major"}
 NUDGE_BATCHES = 2
-# Frozen axes of the verdict, (English, French). Auditors write `Stale plan` (a
-# classification of the Plan axis) as if it were an axis, and sometimes a lowercase
-# label: 16 rows out of 131 in the source repo on 2026-10-02. Folded onto the frozen
-# axis, otherwise one motif spreads over several labels and never reaches the
-# recurrence threshold.
+# Frozen axes of the verdict, (English, French); aliases and lowercase labels fold onto them.
 AXES = (("Correctness", "Correction"), ("Reuse", "Réutilisation"), ("Simplification", "Simplification"),
         ("Cost", "Coût"), ("Placement", "Placement"), ("Comments", "Commentaires"),
         ("Test", "Test"), ("Plan", "Plan"), ("Scope", "Périmètre"))
@@ -105,8 +74,7 @@ def load_state():
 
 
 def normalised(row):
-    """A row saved with the French keys, severity and axis, in the English ones. The id
-    is kept: it was hashed from the label as the auditor wrote it."""
+    """A row saved with the French keys, severity and axis, in the English ones; the id kept."""
     for old, new in ROW_KEYS.items():
         if old in row:
             value = row.pop(old)
@@ -169,8 +137,7 @@ CLOSURE = ("closure", "fermeture")
 
 
 def rows_of(text):
-    """Rows of a GAPS table: Severity, Axis, Gap, Evidence, [Closure,] Expected fix — the
-    header row says whether `Closure` is there (verdicts before 1.12.0 carry none)."""
+    """Rows of a GAPS table: Severity, Axis, Gap, Evidence, [Closure,] Expected fix — per the header row."""
     closure = False
     for line in text.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]

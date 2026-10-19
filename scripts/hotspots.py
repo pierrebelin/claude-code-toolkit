@@ -1,38 +1,21 @@
 #!/usr/bin/env python3
 """Churn against complexity per source file — the hotspot map of the quality report.
 
-After Michael Feathers, "Getting Empirical about Refactoring", and the turbulence
-gem: a file both complex and often changed is where refactoring pays first.
-
-- Files: the sources of `kit.config.json` (`layout.sources.roots` / `extensions`)
-  at the analysed commit, minus the test roots, `skipDirs`, the paths marked
-  `linguist-generated` / `linguist-vendored` in `.gitattributes`, and every
-  `--exclude` glob.
-- Churn: commits reachable from the ref, merges skipped, renames followed back to
-  the current path. Left out: the commit that created a file (being written is not
-  churn), a pure rename, the revisions of `.git-blame-ignore-revs` and `--ignore-rev`.
-  Ranked over a window ending at the analysed commit's date (`--days`, default 365):
-  churn stopped three years ago is not a hotspot. The whole history is counted too.
-- Fixes: commits of the window whose subject reads `fix:` / `fix(scope):`
-  (conventional commits). `null` when the history has no such commit: the
-  convention is not used, and zero would read as "no bug".
-- Complexity: cyclomatic, per function, by lizard (`pip install lizard`), read
-  from the analysed commit, not the working tree. Rolled up per file two ways:
-  total and worst function. Without lizard the status is `missing`: churn alone
-  never ranks a file.
-- Quadrants: each axis split at the median of the analysed files. Danger Zone =
-  above both. Score = sqrt(u² + v²), u = log1p(commits) / log1p(max commits),
-  v = log1p(complexity) / log1p(max complexity). Ranked twice: on the total
-  complexity, then on the worst function — a short file holding one monster
-  function, which the total misses.
-
-The output is the same for the same commit: no clock, no randomness.
+- Files: `layout.sources` at the analysed commit, minus test roots, `skipDirs`,
+  `linguist-generated` / `linguist-vendored` paths and every `--exclude` glob.
+- Churn: merges, file creations, pure renames, `.git-blame-ignore-revs` and `--ignore-rev`
+  left out; renames followed. Ranked over `--days` ending at the commit date; whole
+  history counted beside it. Fixes: `fix:` subjects, `null` when the history has none.
+- Complexity: cyclomatic by lizard at the analysed commit, per file total and worst
+  function; `missing` without lizard (churn alone never ranks a file).
+- Danger Zone: above the median on both axes. Score = sqrt(u² + v²), each axis
+  log1p-normalised to its max. Ranked on the total, then on the worst function.
 
     cctoolkit hotspots                              # Markdown section on stdout
     cctoolkit hotspots --json                       # activity.hotspots of the report JSON
     cctoolkit hotspots --days 0                     # rank over the whole history
     cctoolkit hotspots --exclude '*/Migrations/*' --exclude '*.g.cs'
-    cctoolkit hotspots --ref <branch|sha> --top 10 --ignore-rev <sha>
+    cctoolkit hotspots --ref <branch|sha> --top 10 --top-worst 5 --ignore-rev <sha>
 """
 import argparse
 import datetime
@@ -93,7 +76,6 @@ def split_rename(path):
     return None, path
 
 
-# --- files ---------------------------------------------------------------------------
 def candidate_files(ref, excludes):
     """(analysed paths, {group: count} excluded, tracked file count) at `ref`."""
     tracked = [p for p in git("ls-tree", "-r", "--name-only", ref).splitlines() if p]
@@ -135,7 +117,6 @@ def linguist_marked(ref, paths):
     return marked
 
 
-# --- churn ---------------------------------------------------------------------------
 def ignore_file_revs(ref):
     text = git("show", f"{ref}:.git-blame-ignore-revs", check=False)
     return {line.split("#", 1)[0].strip() for line in text.splitlines()} - {""}
@@ -193,7 +174,6 @@ def churn(ref, cutoff, current, ignored, tracked_count):
     return stats, facts
 
 
-# --- complexity ------------------------------------------------------------------------
 def blobs(ref, paths):
     """{path: text} at `ref`, through one `git cat-file --batch`."""
     stdin = "".join(f"{ref}:{p}\n" for p in paths).encode()
@@ -234,7 +214,6 @@ def complexity(ref, paths):
     return out, f"lizard {getattr(lizard, 'version', '?')}"
 
 
-# --- report ----------------------------------------------------------------------------
 def rank(files, stats, cx, key, fixes):
     """(quadrant counts, Danger Zone rows by score, median thresholds) with complexity = cx[key]."""
     t_churn = statistics.median(stats[p]["commits"] for p in files)

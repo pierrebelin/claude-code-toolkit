@@ -1,42 +1,19 @@
 #!/bin/bash
-# Auto-sync of the graphify graph at the end of a session.
-#
-# Trigger: working tree fingerprint (see ../lib/graphify-freshness.sh), not a flag
-# dropped by the Edit/Write hooks. So it also catches IDE edits, merges, pulls
-# and branch switches.
-#
-# Verification: mtime of graph.json before/after. graphify update exits 0 without
-# writing anything in several cases (node-shrink guard, "Nothing to update"), so
-# neither the exit code nor stdout proves a write happened.
-#
-# The guard refuses to write when the new graph has fewer nodes than the old one,
-# protecting against the missing chunks of a partial session. A drop is however
-# normal after a refactor that deletes code: replay with --force if the extraction
-# is complete and the drop is under the threshold, otherwise warn without
-# overwriting.
-#
-# Detached since 2026-09-13. The rebuild ran in the foreground of the Stop hook:
-# 72 s measured per rebuild, 229 rebuilds over 85 sessions (2.7 per session, 19
-# in the worst one), each holding the end of the turn — the largest wall-clock
-# cost of the whole setup, and invisible to every token measure. The staleness
-# check (99 ms) stays in the foreground so nothing is spawned when the graph is
-# current; the rebuild re-executes this script detached (`--sync`, nohup, fds
-# closed) and the hook returns at once. The mkdir lock keeps two detached
-# rebuilds from racing on graph.json. GRAPHIFY_BIN, GRAPHIFY_HOOK_LOG and
-# GRAPHIFY_AUTOSYNC_LOCK exist for the evals, which point them at a stub and at
-# run-scoped paths.
+# Stop hook — rebuilds the graphify graph when the working tree fingerprint moved
+# (lib/graphify-freshness.sh). The staleness check runs in the foreground; the
+# rebuild re-executes this script detached (`--sync`) under a mkdir lock.
+# A write is proven by graph.json's mtime: `graphify update` exits 0 without writing.
+# A node-shrink refusal is replayed with --force when the extraction is complete and
+# the drop is ≤ MAX_SHRINK_PCT. GRAPHIFY_BIN, GRAPHIFY_HOOK_LOG, GRAPHIFY_AUTOSYNC_LOCK: evals.
 
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 
-# Repo resolved by lib/project-root.sh ($CLAUDE_PROJECT_DIR in a session). Without
-# that, a hardcoded default would update the graph of ANOTHER repo from this hook.
+# Repo resolved by lib/project-root.sh, never hardcoded.
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/project-root.sh"
 REPO="${GRAPHIFY_REPO:-$PROJECT_ROOT}"
 GRAPHIFY="${GRAPHIFY_BIN:-$HOME/.local/bin/graphify}"
 GRAPH="$REPO/graphify-out/graph.json"
-# The helper sits beside this script, never under $REPO: with GRAPHIFY_REPO pointing
-# at another checkout the old path did not exist, STALE came back empty and every
-# Stop rebuilt the graph (found by evals/cases/graphify-autosync.json, 2026-09-13).
+# The helper sits beside this script, never under $REPO (GRAPHIFY_REPO may point elsewhere).
 FRESHNESS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/graphify-freshness.sh"
 export GRAPHIFY_REPO="$REPO"   # freshness must target the same repo
 LOG="${GRAPHIFY_HOOK_LOG:-/tmp/graphify-hook.log}"
@@ -80,8 +57,7 @@ if [ "$MODE" != "--sync" ]; then
   exit 0
 fi
 
-# Atomic lock: two sessions stopping together would launch two concurrent
-# ~72s rebuilds on the same graph.json.
+# Atomic lock: two sessions stopping together would race on graph.json.
 if ! mkdir "$LOCK" 2>/dev/null; then
   say "skip, another autosync holds the lock"
   exit 0

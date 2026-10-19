@@ -4,17 +4,10 @@
     cctoolkit next-id <Context|PREFIX> CU|RM|D [--count N]   # CAT-CU-03, CAT-RM-014, CAT-D-005
     cctoolkit next-id ADR [--count N]                        # ADR-008
 
-Prints N consecutive ids, one per line. The next number is one above the largest
-already used in any `.md` under `knowledge.root` (`HISTORY.md` included: the only
-place a retired id survives) and under `todo/` (specs, plans and sheets not merged
-yet: an id they hold is taken). An id is never given twice, so a gap stays a gap.
-`--count`: a spec is written once, at the end — two calls before it would return
-the same id.
-
-The prefix comes from `knowledge.contexts` of `.claude/kit.config.json`; a context
-or prefix absent from that table is refused (a typo would open a new series).
-Format: `skills/knowledge-sync/references/knowledge-format.md`. Exit 2 on usage,
-3 on a config defect.
+Prints N consecutive ids, one per line, one above the largest used under `knowledge.root`
+(`HISTORY.md` included) and `todo/`. Two calls before the spec is written return the same id:
+take them all with `--count`. A context or prefix absent from `knowledge.contexts` is refused.
+Exit 2 on usage, 3 on a config defect.
 """
 import os
 import sys

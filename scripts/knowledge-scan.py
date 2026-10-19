@@ -4,40 +4,24 @@
     cctoolkit knowledge-scan [--context C[,C]] [--since <commit> | --full] [--json]
     cctoolkit knowledge-scan --reminder [--staged | <path>...]
 
-Per bounded context, three modes:
+Per bounded context:
 
-- `bootstrap` — the context has no folder in the base: the inventory the first sync
-  starts from. Handlers (kind read off the name), their rule sheets
-  (`layout.ruleSheet`) and rule rows, tests tagged and untagged, `DESIGN.md` chapters,
-  exceptions and events, aggregates, the `feat`/`refactor` commits touching the
-  context (the one read of git for past decisions), and a proposed prefix.
-- `incremental` — the context has sync marks (`HISTORY.md` rows `sync <commit>` that
-  are ancestors of HEAD, lib/knowledge.py): the commits since them plus the working
-  tree. Skipped as already covered: a commit carrying `Kit-Batch:` (the kit's batch
-  commit) and one that adds a `sync` row to the context's `HISTORY.md`. Each file a
-  foreign commit touched is routed to its use cases (handler by `kit:handlers`,
-  use-case folder, aggregate by grep of the handlers, test by its tags or its class
-  name) with its diff — foreign commits only, whitespace, import and comment lines
-  removed (`layout.sources.imports`, `layout.sources.comment`). A pure rename or a
-  deletion of a handler is `mechanical`: no agent needed. `tokens` estimates the
-  packet; above `knowledge.syncBudget` it is `overBudget`.
-- `full` — a folder but no mark git still knows (rebase, squash, shallow clone): the
-  inventory again, the base beside it.
+- `bootstrap` — no folder in the base: the inventory the first sync starts from
+  (handlers, rule sheets and rows, tests, `DESIGN.md` chapters, exceptions, events,
+  aggregates, `feat`/`refactor` commits, a proposed prefix).
+- `incremental` — sync marks known (lib/knowledge.py): the commits since them plus the
+  working tree, `Kit-Batch:` commits and those adding a `sync` row skipped. Each file is
+  routed to its use cases with its diff, whitespace, import and comment lines removed.
+  A pure rename or deletion of a handler is `mechanical`. Above `knowledge.syncBudget`
+  the packet is `overBudget`.
+- `full` — a folder but no mark git still knows: the inventory again, the base beside it.
 
-`--since` replaces every mark by one commit; `--full` ignores them — the inventory of
-a context the base holds, for a packet too big to read as a diff. The context of a file: the folder at
-`layout.useCase.contextDepth` under a use-case root (0: one context for the repo),
-else a path segment naming a known context.
+`--since` replaces every mark by one commit; `--full` ignores them. Default output: a summary
+per context; `--json`: everything, for the extraction agent and the evals.
 
-Default output: a summary per context for the session. `--json`: everything, for the
-extraction agent (one context at a time) and the evals.
-
-`--reminder`: one line per context whose use cases the given paths (or the staged
-files) touch — a file of a use-case folder, or an aggregate (`layout.aggregate`) routed
-as the incremental packet routes it, to the use cases whose handlers name it; a test
-never: it follows a rule, it does not make one — unless the same change
-stages a `sync` row for that context. The pre-commit hook and the PostToolUse hook
-print it. Silent without a base. Always exit 0.
+`--reminder`: one line per context whose use cases the paths (or the staged files) touch —
+tests never count, and a context whose `sync` row is staged too stays silent. Silent without
+a base. Always exit 0.
 
 Exit 2 on usage, 3 on a config defect.
 """
@@ -128,8 +112,7 @@ def context_of_use_case(rel):
 
 
 def code_inventory():
-    """{context: [Handler]} — every use-case folder under the use-case roots — and the
-    handlers above the context level, which belong to none."""
+    """{context: [Handler]} of every use-case folder, and the handlers above the context level."""
     out, none = {}, []
     for base, files in C.walk(C.use_case_roots):
         found = marker_files(base)

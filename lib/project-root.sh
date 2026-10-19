@@ -1,10 +1,7 @@
 # Sourced, never run: sets KIT_DIR (the kit: plugin cache directory, or the toolkit
-# checkout) and PROJECT_ROOT (the repo the kit serves). Same order as
-# kit_config.py project_root(): $CLAUDE_PROJECT_DIR, set by Claude Code for every
-# hook; otherwise the kit copied into a repo's `.claude/` serves that repo (eval
-# fixtures, a manual copy); otherwise the git top level of the working directory, which
-# is how a script launched through `cctoolkit` from the Bash tool finds the repo.
-# Both are in kit_path's form (lib/platform.sh): `C:/x/repo` on Windows.
+# checkout) and PROJECT_ROOT (the repo the kit serves). Same order as kit_config.py
+# project_root(): $CLAUDE_PROJECT_DIR; else the repo whose `.claude/` holds a kit copy;
+# else the git top level of the working directory. Both in kit_path's form.
 . "${BASH_SOURCE[0]%/*}/platform.sh"
 KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then

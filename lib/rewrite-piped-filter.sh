@@ -1,40 +1,9 @@
 #!/bin/bash
 # bash-dispatch module — append a local stdout filter to a command RTK does not
 # know how to shrink. One profile per filter, passed as $1.
-#
-# Merged 2026-09-11 from rewrite-graphify.sh and rewrite-git-grep.sh. The two were
-# the same module: same bail-out on pipe/redirect/substitution, same last-segment
-# extraction through the same sed, same anchored match, same jq emission. They
-# differed by a trigger regex and a filter path. A third filter now costs one line
-# in the case below instead of a thirty-line copy that drifts from its sibling.
-#
-# Why these filters are local and not rtk's. `rtk hook claude` knows neither
-# `graphify` nor `git grep`; `rtk git grep` is a plain passthrough and `rtk grep`
-# would mangle the output. An upstream filter for tools this local has no reason
-# to exist.
-#
-# Profiles:
-#   graphify-query  measured 2026-09-10 on `graphify query "<three-word question>"`:
-#                   6102 B raw, 4282 B filtered (-30%), same source-carrying nodes on
-#                   both sides. Re-measured against graphify 0.9.58 on 2026-09-11:
-#                   -29.2%. `explain` is left alone — it emits 37-500 B and has
-#                   nothing to trim.
-#   git-grep        groups matches under a per-file header instead of repeating the
-#                   path on every line. Measured 2026-09-10: `git grep -n <symbol>` on
-#                   three symbols: -48%, -33%, -32%. Nothing is dropped, so grep
-#                   output is never capped: the saving is pure path repetition.
-#
-# Firing rule: the LAST segment of the command must be a bare match, so
-# `cd x && git grep -n "y"` counts and the appended pipe binds to that command
-# only. Any pipe, redirect or substitution anywhere leaves the command untouched —
-# which is also the escape hatch for raw output: append `| cat`.
-#
-# Ordering. Runs after guard-git.sh, which stays the authority on what a git
-# command may do (`grep` is a read and guard-git lets it through silently), and
-# before rewrite-rtk.sh, which has no rewrite of its own to contribute here.
-#
-# Contract: reads HOOK_INPUT / HOOK_CMD, prints the hook JSON when it rewrites,
-# nothing when it passes.
+# Profiles: graphify-query, git-grep. Fires when the LAST segment of the command is
+# a bare match; any pipe, redirect or substitution leaves it alone (raw output: `| cat`).
+# Reads HOOK_INPUT / HOOK_CMD, prints the hook JSON when it rewrites.
 set -u
 
 profile="${1:-}"

@@ -1,19 +1,8 @@
 #!/bin/bash
-# SessionStart hook, registered by the plugin (hooks/hooks.json). It fires in a
-# worktree only if the plugin is enabled there: `enabledPlugins` belongs in the
-# committed .claude/settings.json (templates/settings.json), never in
-# settings.local.json — gitignored, so absent from every linked worktree. A copy
-# predating the plugin registered it in settings.local.json and never fired there.
-#
-# graphify resolves its graph strictly at <cwd>/graphify-out/graph.json — no parent
-# lookup, no env var, only the per-command --graph flag. A linked worktree has no
-# graphify-out/, so every query|explain|path|affected fails there.
-#
-# Fix: symlink the main working tree's graphify-out into the worktree. graphify-out/
-# is gitignored, so the link stays invisible to git.
-#
-# Do NOT run `graphify update` from a worktree: it would rewrite the shared graph
-# from the worktree branch state.
+# SessionStart hook — symlinks the main working tree's graphify-out/ into a linked
+# worktree: graphify only reads <cwd>/graphify-out/graph.json. Fires only where the
+# plugin is enabled in the committed .claude/settings.json.
+# Do NOT run `graphify update` from a worktree: it would rewrite the shared graph.
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
