@@ -13,7 +13,7 @@ model twice:
   of each block whose evidence is not `measured`, which win over any fragment.
 - `tests.total` is recomputed from the per-type entries (passed, failed, skipped,
   duration_seconds): a sum is never copied.
-- The first-level keys are frozen (`rules/markdown-output.md` § Frozen literals): a
+- The first-level keys are frozen (`docs/FROZEN-LITERALS.md`): a
   fragment adding another one is refused, exit 1, nothing written.
 
 Exit 0 written, 1 refused, 2 bad arguments or unreadable fragment.

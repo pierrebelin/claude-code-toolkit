@@ -51,7 +51,7 @@ import work_file  # noqa: E402
 
 IMPLEMENTER = "tdd-implementer"
 AUTHOR = "tdd-test-author"
-# Frozen literals (rules/markdown-output.md): run-lot.js writes the first, parses the three after it.
+# Frozen literals (docs/FROZEN-LITERALS.md): run-lot.js writes the first, parses the three after it.
 GRANTED = "Test files you may modify, granted: "
 TESTS_AT_GREEN = "tests modified at GREEN: "
 GRANTED_SEP = " — granted: "

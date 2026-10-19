@@ -76,7 +76,7 @@ const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filt
 
 const textOf = (value: unknown): string => (typeof value === 'string' ? value : '')
 
-// Fields of `.index/knowledge.jsonl`, a frozen literal of the kit (`rules/markdown-output.md`).
+// Fields of `.index/knowledge.jsonl`, a frozen literal of the kit (`docs/FROZEN-LITERALS.md`).
 export const parseIndex = (jsonl: string): KObject[] =>
   jsonl.split('\n').flatMap(line => {
     if (line.trim() === '') return []

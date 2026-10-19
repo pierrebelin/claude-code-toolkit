@@ -60,7 +60,7 @@ const PANE_FILE = '.pane.jsonl'
 const FEED_KINDS = ['question', 'answer', 'audit-round', 'attempt', 'breaker', 'ack', 'journal']
 const STEP_PHASES = ['Global green', 'Closing']
 const ASIDE_LINE = /^(F\d+) ✗ — set aside — (.*?)(?: — patch (\S+))?$/
-// A section heading and its French aliases (rules/markdown-output.md § French aliases).
+// A section heading and its French aliases (docs/FROZEN-LITERALS.md § French aliases).
 const TO_VALIDATE = ['## To validate', '## À valider']
 const KEPT_SECTIONS = [TO_VALIDATE, ['## Plan stopped']]
 

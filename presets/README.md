@@ -18,7 +18,7 @@ Only `clean-architecture` ships a layer pack and test skills today. A repo's own
 
 | Source | Copied to | Content |
 |--------|-----------|---------|
-| `rules/` (kit root) | `.claude/rules/`, always | the 3 universal rules, whatever the stack: `cctoolkit` (how to read the kit's instructions: `{{PRODUCT}}`, `cctoolkit`, kit paths, namespacing), `markdown-output` (produced vs. instruction files, language, frozen literals) and `context-discipline` (bounds, subagents, graphify against grep — loaded in every session, no `paths:`) |
+| `rules/` (kit root) | `.claude/rules/`, always | the 3 universal rules, whatever the stack: `cctoolkit` (how to read the kit's instructions: `{{PRODUCT}}`, `cctoolkit`, kit paths, namespacing), `markdown-output` (produced vs. instruction files, language, the bare list of frozen literals) and `context-discipline` (bounds, subagents, graphify against grep — loaded in every session, no `paths:`) |
 | `presets/<preset>/rules/` | `.claude/rules/`, when the preset has a pack | the layer conventions, each loaded when a file matching its `paths:` is opened |
 
 A plugin cannot load rules: `/cctoolkit:kit-init` copies them with `{{PRODUCT}}` substituted, rewrites a `paths:` glob that matches nothing from `layout` — or, when no preset fits, drafts one `.claude/rules/<layer>.md` per code folder from what the files actually share, to review. Once copied, `.claude/rules/` is the repo's own: rewritten freely, never parsed by the core. They are the single source of the layer conventions — naming tables live in the rule of the layer that owns the artefact, nowhere else.
@@ -80,7 +80,7 @@ Path patterns are segment globs relative to the repo root (`*` stays inside one 
 
 Any language code works: the model reads the value through `rules/markdown-output.md`, no list to maintain. The kit's own instructions (`skills/`, `agents/`, `rules/`) and the contracts between agents (`## RED`, `## Verdict — GAPS`…) stay English whatever the setting.
 
-**Why anchors.** A parsed heading ends with an invisible HTML comment — `## Règles métier <!-- kit:rules -->` under `"docs": "fr"`, `## Business rules <!-- kit:rules -->` under `"en"`. Hooks and scripts match the anchor, never the title, so a translated document stays machine-readable. A document written without anchors — a French repo's older sheets — is still read by its exact English or French title (`rules/markdown-output.md` § French aliases). Parsed tables carry a schema anchor (`<!-- kit:cols id,rule,outcome -->`) and are read by position, or by their header row when the anchor is absent. The list of anchors and of their parsers: `rules/markdown-output.md` § Frozen literals.
+**Why anchors.** A parsed heading ends with an invisible HTML comment — `## Règles métier <!-- kit:rules -->` under `"docs": "fr"`, `## Business rules <!-- kit:rules -->` under `"en"`. Hooks and scripts match the anchor, never the title, so a translated document stays machine-readable. A document written without anchors — a French repo's older sheets — is still read by its exact English or French title (`docs/FROZEN-LITERALS.md` § French aliases). Parsed tables carry a schema anchor (`<!-- kit:cols id,rule,outcome -->`) and are read by position, or by their header row when the anchor is absent. The list of anchors and of their parsers: `docs/FROZEN-LITERALS.md`.
 
 ## What the config cannot express yet
 

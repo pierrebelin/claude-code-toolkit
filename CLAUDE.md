@@ -19,7 +19,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `workflows/` | `run-lot` (one batch), `run-plan` (whole plan) and `run-audit` (the quality report), as Workflow scripts |
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
-| `docs/` | context cost, tooling |
+| `docs/` | context cost, tooling, the frozen literals registry |
 | `dev/` | maintainer tools: `bump.sh`, `release-check.sh`, `knowledge-pane-demo.sh` (the mod's demo copy of `examples/docs/business/`) |
 
 ## Anonymisation — do not break it
@@ -32,7 +32,7 @@ The product name is the `{{PRODUCT}}` placeholder, never substituted in the kit 
 
 ## Frozen literals
 
-Some emitted strings are parsed by exact match — anchors, verdict headings, agent report headings, script output labels. The list, each with its parser, lives once: `rules/markdown-output.md` § Frozen literals, shipped to the target repo and binding the kit alike. Reword a literal and you reword its parser in the same change.
+Some emitted strings are parsed by exact match — anchors, verdict headings, agent report headings, script output labels. The list, each with its parser, lives once: `docs/FROZEN-LITERALS.md`, binding the kit; the target repo receives the bare list (`rules/markdown-output.md` § Frozen literals). Reword a literal and you reword its parser, and both lists, in the same change.
 
 A skill's template blocks (spec structure, plan structure, handler sheet) are produced text: their structure and anchors are copied verbatim, their prose follows `language.docs`.
 

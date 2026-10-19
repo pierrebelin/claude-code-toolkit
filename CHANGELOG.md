@@ -4,6 +4,14 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## Unreleased
+
+A lighter kit: less loaded per document, dead code and migrations removed.
+
+- `cctoolkit`: `rules/markdown-output.md` keeps the language rules and the bare list of frozen literals (40 lines, 5 kB, was 131 lines, 29 kB, loaded with every spec, plan and sheet). The registry naming each literal's parser, with the French aliases table, moves to the kit-only `docs/FROZEN-LITERALS.md`.
+
+**Rules changed**: `rules/markdown-output.md` (frozen literals as a bare list, the registry moved to `docs/FROZEN-LITERALS.md` of the kit).
+
 ## 2.0.4 — 2026-10-19
 
 Windows hardening, before a first install on a real Windows machine.
