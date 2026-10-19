@@ -47,15 +47,9 @@ const PLAN_HEADING = /^### (?:Lot|Batch) (F\d+) — (.+?)(?:\s+(?:—\s+)?(?:✅
 const REPORT_STATUS = /^## (?:STATUT|STATUS) — (\S+)/
 const LOT_DONE = ['TERMINÉ', 'DONE']
 const WAITING_TONE = 'cyan'
-const REPORT_NAMES = ['rapport', 'report']
-const BATCH_REPORT_DIRS = ['batches', 'lots']
 const WAVE_LABEL = /^RED \S+ w(\d+)\b/
 const REPORT_PHASE = 'Report'
 const CYCLES_SECTION = '## Cycles'
-const RETIRED_LABELS = [/^tick /, /^closing \+ pre-audit$/]
-const INTRODUCED_LABELS = [/^index /, /^declaratives$/, /^pre-audit$/]
-const DROPPED_LABELS = [/^pre-design /]
-const WAIT_SECONDS = 600
 const PANE_FILE = '.pane.jsonl'
 const FEED_KINDS = ['question', 'answer', 'audit-round', 'attempt', 'breaker', 'ack', 'journal']
 const STEP_PHASES = ['Global green', 'Closing']
@@ -611,10 +605,7 @@ export const withLot = (lots: PlanLot[], lot: string, change: (one: PlanLot) => 
 
 const runRootOf = (sheet: string): string => `${sheet.slice(0, lastSeparator(sheet) + 1)}run`
 
-export const reportPathsOf = (sheet: string, lot: string): string[] => [
-  ...BATCH_REPORT_DIRS.map(dir => `${runRootOf(sheet)}/${dir}/${lot}.md`),
-  ...REPORT_NAMES.map(name => `${runRootOf(sheet)}/${lot}/${lot}-${name}.md`),
-]
+export const reportPathsOf = (sheet: string, lot: string): string[] => [`${runRootOf(sheet)}/batches/${lot}.md`]
 
 export const workFileOf = (sheet: string): string => `${runRootOf(sheet)}/.work.jsonl`
 
@@ -636,7 +627,7 @@ export type PendingQuestion = { batch: string; id: string; count: number; endsAt
 
 const numberOf = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 
-// A question waits `waitSeconds` (600 on lines written before the field) before the run applies its
+// A question waits `waitSeconds` before the run applies its
 // recommendation; an answer line of the same id, written at or after it, answers it.
 export const openQuestionsOf = (lines: WorkLine[]): PendingQuestion[] => {
   const records = lines as Record<string, unknown>[]
@@ -646,7 +637,7 @@ export const openQuestionsOf = (lines: WorkLine[]): PendingQuestion[] => {
     if (records.some(other => other.kind === 'answer' && String(other.id) === String(line.id) && (numberOf(other.at) ?? Infinity) >= at)) return []
     const payload = fieldsOf(line.payload)
     const asked = Array.isArray(payload?.questions) ? payload.questions.length : 1
-    return [{ batch: String(line.batch ?? payload?.batch ?? ''), id: String(line.id), count: Math.max(1, asked), endsAt: (at + (numberOf(payload?.waitSeconds) ?? WAIT_SECONDS)) * 1000 }]
+    return [{ batch: String(line.batch ?? payload?.batch ?? ''), id: String(line.id), count: Math.max(1, asked), endsAt: (at + (numberOf(payload?.waitSeconds) ?? 0)) * 1000 }]
   })
 }
 
@@ -883,19 +874,6 @@ const spansOf = (samples: Sample[]): { phase: string; ms: number }[] => {
     bounds[key] = { from: Math.min(found?.from ?? sample.startedAt, sample.startedAt), to: Math.max(found?.to ?? end, end) }
   }
   return Object.entries(bounds).map(([key, one]) => ({ phase: (JSON.parse(key) as string[])[1] ?? '', ms: one.to - one.from }))
-}
-
-const labelled = (patterns: RegExp[], sample: Sample): boolean => patterns.some(pattern => pattern.test(sample.label ?? ''))
-
-export const currentShapeSamples = (shaped: Sample[][]): Sample[][] => {
-  const journals = shaped.map(samples => samples.filter(one => !labelled(DROPPED_LABELS, one)))
-  const isRecent = (samples: Sample[]): boolean => samples.some(one => labelled(INTRODUCED_LABELS, one))
-  const recent = journals.filter(isRecent)
-  if (recent.length === 0) return journals
-  const reshaped = new Set(
-    [...recent.flat().filter(one => labelled(INTRODUCED_LABELS, one)), ...journals.flat().filter(one => labelled(RETIRED_LABELS, one))].map(one => one.phase),
-  )
-  return journals.map(samples => (isRecent(samples) ? samples : samples.filter(one => !reshaped.has(one.phase))))
 }
 
 const NO_SAMPLE: PhaseSample = { total: 0, count: 0, tools: 0, toolCount: 0, span: 0, spanCount: 0 }
@@ -2843,7 +2821,7 @@ export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFini
             jsonLine({
               kind: 'question', batch: 'F4', id: 'F4-design-1', at: s - 148,
               payload: {
-                batch: 'F4', sheet: DEMO_LOT_SHEET, kind: 'design', context: 'publication lock owner', waitSeconds: WAIT_SECONDS,
+                batch: 'F4', sheet: DEMO_LOT_SHEET, kind: 'design', context: 'publication lock owner', waitSeconds: 600,
                 questions: [
                   { id: 'q1', severity: 'Major', question: 'Lock on publication or on first sale?', evidence: 'RM-04', options: ['publication', 'first sale'], recommendation: 'publication' },
                   { id: 'q2', severity: 'Minor', question: 'Archived catalog read-only?', evidence: 'RM-07', options: ['yes', 'no'], recommendation: 'yes' },
@@ -3142,7 +3120,7 @@ async function learnHistory($: EngineInterface, run: WorkflowRun): Promise<void>
     const text = await readText($, journal.path)
     if (text !== null) sampled.push(samplesOf(text, run.child?.labels ?? {}))
   }
-  const known = currentShapeSamples(sampled).reduce(withSamples, {} as PhaseSamples)
+  const known = sampled.reduce(withSamples, {} as PhaseSamples)
   await update($, history, () => known)
 }
 

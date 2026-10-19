@@ -4,7 +4,7 @@ import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput, TurnStepChunk,
 
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
-  figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, currentShapeSamples, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles,
+  figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles,
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, relativePath, samePath, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
@@ -1297,8 +1297,8 @@ describe('batch plan through run-plan', () => {
   })
 
   test('batch report: status, reason, path next to the sheet', () => {
-    const [english, french, path = '', older] = reportPathsOf('/repo/todo/cat/CAT-PLAN-F2.md', 'F2')
-    expect([english, french, path, older]).toEqual(['/repo/todo/cat/run/batches/F2.md', '/repo/todo/cat/run/lots/F2.md', '/repo/todo/cat/run/F2/F2-rapport.md', '/repo/todo/cat/run/F2/F2-report.md'])
+    const [path = ''] = reportPathsOf('/repo/todo/cat/CAT-PLAN-F2.md', 'F2')
+    expect(path).toBe('/repo/todo/cat/run/batches/F2.md')
     expect(reportOutcomeOf('## STATUS — DONE\nReason: —\n', path)).toEqual({ label: 'DONE', reason: null, report: path })
     expect(reportOutcomeOf('## STATUS — BLOCKED\nReason: GREEN refusal — exit 1\n', path)?.reason).toBe('GREEN refusal — exit 1')
     expect(reportOutcomeOf('## STATUT — ECARTS\nRaison : deux tours\n', path)?.label).toBe('ECARTS')
@@ -1435,7 +1435,7 @@ const result = await workflow('run-lot', b.sheet)
     [RUN_PLAN_PATH]: RUN_PLAN,
     '/repo/todo/cat/CAT-PLAN-F1.md': LOT_SHEET('F1'),
     '/repo/todo/cat/CAT-PLAN-F2.md': LOT_SHEET('F2'),
-    '/repo/todo/cat/run/F1/F1-rapport.md': '## STATUT — TERMINÉ\nRaison : —\n',
+    '/repo/todo/cat/run/batches/F1.md': '## STATUT — TERMINÉ\nRaison : —\n',
     [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ workflowPhase: 'Preflight' }),
     [`${DIR}/agent-a2.meta.json`]: JSON.stringify({ workflowPhase: 'Design' }),
     [`${DIR}/agent-a3.meta.json`]: JSON.stringify({ workflowPhase: 'Report' }),
@@ -1633,18 +1633,6 @@ describe('sheet-driven cycles', () => {
     expect(live.cycles!.map(one => one.live).slice(0, 3)).toEqual(['GREEN', 'RED', undefined])
     expect(isSheetDone(live)).toBe(false)
     expect(withLiveCycles(done, [agent(`GREEN ${first!.id} x`, 'done')]).cycles).toEqual(done.cycles)
-  })
-
-  test('history: samples of the phases the new labels reshaped dropped from earlier journals, kept while every journal is earlier; pre-design samples dropped everywhere', () => {
-    const sample = (phase: string, label: string, ms: number) => ({ phase, label, ms, tools: null, startedAt: null })
-    const earlier = [sample('Design', 'design', 600_000), sample('RED', 'RED 1 a', 60_000), sample('GREEN', 'GREEN a', 60_000), sample('GREEN', 'tick a', 10_000), sample('Closing', 'closing + pre-audit', 120_000), sample('Review', 'next batch review', 90_000)]
-    const recent = [sample('Design', 'index S-PLAN-F2.md', 20_000), sample('RED', 'RED 1 b', 40_000), sample('Closing', 'pre-audit', 30_000), sample('Review', 'pre-design F3', 200_000), sample('Review', 'next batch review', 70_000)]
-    expect(currentShapeSamples([earlier])).toEqual([earlier])
-    const [kept, mine] = currentShapeSamples([earlier, recent])
-    expect(kept?.map(one => one.label)).toEqual(['RED 1 a', 'next batch review'])
-    expect(mine).toEqual(recent.filter(one => one.label !== 'pre-design F3'))
-    const known = currentShapeSamples([earlier, recent]).reduce(withSamples, {})
-    expect([known.Design?.total, known.Closing?.total, known.RED?.count, known.Review?.total]).toEqual([20_000, 30_000, 2, 160_000])
   })
 
   test('phase of a label: ternary paired branch by branch, parameter resolved at its call sites', () => {

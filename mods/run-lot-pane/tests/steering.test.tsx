@@ -18,9 +18,9 @@ const agentOf = (id: string, label: string, phase: string, startedAt: number, st
 })
 
 describe('run files', () => {
-  test('pending question: count, countdown from its waitSeconds (600 when absent), gone on an answer at or after it or once over', () => {
+  test('pending question: count, countdown from its waitSeconds, gone on an answer at or after it or once over', () => {
     const asked = (id: string, at: number, extra: object = {}) => ({ kind: 'question', batch: 'F3', id, at, payload: { batch: 'F3', questions: [{ id: 'q1' }, { id: 'q2' }], ...extra } })
-    const work = lines(asked('F3-1', S - 148), { kind: 'answer', batch: 'F3', id: 'F3-0', at: S }, asked('F3-0', S - 10, { waitSeconds: 300 }))
+    const work = lines(asked('F3-1', S - 148, { waitSeconds: 600 }), { kind: 'answer', batch: 'F3', id: 'F3-0', at: S }, asked('F3-0', S - 10, { waitSeconds: 300 }))
     expect(openQuestionsOf(work)).toEqual([{ batch: 'F3', id: 'F3-1', count: 2, endsAt: (S - 148 + 600) * 1000 }])
     expect(questionBanner(openQuestionsOf(work), NOW)).toBe('? F3 — 2 questions — recommendation applied in 7:32')
     expect(questionBanner(openQuestionsOf(work), NOW + 452_000)).toBeNull()
@@ -165,7 +165,7 @@ describe('run files', () => {
     const lot = (id: string): PlanLot => ({ lot: id, sheet: null, deps: [], isDone: false, outcome: null, audit: null, view: null })
     const plan = completeRun({ runId: 'r', name: 'run-plan', startedAt: 0, child: { name: 'run-lot', phases: [], details: {}, labels: {} }, plan: 'todo/cat/CAT-PLAN.md', lots: [lot('F1')] } as unknown as WorkflowRun)
     expect(feedPathsOf(plan, 'todo/cat/run', lines({ kind: 'journal', run: '2026-10-10-0912', text: 'x' }))).toEqual([
-      'todo/cat/run/batches/F1.md', 'todo/cat/run/lots/F1.md', 'todo/cat/run/F1/F1-rapport.md', 'todo/cat/run/F1/F1-report.md', 'todo/cat/run/2026-10-10-0912.md',
+      'todo/cat/run/batches/F1.md', 'todo/cat/run/2026-10-10-0912.md',
     ])
     const lotRunOnly = completeRun({ runId: 'r', name: 'run-lot', startedAt: 0, argument: 'todo/cat/CAT-PLAN-F2.md' } as WorkflowRun)
     expect(feedPathsOf(lotRunOnly, 'todo/cat/run', [])[0]).toBe('todo/cat/run/batches/F2.md')
