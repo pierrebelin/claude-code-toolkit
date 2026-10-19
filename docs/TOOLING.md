@@ -196,20 +196,6 @@ before the first render) and `implement-tdd-guard.sh` reads it back. Missing fil
 `CLAUDE_EFFORT_LEVEL` forces the value for evals and troubleshooting. Measured on ten batches:
 155 min of model latency out of 628, 8.6 s per turn over 1 087 turns, all at effort high.
 
-## Batch wall-clock — `scripts/batch-wallclock.py`
-
-Per-batch counterpart to the per-window "wall clock" section of `turn-batching-check.py`. One line
-per `/implement-tdd` session: wall time split into model, tools, agent wait and human, turns (and
-how many fall after the first audit), audit durations, Bash calls over two minutes, context at the
-first and last turn. `--subagents` adds the per-type table (runs, mean wall, mean turns, latency
-per turn). A batch is a session that both launched the skill and delegated at least one `tdd-*`
-agent — the launch alone also matches a session that merely talks about it.
-
-```bash
-cctoolkit batch-wallclock                          # batches detected over 14 days
-cctoolkit batch-wallclock --sessions <id> --subagents
-```
-
 ## Hook evals
 
 `cctoolkit evals [-v] [cases/x.json]` replays recorded payloads through the hooks and

@@ -10,7 +10,7 @@ of what you leave in them. An aggregate read whole is ~24k characters carried to
 the session. A 40k-token `Read` at turn 5 of a 100-turn session is re-read 95 times.
 
 Measured on two .NET repos of this shape: `Read` is ~30 % of context fill, only a third of calls
-bounded. Re-measure per repo with `turn-batching-check.py` before quoting those figures.
+bounded. Re-measure per repo with `dev/turn-batching-check.py` before quoting those figures.
 
 ## Reading
 
@@ -54,17 +54,10 @@ The base is read by levels, each one bounded: `INDEX.md` (~200 tokens, fixed), a
 `HISTORY.md` grow with the repo and are never read whole ([`lib/README.md`](../lib/README.md) § `bounds-common.sh`).
 One answer is capped by `knowledge.askBudget` ([`presets/README.md`](../presets/README.md)).
 
-Not measured yet: the first figures come from a real base. Every call is logged to
-`<root>/.index/ask.jsonl`; after two weeks of use:
-
-```bash
-cctoolkit ask --stats
-```
-
-Record here the median and 90th percentile of tokens per answer, per mode, and the share cut by
-the budget. A cut share above ~20 % on questions means the ranking returns too much to read: look
-at what the cut questions asked before raising the budget. A median close to the budget on
-`--handler` means use cases carry too many rules: split them, not the budget.
+Not measured yet. Every answer ends with `shown N of M`: N below M often on questions means the
+ranking returns too much to read — look at what the cut questions asked before raising the
+budget; the cut often on `--handler` means use cases carry too many rules — split them, not the
+budget.
 
 ## Batching
 
@@ -99,7 +92,7 @@ Check after five batches with `turn-batching-check`: calls per tool-carrying tur
 ## Weekly check
 
 ```bash
-cctoolkit turn-batching-check --compare .claude/context-baseline.json
+python3 <kit checkout>/dev/turn-batching-check.py --compare .claude/context-baseline.json
 ```
 
 Fill per tool, share of bounded `Read`s, `read-bounds` denials and **forcings**. A high forcing
@@ -116,7 +109,7 @@ that day were on files of 23 to 303 lines. The cost was the count, not one huge 
 Create it on installation, from the transcripts that predate the hook going live:
 
 ```bash
-cctoolkit turn-batching-check --until <YYYY-MM-DD> --save-baseline .claude/context-baseline.json
+python3 <kit checkout>/dev/turn-batching-check.py --until <YYYY-MM-DD> --save-baseline .claude/context-baseline.json
 ```
 
 Re-freeze it with `--save-baseline` only after a deliberate change of method — never to erase a

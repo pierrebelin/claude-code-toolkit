@@ -6,11 +6,12 @@ accumulated context. Two independent calls made in two turns pay that accumulati
 twice. This script measures what could have fitted in a single message.
 
 Usage:
-    cctoolkit turn-batching-check [--days N] [--until YYYY-MM-DD] [--project <substring>]
-                                  [--save-baseline <file.json>] [--compare <file.json>]
+    python3 <kit checkout>/dev/turn-batching-check.py [--days N] [--until YYYY-MM-DD] [--project <substring>]
+                                                      [--save-baseline <file.json>] [--compare <file.json>]
 
 By default the project filter is derived from the repository folder name, which is
-how Claude Code names the transcript directory under ~/.claude/projects.
+how Claude Code names the transcript directory under ~/.claude/projects. Run it from
+inside the repo measured: a maintainer tool, not shipped as a `cctoolkit` command.
 
 Output: calls per turn, batchable read runs, files read whole more than once — main
 chain — then the read-bounds denials of the subagents, whose transcripts sit under

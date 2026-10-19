@@ -18,24 +18,18 @@ beyond `INDEX.md`, an `OVERVIEW.md` or a use-case file.
         decisions, the ADRs that cite it — one line each.
     cctoolkit ask --history [--context C[,C]] [--id <id>]
         `HISTORY.md` rows, newest first.
-    cctoolkit ask --stats
-        what the questions cost: count, median and 90th percentile of tokens returned,
-        the share cut by the budget — read from `.index/ask.jsonl`.
 
 Every answer ends with `shown N of M`: N items printed, M found. `shown 0 of 0` is
 nothing found; N below M is the budget cutting (`knowledge.askBudget`, 1,500 tokens by
 default, `--budget` for one call) — narrow with `--context`, `--kind`, `--id`. Tokens
-are characters / 4. Each call is logged to `<root>/.index/ask.jsonl`, git-ignored.
+are characters / 4.
 
 `.index/` is refreshed first when a base file changed (`lib/knowledge_index.py`);
 `INDEX.md` is never written here. Exit 0, 1 no base, 2 usage, 3 config defect.
 """
-import datetime
-import json
 import math
 import os
 import re
-import statistics
 import sys
 import unicodedata
 
@@ -47,7 +41,6 @@ import knowledge_index  # noqa: E402
 
 KINDS = {"usecase": "CU", "rule": "RM", "decision": "D", "adr": "ADR"}
 NAMES = {v: k for k, v in KINDS.items()}
-LOG = "ask.jsonl"
 FIRST = 160
 STOP = set("""
 a an and are as at be by can do does for from how in is it its no not of on only or that the this to
@@ -60,7 +53,7 @@ def usage(msg=None):
     if msg:
         print(f"ask: {msg}", file=sys.stderr)
     print('usage: cctoolkit ask "<question>" [--context C,…] [--kind usecase|rule|decision|adr] [--budget N]\n'
-          "       cctoolkit ask --id <id>[,<id>] | --handler <Name> | --context C,… | --history [--context C,…] [--id <id>] | --stats",
+          "       cctoolkit ask --id <id>[,<id>] | --handler <Name> | --context C,… | --history [--context C,…] [--id <id>]",
           file=sys.stderr)
     sys.exit(2)
 
@@ -142,7 +135,6 @@ class Out:
         self.lines.append(f"shown {self.shown} of {self.found}{tail}")
         text = "\n".join(self.lines)
         print(text)
-        return len(text) // 4
 
 
 def tag(r):
@@ -269,48 +261,12 @@ def ask_history(c, ctxs, oid, out):
         out.item(f"{date} · {ctx} · {feature} · {delta}")
 
 
-def stats(c):
-    path = os.path.join(knowledge_index.index_dir(c), LOG)
-    entries = []
-    try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                try:
-                    entries.append(json.loads(line))
-                except ValueError:
-                    pass
-    except OSError:
-        pass
-    if not entries:
-        print("no question logged yet")
-        return 0
-    def line(label, es):
-        t = sorted(e.get("tokens", 0) for e in es)
-        p90 = t[min(len(t) - 1, math.ceil(len(t) * 0.9) - 1)]
-        cut = sum(1 for e in es if e.get("shown", 0) < e.get("found", 0))
-        nothing = sum(1 for e in es if e.get("found", 0) == 0)
-        return (f"{label}: {len(es)} · median ~{int(statistics.median(t))} tokens · p90 ~{p90}"
-                f" · cut by the budget {cut} ({100 * cut // len(es)} %) · nothing found {nothing}")
-    print(line("asks", entries))
-    for mode in sorted({e.get("mode") for e in entries if e.get("mode")}):
-        print("  " + line(mode, [e for e in entries if e.get("mode") == mode]))
-    return 0
-
-
-def log(c, entry):
-    try:
-        with open(os.path.join(knowledge_index.index_dir(c), LOG), "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except OSError:
-        pass
-
-
 def main(argv):
     opts = {"context": None, "kind": None, "id": None, "handler": None, "budget": None}
     flags, words = set(), []
     it = iter(argv)
     for a in it:
-        if a in ("--history", "--stats"):
+        if a == "--history":
             flags.add(a[2:])
         elif a.startswith("--") and a[2:] in opts:
             v = next(it, None)
@@ -328,15 +284,15 @@ def main(argv):
         kind = KINDS.get(opts["kind"]) or usage(f"--kind is one of {', '.join(KINDS)}")
     ids = [x for x in (opts["id"] or "").split(",") if x]
     modes = [m for m, on in (("question", question), ("id", ids and "history" not in flags), ("handler", opts["handler"]),
-                             ("history", "history" in flags), ("stats", "stats" in flags)) if on]
+                             ("history", "history" in flags)) if on]
     if not modes and ctxs:
         modes = ["context"]
     if len(modes) != 1:
-        usage("one of a question, --id, --handler, --context, --history, --stats")
+        usage("one of a question, --id, --handler, --context, --history")
     mode = modes[0]
     if kind and mode != "question":
         usage("--kind narrows a question")
-    if ctxs and mode in ("id", "handler", "stats"):
+    if ctxs and mode in ("id", "handler"):
         usage(f"--context does not apply to --{mode}")
     if "history" in flags and len(ids) > 1:
         usage("--history takes one --id")
@@ -348,8 +304,6 @@ def main(argv):
     if not os.path.isdir(knowledge.base_dir(c)):
         print(f"no knowledge base under {c.knowledge_root} — /cctoolkit:knowledge-sync builds it", file=sys.stderr)
         return 1
-    if mode == "stats":
-        return stats(c)
     budget = c.ask_budget
     if opts["budget"]:
         if not opts["budget"].isdigit() or int(opts["budget"]) <= 0:
@@ -372,11 +326,7 @@ def main(argv):
         ask_context(c, rows, ctxs, out)
     else:
         ask_history(c, ctxs, ids[0] if ids else None, out)
-    tokens_out = out.close()
-    log(c, {"ts": datetime.datetime.now().isoformat(timespec="seconds"), "mode": mode,
-            "query": question or opts["handler"] or ",".join(ids) or ",".join(sorted(ctxs)),
-            "context": ",".join(sorted(ctxs)), "kind": opts["kind"], "shown": out.shown, "found": out.found,
-            "tokens": tokens_out, "budget": budget})
+    out.close()
     return 0
 
 
