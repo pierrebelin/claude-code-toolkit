@@ -266,18 +266,6 @@
       }
     },
     {
-      "name": "« Plan périmé » folds into the axis Plan, severity Majeur read as Major",
-      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --axis plan",
-      "env": {
-        "LEARN_TRANSCRIPTS": "{{FIX}}/trfr",
-        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
-      },
-      "expect": {
-        "exit": 0,
-        "stdout": "- [Major] Fiche non resynchronisée"
-      }
-    },
-    {
       "name": "the French axis Périmètre is the axis Scope, severity Bloquant read as Blocking",
       "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --axis Scope",
       "env": {

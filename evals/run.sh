@@ -1,30 +1,19 @@
 #!/bin/bash
 # Hook evals — replay recorded tool payloads through the hooks, check the decision.
 #
-# Why. Two thousand lines of hook bash guard every Read, Bash and Agent call of every
-# session, and until 2026-09-12 nothing exercised them outside a live session.
-# Six defects were found in production and documented in the hooks' own
-# comments: a tab separator that shifted agent_id (bash-dispatch.sh), two skip
-# lists that diverged (bounds-common.sh), cleanup patterns that matched nothing
-# (session-cleanup.sh), two modules answering the same command (bash-dispatch.sh),
-# an escape hatch leaking across agents (read-bounds.sh), /tmp never purged.
-# Each one is a case under cases/. Spotify's shunt plugin ships 51 such cases
-# for 2 hooks; the shape (JSON cases, jq runner) is borrowed from it.
-#
 # Usage:
 #   cctoolkit evals                              # every cases/*.json
 #   bash evals/run.sh -v cases/guard-git.json      # from the toolkit checkout
 #   LATENCY_MAX_MS=200 cctoolkit evals             # looser latency budget
 #
-# Every hook case is also timed: a hook whose median exceeds its budget fails the
-# run like a wrong decision would (budgets below LATENCY_MAX_MS).
-#
 # Case file shape:
-#   { "fixtures": [ {"path": "big.cs", "lines": 300, "kind": "sparse|flat|md|transcript|stub|stub-error|stub-slow|cs-flat|cs-loop|cs-filter|text", "ctx": N, "content": "..." } ],
+#   { "fixtures": [ {"path": "big.cs", "lines": 300, "kind": "sparse|flat|md|transcript|text", "ctx": N, "content": "..." } ],
 #     "cases": [ { "name": "...",
 #                  "hook": "hooks/x.sh"  |  "cmd": "bash {{KIT}}/tools/x ...",
 #                  "pre": [payload, ...],          # replayed first, output ignored
-#                  "input": payload,               # hook payload on stdin
+#                  "input": payload,               # hook payload on stdin; session_id
+#                                                  # ({{SID}}), agent_id and transcript_path ("")
+#                                                  # default when absent
 #                  "env": {"VAR": "value"},
 #                  "expect": { "decision": "deny|allow|ask|none|not_deny",
 #                              "reason": "substring", "command": "substring",
@@ -59,10 +48,8 @@ FIX="$HERE/.fixtures"
 RUN="eval-$$-$(date +%s)"
 ERRF="/tmp/claude-evalerr-$RUN"
 LATF="/tmp/claude-evallat-$RUN"
-# Median latency budget per hook, in ms. Measured 2026-10-02 on macOS arm64: every
-# hook 18-38 ms except handler-claude-md-check (145 ms, indexes every trait under
-# tests/ on each Edit|Write). Budget = about twice the measure, so a regression
-# that doubles a hot-path hook fails the run. Slower machine: LATENCY_MAX_MS=200.
+# Median latency budget per hook, in ms: about twice the measure, so a regression that
+# doubles a hot-path hook fails the run.
 LATENCY_MAX_MS="${LATENCY_MAX_MS:-80}"
 LATENCY_SLOW_HOOKS="hooks/handler-claude-md-check.sh:300"
 VERBOSE=0
@@ -102,83 +89,14 @@ make_fixture() {
       { seq 1 40 | awk '{printf "public sealed record Declaration%03d(string Name, int Value, bool Enabled, string Description);\n", $1}'
         seq 41 "$lines" | awk '{print "class C"$1" {}"}'; } > "$path" ;;
     text)
-      # Verbatim bytes. A state file a hook reads is a fixture like any other:
-      # implement-tdd-guard.sh reads the effort the statusline dropped in $TMPDIR.
-      printf '%s' "$content" > "$path" ;;
+      # Verbatim bytes, final newlines stripped; a script (`#!`) is made executable.
+      printf '%s' "$content" > "$path"
+      case "$content" in '#!'*) chmod +x "$path" ;; esac ;;
     md)
       seq 1 "$lines" | awk '{print "Paragraph "$1": markdown wraps at the paragraph rather than at eighty columns, so a line count alone waves a heavy file through and only the byte bound catches it."}' > "$path" ;;
     transcript)
       printf '{"type":"user","message":{"role":"user","content":"x"}}\n' > "$path"
       printf '{"type":"assistant","message":{"role":"assistant","usage":{"input_tokens":32,"cache_creation_input_tokens":1000,"cache_read_input_tokens":%d,"output_tokens":10}}}\n' "$ctx" >> "$path" ;;
-    stub)
-      cat > "$path" <<'STUB'
-#!/bin/bash
-cat >/dev/null
-printf '%s\n' '{"type":"result","is_error":false,"result":"- stubbed answer","usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5},"total_cost_usd":0.001}'
-STUB
-      chmod +x "$path" ;;
-    stub-error)
-      cat > "$path" <<'STUB'
-#!/bin/bash
-cat >/dev/null
-printf '%s\n' '{"type":"result","is_error":true,"result":"stubbed failure","usage":{},"total_cost_usd":0}'
-STUB
-      chmod +x "$path" ;;
-    stub-slow)
-      cat > "$path" <<'STUB'
-#!/bin/bash
-cat >/dev/null
-sleep 5
-printf '%s\n' '{"type":"result","is_error":false,"result":"- too late","usage":{},"total_cost_usd":0}'
-STUB
-      chmod +x "$path" ;;
-    cs-flat)
-      # Handler with two repository reads, one save, one receiver the naming
-      # heuristic of scripts/access-cost.py does not know (quotaChecker).
-      cat > "$path" <<'CS'
-public sealed class FlatHandler
-{
-    public async Task Handle(Command command, CancellationToken ct)
-    {
-        var product = await productRepository.GetProduct(command.Id, ct);
-        var names = await productRepository.GetProductNames(command.OrganizationId, ct);
-        var allowed = await quotaChecker.HasAvailableQuota(command.OrganizationId, ct);
-        product.Rename(command.Name, names, allowed);
-        await productRepository.Save(product.DomainEvents, ct);
-    }
-}
-CS
-      ;;
-    cs-loop)
-      # One repository read per received identifier — the N+1 the COST step must refuse.
-      cat > "$path" <<'CS'
-public sealed class LoopHandler
-{
-    public async Task Handle(Command command, CancellationToken ct)
-    {
-        var signatures = new List<Signature>();
-        foreach (var id in command.SignatureIds)
-        {
-            signatures.Add(await signatureRepository.GetSignature(id, ct));
-        }
-        await signatureRepository.Save(signatures, ct);
-    }
-}
-CS
-      ;;
-    cs-filter)
-      # Whole table read, then filtered in memory.
-      cat > "$path" <<'CS'
-public sealed class FilterHandler
-{
-    public async Task<int> Handle(Query query, CancellationToken ct)
-    {
-        var open = (await productRepository.GetAll(ct)).Where(c => c.IsOpen).ToList();
-        return open.Count;
-    }
-}
-CS
-      ;;
     *)
       # Sparse: one declaration every 40 lines, the rest statements.
       seq 1 "$lines" | awk 'NR%40==1{print "public class C"$1" { }"; next}{print "    var v"$1" = "$1";"}' > "$path" ;;
@@ -193,6 +111,8 @@ jf() { printf '%s' "$1" | jq -r "$2"; }
 jc() { printf '%s' "$1" | jq -c "$2"; }
 
 ENVARGS=()
+# A payload's defaults; an empty payload ({}) stays empty.
+WITH_DEFAULTS='def d(p): if p == {} then p else {session_id: "{{SID}}", agent_id: "", transcript_path: ""} + p end; d'
 
 # /bin/bash is 3.2 on macOS: no $EPOCHREALTIME, and BSD date has no %N.
 now_ms() { perl -MTime::HiRes=time -e 'printf "%d\n", time * 1000'; }
@@ -203,7 +123,7 @@ run_payload() {
 
 check() {
   local c="$1" out="$2" err="$3" rc="$4" fails=""
-  local decision reason command prompt context want
+  local decision reason command prompt context want k v
   if [ -n "$out" ] && printf '%s' "$out" | jq -e 'type == "object"' >/dev/null 2>&1; then
     decision=$(jf "$out" '.hookSpecificOutput.permissionDecision // "none"')
     reason=$(jf "$out" '.hookSpecificOutput.permissionDecisionReason // ""')
@@ -215,34 +135,26 @@ check() {
   fi
 
   want=$(jf "$c" '.expect.decision // empty')
-  if [ -n "$want" ]; then
-    if [ "$want" = "not_deny" ]; then
-      [ "$decision" != "deny" ] || fails="$fails decision=deny"
-    else
-      [ "$decision" = "$want" ] || fails="$fails decision=$decision(want:$want)"
-    fi
+  if [ "$want" = "not_deny" ]; then
+    [ "$decision" != "deny" ] || fails="$fails decision=deny"
+  elif [ -n "$want" ]; then
+    [ "$decision" = "$want" ] || fails="$fails decision=$decision(want:$want)"
   fi
-  want=$(jf "$c" '.expect.reason // empty')
-  if [ -n "$want" ]; then case "$reason" in *"$want"*) ;; *) fails="$fails reason!~[$want]" ;; esac; fi
-  want=$(jf "$c" '.expect.command // empty')
-  if [ -n "$want" ]; then case "$command" in *"$want"*) ;; *) fails="$fails command!~[$want]" ;; esac; fi
-  want=$(jf "$c" '.expect.command_absent // empty')
-  if [ -n "$want" ]; then case "$command" in *"$want"*) fails="$fails command~[$want]" ;; esac; fi
-  want=$(jf "$c" '.expect.prompt // empty')
-  if [ -n "$want" ]; then case "$prompt" in *"$want"*) ;; *) fails="$fails prompt!~[$want]" ;; esac; fi
-  want=$(jf "$c" '.expect.prompt_absent // empty')
-  if [ -n "$want" ]; then case "$prompt" in *"$want"*) fails="$fails prompt~[$want]" ;; esac; fi
-  want=$(jf "$c" '.expect.context // empty')
-  if [ -n "$want" ]; then case "$context" in *"$want"*) ;; *) fails="$fails context!~[$want]" ;; esac; fi
+  # expect key:variable that must contain it
+  for k in reason:reason command:command prompt:prompt context:context stdout:out stderr:err; do
+    want=$(jf "$c" ".expect.${k%%:*} // empty"); v=${k#*:}
+    if [ -n "$want" ]; then case "${!v}" in *"$want"*) ;; *) fails="$fails ${k%%:*}!~[$want]" ;; esac; fi
+  done
+  # expect key:variable that must not contain it
+  for k in command_absent:command prompt_absent:prompt; do
+    want=$(jf "$c" ".expect.${k%%:*} // empty"); v=${k#*:}
+    if [ -n "$want" ]; then case "${!v}" in *"$want"*) fails="$fails $v~[$want]" ;; esac; fi
+  done
   if [ "$(jf "$c" '.expect.no_context // false')" = "true" ]; then
     [ -z "$context" ] || fails="$fails context-present"
   fi
   want=$(jf "$c" '.expect.exit // empty')
   if [ -n "$want" ]; then [ "$rc" = "$want" ] || fails="$fails exit=$rc(want:$want)"; fi
-  want=$(jf "$c" '.expect.stdout // empty')
-  if [ -n "$want" ]; then case "$out" in *"$want"*) ;; *) fails="$fails stdout!~[$want]" ;; esac; fi
-  want=$(jf "$c" '.expect.stderr // empty')
-  if [ -n "$want" ]; then case "$err" in *"$want"*) ;; *) fails="$fails stderr!~[$want]" ;; esac; fi
   printf '%s' "$fails"
 }
 
@@ -288,10 +200,10 @@ EOF
       npre=$(jf "$c" '.pre // [] | length')
       p=0
       while [ "$p" -lt "$npre" ]; do
-        run_payload "$hook" "$(expand "$(jc "$c" ".pre[$p]")" "$sid")" >/dev/null 2>&1
+        run_payload "$hook" "$(expand "$(jc "$c" "$WITH_DEFAULTS(.pre[$p])")" "$sid")" >/dev/null 2>&1
         p=$((p + 1))
       done
-      payload=$(expand "$(jc "$c" '.input')" "$sid")
+      payload=$(expand "$(jc "$c" "$WITH_DEFAULTS(.input)")" "$sid")
       t0=$(now_ms)
       out=$(run_payload "$hook" "$payload"); rc=$?
       printf '%s\t%s\n' "$hook" "$(( $(now_ms) - t0 ))" >> "$LATF"

@@ -5,8 +5,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "Explore",
           "prompt": "graphify first",
@@ -23,8 +21,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "Explore",
           "description": "locate X",
@@ -42,8 +38,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "Explore",
           "description": "locate X",
@@ -60,8 +54,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "Explore",
           "description": "map the convention",
@@ -79,8 +71,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "Explore",
           "description": "locate X",
@@ -98,8 +88,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "Explore",
           "description": "locate X",
@@ -116,8 +104,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "general-purpose",
           "description": "search",
@@ -134,8 +120,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "general-purpose",
           "description": "search",
@@ -153,8 +137,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "Plan",
           "description": "plan X",
@@ -171,8 +153,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "tdd-implementer",
           "description": "green phase",
@@ -188,8 +168,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Read",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "file_path": "x.cs"
         }
@@ -203,8 +181,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "description": "refactor CA1002",
           "prompt": "replace List<T> by IReadOnlyList<T> in the files below"
@@ -220,8 +196,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "description": "refactor CA1002",
           "prompt": "replace List<T> by IReadOnlyList<T>",
@@ -238,8 +212,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "tdd-implementer",
           "description": "GREEN phase",
@@ -255,8 +227,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "statusline-setup",
           "description": "set statusline",
@@ -273,8 +243,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "cctoolkit:tdd-implementer",
           "description": "GREEN phase",
@@ -290,8 +258,6 @@
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
-        "session_id": "{{SID}}",
-        "agent_id": "",
         "tool_input": {
           "subagent_type": "Explore",
           "description": "inventory",

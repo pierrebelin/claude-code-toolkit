@@ -17,7 +17,6 @@
       "input": {
         "hook_event_name": "PostToolUse",
         "tool_name": "Edit",
-        "session_id": "{{SID}}",
         "tool_input": {
           "file_path": "{{FIX}}/kr-base/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs"
         }
@@ -35,7 +34,6 @@
       "input": {
         "hook_event_name": "PostToolUse",
         "tool_name": "Edit",
-        "session_id": "{{SID}}",
         "tool_input": {
           "file_path": "{{FIX}}/kr-base/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs"
         }
@@ -47,7 +45,6 @@
         {
           "hook_event_name": "PostToolUse",
           "tool_name": "Edit",
-          "session_id": "{{SID}}",
           "tool_input": {
             "file_path": "{{FIX}}/kr-base/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs"
           }
@@ -63,7 +60,6 @@
       "input": {
         "hook_event_name": "PostToolUse",
         "tool_name": "Edit",
-        "session_id": "{{SID}}",
         "agent_id": "a1",
         "tool_input": {
           "file_path": "{{FIX}}/kr-base/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs"
@@ -82,7 +78,6 @@
       "input": {
         "hook_event_name": "PostToolUse",
         "tool_name": "Edit",
-        "session_id": "{{SID}}",
         "tool_input": {
           "file_path": "{{FIX}}/kr-base/src/Shop.Domain/Catalog/DESIGN.md"
         }
@@ -100,7 +95,6 @@
       "input": {
         "hook_event_name": "PostToolUse",
         "tool_name": "Edit",
-        "session_id": "{{SID}}",
         "tool_input": {
           "file_path": "{{FIX}}/kr-base/src/Shop.Domain/Catalog/Aggregates/Product.cs"
         }
@@ -118,7 +112,6 @@
       "input": {
         "hook_event_name": "PostToolUse",
         "tool_name": "Edit",
-        "session_id": "{{SID}}",
         "tool_input": {
           "file_path": "{{FIX}}/kr-base/tests/Shop.UnitTests/Catalog/ArchiveProductCommandHandlerTests.cs"
         }
@@ -135,8 +128,7 @@
       },
       "input": {
         "hook_event_name": "PostToolUse",
-        "tool_name": "Edit",
-        "session_id": "{{SID}}"
+        "tool_name": "Edit"
       },
       "expect": {
         "no_context": true,

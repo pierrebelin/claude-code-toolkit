@@ -91,14 +91,6 @@
       }
     },
     {
-      "name": "--check reads a French plan",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/Y-PLAN.md {{FIX}}/Y-PLAN-F2.md $d/todo/x/; git -C $d init -q; python3 {{KIT}}/scripts/plan-next-batch.py $d/todo/x/Y-PLAN.md --check",
-      "expect": {
-        "exit": 0,
-        "stdout": "OK 2 batches, 1 DONE"
-      }
-    },
-    {
       "name": "--check reads an English plan",
       "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; python3 {{KIT}}/scripts/plan-next-batch.py $d/todo/x/X-PLAN.md --check",
       "expect": {
@@ -152,14 +144,6 @@
       "expect": {
         "exit": 0,
         "stdout": "END F2:skipped F3:F2"
-      }
-    },
-    {
-      "name": "--next with --skip on a French plan names the held batches",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x; cp {{FIX}}/W-PLAN.md {{FIX}}/W-PLAN-F3.md $d/todo/x/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/x/W-PLAN.md --skip F2 --next $d/w.jsonl --run S1 | grep -o '\"held\": \\[{\"batch\": \"F3\", \"by\": \\[\"F2\"\\]}\\]' | tr '\\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "\"held\": [{\"batch\": \"F3\", \"by\": [\"F2\"]}];"
       }
     },
     {

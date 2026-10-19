@@ -6,15 +6,18 @@
     },
     {
       "path": "claude-stub",
-      "kind": "stub"
+      "kind": "text",
+      "content": "#!/bin/bash\ncat >/dev/null\nprintf '%s\\n' '{\"type\":\"result\",\"is_error\":false,\"result\":\"- stubbed answer\",\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":5},\"total_cost_usd\":0.001}'\n"
     },
     {
       "path": "claude-stub-error",
-      "kind": "stub-error"
+      "kind": "text",
+      "content": "#!/bin/bash\ncat >/dev/null\nprintf '%s\\n' '{\"type\":\"result\",\"is_error\":true,\"result\":\"stubbed failure\",\"usage\":{},\"total_cost_usd\":0}'\n"
     },
     {
       "path": "claude-stub-slow",
-      "kind": "stub-slow"
+      "kind": "text",
+      "content": "#!/bin/bash\ncat >/dev/null\nsleep 5\nprintf '%s\\n' '{\"type\":\"result\",\"is_error\":false,\"result\":\"- too late\",\"usage\":{},\"total_cost_usd\":0}'\n"
     }
   ],
   "cases": [

@@ -5,9 +5,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "dotnet test --project tests/X/X.csproj --no-build --no-restore"
         }
@@ -22,9 +19,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "APP_TEST_MODE=true dotnet test --project tests/X/X.csproj --no-build"
         }
@@ -39,9 +33,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "rtk dotnet test --project tests/X/X.csproj"
         }
@@ -55,9 +46,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "cat <<'EOF' > /tmp/claude-evalhd-{{SID}}\ndotnet test --project x\nEOF"
         }
@@ -71,9 +59,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "~/.dotnet/tools/ilspycmd --help"
         }
@@ -87,9 +72,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "grep -rn ZzzNotASymbolXyz src"
         }
@@ -104,9 +86,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "/usr/bin/grep -rn ZzzNotASymbolXyz src"
         }
@@ -121,9 +100,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "dotnet build --no-restore"
         }
@@ -138,9 +114,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "dotnet test --project tests/X/X.csproj --timeout 2m"
         }
@@ -158,9 +131,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "rtk dotnet test --project tests/X/X.csproj --no-build"
         }
@@ -178,9 +148,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "dotnet test --project tests/X/X.csproj 2>&1 | tail -5"
         }
@@ -198,9 +165,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "cd tests && dotnet test --project X/X.csproj"
         }
@@ -218,9 +182,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "grep -n \"dotnet test\" CLAUDE.md"
         }
@@ -237,9 +198,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "cat <<'EOF' > /tmp/claude-evalhd2-{{SID}}\ndotnet test --project x\nEOF"
         }
@@ -256,9 +214,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "dotnet build --no-restore"
         }
@@ -275,9 +230,6 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "dotnet test --project tests/X/X.csproj"
         }
@@ -295,9 +247,6 @@
       },
       "input": {
         "tool_name": "Bash",
-        "session_id": "{{SID}}",
-        "agent_id": "",
-        "transcript_path": "",
         "tool_input": {
           "command": "dotnet test --project tests/X/X.csproj"
         }

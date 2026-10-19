@@ -2,15 +2,18 @@
   "fixtures": [
     {
       "path": "cost/FlatHandler.cs",
-      "kind": "cs-flat"
+      "kind": "text",
+      "content": "public sealed class FlatHandler\n{\n    public async Task Handle(Command command, CancellationToken ct)\n    {\n        var product = await productRepository.GetProduct(command.Id, ct);\n        var names = await productRepository.GetProductNames(command.OrganizationId, ct);\n        var allowed = await quotaChecker.HasAvailableQuota(command.OrganizationId, ct);\n        product.Rename(command.Name, names, allowed);\n        await productRepository.Save(product.DomainEvents, ct);\n    }\n}\n"
     },
     {
       "path": "cost/LoopHandler.cs",
-      "kind": "cs-loop"
+      "kind": "text",
+      "content": "public sealed class LoopHandler\n{\n    public async Task Handle(Command command, CancellationToken ct)\n    {\n        var signatures = new List<Signature>();\n        foreach (var id in command.SignatureIds)\n        {\n            signatures.Add(await signatureRepository.GetSignature(id, ct));\n        }\n        await signatureRepository.Save(signatures, ct);\n    }\n}\n"
     },
     {
       "path": "cost/FilterHandler.cs",
-      "kind": "cs-filter"
+      "kind": "text",
+      "content": "public sealed class FilterHandler\n{\n    public async Task<int> Handle(Query query, CancellationToken ct)\n    {\n        var open = (await productRepository.GetAll(ct)).Where(c => c.IsOpen).ToList();\n        return open.Count;\n    }\n}\n"
     }
   ],
   "cases": [
@@ -103,7 +106,7 @@
     },
     {
       "name": "--base: a loop the current batch adds is flagged, exit 2, the earlier one stays pre-existing",
-      "cmd": "R={{FIX}}/costbase-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src && cp {{FIX}}/cost/LoopHandler.cs $R/src/ && cd $R && git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 >/dev/null && printf 'public sealed class Second\\n{\\n    public async Task Run(List<int> ids, CancellationToken ct)\\n    {\\n        foreach (var id in ids)\\n        {\\n            await otherRepository.Get(id, ct);\\n        }\\n    }\\n}\\n' >> src/LoopHandler.cs && python3 {{KIT}}/scripts/access-cost.py --base $W F1 src/LoopHandler.cs",
+      "cmd": "R={{FIX}}/costbase-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src && cp {{FIX}}/cost/LoopHandler.cs $R/src/ && cd $R && git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 >/dev/null && printf '\\npublic sealed class Second\\n{\\n    public async Task Run(List<int> ids, CancellationToken ct)\\n    {\\n        foreach (var id in ids)\\n        {\\n            await otherRepository.Get(id, ct);\\n        }\\n    }\\n}\\n' >> src/LoopHandler.cs && python3 {{KIT}}/scripts/access-cost.py --base $W F1 src/LoopHandler.cs",
       "expect": {
         "exit": 2,
         "stdout": "Infrastructure in loop (2): L8 signatureRepository.GetSignature (pre-existing) · L19 otherRepository.Get"
