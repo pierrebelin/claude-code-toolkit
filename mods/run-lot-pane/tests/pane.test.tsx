@@ -8,9 +8,8 @@ import {
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, relativePath, samePath, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
-  activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples,
-} from '../hooks/register'
-import { PANE, paneAt, paneCommand, world } from './world'
+  activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples, washOf } from '../hooks/register'
+import { PANE, paneAt, paneCommand, world, indented } from './world'
 import type { Directory, Stamps, World } from './world'
 
 const SESSION = '/home/u/.claude/projects/p/s1'
@@ -617,15 +616,20 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
     expect(await ui.find({ type: 'Text', text: /✻ run-lot · F4 · CAT-CYCLE/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /running\s+1m0\d\s+1\/2 agents/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /━+─+\s+1\/3 phases/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^ {2}Session$/ })).toBeDefined()
+    // The desktop draws the progress as an SVG bar beside its count; the terminal as glyphs.
+    if (surface === 'desktop') expect((await ui.findAll({ type: 'Svg' })).map(one => one.props.alt)).toContain('progress 1/3')
+    expect(await ui.find({ type: 'Text', text: surface === 'desktop' ? /^1\/3 phases$/ : /━+─+\s+1\/3 phases/ })).toBeDefined()
+    // The desktop keeps its figures block, a row per figure; the terminal writes them on one line.
+    if (surface === 'desktop') {
+      expect(await ui.find({ type: 'Text', text: /^Session$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^Run$/ })).toBeDefined()
+    } else expect(await ui.find({ type: 'Text', text: /^ {2}Session ctx 84k \(42%\) {3}Run 87k tok$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^ctx 84k \(42%\)$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^ {2}Run$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^87k tok$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^agents$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^time$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^tokens$/ })).toBeDefined()
-    expect(await ui.find({ type: pressType(surface), text: /⏺ Design/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /✓ Design/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽] RED(?! 1)/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽] RED 1 créer/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /○ GREEN/ })).toBeDefined()
@@ -636,11 +640,12 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
     expect((await ui.find({ key: 'agent-a2-time' }))?.text).toMatch(/^1m0\d$/)
     expect(await colorOf(ui, 'agent-a2-time')).toBe('warning')
     expect((await ui.find({ key: 'agent-a2-tokens' }))?.text).toBe('87k')
-    expect(await ui.find({ type: 'Text', text: /^ {9}Edit \(1\) · ctx 43k$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /SHEET F4 · 2 hypotheses/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: indented(surface, /^ {6}Edit \(1\) · ctx 43k$/) })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: surface === 'desktop' ? /SHEET F4 · 2 hypotheses/ : /^ {2}Sheet F4 · 2 hypotheses ─+$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^2\/4 steps$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /✓ 1 Créer le produit/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /◐ 2 Refus sans catalogue/ })).toBeDefined()
+    // The step being worked on while the run goes: the spinner on the terminal, the half circle on the desktop.
+    expect(await ui.find({ type: 'Text', text: surface === 'desktop' ? /◐ 2 Refus sans catalogue/ : /[✢✳✶✻✽] 2 Refus sans catalogue/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /○ 3 Verrou catalogue/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /↳ C1 verrou posé/ })).toBeDefined()
     expect((await ui.find({ key: 'step-marks-1' }))?.text).toMatch(/RED ✓\s+GREEN ✓\s+COST ✓/)
@@ -674,11 +679,14 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
   expect(await nav.find({ type: 'Text', text: /Files modified · 1/ })).toBeDefined()
   expect(await nav.find({ type: 'Text', text: /Still running…/ })).toBeDefined()
   await nav.press({ key: 'back' })
-  expect(await nav.find({ type: 'Text', text: /^ {2}Session$/ })).toBeDefined()
+  expect(await nav.find({ type: 'Text', text: /^Session $/ })).toBeDefined()
   await nav.press({ key: 'current' })
-  expect(await nav.find({ type: 'Text', text: /Agents · 1/ })).toBeDefined()
+  expect(await nav.find({ type: 'Text', text: /^ {2}Agents · 1 ─+$/ })).toBeDefined()
   expect(await nav.find({ type: 'Text', text: /100% of run tokens/ })).toBeDefined()
-  expect(await nav.find({ type: 'Button', text: /RED 1 créer · 1m0\d · Edit \(1\) · ctx 43k · 87k tok/ })).toBeDefined()
+  // An agent of the phase card keeps its figures in the columns, time and tokens right-aligned; its stall in amber after it.
+  expect(await nav.find({ type: 'Button', text: /^[✢✳✶✻✽] RED 1 créer · Edit \(1\) · ctx 43k {2}⚠ idle 1m$/ })).toBeDefined()
+  expect((await nav.find({ key: 'card-a2-time' }))?.text).toMatch(/^1m0\d$/)
+  expect((await nav.find({ key: 'card-a2-tokens' }))?.text).toBe('87k')
   await nav.press({ key: 'back' })
   expect(await nav.find({ type: 'Button', text: /✓ design/ })).toBeDefined()
   await nav.press({ key: 'toggle-Design' })
@@ -758,11 +766,13 @@ test('agent view: structured verdict as outcome, every call in order, recovered 
   }
   const ui = await open()
   expect(await ui.find({ type: 'Text', text: /No answer/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /^ {2}ECARTS · 1 blocking$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}Blocking · Correctness · lock not checked$/ })).toBeDefined()
+  // A wrapped line of a card hangs two cells in, its next lines under its first.
+  expect((await ui.find({ type: 'Box', text: /^ECARTS · 1 blocking$/ }))?.props.paddingLeft).toBe(2)
+  expect((await ui.find({ type: 'Box', text: /^ {2}Blocking · Correctness · lock not checked$/ }))?.props.paddingLeft).toBe(2)
   expect(await ui.find({ type: 'Text', text: /Errors · 1 · recovered/ })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /^ {2}Bash · Find the handlers: exit 1$/ }))?.props.color).toBe('inactive')
-  expect(await ui.find({ type: 'Text', text: /^ {2}mode: fast F1 s\.md$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^Bash · Find the handlers: exit 1$/ }))?.props.color).toBe('inactive')
+  expect((await ui.find({ type: 'Box', text: /^Bash · Find the handlers: exit 1$/ }))?.props.paddingLeft).toBe(2)
+  expect((await ui.find({ type: 'Box', text: /^mode: fast F1 s\.md$/ }))?.props.paddingLeft).toBe(2)
   expect(await ui.find({ type: 'Text', text: /Global plan/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Activity · 3 calls/ })).toBeDefined()
   const rows = (await ui.findAll({ type: 'Text', text: /^ {2} +\d+:\d{2} [✓✗]/ })).map(row => row.text)
@@ -796,20 +806,22 @@ test('running demo: columns, model, retry, slow agent, stalled, interrupted, est
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
     expect(await ui.find({ type: 'Text', text: /✻ run-lot · F4 · CAT-LIFECYCLE/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /waiting for user\s+12m40\s+6\/7 agents\s+ETA ~8m/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /━+─+\s+2\/8 phases/ })).toBeDefined()
+    // The desktop draws the progress as an SVG bar beside its count; the terminal as glyphs.
+    if (surface === 'desktop') expect((await ui.findAll({ type: 'Svg' })).map(one => one.props.alt)).toContain('progress 2/8')
+    expect(await ui.find({ type: 'Text', text: surface === 'desktop' ? /^2\/8 phases$/ : /━+─+\s+2\/8 phases/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /GREEN X3 lock ↻ 2/ })).toBeDefined()
     expect((await ui.find({ key: 'model-demo-g1' }))?.text).toBe('Sonnet · high')
     expect(await colorOf(ui, 'agent-demo-g2b-time')).toBe('warning')
     expect(await colorOf(ui, 'agent-demo-g1-time')).toBe('inactive')
-    expect(await ui.find({ type: 'Text', text: /^ {9}● thinking · 4.2k chars · 160 tok\/s · Edit \(48\) · ctx 36k · ⚠ 48 tools$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: indented(surface, /^ {6}● thinking · 4.2k chars · 160 tok\/s · Edit \(48\) · ctx 36k · ⚠ 48 tools$/) })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /tdd-implementer, ser/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^ {2}wave 1\/2$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: indented(surface, /^ {2}wave 1\/2$/) })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /○ Global green/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /whole or filtered suites/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /○ Audit/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /○ Report/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /○ Audit · Review · Report/ })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /SHEET F4 · 2 hypotheses/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: surface === 'desktop' ? /SHEET F4 · 2 hypotheses/ : /^ {2}Sheet F4 · 2 hypotheses ─+$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^2\/5 cycles$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /↳ unreachable, not written: ProductTests/ })).toBeDefined()
     expect(await ui.find({ key: 'outcome' })).toBeUndefined()
@@ -818,7 +830,7 @@ test('running demo: columns, model, retry, slow agent, stalled, interrupted, est
 
   const narrow = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...paneAt(40) })
   expect(await narrow.find({ key: 'model-demo-g1' })).toBeUndefined()
-  expect(await narrow.find({ type: 'Button', text: /GREEN X… ↻ 2/ })).toBeDefined()
+  expect(await narrow.find({ type: 'Button', text: /GREEN X3… ↻ 2/ })).toBeDefined()
   expect((await narrow.find({ key: 'cycle-marks-X1' }))?.text).toMatch(/^✓ +✓$/)
   await narrow.unmount()
 
@@ -845,8 +857,12 @@ test('finished demo: verdict on the Audit row, outcome in a coloured box, slow a
     const verdict = await ui.find({ type: 'Text', text: /GAPS · 1 blocking · 2 major/ })
     expect(verdict?.props.color).toBe('error')
     const outcome = await ui.find({ key: 'outcome' })
-    expect(outcome?.props.borderStyle).toBe('round')
-    expect(outcome?.props.borderColor).toBe('warning')
+    // The terminal frames the outcome in its tone; the desktop washes it in that tone.
+    if (surface === 'desktop') expect(outcome?.props.backgroundColor).toBe(washOf('warning'))
+    else {
+      expect(outcome?.props.borderStyle).toBe('round')
+      expect(outcome?.props.borderColor).toBe('warning')
+    }
     expect((await ui.find({ type: 'Text', text: /^GAPS$/ }))?.props.color).toBe('warning')
     for (const line of wrapWords(DEMO_REASON, 53)) expect((await ui.find({ type: 'Text', text: line }))?.text).toBe(line)
     expect((await ui.find({ type: 'Text', text: /Report:/ }))?.text).toBe(`Report: ${DEMO_REPORT}`)
@@ -908,7 +924,7 @@ test('stop read then resume: agent left running is interrupted, stale stopped jo
   expect(await resumed.find({ type: 'Button', text: /⊘ GREEN 2 verrou/ })).toBeDefined()
   expect(await resumed.find({ type: 'Button', text: /[✢✳✶✻✽] GREEN 2 verrou/ })).toBeDefined()
   expect(await resumed.find({ type: 'Button', text: /↻/ })).toBeUndefined()
-  expect(await resumed.find({ type: 'Text', text: /^ {9}Read \(1\)$/ })).toBeDefined()
+  expect(await resumed.find({ type: 'Text', text: /^ {6}Read \(1\)$/ })).toBeDefined()
   await resumed.unmount()
   expect(toasts).toHaveLength(1)
 
@@ -941,7 +957,7 @@ test('relaunch before the stop is read: running agent interrupted, journal older
   expect(await ui.find({ type: 'Text', text: /[✢✳✶✻✽] running/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', text: /⊘ GREEN 2 verrou/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', text: /[✢✳✶✻✽] GREEN 2 verrou(?! ↻)/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {9}Read \(1\)$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {6}Read \(1\)$/ })).toBeDefined()
   await $.turn.complete(complete('a2'))
   expect(await ui.find({ type: 'Button', text: /✓ GREEN 2 verrou/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /⏺ running\s+\S+\s+1\/1 agents/ })).toBeUndefined()
@@ -1019,11 +1035,14 @@ test('stalling agent: yellow reason under the agent row and in its card, idle ou
   await clock.advance(2_000)
 
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /^ {9}Read \(41\) · ⚠ 41 tools$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {6}Read \(41\) · ⚠ 41 tools$/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /^ · ⚠ 41 tools$/ }))?.props.color).toBe('warning')
-  expect(await ui.find({ type: 'Text', text: /^ {9}ctx 163k · ⚠ ctx 163k$/ })).toBeDefined()
-  expect(((await ui.find({ key: 'open-a1' }))?.children[1] as { props?: { color?: string } } | undefined)?.props?.color).toBe('warning')
-  expect(((await ui.find({ key: 'open-a3' }))?.children[1] as { props?: { color?: string } } | undefined)?.props?.color).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^ {6}ctx 163k · ⚠ ctx 163k$/ })).toBeDefined()
+  // Colour tells a state: a stalled agent's label stays in the text colour, bold while it runs; the stall says itself in amber.
+  const labelOf = async (key: string) => (await ui.find({ key }))?.children[1] as { props?: { color?: string; bold?: boolean } } | undefined
+  expect((await labelOf('open-a1'))?.props).toMatchObject({ bold: true })
+  expect((await labelOf('open-a1'))?.props?.color).toBeUndefined()
+  expect((await labelOf('open-a3'))?.props?.color).toBeUndefined()
   await ui.press({ key: 'open-a1' })
   expect((await ui.find({ type: 'Text', text: /⚠ 41 tools/ }))?.props.color).toBe('warning')
   await ui.press({ key: 'back' })
@@ -1032,11 +1051,11 @@ test('stalling agent: yellow reason under the agent row and in its card, idle ou
   const pending = $.tool.call({ tool: 'Bash', agentId: 'a3', command: 'dotnet test' } as unknown as Parameters<typeof $.tool.call>[0])
   await clock.advance(190_000)
   const waiting = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await waiting.find({ type: 'Text', text: /^ {9}tool Bash 3 min · Bash \(1\)$/ })).toBeDefined()
+  expect(await waiting.find({ type: 'Text', text: /^ {6}tool Bash 3 min · Bash \(1\)$/ })).toBeDefined()
   await waiting.unmount()
   await clock.advance(120_000)
   const long = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await long.find({ type: 'Text', text: /^ {9}tool Bash 5 min · Bash \(1\) · ⚠ long tool$/ })).toBeDefined()
+  expect(await long.find({ type: 'Text', text: /^ {6}tool Bash 5 min · Bash \(1\) · ⚠ long tool$/ })).toBeDefined()
   expect((await long.find({ type: 'Text', text: /^ · ⚠ long tool$/ }))?.props.color).toBe('warning')
   await long.unmount()
 
@@ -1044,7 +1063,7 @@ test('stalling agent: yellow reason under the agent row and in its card, idle ou
   await pending
   await clock.advance(190_000)
   const idle = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await idle.find({ type: 'Text', text: /^ {9}Bash \(1\) · ⚠ idle 3m$/ })).toBeDefined()
+  expect(await idle.find({ type: 'Text', text: /^ {6}Bash \(1\) · ⚠ idle 3m$/ })).toBeDefined()
   await idle.unmount()
 })
 
@@ -1053,7 +1072,7 @@ const output = (count: number): TurnStepChunk => ({ kind: 'text', index: 1, text
 
 const activityLine = async ($: Engine): Promise<string | undefined> => {
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  const found = await ui.find({ type: 'Text', text: /^ {9}\S/ })
+  const found = await ui.find({ type: 'Text', text: /^ {6}\S/ })
   await ui.unmount()
   return found?.text.trim()
 }
@@ -1415,14 +1434,14 @@ const result = await workflow('run-lot', b.sheet)
   expect(await ui.find({ type: 'Text', text: /▸ run-lot/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /0\/3 phases/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^run-lot$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /SHEET F2/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /BATCHES/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}Sheet F2 ─+$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}Batches ─+$/ })).toBeUndefined()
 
   await ui.press({ key: 'open-lot-F1' })
   expect(await ui.find({ type: 'Text', text: /completed/ })).toBeDefined()
 
   await ui.press({ key: 'plan' })
-  expect(await ui.find({ type: 'Text', text: /BATCHES/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}Batches ─+$/ })).toBeDefined()
   expect(lotFiguresFrom(kept['lot:p:CAT-F1'])?.agents).toBe(2)
   await ui.unmount()
 })
@@ -1468,15 +1487,15 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: / after F2, F3$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Supervisor$/ })).toBeDefined()
   await ui.press({ key: 'open-lot-F2' })
-  expect(await ui.find({ type: 'Text', text: /SHEET F2/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {9}tool Bash 2 min · Bash \(17\) · ctx \d+k$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}Sheet F2 ─+$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {6}tool Bash 2 min · Bash \(17\) · ctx \d+k$/ })).toBeDefined()
   await ui.unmount()
 
   await paneCommand($, 'demo plan end')
   const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await end.find({ type: 'Text', text: /3\/6 batches/ })).toBeDefined()
   expect(await end.find({ key: 'outcome' })).toBeDefined()
-  expect(await end.find({ type: 'Text', text: /BATCHES/ })).toBeDefined()
+  expect(await end.find({ type: 'Text', text: /^ {2}Batches ─+$/ })).toBeDefined()
   await end.unmount()
 })
 
@@ -1667,9 +1686,12 @@ test('pane counts cycles from the cycle states, flags unreachable methods', asyn
   expect(await ui.find({ type: 'Text', text: /^1\/3 cycles$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /steps$/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /✓ X1 Créer le produit/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /◐ X2 Refus sans catalogue/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /[✢✳✶✻✽] X2 Refus sans catalogue/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /○ X3 Garde d'architecture/ })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /↳ unreachable, not written: A\.Unreachable/ }))?.props.color).toBe('warning')
+  // The amber goes to the glyph of the warning; the method it names keeps the text colour.
+  expect(await ui.find({ type: 'Text', text: /^ {4}↳ unreachable, not written: A\.Unreachable$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^↳ $/ }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: /^unreachable, not written: $/ }))?.props.color).toBe('inactive')
   expect((await ui.find({ key: 'cycle-marks-X2' }))?.text).toMatch(/RED ✓\s+GREEN ·/)
   await ui.unmount()
 
@@ -1691,4 +1713,58 @@ test('pane counts cycles from the cycle states, flags unreachable methods', asyn
   expect(await done.find({ type: 'Text', text: /^2\/3 cycles$/ })).toBeDefined()
   expect(await done.find({ type: 'Text', text: /✓ X2 Refus sans catalogue/ })).toBeDefined()
   await done.unmount()
+})
+
+test('desktop: every view of the demo draws a tree the surface accepts, with a dismiss button and labelled actions', async ($, on) => {
+  runWorld(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await paneCommand($, 'demo')
+  const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...PANE })
+  await ui.drawn()
+  expect((await ui.find({ key: 'close' }))?.props.role).toBe('dismiss')
+  // A phase or TDD label is a name, never tinted: colour is left to state, so it never clashes with a row's wash.
+  const labels = await ui.findAll({ type: 'Text', text: /^(RED|GREEN)\s*$/ })
+  expect(labels.length).toBeGreaterThan(0)
+  expect(labels.filter(one => one.props.color === 'success' || one.props.color === 'error')).toEqual([])
+  expect((await ui.find({ key: 'note' }))?.props.label).toBe('Note')
+  await ui.press({ key: 'open-demo-g2b' })
+  await ui.drawn()
+  expect((await ui.find({ key: 'back' }))?.props.label).toBe('← Back')
+  await ui.press({ key: 'back' })
+  await ui.press({ key: 'current' })
+  await ui.drawn()
+  await ui.press({ key: 'back' })
+  await ui.press({ key: 'open-validate' })
+  await ui.drawn()
+  await ui.unmount()
+
+  await paneCommand($, 'demo plan')
+  const plan = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...PANE })
+  await plan.drawn()
+  await plan.press({ key: 'open-graph' })
+  await plan.drawn()
+  await plan.unmount()
+})
+
+test('terminal at 40, 60 and 100 columns: block titles ruled to the figures, agent rows never into their figures, figures never cut', async ($, on) => {
+  runWorld(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await paneCommand($, 'demo')
+  for (const columns of [40, 60, 100]) {
+    const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...paneAt(columns) })
+    // The figures take 20 cells (agents, time, tokens), 14 more for the model from 56 columns.
+    const right = 20 + (columns >= 56 ? 14 : 0)
+    expect((await ui.find({ type: 'Text', text: /^ {2}Phases ─+$/ }))?.text).toHaveLength(columns - 21)
+    expect((await ui.find({ type: 'Text', text: /^ {2}Notes · 2 ─+$/ }))?.text).toHaveLength(columns)
+    expect(await ui.find({ key: 'model-demo-g1' })).toEqual(columns >= 56 ? expect.anything() : undefined)
+    const agents = (await ui.findAll({ type: 'Button' })).filter(one => /^open-demo-/.test(one.key ?? ''))
+    expect(agents.length).toBeGreaterThanOrEqual(8)
+    for (const agent of agents) {
+      expect(4 + agent.text.length).toBeLessThanOrEqual(columns - right)
+      const id = (agent.key ?? '').slice('open-'.length)
+      expect((await ui.find({ key: `agent-${id}-time` }))?.text).toMatch(/^\d+m\d{2}$/)
+      expect((await ui.find({ key: `agent-${id}-tokens` }))?.text).toMatch(/^\d+k$/)
+    }
+    await ui.unmount()
+  }
 })

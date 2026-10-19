@@ -70,4 +70,8 @@ export const BAND = {
   props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
 } as const
 
+// The desktop turns a row's leading spaces into a padding: the same row, its text without them.
+export const indented = (surface: 'terminal' | 'desktop', pattern: RegExp) =>
+  surface === 'desktop' ? new RegExp(pattern.source.replace(/^\^ \{\d+\}/, '^'), pattern.flags) : pattern
+
 export const paneCommand = ($: Engine, args: string) => $.command.run({ command: 'run-lot-pane', args } as Parameters<typeof $.command.run>[0])

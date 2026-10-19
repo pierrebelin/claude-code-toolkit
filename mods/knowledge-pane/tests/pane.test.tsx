@@ -301,8 +301,10 @@ test('home, context, object and back: every id opens, the stack walks back', asy
   expect(await ui.find({ type: 'Text', text: /^Catalog$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /CAT · 2 CU · 4 RM · 1 D/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Catalog holds the products an organisation sells\.$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ 1 medium$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^  2026-10-15 · PRD-ARCH · Catalog · ~CAT-CU-01/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^1 medium$/ })).toBeDefined()
+  // A block's title, its count and a rule to the pane's edge: 80 cells, less the indent and the toggle.
+  expect((await ui.find({ type: 'Text', text: /^Contexts  1 ─+$/ }))?.text).toHaveLength(76)
+  expect(await ui.find({ type: 'Text', text: /^ {4}2026-10-15  PRD-ARCH · Catalog  ~CAT-CU-01/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Index behind|No index/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^ADR-001 $/ })).toBeDefined()
 
@@ -315,27 +317,27 @@ test('home, context, object and back: every id opens, the stack walks back', asy
   await ui.press({ key: 'open-overview:Relations' })
   expect(await ui.find({ type: 'Text', text: /^flowchart LR$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /mermaid|```/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /^  2026-10-15 · PRD-ARCH · ~CAT-CU-01/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {4}2026-10-15  PRD-ARCH  ~CAT-CU-01/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Only a published product can be archived$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ ◐ medium$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ Cross-cutting rules$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Cross-cutting rules  \d+ ─+$/ })).toBeDefined()
 
   await ui.press({ key: 'open-cu-CAT-CU-02' })
   expect(await ui.find({ type: 'Text', text: /CAT-CU-02 — Archive a product/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Outcome: ProductNotPublishedException$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Rules$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^#/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /^ Rules$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Rules  \d+ ─+$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Only a published product can be archived$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^  ArchiveProductCommandHandler$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {4}ArchiveProductCommandHandler$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /docs\/business\/Catalog\/usecases\/CAT-CU-02-archive-product\.md:1/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^  2026-10-15 · PRD-ARCH · \+CAT-CU-02$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {4}2026-10-15  PRD-ARCH  \+CAT-CU-02$/ })).toBeDefined()
 
   await ui.press({ key: 'open-cites-CAT-RM-004' })
   expect(await ui.find({ type: 'Text', text: /CAT-RM-004 — An archived product/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Outcome: the listing returns published products only\.$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ Applies to$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ Cited by$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Applies to  \d+ ─+$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Cited by  \d+ ─+$/ })).toBeDefined()
 
   await ui.press({ key: 'back' })
   expect(await ui.find({ type: 'Text', text: /CAT-CU-02 — Archive a product/ })).toBeDefined()
@@ -486,6 +488,12 @@ test('a staged merge: alert, objects by change, base now beside the staged text'
   const ui = await $.ui.mount({ plugin: 'knowledge-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /◆ PRD-DUP — merge staged, not written/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /\+1 ~1 −1/ })).toBeDefined()
+  // On the terminal the alerts wait on the user, framed in amber; the tone goes to the glyph, the merge's name stays bold.
+  expect((await ui.find({ key: 'alerts' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: 'warning' })
+  expect((await ui.find({ type: 'Text', text: /^◆ $/ }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: /^PRD-DUP$/ }))?.props.bold).toBe(true)
+  expect((await ui.find({ type: 'Text', text: /^PRD-DUP$/ }))?.props.color).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /^ — merge staged, not written$/ }))?.props.color).toBeUndefined()
   await ui.press({ key: 'open-merge-PRD-DUP' })
   expect(await ui.find({ type: 'Text', text: /Staged: the whole files are ready/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Duplicate a product$/ })).toBeDefined()
@@ -564,6 +572,43 @@ test('desktop: the use cases × rules matrix heads the context, the button above
   await terminal.unmount()
 })
 
+test('desktop: every view draws a tree the surface accepts, bodies as Markdown, no terminal glyph rule', async ($, on) => {
+  const files = baseFiles()
+  files[`${ROOT}/.index/files.json`] = stamps(files)
+  const merge = `${ROOT}/.merge/PRD-DUP`
+  files[`${merge}/.feature`] = 'PRD-DUP\n'
+  files[`${merge}/.packet.json`] = JSON.stringify({
+    code: 'PRD-DUP',
+    objects: [{ id: 'CAT-RM-001', kind: 'RM', change: 'modified', context: 'Catalog', title: 'A product is visible only to its organisation', status: 'todo' }],
+  })
+  files[`${merge}/Catalog/rules.md`] = RULES
+  world(on, files)
+  await $.session.start({ cwd: '/repo', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'knowledge-pane', args: '' } as never)
+  const ui = await $.ui.mount({ plugin: 'knowledge-pane', surface: 'desktop', ...PANE })
+  const accepted = async () => {
+    await ui.drawn()
+    expect(await ui.find({ type: 'Text', text: /⎿/ })).toBeUndefined()
+  }
+  await accepted()
+  expect(await ui.find({ type: 'Button', key: 'close' })).toBeDefined()
+  await ui.press({ key: 'open-context-Catalog' })
+  await accepted()
+  await ui.press({ key: 'open-overview:Vocabulary' })
+  expect(await ui.find({ type: 'Markdown', text: /Product/ })).toBeDefined()
+  await ui.press({ key: 'open-cu-CAT-CU-02' })
+  await accepted()
+  expect(await ui.find({ type: 'Markdown', text: /ProductNotPublishedException/ })).toBeDefined()
+  await ui.press({ key: 'home' })
+  await ui.press({ key: 'open-merge-PRD-DUP' })
+  await accepted()
+  await ui.press({ key: 'open-change-CAT-RM-001' })
+  await accepted()
+  await ui.press({ key: 'search' })
+  await accepted()
+  await ui.unmount()
+})
+
 test('demo: the kit example from the plugin folder, no stale check, no follow', async ($, on) => {
   world(on, baseFiles(), {}, path => path.replace(/^.*\/demo(?=\/|$)/, '/repo'))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
@@ -604,7 +649,7 @@ test('a /business-spec puts its spec on top of the stack: b folds its rows first
   expect(await ui.find({ key: 'fold-all' })).toBeUndefined()
   expect((await ui.find({ key: 'back' }))?.props.hotkey).toBe('b')
   await ui.press({ key: 'back' })
-  expect(await ui.find({ type: 'Text', text: /^ Cross-cutting rules$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Cross-cutting rules  \d+ ─+$/ })).toBeDefined()
   await ui.press({ key: 'home' })
   expect(await ui.find({ type: 'Text', text: /^✎ PRD-ARCH — Product archiving$/ })).toBeDefined()
   await ui.press({ key: 'open-spec' })
@@ -616,4 +661,21 @@ test('a /business-spec puts its spec on top of the stack: b folds its rows first
   expect(await cleared.find({ type: 'Text', text: /CAT · 2 CU/ })).toBeDefined()
   expect(await cleared.find({ key: 'open-spec' })).toBeUndefined()
   await cleared.unmount()
+})
+
+test('terminal at 40, 60 and 100 columns: every block title ruled to the pane edge, its rows one level in', async ($, on) => {
+  const files = baseFiles()
+  files[`${ROOT}/.index/files.json`] = stamps(files)
+  world(on, files)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'knowledge-pane', args: 'Catalog' } as never)
+  for (const columns of [40, 60, 100]) {
+    const ui = await $.ui.mount({ plugin: 'knowledge-pane', surface: 'terminal', ...PANE, props: { ...PANE.props, bodyColumns: columns } })
+    // Two cells of indent, two of toggle, then the title, its count and the rule to the edge.
+    const titles = await ui.findAll({ type: 'Text', text: /^(Overview|Use cases|Cross-cutting rules|Decisions|ADRs|History) {2}.+ ─+$/ })
+    expect(titles.map(one => one.text.split('  ')[0])).toEqual(['Overview', 'Use cases', 'Cross-cutting rules', 'Decisions', 'ADRs', 'History'])
+    for (const title of titles) expect(title.text).toHaveLength(columns - 4)
+    expect(await ui.find({ type: 'Text', text: /^ {4}2026-10-15 {2}PRD-ARCH {2}~CAT-CU-01/ })).toBeDefined()
+    await ui.unmount()
+  }
 })

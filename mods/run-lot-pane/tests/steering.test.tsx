@@ -7,7 +7,7 @@ import {
   graphNodesOf, graphTreeLines, isAttemptOf, keptSections, notesOf, openQuestionsOf, paneLinesOf, parsePlanLots, pendingQuestionsOf, planGraph, planGraphAlt,
   questionBanner, retryOf, roundLine, svgHeight, svgWidth, toValidateOf, validateEntriesOf, withPaneLine, workLinesOf,
 } from '../hooks/register'
-import { BAND, paneAt, paneCommand, world } from './world'
+import { BAND, paneAt, paneCommand, world, indented } from './world'
 
 const lines = (...records: object[]) => workLinesOf(records.map(one => JSON.stringify(one)).join('\n'))
 const NOW = 1_760_000_000_000
@@ -214,6 +214,11 @@ const planWorld = (on: On, files: Record<string, string>, writes: string[] = [])
 }
 
 const PANE = paneAt(72, 60)
+
+type Found = { find: (query: { type: string; text: RegExp }) => Promise<{ props: Record<string, unknown> } | undefined> }
+
+// A line the terminal wraps hangs in a box: its indent is the box's padding, its text starts where the line does.
+const hung = async (ui: Found, text: RegExp) => (await ui.find({ type: 'Box', text }))?.props.paddingLeft
 test('demo: the pending question above the prompt and on every view, ticking; retry reasons; notes', async ($, on) => {
   const { clock } = planWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -224,10 +229,19 @@ test('demo: the pending question above the prompt and on every view, ticking; re
     expect(await band.find({ key: 'toggle-run-lot-pane' })).toEqual(surface === 'desktop' ? expect.anything() : undefined)
     await band.unmount()
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
-    expect(await ui.find({ type: 'Text', text: /^ {2}\? F4 — 2 questions — recommendation applied in 7:32$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: indented(surface, /^ {2}\? F4 — 2 questions — recommendation applied in 7:32$/) })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /↻ attempt 1 rejected: tests modified at GREEN: tests\/Acme/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /✓ F4 · an archived catalog is read-only · consumed/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /✎ F4 · keep the lock check in the aggregate, not the handler · pending/ })).toBeDefined()
+    if (surface === 'desktop') {
+      expect(await ui.find({ type: 'Text', text: /✓ F4 · an archived catalog is read-only · consumed/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /✎ F4 · keep the lock check in the aggregate, not the handler · pending/ })).toBeDefined()
+    } else {
+      // A note's tone goes to its glyph: the batch and its state dim, its text in the text colour.
+      expect(await ui.find({ type: 'Text', text: /^ {2}✓ F4 {2}an archived catalog is read-only · consumed$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^ {2}✎ F4 {2}keep the lock check in the aggregate, not the handler · pending$/ })).toBeDefined()
+      expect((await ui.find({ type: 'Text', text: /^✎ $/ }))?.props.color).toBe('warning')
+      expect((await ui.find({ type: 'Text', text: /^keep the lock check in the aggregate, not the handler$/ }))?.props.color).toBeUndefined()
+      expect((await ui.find({ type: 'Text', text: /^ {2}Notes · 2 ─+$/ }))?.text).toHaveLength(72)
+    }
     await ui.unmount()
   }
   await clock.advance(2_000)
@@ -240,7 +254,7 @@ test('demo: the pending question above the prompt and on every view, ticking; re
   await ui.press({ key: 'back' })
   await ui.press({ key: 'note' })
   await ui.input({ key: 'note-input', text: 'the lock is on the catalog' })
-  expect(await ui.find({ type: 'Text', text: /✎ F4 · the lock is on the catalog · pending/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✎ F4 {2}the lock is on the catalog · pending/ })).toBeDefined()
   expect(await ui.find({ key: 'note-input' })).toBeUndefined()
   await clock.advance(452_000)
   expect(await ui.find({ key: 'question-banner' })).toBeUndefined()
@@ -252,11 +266,15 @@ test('demo end: audit rounds under the Audit phase, to validate in each state, a
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await paneCommand($, 'demo end')
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /^ {5}R1 findings 3 → 2 · files 4$/ })).toBeDefined()
-  const diverged = await ui.find({ type: 'Text', text: /^ {5}R2 findings 2 → 2 · files 5 · diverging, rounds stopped$/ })
-  expect(diverged?.props.color).toBe('error')
-  expect(await ui.find({ type: 'Text', text: /↳ contested: duplicated guard in the aggregate — harm: none, the guard runs once per command → Accept: trade-off kept/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /↳ contested: organization lock not checked before deletion — harm: .* → Escalate: / })).toBeDefined()
+  // A round at the agents' level, its contests one level in, each answer on its own line beneath.
+  expect(await ui.find({ type: 'Text', text: /^ {4}R1 findings 3 → 2 · files 4$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {4}R2 findings 2 → 2 · files 5 · diverging, rounds stopped$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^ · diverging, rounds stopped$/ }))?.props.color).toBe('error')
+  expect((await ui.find({ type: 'Text', text: /^R2 findings 2 → 2 · files 5$/ }))?.props.color).toBe('inactive')
+  expect(await ui.find({ type: 'Text', text: /^ {6}↳ contested: duplicated guard in the aggregate — harm: none, the guard runs once per command$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {8}→ Accept: trade-off kept, the guard stays in the aggregate$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {6}↳ contested: organization lock not checked before deletion — harm: / })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {8}→ Escalate: / })).toBeDefined()
   expect(await ui.find({ key: 'question-banner' })).toBeUndefined()
   expect((await ui.find({ key: 'open-validate' }))?.text).toBe('to validate 4')
   await ui.press({ key: 'phase-Audit' })
@@ -265,21 +283,22 @@ test('demo end: audit rounds under the Audit phase, to validate in each state, a
 
   await ui.press({ key: 'open-validate' })
   expect(await ui.find({ type: 'Text', text: /cctoolkit run-validate apply \/repo\/todo\/catalog-lifecycle\/run\/\.work\.jsonl$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}✓ kept · applied$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}✓ amended: write the test, the guard stays · applied$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}relaunch: \/run-lot todo\/catalog-lifecycle\/CAT-LIFECYCLE-PLAN-F4\.md$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}● rejected: lock on first sale, the spec is wrong here · answered, not applied yet$/ })).toBeDefined()
-  expect((await ui.findAll({ type: 'Text', text: /^ {4}○ pending answer$/ })).length).toBe(4)
-  expect(await ui.find({ type: 'Text', text: /^ {4}an archived catalog is read-only$/ })).toBeDefined()
+  expect(await hung(ui, /^✓ kept · applied$/)).toBe(4)
+  expect(await hung(ui, /^✓ amended: write the test, the guard stays · applied$/)).toBe(4)
+  expect(await hung(ui, /^ {2}relaunch: \/run-lot todo\/catalog-lifecycle\/CAT-LIFECYCLE-PLAN-F4\.md$/)).toBe(2)
+  expect(await hung(ui, /^● rejected: lock on first sale, the spec is wrong here · answered, not applied yet$/)).toBe(4)
+  expect((await ui.find({ type: 'Text', text: /^● $/ }))?.props.color).toBe('warning')
+  expect((await ui.findAll({ type: 'Box', text: /^○ pending answer$/ })).map(one => one.props.paddingLeft)).toEqual([4, 4, 4, 4])
+  expect(await hung(ui, /^an archived catalog is read-only$/)).toBe(4)
 
   const entry = toValidateOf('## To validate\n\n- Assumptions — H2: archived items keep their audit trail (tech lead)\n', 'F4')[0]!
   await ui.press({ key: `keep-${entry.id}` })
-  expect((await ui.findAll({ type: 'Text', text: /^ {4}○ pending answer$/ })).length).toBe(3)
+  expect((await ui.findAll({ type: 'Box', text: /^○ pending answer$/ })).length).toBe(3)
   expect(await ui.find({ key: `keep-${entry.id}` })).toBeDefined()
   const design = { id: (await ui.findAll({ type: 'Button' })).map(one => one.key ?? '').find(key => key.startsWith('amend-'))!.slice('amend-'.length) }
   await ui.press({ key: `amend-${design.id}` })
   await ui.input({ key: `answer-${design.id}`, text: '  the lock is per product  ' })
-  expect(await ui.find({ type: 'Text', text: /^ {4}● amended: the lock is per product · answered, not applied yet$/ })).toBeDefined()
+  expect(await hung(ui, /^● amended: the lock is per product · answered, not applied yet$/)).toBe(4)
   expect(await ui.find({ key: `answer-${design.id}` })).toBeUndefined()
   await ui.press({ key: 'back' })
   expect((await ui.find({ key: 'open-validate' }))?.text).toBe('to validate 3')
@@ -296,25 +315,29 @@ test('demo plan: graph as a tree on the terminal and an SVG on the desktop, entr
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await paneCommand($, 'demo plan')
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /✓ F1 · reuse the archived flag of the catalog · consumed/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /✎ F2 · the archived filter stays off by default · pending/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}✓ F1 {2}reuse the archived flag of the catalog · consumed$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}✎ F2 {2}the archived filter stays off by default · pending$/ })).toBeDefined()
 
   await ui.press({ key: 'note' })
   expect((await ui.find({ key: 'note-input' }))?.props.label).toBe('note for F2: ')
   await ui.input({ key: 'note-input', text: 'F3: restore keeps the archive date' })
-  expect(await ui.find({ type: 'Text', text: /✎ F3 · restore keeps the archive date · pending/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✎ F3 {2}restore keeps the archive date · pending/ })).toBeDefined()
 
   await ui.press({ key: 'open-graph' })
   expect(await ui.find({ type: 'Text', text: /^⊘ F6 Export schedule · blocked: F5 set aside — design blocked: no defensible export format/ })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /^✗ F5 Export the products/ }))?.props.color).toBe('error')
+  // A node's tone goes to its glyph; a batch waiting to start reads dim.
+  const node = await ui.find({ type: 'Text', text: /^✗ F5 Export the products/ })
+  expect((node?.children[0] as { props?: { color?: string } } | undefined)?.props?.color).toBe('error')
+  expect((node?.children[1] as { props?: { color?: string } } | undefined)?.props?.color).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /^F3 Restore a product · waiting to start$/ }))?.props).toMatchObject({ color: 'inactive', dimColor: true })
   expect(await ui.find({ type: 'Text', text: /^○ F4 Product history · waiting on F2 \(running\), F3 \(waiting\)/ })).toBeDefined()
   await ui.press({ key: 'back' })
 
   await ui.press({ key: 'open-validate' })
-  expect(await ui.find({ type: 'Text', text: /^ {4}✓ kept · applied$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}export format undecided: CSV or the catalog JSON feed \(no rule names one/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}design blocked: no defensible export format, CSV or the catalog JSON feed — patch run\/2026-10-10-0912-aside-F5\.patch$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}reuse the archived flag of the catalog$/ })).toBeDefined()
+  expect(await hung(ui, /^✓ kept · applied$/)).toBe(4)
+  expect(await hung(ui, /^export format undecided: CSV or the catalog JSON feed \(no rule names one/)).toBe(4)
+  expect(await hung(ui, /^design blocked: no defensible export format, CSV or the catalog JSON feed — patch run\/2026-10-10-0912-aside-F5\.patch$/)).toBe(4)
+  expect(await hung(ui, /^reuse the archived flag of the catalog$/)).toBe(4)
   await ui.press({ key: 'open-lot-F2' })
   expect(await ui.find({ key: 'open-graph' })).toBeUndefined()
   await ui.unmount()
@@ -333,8 +356,8 @@ test('demo plan: graph as a tree on the terminal and an SVG on the desktop, entr
   await paneCommand($, 'demo plan end')
   const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   await end.press({ key: 'open-validate' })
-  expect(await end.find({ type: 'Text', text: /^ {4}restoring keeps the archive date in the history \(the audit trail is never rewritten\)$/ })).toBeDefined()
-  expect(await end.find({ type: 'Text', text: /^ {4}archiving twice answers 409, not 204 \(the spec says refused, not ignored\)$/ })).toBeDefined()
+  expect(await hung(end, /^restoring keeps the archive date in the history \(the audit trail is never rewritten\)$/)).toBe(4)
+  expect(await hung(end, /^archiving twice answers 409, not 204 \(the spec says refused, not ignored\)$/)).toBe(4)
   await end.unmount()
 })
 
@@ -387,8 +410,7 @@ test('a real run-plan: run files read from disk, the breaker stop, answers and n
 
   await ui.press({ key: 'open-validate' })
   const entries = toValidateOf(files['/repo/todo/cat/run/batches/F1.md']!, 'F1')
-  const plan = await ui.find({ type: 'Text', text: /^ {4}common cause across F1, F3: the spec leaves the lock owner open$/ })
-  expect(plan).toBeDefined()
+  expect(await hung(ui, /^common cause across F1, F3: the spec leaves the lock owner open$/)).toBe(4)
   await ui.press({ key: `reject-${entries[0]!.id}` })
   await ui.input({ key: `answer-${entries[0]!.id}`, text: 'the lock is on the product' })
   const answer = JSON.parse(files[paneFile]!.trim().split('\n').pop()!)
@@ -399,8 +421,8 @@ test('a real run-plan: run files read from disk, the breaker stop, answers and n
   expect(files[paneFile]!.trim().split('\n')).toHaveLength(1)
   touch(work, `${files[work]}\n${JSON.stringify({ kind: 'ack', batch: 'F1', ref: entries[0]!.id, what: 'applied', relaunch: '/run-plan /repo/todo/cat/CAT-PLAN.md', hn: 'H2', cycles: [], at: answer.at + 1 })}`)
   await clock.advance(2_000)
-  expect(await ui.find({ type: 'Text', text: /^ {4}✓ rejected: the lock is on the product · applied$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}relaunch: \/run-plan \/repo\/todo\/cat\/CAT-PLAN\.md$/ })).toBeDefined()
+  expect(await hung(ui, /^✓ rejected: the lock is on the product · applied$/)).toBe(4)
+  expect(await hung(ui, /^ {2}relaunch: \/run-plan \/repo\/todo\/cat\/CAT-PLAN\.md$/)).toBe(2)
   await ui.press({ key: 'back' })
 
   await ui.press({ key: 'note' })
@@ -410,7 +432,7 @@ test('a real run-plan: run files read from disk, the breaker stop, answers and n
   expect(note.id).toBe(`n-${note.at}`)
   touch(work, `${files[work]}\n${JSON.stringify({ kind: 'ack', batch: 'F2', ref: note.id, what: 'note-taken', at: note.at + 1 })}`)
   await clock.advance(2_000)
-  expect(await ui.find({ type: 'Text', text: /✓ F2 · mind the lock · consumed/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✓ F2 {2}mind the lock · consumed/ })).toBeDefined()
   expect(writes.every(path => path === paneFile)).toBe(true)
   await ui.unmount()
 })

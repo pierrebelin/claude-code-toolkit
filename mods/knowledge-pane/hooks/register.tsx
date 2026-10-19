@@ -55,6 +55,11 @@ const EDITING_TOOLS = ['Edit', 'Write', 'MultiEdit']
 const BLOCKING = ['bloquant', 'blocking']
 const MAJOR = ['majeur', 'major', 'warning']
 
+// The terminal's grid: the view's lines at two cells, a block's rows one level in, under its title.
+const INDENT = '  '
+const ROW = 4
+const rule = (cells: number): string => '─'.repeat(Math.max(0, cells))
+
 const HOME: Navigation = { stack: [{ kind: 'home' }], query: '', seed: '', expanded: [], collapsed: [] }
 const IDLE: Tracked = { isArmed: false, topic: null, path: null, mtimeMs: 0, doc: null, readAt: null }
 
@@ -517,6 +522,17 @@ export const isUnanswered = (decision: Decision): boolean => !decision.isPending
 
 export const isOffRecommendation = (decision: Decision): boolean =>
   decision.answer !== null && decision.recommended !== null && !decision.answer.split(', ').includes(decision.recommended)
+
+// The desktop sets its blocks apart by shade, not by line: a translucent grey surface reads on a light or a dark
+// theme alike; what waits on the person takes a faint wash of its tone: a merge or sync staged and the index
+// behind in amber, a blocking open question in red, a decision waiting for its answer in orange.
+const SURFACE = '#80808014'
+const WARNING_WASH = '#d99a1e24'
+const WASH: Record<string, string> = { warning: WARNING_WASH, error: '#d6454524', claude: '#d977571f' }
+// A block's padding, in cells; a washed row reaches one cell into it on each side, so its text keeps the column
+// of the rows around it while its tone spans the whole width.
+const BLOCK = { paddingX: 2, paddingY: 'sm' } as const
+const BLEED = { marginX: -1, paddingX: 1 } as const
 
 const STATUS = { good: '#0ca30c', warning: '#fab219', critical: '#d03b3b', specified: '#3b82c4' } as const
 const CELL_INK = '#0b0b0b'
@@ -1244,6 +1260,10 @@ export const register: Register = on => {
     const { Box, Button, Text } = elements
     const Input = 'Input' in elements ? elements.Input : undefined
     const Svg = e.surface === 'desktop' && 'Svg' in elements ? elements.Svg : undefined
+    const Markdown = e.surface === 'desktop' && 'Markdown' in elements ? elements.Markdown : undefined
+    // The desktop draws in a proportional face: no space indents, glyph rules or `⎿` there, but a type scale,
+    // spacing steps and real buttons. The terminal keeps its text layout.
+    const isDesktop = e.surface === 'desktop'
     const kb = await read($, base)
     const spec = await read($, tracked)
     const asked = await read($, decisions)
@@ -1277,8 +1297,18 @@ export const register: Register = on => {
     const foldAll = () => void update($, nav, current => ({ ...HOME, ...current, expanded: [] }))
     const isOpen = (group: string, byDefault = true) => (where.collapsed.includes(group) ? !byDefault : byDefault)
 
-    const close = <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
-    const header = (title: string, trail?: string) => (
+    const close = isDesktop
+      ? <Button key="close" label="Close" role="dismiss" onPress={() => closePane($)} />
+      : <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
+    const header = (title: string, trail?: string) => isDesktop ? (
+      <Box key="header" flexDirection="row" alignItems="flex-start" gap="sm">
+        <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+          {trail !== undefined && <Text size="footnote" dimColor wrap="truncate-end">{trail}</Text>}
+          <Text size="heading" weight="semibold" wrap="wrap">{title}</Text>
+        </Box>
+        {close}
+      </Box>
+    ) : (
       <Box key="header" height={1}>
         <Box flexGrow={1} flexShrink={1}>
           <Text wrap="truncate-end">
@@ -1300,39 +1330,60 @@ export const register: Register = on => {
           : spec.isArmed
             ? 'waiting for the SPEC file…'
             : 'No /business-spec in this session yet.'
-    const location = (
-      <Text key="location" color="inactive" wrap="truncate-start">
-        {'  ⎿  '}
-        {place}
-      </Text>
+    // A path cut from its start keeps its indent: the cut happens after the leading cells, never through them.
+    const tail = (key: string, indent: number, text: string) => (
+      <Box key={key} height={1}>
+        <Text>{' '.repeat(indent)}</Text>
+        <Text color="inactive" wrap="truncate-start">{text}</Text>
+      </Box>
     )
-    const keys = (
+    const location = isDesktop ? (
+      <Text key="location" size="footnote" mono dimColor wrap="truncate-start">{place}</Text>
+    ) : (
+      tail('location', INDENT.length, place)
+    )
+    const keys = isDesktop ? (
+      <Box key="keys" flexDirection="row" flexWrap="wrap" gap="xs" marginTop="xs">
+        {where.stack.length > 1 && <Button key="back" label="← Back" hotkey={isFolding ? undefined : 'b'} onPress={() => void back($)} />}
+        {where.stack.length > 1 && <Button key="home" label="Home" hotkey="h" onPress={() => void home($)} />}
+        {kb.isPresent && view.kind !== 'search' && <Button key="search" label="Search" hotkey="s" onPress={toSearch} />}
+        {isFolding && <Button key="fold-all" label={`Fold all (${where.expanded.length} open)`} hotkey="b" onPress={foldAll} />}
+      </Box>
+    ) : (
       <Box key="keys" height={1}>
-        <Text>{'     '}</Text>
-        {isFolding && (
-          <Button key="fold-all" hotkey="b" plain dimColor onPress={foldAll}>
-            <Text>{`fold all (${where.expanded.length} open) `}</Text>
-          </Button>
-        )}
-        {where.stack.length > 1 && (
-          <Button key="back" hotkey={isFolding ? undefined : 'b'} plain dimColor onPress={() => void back($)}>
-            <Text>back </Text>
-          </Button>
-        )}
-        {where.stack.length > 1 && (
-          <Button key="home" hotkey="h" plain dimColor onPress={() => void home($)}>
-            <Text>home </Text>
-          </Button>
-        )}
-        {kb.isPresent && view.kind !== 'search' && (
-          <Button key="search" hotkey="s" plain dimColor onPress={toSearch}>
-            <Text>search</Text>
-          </Button>
-        )}
+        <Text>{INDENT}</Text>
+        {[
+          isFolding && (
+            <Button key="fold-all" hotkey="b" plain dimColor onPress={foldAll}>
+              <Text>{`fold all (${where.expanded.length} open)`}</Text>
+            </Button>
+          ),
+          where.stack.length > 1 && (
+            <Button key="back" hotkey={isFolding ? undefined : 'b'} plain dimColor onPress={() => void back($)}>
+              <Text>back</Text>
+            </Button>
+          ),
+          where.stack.length > 1 && (
+            <Button key="home" hotkey="h" plain dimColor onPress={() => void home($)}>
+              <Text>home</Text>
+            </Button>
+          ),
+          kb.isPresent && view.kind !== 'search' && (
+            <Button key="search" hotkey="s" plain dimColor onPress={toSearch}>
+              <Text>search</Text>
+            </Button>
+          ),
+        ]
+          .filter(Boolean)
+          .flatMap((one, index) => (index === 0 ? [one] : [<Text key={`keys-gap-${index}`}>{'   '}</Text>, one]))}
       </Box>
     )
     // Markdown lines as text: a heading bold without its marks, a fenced block dim without its fences.
     const paragraph = (key: string, text: string, color?: string) => {
+      if (Markdown !== undefined) {
+        const source = text.replace(/<!--[\s\S]*?-->/g, '').trim()
+        return source === '' ? [] : [<Markdown key={key} text={source} dimColor={color === 'inactive'} />]
+      }
       let isCode = false
       const lines: { line: string; isCode: boolean }[] = []
       for (const line of text.split('\n')) {
@@ -1350,14 +1401,32 @@ export const register: Register = on => {
           )
         })
     }
-    const group = (key: string, title: string, count: string, rows: JSX.Element[], tone?: string, byDefault = true) => (
+    const washed = (key: string, tone: string | undefined, child: JSX.Element) => {
+      const wash = isDesktop && tone !== undefined ? WASH[tone] : undefined
+      return wash === undefined ? child : <Box key={`${key}-wash`} flexDirection="column" backgroundColor={wash} {...BLEED}>{child}</Box>
+    }
+    const group = (key: string, title: string, count: string, rows: JSX.Element[], tone?: string, byDefault = true) => isDesktop ? (
+      <Box key={`group-${key}`} flexDirection="column" marginTop="sm" gap="xs" backgroundColor={SURFACE} {...BLOCK}>
+        <Button key={`toggle-${key}`} plain onPress={toggle(key)}>
+          <Text size="footnote" dimColor>{isOpen(key, byDefault) ? '▾ ' : '▸ '}</Text>
+          <Text size="footnote" weight="semibold" color="inactive">{`${title}  `}</Text>
+          <Text size="footnote" color={tone} dimColor={tone === undefined} tabular>{count}</Text>
+        </Button>
+        {isOpen(key, byDefault) && rows.length > 0 && <Box flexDirection="column" gap="xs">{rows}</Box>}
+      </Box>
+    ) : (
       <Box key={`group-${key}`} flexDirection="column" marginTop={1}>
         <Box height={1}>
+          <Text>{INDENT}</Text>
           <Button key={`toggle-${key}`} plain dimColor onPress={toggle(key)}>
-            {isOpen(key, byDefault) ? '▾' : '▸'}
+            {isOpen(key, byDefault) ? '▾ ' : '▸ '}
           </Button>
-          <Text bold> {title}</Text>
-          <Text color={tone ?? 'inactive'}> {count}</Text>
+          <Text wrap="truncate-end">
+            <Text bold>{title}</Text>
+            <Text>{'  '}</Text>
+            <Text color={tone ?? 'inactive'}>{count}</Text>
+            <Text dimColor>{` ${rule(columns - ROW - title.length - count.length - 3)}`}</Text>
+          </Text>
         </Box>
         {isOpen(key, byDefault) && rows}
       </Box>
@@ -1365,8 +1434,26 @@ export const register: Register = on => {
     const mark = (object: KObject) =>
       object.level === null ? [] : [<Text key="observed" color="warning">{` ◐ ${object.level}`}</Text>]
     // One object as a row: its id and title, pressed to open it; an id outside the base is shown, not pressable.
-    const idRow = (key: string, id: string, indent = 2) => {
+    const idRow = (key: string, id: string, indent = ROW) => {
       const object = byId.get(id)
+      if (isDesktop) {
+        const nested = indent > ROW ? 'md' : 0
+        if (object === undefined)
+          return (
+            <Box key={key} paddingLeft={nested}>
+              <Text size="footnote" dimColor wrap="truncate-end"><Text mono>{id}</Text> not in the base</Text>
+            </Box>
+          )
+        return (
+          <Box key={key} paddingLeft={nested}>
+            <Button key={`open-${key}`} plain onPress={go({ kind: 'object', id })}>
+              <Text size="footnote" mono dimColor>{`${object.id}  `}</Text>
+              <Text>{object.title}</Text>
+              {object.level === null ? [] : [<Text key="observed" size="footnote" color="warning">{`  ◐ observed ${object.level}`}</Text>]}
+            </Button>
+          </Box>
+        )
+      }
       if (object === undefined)
         return (
           <Box key={key} height={1}>
@@ -1386,18 +1473,55 @@ export const register: Register = on => {
     }
     const historyRow = (key: string, row: HistoryRow, id?: string, isContextShown = id === undefined) => {
       const shown = id === undefined ? row.delta : row.delta.filter(token => deltaId(token) === id)
+      if (isDesktop)
+        return (
+          <Box key={key} flexDirection="row" gap="sm">
+            <Text size="footnote" tabular dimColor>{row.date}</Text>
+            <Box flexGrow={1} flexShrink={1}>
+              <Text size="footnote" wrap="wrap">
+                {row.feature}
+                {isContextShown && <Text dimColor>{` · ${row.context}`}</Text>}
+                <Text mono dimColor>{`  ${shown.join(' ') || '—'}`}</Text>
+              </Text>
+            </Box>
+          </Box>
+        )
       return (
-        <Text key={key} color="inactive" wrap="truncate-end">
-          {`  ${fit(`${row.date} · ${row.feature}${isContextShown ? ` · ${row.context}` : ''} · ${shown.join(' ') || '—'}`, columns - 2)}`}
+        <Text key={key} wrap="truncate-end">
+          <Text>{' '.repeat(ROW)}</Text>
+          <Text color="inactive">{`${row.date}  `}</Text>
+          <Text>{row.feature}</Text>
+          {isContextShown && <Text color="inactive">{` · ${row.context}`}</Text>}
+          <Text color="inactive">{`  ${shown.join(' ') || '—'}`}</Text>
         </Text>
       )
     }
 
-    const blank = (text: string, tone = 'inactive') => (
-      <Text key="blank" color={tone} wrap="wrap">
-        {'  ⎿  '}
-        {text}
-      </Text>
+    const blank = (text: string, tone = 'inactive') => isDesktop ? (
+      <Box key="blank" marginTop="md">
+        <Text color={tone === 'inactive' ? undefined : tone} dimColor={tone === 'inactive'} wrap="wrap">{text}</Text>
+      </Box>
+    ) : (
+      <Box key="blank" marginTop={1}>
+        <Text color={tone} wrap="wrap">
+          {INDENT}
+          {text}
+        </Text>
+      </Box>
+    )
+
+    // On the terminal an alert's tone goes to its glyph, the box around the alerts says they wait on the user.
+    const alertLine = (key: string, press: string, glyph: string, tone: string, name: string, text: string, trail: string, onPress: () => void, gap = '  ') => (
+      <Box key={key} height={1}>
+        <Button key={press} plain onPress={onPress}>
+          <Text wrap="truncate-end">
+            <Text color={tone}>{`${glyph} `}</Text>
+            {name !== '' && <Text bold>{name}</Text>}
+            <Text>{name === '' ? text : ` ${text}`}</Text>
+            <Text color="inactive">{`${gap}${trail}`}</Text>
+          </Text>
+        </Button>
+      </Box>
     )
 
     // --- home ---------------------------------------------------------------------------
@@ -1405,6 +1529,7 @@ export const register: Register = on => {
       const followed = spec.isArmed
         ? [
             <Box key="alert-spec" height={1}>
+              {!isDesktop && <Text>{INDENT}</Text>}
               <Button key="open-spec" plain onPress={go({ kind: 'spec' })}>
                 <Text color="claude" bold>{`✎ ${spec.doc?.title || spec.topic || SPEC_TITLE}`}</Text>
                 <Text color="inactive">{spec.doc === null ? '  /business-spec, SPEC not written yet' : '  /business-spec'}</Text>
@@ -1417,14 +1542,17 @@ export const register: Register = on => {
           blank(`No knowledge base under ${kb.root} — /cctoolkit:knowledge-sync builds it. /knowledge-pane demo shows the kit example.`),
           ...(followed.length > 0 ? [<Box key="alerts" flexDirection="column" marginTop={1}>{followed}</Box>] : []),
         ]
-      const alerts: JSX.Element[] = [...followed]
+      const alerts: JSX.Element[] = isDesktop ? [...followed] : []
       if (kb.index === 'missing')
         alerts.push(
-          <Text key="alert-index" color="error" wrap="wrap">{`✗ No index yet (${kb.root}/${INDEX_JSONL}) — run ${INDEX_COMMAND}`}</Text>,
+          isDesktop
+            ? <Text key="alert-index" color="error" wrap="wrap">{`✗ No index yet (${kb.root}/${INDEX_JSONL}) — run ${INDEX_COMMAND}`}</Text>
+            : <Text key="alert-index" wrap="wrap"><Text color="error">✗ </Text>{`No index yet (${kb.root}/${INDEX_JSONL})`}<Text color="inactive">{` — run ${INDEX_COMMAND}`}</Text></Text>,
         )
       if (kb.index === 'stale') {
         const slot = 'stale'
         alerts.push(
+          !isDesktop ? alertLine('alert-index', 'open-stale', '▲', 'warning', '', `Index behind ${counted(kb.staleFiles.length, 'file')}`, `run ${INDEX_COMMAND}`, unfold(slot), ' — ') :
           <Box key="alert-index" height={1}>
             <Button key="open-stale" plain onPress={unfold(slot)}>
               <Text color="warning">{`▲ Index behind ${counted(kb.staleFiles.length, 'file')} — run ${INDEX_COMMAND}`}</Text>
@@ -1432,7 +1560,7 @@ export const register: Register = on => {
           </Box>,
           ...(where.expanded.includes(slot)
             ? kb.staleFiles.map((rel, index) => (
-                <Text key={`stale-${index}`} color="inactive" wrap="truncate-start">{`    ${rel}`}</Text>
+                isDesktop ? <Text key={`stale-${index}`} color="inactive" wrap="truncate-start">{`    ${rel}`}</Text> : tail(`stale-${index}`, 2, rel)
               ))
             : []),
         )
@@ -1440,6 +1568,7 @@ export const register: Register = on => {
       for (const merge of kb.merges) {
         const changes = ['new', 'modified', 'retired'].map(change => merge.objects.filter(one => one.change === change).length)
         alerts.push(
+          !isDesktop ? alertLine(`alert-merge-${merge.code}`, `open-merge-${merge.code}`, '◆', 'warning', `${merge.code}${merge.isPartial ? ' partial' : ''}`, `— merge ${merge.isStaged ? 'staged' : 'prepared'}, not written`, `+${changes[0]} ~${changes[1]} −${changes[2]}`, go({ kind: 'merge', code: merge.code })) :
           <Box key={`alert-merge-${merge.code}`} height={1}>
             <Button key={`open-merge-${merge.code}`} plain onPress={go({ kind: 'merge', code: merge.code })}>
               <Text color="warning" bold>{`◆ ${merge.code}${merge.isPartial ? ' partial' : ''} — merge ${merge.isStaged ? 'staged' : 'prepared'}, not written`}</Text>
@@ -1451,6 +1580,7 @@ export const register: Register = on => {
       for (const sync of kb.syncs) {
         const slot = `sync:${sync.context}`
         alerts.push(
+          !isDesktop ? alertLine(`alert-sync-${sync.context}`, `open-sync-${sync.context}`, '◆', 'warning', sync.context, '— sync staged, not written', counted(sync.files.length, 'file'), unfold(slot)) :
           <Box key={`alert-sync-${sync.context}`} height={1}>
             <Button key={`open-sync-${sync.context}`} plain onPress={unfold(slot)}>
               <Text color="warning" bold>{`◆ ${sync.context} — sync staged, not written`}</Text>
@@ -1459,26 +1589,35 @@ export const register: Register = on => {
           </Box>,
           ...(where.expanded.includes(slot)
             ? [
-                ...sync.files.map((rel, index) => <Text key={`sync-${sync.context}-${index}`} color="inactive" wrap="truncate-start">{`    ${rel}`}</Text>),
-                <Text key={`sync-${sync.context}-next`} color="inactive" wrap="wrap">{'    → /cctoolkit:knowledge-sync to review and write it'}</Text>,
+                ...sync.files.map((rel, index) => (isDesktop ? <Text key={`sync-${sync.context}-${index}`} color="inactive" wrap="truncate-start">{`    ${rel}`}</Text> : tail(`sync-${sync.context}-${index}`, 2, rel))),
+                <Text key={`sync-${sync.context}-next`} color="inactive" wrap="wrap">{isDesktop ? '    → /cctoolkit:knowledge-sync to review and write it' : '  → /cctoolkit:knowledge-sync to review and write it'}</Text>,
               ]
             : []),
         )
       }
-      const contextRows = kb.contexts.flatMap(context => [
+      const contextRows = isDesktop ? kb.contexts.map(context => (
+        <Box key={`row-context-${context.name}`} flexDirection="column">
+          <Button key={`open-context-${context.name}`} plain onPress={go({ kind: 'context', name: context.name })}>
+            <Text weight="semibold">{context.name}</Text>
+            <Text size="footnote" mono dimColor>{context.prefix === '' ? '' : `  ${context.prefix}`}</Text>
+            <Text size="footnote" tabular dimColor>{`  ${context.usecases} CU · ${context.rules} RM · ${context.decisions} D`}</Text>
+          </Button>
+          {context.summary !== '' && <Text size="footnote" dimColor wrap="wrap">{plain(context.summary)}</Text>}
+        </Box>
+      )) : kb.contexts.flatMap(context => [
         <Box key={`row-context-${context.name}`} height={1}>
-          <Text>{'  '}</Text>
+          <Text>{' '.repeat(ROW)}</Text>
           <Button key={`open-context-${context.name}`} plain onPress={go({ kind: 'context', name: context.name })}>
             <Text bold>{context.name}</Text>
-            <Text color="inactive">{`${context.prefix === '' ? '' : ` ${context.prefix}`} · ${context.usecases} CU · ${context.rules} RM · ${context.decisions} D`}</Text>
+            <Text color="inactive">{`${context.prefix === '' ? '' : `  ${context.prefix}`} · ${context.usecases} CU · ${context.rules} RM · ${context.decisions} D`}</Text>
           </Button>
         </Box>,
         ...(context.summary === ''
           ? []
           : [
-              <Box key={`summary-${context.name}`} marginLeft={4}>
-                <Text color="inactive" wrap="wrap">
-                  {plain(context.summary)}
+              <Box key={`summary-${context.name}`} marginLeft={ROW + 2} height={1}>
+                <Text color="inactive" wrap="truncate-end">
+                  {fit(plain(context.summary), columns - ROW - 2)}
                 </Text>
               </Box>,
             ]),
@@ -1487,7 +1626,12 @@ export const register: Register = on => {
       const observed = LEVELS.map(level => ({ level, items: kb.objects.filter(one => one.level === level) }))
       const observedCount = observed.reduce((sum, one) => sum + one.items.length, 0)
       return [
-        ...(alerts.length > 0 ? [<Box key="alerts" flexDirection="column" marginTop={1}>{alerts}</Box>] : []),
+        ...(alerts.length > 0
+          ? [isDesktop
+              ? <Box key="alerts" flexDirection="column" gap="xs" marginTop="sm" backgroundColor={WARNING_WASH} {...BLOCK}>{alerts}</Box>
+              : <Box key="alerts" flexDirection="column" marginTop={1} marginLeft={INDENT.length} borderStyle="round" borderColor={kb.index === 'missing' ? 'error' : 'warning'} paddingX={1}>{alerts}</Box>]
+          : []),
+        ...(!isDesktop && followed.length > 0 ? [<Box key="followed" flexDirection="column" marginTop={1}>{followed}</Box>] : []),
         group('contexts', 'Contexts', `${kb.contexts.length}`, contextRows),
         group('adrs', 'ADRs', `${kb.adrCount ?? adrs.length}`, adrs.map(one => idRow(`adr-${one.id}`, one.id)), undefined, adrs.length <= 8),
         group(
@@ -1498,10 +1642,16 @@ export const register: Register = on => {
           observedCount > 0 ? 'warning' : 'success',
           false,
         ),
-        <Box key="recent" flexDirection="column" marginTop={1}>
-          <Text bold>Recent</Text>
-          {kb.history.length === 0 ? <Text color="inactive">  none</Text> : kb.history.slice(0, HISTORY_SHOWN).map((row, index) => historyRow(`recent-${index}`, row))}
-        </Box>,
+        isDesktop ? (
+          <Box key="recent" flexDirection="column" marginTop="sm" gap="xs" backgroundColor={SURFACE} {...BLOCK}>
+            <Text size="footnote" weight="semibold" color="inactive">Recent</Text>
+            <Box flexDirection="column" gap="xs">
+              {kb.history.length === 0 ? <Text size="footnote" dimColor>none</Text> : kb.history.slice(0, HISTORY_SHOWN).map((row, index) => historyRow(`recent-${index}`, row))}
+            </Box>
+          </Box>
+        ) : (
+          group('recent', 'Recent', kb.history.length === 0 ? 'none' : `${Math.min(HISTORY_SHOWN, kb.history.length)}`, kb.history.slice(0, HISTORY_SHOWN).map((row, index) => historyRow(`recent-${index}`, row)))
+        ),
       ]
     }
 
@@ -1511,22 +1661,31 @@ export const register: Register = on => {
       const overview = parseOverview(kb.overviews[name] ?? '')
       const gauge = Svg === undefined ? '' : matrixSvg(kb.objects, name)
       const overviewRows = [
-        ...(overview.role === '' ? [] : [<Box key="role" marginLeft={2} flexDirection="column">{paragraph('role', overview.role)}</Box>]),
+        ...(overview.role === '' ? [] : [<Box key="role" marginLeft={isDesktop ? 0 : ROW} flexDirection="column">{paragraph('role', overview.role)}</Box>]),
         ...overview.parts.flatMap(part => {
           const slot = `overview:${part.title}`
           const isUnfolded = where.expanded.includes(slot)
+          if (isDesktop)
+            return [
+              <Button key={`open-${slot}`} plain onPress={unfold(slot)}>
+                <Text dimColor>{isUnfolded ? '▾ ' : '▸ '}</Text>
+                <Text>{part.title}</Text>
+              </Button>,
+              ...(isUnfolded ? [<Box key={`body-${slot}`} flexDirection="column" paddingLeft="md" marginBottom="sm">{paragraph(slot, part.body)}</Box>] : []),
+            ]
           return [
             <Box key={`row-${slot}`} height={1}>
-              <Text color="inactive">{isUnfolded ? '  ▾ ' : '  ▸ '}</Text>
+              <Text>{' '.repeat(ROW)}</Text>
+              <Text color="inactive">{isUnfolded ? '▾ ' : '▸ '}</Text>
               <Button key={`open-${slot}`} plain onPress={unfold(slot)}>
                 <Text>{part.title}</Text>
               </Button>
             </Box>,
-            ...(isUnfolded ? [<Box key={`body-${slot}`} flexDirection="column" marginLeft={4} marginBottom={1}>{paragraph(slot, part.body)}</Box>] : []),
+            ...(isUnfolded ? [<Box key={`body-${slot}`} flexDirection="column" marginLeft={ROW + 2} marginBottom={1}>{paragraph(slot, part.body)}</Box>] : []),
           ]
         }),
       ]
-      const caseRows = parts.usecases.flatMap(({ cu, rules }) => [idRow(`cu-${cu.id}`, cu.id), ...rules.map(rule => idRow(`own-${rule.id}`, rule.id, 6))])
+      const caseRows = parts.usecases.flatMap(({ cu, rules }) => [idRow(`cu-${cu.id}`, cu.id), ...rules.map(rule => idRow(`own-${rule.id}`, rule.id, ROW + 2))])
       const rows = kb.history.filter(row => row.context === name)
       return [
         ...(Svg !== undefined && gauge !== ''
@@ -1564,13 +1723,30 @@ export const register: Register = on => {
       const ids = (list: string[], key: string) => list.filter(one => one !== id).map(one => idRow(`${key}-${one}`, one))
       const appliesTo = object.kind === 'RM' ? object.usecases : []
       const ownRules = object.kind === 'CU' ? kb.objects.filter(one => isOwnRule(one, object)).sort((a, b) => a.id.localeCompare(b.id)) : []
+      const facts = isDesktop ? (
+        <Box key="facts" flexDirection="column" gap="xs" marginTop="sm">
+          <Box flexDirection="row" flexWrap="wrap" columnGap="sm" alignItems="center">
+            <Text size="footnote" weight="medium">{KIND_NAMES[object.kind]}</Text>
+            <Text size="footnote" dimColor>{object.context || object.contexts.join(', ')}</Text>
+            <Text size="footnote" weight="medium" color={object.level === null ? 'success' : 'warning'}>
+              {object.level === null ? '● specified' : `◐ observed ${object.level} — not validated yet`}
+            </Text>
+          </Box>
+          <Text size="footnote" mono dimColor wrap="truncate-start">{`${object.path}:${object.line}`}</Text>
+        </Box>
+      ) : null
       return [
-        <Box key="facts" flexDirection="column" marginTop={1}>
-          <Text color="inactive" wrap="truncate-end">{`  ${KIND_NAMES[object.kind]} · ${object.context || object.contexts.join(', ')}`}</Text>
-          <Text color={object.level === null ? 'success' : 'warning'}>{object.level === null ? '  specified' : `  ◐ observed ${object.level} — not validated yet`}</Text>
-          <Text color="inactive" wrap="truncate-start">{`  ${object.path}:${object.line}`}</Text>
+        facts ?? <Box key="facts" flexDirection="column" marginTop={1}>
+          <Text wrap="truncate-end">
+            {INDENT}
+            <Text color={object.level === null ? 'success' : 'warning'}>{object.level === null ? '✓ ' : '◐ '}</Text>
+            {object.level === null ? <Text>specified</Text> : <Text color="warning">{`observed ${object.level}`}</Text>}
+            {object.level !== null && <Text color="inactive"> — not validated yet</Text>}
+            <Text color="inactive">{`  ${KIND_NAMES[object.kind]} · ${object.context || object.contexts.join(', ')}`}</Text>
+          </Text>
+          {tail('place', INDENT.length, `${object.path}:${object.line}`)}
         </Box>,
-        <Box key="text" flexDirection="column" marginTop={1} marginLeft={2}>
+        <Box key="text" flexDirection="column" {...(isDesktop ? { marginTop: 'sm' as const, backgroundColor: SURFACE, ...BLOCK } : { marginTop: 1, marginLeft: 2 })}>
           {paragraph('text', texts[id] ?? object.text)}
         </Box>,
         ...(ownRules.length > 0 ? [group('own-rules', 'Rules', `${ownRules.length}`, ownRules.map(rule => idRow(`rule-${rule.id}`, rule.id)))] : []),
@@ -1582,7 +1758,7 @@ export const register: Register = on => {
                 'Handlers',
                 `${object.handlers.length}`,
                 object.handlers.map(handler => (
-                  <Text key={`handler-${handler}`} wrap="truncate-end">{`  ${handler}`}</Text>
+                  <Text key={`handler-${handler}`} wrap="truncate-end">{`${isDesktop ? '  ' : ' '.repeat(ROW)}${handler}`}</Text>
                 )),
               ),
             ]
@@ -1600,12 +1776,22 @@ export const register: Register = on => {
       if (merge === undefined) return [blank(`${code}: no merge staged any more`)]
       const contexts = [...new Set(merge.objects.map(one => one.context))].sort()
       return [
-        <Box key="merge-state" flexDirection="column" marginTop={1}>
-          <Text color="warning" wrap="wrap">
-            {merge.isStaged ? '  Staged: the whole files are ready, nothing is written to the base yet.' : '  Prepared: drafts in progress, not staged yet.'}
-          </Text>
-          <Text color="inactive" wrap="wrap">{'  → /cctoolkit:knowledge-merge to review and write it'}</Text>
-        </Box>,
+        isDesktop ? (
+          <Box key="merge-state" flexDirection="column" marginTop={1}>
+            <Text color="warning" wrap="wrap">
+              {merge.isStaged ? '  Staged: the whole files are ready, nothing is written to the base yet.' : '  Prepared: drafts in progress, not staged yet.'}
+            </Text>
+            <Text color="inactive" wrap="wrap">{'  → /cctoolkit:knowledge-merge to review and write it'}</Text>
+          </Box>
+        ) : (
+          <Box key="merge-state" flexDirection="column" marginTop={1} marginLeft={INDENT.length} borderStyle="round" borderColor="warning" paddingX={1}>
+            <Text wrap="wrap">
+              <Text color="warning">◆ </Text>
+              {merge.isStaged ? 'Staged: the whole files are ready, nothing is written to the base yet.' : 'Prepared: drafts in progress, not staged yet.'}
+            </Text>
+            <Text color="inactive" wrap="wrap">{'→ /cctoolkit:knowledge-merge to review and write it'}</Text>
+          </Box>
+        ),
         ...contexts.map(context =>
           group(
             `merge-${context}`,
@@ -1615,10 +1801,10 @@ export const register: Register = on => {
               .filter(one => one.context === context)
               .map(one => (
                 <Box key={`change-${one.id}`} height={1}>
-                  <Text color={one.change === 'new' ? 'success' : one.change === 'retired' ? 'error' : 'warning'}>{`  ${markOf(one.change)} `}</Text>
+                  <Text color={one.change === 'new' ? 'success' : one.change === 'retired' ? 'error' : 'warning'}>{`${isDesktop ? '  ' : ' '.repeat(ROW)}${markOf(one.change)} `}</Text>
                   <Button key={`open-change-${one.id}`} plain onPress={go({ kind: 'change', code, id: one.id })}>
                     <Text color="inactive">{one.id} </Text>
-                    <Text wrap="truncate-end">{fit(one.title, columns - one.id.length - 6 - (merge.after[one.id] === undefined && one.change !== 'retired' ? 11 : 0))}</Text>
+                    <Text wrap="truncate-end">{fit(one.title, columns - one.id.length - (isDesktop ? 6 : ROW + 4) - (merge.after[one.id] === undefined && one.change !== 'retired' ? 11 : 0))}</Text>
                     {merge.after[one.id] === undefined && one.change !== 'retired' ? <Text color="inactive"> · no draft</Text> : <Text> </Text>}
                   </Button>
                 </Box>
@@ -1635,21 +1821,30 @@ export const register: Register = on => {
       const after = merge.after[id]
       return [
         <Box key="change-kind" marginTop={1}>
-          <Text color={change.change === 'new' ? 'success' : change.change === 'retired' ? 'error' : 'warning'}>{`  ${markOf(change.change)} ${change.change} · ${change.context}`}</Text>
+          {isDesktop
+            ? <Text color={change.change === 'new' ? 'success' : change.change === 'retired' ? 'error' : 'warning'}>{`  ${markOf(change.change)} ${change.change} · ${change.context}`}</Text>
+            : (
+              <Text>
+                {INDENT}
+                <Text color={change.change === 'new' ? 'success' : change.change === 'retired' ? 'error' : 'warning'}>{`${markOf(change.change)} `}</Text>
+                {change.change}
+                <Text color="inactive">{` · ${change.context}`}</Text>
+              </Text>
+            )}
         </Box>,
-        <Box key="before" flexDirection="column" marginTop={1}>
+        <Box key="before" flexDirection="column" marginTop={1} {...(isDesktop ? {} : { marginLeft: INDENT.length })}>
           <Text bold>Base now</Text>
           <Box flexDirection="column" marginLeft={2}>
             {before === null ? <Text color="inactive">not in the base</Text> : paragraph('before', before, 'inactive')}
           </Box>
         </Box>,
-        <Box key="after" flexDirection="column" marginTop={1}>
+        <Box key="after" flexDirection="column" marginTop={1} {...(isDesktop ? {} : { marginLeft: INDENT.length })}>
           <Text bold>{merge.isStaged ? 'Staged' : 'Draft'}</Text>
           <Box flexDirection="column" marginLeft={2}>
             {change.change === 'retired' ? <Text color="error">retired: cut from the base</Text> : after === undefined ? <Text color="inactive">no draft yet</Text> : paragraph('after', after)}
           </Box>
         </Box>,
-        ...(byId.has(id) ? [<Box key="open-object-row" marginTop={1} height={1}>{idRow('change-object', id, 0)}</Box>] : []),
+        ...(byId.has(id) ? [<Box key="open-object-row" marginTop={1} height={1}>{idRow('change-object', id, isDesktop ? 0 : INDENT.length)}</Box>] : []),
       ]
     }
 
@@ -1658,6 +1853,7 @@ export const register: Register = on => {
       const found = search(kb.objects, where.query)
       return [
         <Box key="query-row" marginTop={1}>
+          {!isDesktop && Input !== undefined && <Text>{INDENT}</Text>}
           {Input === undefined ? (
             <Text color="inactive">{`  query: ${where.query || '—'} (/knowledge-pane <words> sets it)`}</Text>
           ) : (
@@ -1683,7 +1879,7 @@ export const register: Register = on => {
             <Text color="inactive">  nothing found</Text>
           ) : (
             [
-              ...found.slice(0, RESULTS_SHOWN).map(one => idRow(`found-${one.id}`, one.id)),
+              ...found.slice(0, RESULTS_SHOWN).map(one => idRow(`found-${one.id}`, one.id, isDesktop ? ROW : INDENT.length)),
               <Text key="found-count" color="inactive">{`  ${found.length > RESULTS_SHOWN ? `${RESULTS_SHOWN} of ` : ''}${counted(found.length, 'object')}`}</Text>,
             ]
           )}
@@ -1753,14 +1949,19 @@ export const register: Register = on => {
         return body === null
           ? []
           : [
-              <Box key={`detail-${kind}-${id}`} flexDirection="column" marginLeft={4} marginBottom={1}>
+              <Box key={`detail-${kind}-${id}`} flexDirection="column" {...(isDesktop ? { paddingLeft: 'md' as const, marginBottom: 'sm' as const, gap: 'xs' as const } : { marginLeft: ROW + 2, marginBottom: 1 })}>
                 {body}
               </Box>,
             ]
       }
-      const entry = (kind: SpecKind, id: string, children: JSX.Element[]) => [
+      const entry = (kind: SpecKind, id: string, children: JSX.Element[], tone?: string) => isDesktop ? [
+        washed(`${kind}-${id}`, tone, <Button key={`open-${kind}-${id}`} plain onPress={unfold(slot(kind, id))}>
+          {children}
+        </Button>),
+        ...unfolded(kind, id),
+      ] : [
         <Box key={`row-${kind}-${id}`} height={1}>
-          <Text color="inactive">{isUnfolded(kind, id) ? '▾ ' : '  '}</Text>
+          <Text color="inactive">{`${INDENT}${isUnfolded(kind, id) ? '▾ ' : '  '}`}</Text>
           <Button key={`open-${kind}-${id}`} plain onPress={unfold(slot(kind, id))}>
             {children}
           </Button>
@@ -1775,17 +1976,24 @@ export const register: Register = on => {
             {decision.isPending ? '? ' : isUnanswered(decision) ? '– ' : isOffRecommendation(decision) ? '≠ ' : '✓ '}
           </Text>,
           <Text key="text" wrap="truncate-end">
-            {fit(`${decision.header !== '' ? `${decision.header} · ` : ''}${decision.isPending ? decision.question : (decision.answer ?? 'no answer')}`, columns - 4)}
+            {fit(`${decision.header !== '' ? `${decision.header} · ` : ''}${decision.isPending ? decision.question : (decision.answer ?? 'no answer')}`, columns - (isDesktop ? 4 : ROW + 2))}
           </Text>,
-        ]),
+        ], decision.isPending ? 'claude' : undefined),
       )
       const openQuestions = doc?.openQuestions ?? []
       const blocking = blockingCount(openQuestions)
       const questionRows = openQuestions.flatMap(question => [
-        <Box key={`row-openQuestion-${question.id}`}>
-          <Text color="inactive">{isUnfolded('openQuestion', question.id) ? '▾ ' : '  '}</Text>
+        washed(`openQuestion-${question.id}`, severityTone(question.severity) === 'error' ? 'error' : undefined, <Box key={`row-openQuestion-${question.id}`}>
+          {(!isDesktop || isUnfolded('openQuestion', question.id)) && <Text color="inactive">{`${isDesktop ? '' : INDENT}${isUnfolded('openQuestion', question.id) ? '▾ ' : '  '}`}</Text>}
           <Button key={`open-openQuestion-${question.id}`} plain onPress={unfold(slot('openQuestion', question.id))}>
-            <Text color={severityTone(question.severity)}>● {question.id}</Text>
+            {isDesktop ? (
+              <Text color={severityTone(question.severity)}>● {question.id}</Text>
+            ) : (
+              <Text>
+                <Text color={severityTone(question.severity)}>● </Text>
+                <Text color="inactive">{question.id}</Text>
+              </Text>
+            )}
           </Button>
           <Text> </Text>
           <Box flexShrink={1} flexGrow={1}>
@@ -1793,7 +2001,7 @@ export const register: Register = on => {
               {plain(question.question)}
             </Text>
           </Box>
-        </Box>,
+        </Box>),
         ...unfolded('openQuestion', question.id),
       ])
       const itemRows = (kind: SpecKind, items: SpecItem[]) =>
@@ -1803,7 +2011,7 @@ export const register: Register = on => {
               {item.id}{' '}
             </Text>,
             <Text key="name" wrap="truncate-end">
-              {fit(item.name, columns - 3 - item.id.length)}
+              {fit(item.name, columns - (isDesktop ? 3 : ROW + 1) - item.id.length)}
             </Text>,
           ]),
         )
@@ -1814,7 +2022,7 @@ export const register: Register = on => {
         const count = counts[sectionKey(section, index)] ?? 0
         return entry('section', sectionKey(section, index), [
           <Text key="text" wrap="truncate-end">
-            {fit(sectionLabel(section), columns - 2 - (count > 0 ? String(count).length + 2 : 0))}
+            {fit(sectionLabel(section), columns - (isDesktop ? 2 : ROW) - (count > 0 ? String(count).length + 2 : 0))}
           </Text>,
           ...(count > 0 ? [<Text key="count" color={section === questionsAt ? countTone : 'inactive'}>{`  ${count}`}</Text>] : []),
         ])
@@ -1831,7 +2039,7 @@ export const register: Register = on => {
           : []),
         ...(doc !== null && doc.summary !== ''
           ? [
-              <Box key="summary" marginTop={1}>
+              <Box key="summary" marginTop={1} {...(isDesktop ? {} : { marginLeft: INDENT.length })}>
                 <Text color="inactive" wrap="wrap">
                   {plain(doc.summary)}
                 </Text>
@@ -1887,7 +2095,7 @@ export const register: Register = on => {
                   : homeView()
 
     return (
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column" marginTop={1} {...(isDesktop ? { paddingX: 'sm' as const, gap: 'xs' as const } : {})}>
         {header(title, trail)}
         {location}
         {(kb.isPresent || where.stack.length > 1) && keys}

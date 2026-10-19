@@ -12,11 +12,15 @@ const STREAK_SHOWN = 3
 const SPARK_TURNS = 12
 const TOP_TURNS = 5
 const TOP_SHOWN = 2
-const TOGGLE_GAP = 4
+const TOGGLE_GAP = 3
 const LIST_ROWS = 10
-const METER_CELLS = 10
-const GROUP = ' │ '
+const METER_CELLS = 8
+// The terminal sets its groups apart by space, not by a rule: a `│` between every figure read as noise.
+const GROUP = '   '
 const LABEL_CELLS = 18
+const TERMINAL_LABEL = 15
+const TOP_LABEL = 36
+const TOP_FIGURE = 6
 const FIVE_HOUR = 'five_hour'
 const HINT_INDENT = 4
 const CHARS_PER_TOKEN = 4
@@ -51,10 +55,10 @@ export const kilo = (tokens: number): string => {
   return `${tokens}`
 }
 
-export const tokenColor = (tokens: number): string | undefined => {
-  if (tokens >= CEILING_TOKENS) return 'red'
-  if (tokens >= STEP_TOKENS) return 'magenta'
-  if (tokens >= STEP_TOKENS - 50_000) return 'yellow'
+// Colour tells a state, never a name: nothing below 100k, amber from there, red past the 250k ceiling.
+export const tokenColor = (tokens: number): 'warning' | 'error' | undefined => {
+  if (tokens >= CEILING_TOKENS) return 'error'
+  if (tokens >= STEP_TOKENS - 50_000) return 'warning'
   return undefined
 }
 
@@ -187,10 +191,21 @@ export const meter = (percent: number): string => {
   return '█'.repeat(filled) + '░'.repeat(METER_CELLS - filled)
 }
 
-export const meterColor = (percent: number): string => {
-  if (percent >= 85) return 'red'
-  if (percent >= 60) return 'yellow'
-  return 'green'
+// A meter's state: green at rest, amber from 60 %, red from 85 %.
+export const meterColor = (percent: number): 'success' | 'warning' | 'error' => {
+  if (percent >= 85) return 'error'
+  if (percent >= 60) return 'warning'
+  return 'success'
+}
+
+// The cache's named colours, read as the theme's status keys on the terminal.
+const THEMED: Record<string, string> = { red: 'error', yellow: 'warning' }
+
+// A contributor's row: its label cut to a column, its tokens right-aligned beside it, the rows of a list aligned.
+export const topLine = (label: string, tokens: number, width: number): { label: string; tokens: string } => {
+  const room = Math.max(4, width)
+  const cut = label.length > room ? `${label.slice(0, room - 1)}…` : label
+  return { label: cut.padEnd(room), tokens: kilo(tokens).padStart(TOP_FIGURE) }
 }
 
 export const span = (ms: number): string => {
@@ -323,10 +338,157 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const state = complete(await read($, band))
     if (state.readings.length === 0 || e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
-    return contextView($, e, state, e.props.isWorking, e.props.bodyColumns, null)
+    return desktopView($, e, state, e.props.isWorking)
   })
 }
 
+// The desktop draws in a proportional face: block-glyph meters and `│` rules read as noise there.
+// It gets drawn bars, the theme's status colours, a type scale and spacing instead of separators.
+const BAR = { width: 64, height: 6 } as const
+// A translucent grey: the details' surface reads on a light or a dark theme alike, no frame needed.
+const SURFACE = '#80808014'
+// A figure that asks for attention (the /clear step reached, the 5-hour limit or the cache running out) sits on a
+// faint wash of its tone; every figure keeps the same padding, washed or not, so the band stays aligned.
+const WASH: Record<string, string> = { warning: '#d99a1e24', error: '#d6454524' }
+const BAR_INK = { ok: '#3fa66b', warning: '#d99a1e', high: '#d4652c', critical: '#d64545' } as const
+
+const tone = (percent: number): keyof typeof BAR_INK => {
+  if (percent >= 85) return 'critical'
+  if (percent >= 60) return 'warning'
+  return 'ok'
+}
+
+const tokenTone = (tokens: number): keyof typeof BAR_INK | null => {
+  if (tokens >= CEILING_TOKENS) return 'critical'
+  if (tokens >= STEP_TOKENS) return 'high'
+  if (tokens >= STEP_TOKENS - 50_000) return 'warning'
+  return null
+}
+
+const THEME_OF: Record<keyof typeof BAR_INK, string> = { ok: 'success', warning: 'warning', high: 'warning', critical: 'error' }
+
+export const barSource = (percent: number, ink: string): string => {
+  const { width, height } = BAR
+  const filled = Math.round((Math.min(100, Math.max(0, percent)) * width) / 100)
+  const radius = height / 2
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`
+    + `<rect width="${width}" height="${height}" rx="${radius}" fill="${ink}" fill-opacity="0.18"/>`
+    + (filled > 0 ? `<rect width="${Math.max(filled, height)}" height="${height}" rx="${radius}" fill="${ink}"/>` : '')
+    + '</svg>'
+}
+
+async function desktopView(
+  $: EngineInterface,
+  e: Parameters<EngineInterface['ui']['resolve']>[0],
+  state: Band,
+  isWorking: boolean,
+): Promise<JSX.Element> {
+  const elements = $.ui.resolve(e)
+  const { Box, Button, Text } = elements
+  const Svg = 'Svg' in elements ? elements.Svg : undefined
+  const at = await read($, now)
+  const tokens = state.readings[state.readings.length - 1] ?? 0
+  const percent = state.window > 0 ? Math.round((tokens * 100) / state.window) : null
+  const stepTone = tokenTone(tokens)
+  const cache = isWorking ? null : cacheState(state.lastTurnAt, at, tokens)
+  const rebuilding = await read($, isRebuilding)
+  const grouping = state.streak >= STREAK_SHOWN
+  const limit = state.fiveHour
+  const resetIn = limit?.resetsAt == null || limit.resetsAt <= at ? null : span(limit.resetsAt - at)
+  const turns = Math.min(TOP_TURNS, state.turn)
+  const all = topContributions(state.contributions, state.turn - TOP_TURNS + 1, Number.MAX_SAFE_INTEGER)
+  const expanded = await read($, isExpanded)
+  const shown = all.slice(0, LIST_ROWS)
+  const cacheTone = cache?.color === 'red' ? 'error' : cache?.color === 'yellow' ? 'warning' : undefined
+
+  const bar = (key: string, value: number, ink: keyof typeof BAR_INK, alt: string) =>
+    Svg === undefined ? null : <Svg key={key} source={barSource(value, BAR_INK[ink])} alt={alt} width={BAR.width} height={BAR.height} />
+  const label = (text: string) => <Text size="footnote" dimColor>{text}</Text>
+  const metric = (key: string, children: (JSX.Element | null)[], theme?: string) => (
+    <Box key={key} flexDirection="row" alignItems="center" gap="xs" flexShrink={0} paddingX={1} {...(theme !== undefined && WASH[theme] !== undefined ? { backgroundColor: WASH[theme] } : {})}>
+      {children}
+    </Box>
+  )
+  const detail = (key: string, name: string, value: JSX.Element) => (
+    <Box key={key} flexDirection="row" gap="sm">
+      <Box width={LABEL_CELLS} flexShrink={0}>{label(name)}</Box>
+      <Box flexGrow={1} flexShrink={1}>{value}</Box>
+    </Box>
+  )
+
+  const metrics = [
+    metric('context', [
+      label('Context'),
+      ...(percent === null ? [] : [bar('context-bar', percent, stepTone ?? tone(percent), `context ${percent}% full`)]),
+      <Text key="tokens" size="footnote" tabular weight={stepTone === null ? 'medium' : 'semibold'} color={stepTone === null ? undefined : THEME_OF[stepTone]}>
+        {kilo(tokens)}
+      </Text>,
+      ...(state.window > 0 ? [<Text key="window" size="footnote" tabular dimColor>/ {kilo(state.window)}</Text>] : []),
+    ], stepTone === null ? undefined : THEME_OF[stepTone]),
+    ...(limit === null ? [] : [metric('limit', [
+      label('5h limit'),
+      bar('limit-bar', limit.percent, tone(limit.percent), `5-hour limit ${Math.round(limit.percent)}% used`),
+      <Text key="limit-percent" size="footnote" tabular color={tone(limit.percent) === 'ok' ? undefined : THEME_OF[tone(limit.percent)]}>
+        {`${Math.round(limit.percent)}%`}
+      </Text>,
+      ...(resetIn === null ? [] : [<Text key="reset" size="footnote" tabular dimColor>{`resets ${resetIn}`}</Text>]),
+    ], tone(limit.percent) === 'ok' ? undefined : THEME_OF[tone(limit.percent)])]),
+    ...(cache === null ? [] : [metric('cache', [
+      <Text key="cache" size="footnote" tabular color={cacheTone} dimColor={cacheTone === undefined}>{cache.label}</Text>,
+    ], cacheTone)]),
+    ...(grouping ? [metric('streak', [<Text key="streak" size="footnote" color="warning">{`${state.streak} single-call turns`}</Text>], 'warning')] : []),
+    ...(rebuilding ? [metric('graph', [<Text key="graph" size="footnote" dimColor>graph rebuilding</Text>])] : []),
+    metric('session', [
+      <Text key="session" size="footnote" tabular dimColor>
+        {`${span(at - state.startedAt)} · ${state.turn} turn${state.turn > 1 ? 's' : ''}`}
+      </Text>,
+      ...(state.cost === null ? [] : [<Text key="cost" size="footnote" tabular weight="medium">{dollars(state.cost)}</Text>]),
+    ]),
+  ]
+
+  return (
+    <Box flexDirection="column" gap="xs" paddingX="xs">
+      <Box flexDirection="row" alignItems="center" gap="md">
+        <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap="md" rowGap="xs" flexGrow={1} flexShrink={1}>
+          {metrics}
+        </Box>
+        <Button
+          key="top-toggle"
+          label={expanded ? 'Hide details' : 'Details'}
+          plain
+          dimColor
+          onPress={() => update($, isExpanded, value => !value)}
+        />
+      </Box>
+      {expanded && (
+        <Box flexDirection="column" gap="xs" paddingX={2} paddingY="sm" backgroundColor={SURFACE}>
+          {detail('step', 'Next /clear', (
+            <Text size="footnote" color={stepTone === null ? undefined : THEME_OF[stepTone]}>{stepLabel(tokens)}</Text>
+          ))}
+          {cache?.detail !== undefined && detail('cache', 'Cache', <Text size="footnote" color={cacheTone}>{cache.detail}</Text>)}
+          {grouping && detail('batch', 'Batching', (
+            <Text size="footnote" color="warning">
+              {`${state.streak} turns with a single tool call: send independent calls together (each turn resends the whole context)`}
+            </Text>
+          ))}
+          {all.length > 0 && detail('top', `Top ${turns === 1 ? 'last turn' : `${turns} turns`}`, (
+            <Box flexDirection="column">
+              {shown.map((one, index) => (
+                <Box key={`top-${index}`} flexDirection="row" gap="sm">
+                  <Box flexGrow={1} flexShrink={1}><Text size="footnote" wrap="truncate-end">{one.label}</Text></Box>
+                  <Text size="footnote" tabular weight="medium">{kilo(one.tokens)}</Text>
+                </Box>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+// The terminal's band: one line of figures under the hint, each group a dim label and its value, set apart by
+// space. Colour is kept for a figure asking for attention (amber, red); a figure at rest reads in the text colour.
 async function contextView(
   $: EngineInterface,
   e: Parameters<EngineInterface['ui']['resolve']>[0],
@@ -335,108 +497,124 @@ async function contextView(
   columns: number | undefined,
   below: JSX.Element | null,
 ): Promise<JSX.Element> {
-    const { Box, Button, Text } = $.ui.resolve(e)
-    const at = await read($, now)
-    const tokens = state.readings[state.readings.length - 1] ?? 0
-    const percent = state.window > 0 ? Math.round((tokens * 100) / state.window) : null
-    const color = tokenColor(tokens)
-    const cache = isWorking ? null : cacheState(state.lastTurnAt, at, tokens)
-    const rebuilding = await read($, isRebuilding)
-    const grouping = state.streak >= STREAK_SHOWN
-    const limit = state.fiveHour
-    const resetIn = limit?.resetsAt == null || limit.resetsAt <= at ? null : span(limit.resetsAt - at)
-    const turns = Math.min(TOP_TURNS, state.turn)
-    const all = topContributions(state.contributions, state.turn - TOP_TURNS + 1, Number.MAX_SAFE_INTEGER)
-    const hidden = Math.max(0, all.length - TOP_SHOWN)
-    const expanded = await read($, isExpanded)
-    const shown = expanded ? all.slice(0, LIST_ROWS) : all.slice(0, TOP_SHOWN)
-    const showsTop = all.length > 0
-    const toggle = (
-      <Button
-        key="top-toggle"
-        label={expanded ? '[Collapse]' : hidden > 0 ? `[Show all (+${hidden})]` : '[Show all]'}
-        plain
-        dimColor
-        onPress={() => update($, isExpanded, value => !value)}
-      />
-    )
-    const header = `Top ${turns === 1 ? 'last turn' : `${turns} turns`}`
+  const { Box, Button, Text } = $.ui.resolve(e)
+  const at = await read($, now)
+  const tokens = state.readings[state.readings.length - 1] ?? 0
+  const percent = state.window > 0 ? Math.round((tokens * 100) / state.window) : null
+  const color = tokenColor(tokens)
+  const cache = isWorking ? null : cacheState(state.lastTurnAt, at, tokens)
+  const cacheColor = cache?.color === undefined ? undefined : THEMED[cache.color]
+  const rebuilding = await read($, isRebuilding)
+  const grouping = state.streak >= STREAK_SHOWN
+  const limit = state.fiveHour
+  const resetIn = limit?.resetsAt == null || limit.resetsAt <= at ? null : span(limit.resetsAt - at)
+  const turns = Math.min(TOP_TURNS, state.turn)
+  const all = topContributions(state.contributions, state.turn - TOP_TURNS + 1, Number.MAX_SAFE_INTEGER)
+  const hidden = Math.max(0, all.length - TOP_SHOWN)
+  const expanded = await read($, isExpanded)
+  const shown = expanded ? all.slice(0, LIST_ROWS) : all.slice(0, TOP_SHOWN)
+  const showsTop = all.length > 0
+  const toggle = (
+    <Button
+      key="top-toggle"
+      label={expanded ? '▾ details' : hidden > 0 ? `▸ details +${hidden}` : '▸ details'}
+      plain
+      dimColor
+      onPress={() => update($, isExpanded, value => !value)}
+    />
+  )
+  const header = `Top ${turns === 1 ? 'last turn' : `${turns} turns`}`
+  // A meter whole in the colour of its state; the figure beside it coloured only when it asks for attention.
+  const gauge = (key: string, value: number) => <Text key={key} color={meterColor(value)}>{meter(value)}</Text>
+  const alarm = (value: number) => (meterColor(value) === 'success' ? undefined : meterColor(value))
+  const labelOf = (text: string) => (
+    <Box width={TERMINAL_LABEL} flexShrink={0}>
+      <Text dimColor>{text}</Text>
+    </Box>
+  )
+  const room = Math.max(...shown.map(one => one.label.length), 0)
+  const topWidth = Math.min(TOP_LABEL, room, Math.max(4, (columns ?? 80) - 2 - TERMINAL_LABEL - TOP_FIGURE - 1))
 
-    return (
-      <Box flexDirection="column">
-        <Box flexDirection="column" width={columns}>
-          <Box height={1}>
-            <Box flexGrow={1} flexShrink={1}>
-              <Text wrap="truncate-end">
-                <Text dimColor>Context </Text>
-                {percent !== null && <Text color={meterColor(percent)}>{meter(percent)} </Text>}
-                <Text color={color} bold={color !== undefined}>{kilo(tokens)}</Text>
-                {state.window > 0 && <Text dimColor>/{kilo(state.window)}</Text>}
-                {limit !== null && <Text dimColor>{GROUP}Lim 5h </Text>}
-                {limit !== null && <Text color={meterColor(limit.percent)}>{meter(limit.percent)}</Text>}
-                {limit !== null && <Text dimColor> {Math.round(limit.percent)}%{resetIn === null ? '' : ` ${resetIn}`}</Text>}
-                {[
-                  cache !== null && <Text key="cache" color={cache.color} dimColor={cache.color === undefined}>{cache.label}</Text>,
-                  grouping && <Text key="grouping" color="yellow">{state.streak} turns</Text>,
-                  rebuilding && <Text key="graph" dimColor>graph rebuilding</Text>,
-                ].filter(Boolean).map((one, index) => (
-                  <Text key={`advice-${index}`}>
-                    <Text dimColor>{index === 0 ? GROUP : ' · '}</Text>
-                    {one}
-                  </Text>
-                ))}
-                <Text dimColor>{GROUP}Session {span(at - state.startedAt)} · {state.turn} turn{state.turn > 1 ? 's' : ''}</Text>
-                {state.cost !== null && <Text dimColor> · {dollars(state.cost)}</Text>}
-                {showsTop && !expanded && <Text dimColor>{GROUP}{header} : </Text>}
-                {showsTop && !expanded && shown.map((one, index) => (
-                  <Text key={`top-${index}`}>
-                    {index > 0 && <Text dimColor> · </Text>}
-                    <Text>{one.label} </Text>
-                    <Text bold>{kilo(one.tokens)}</Text>
-                  </Text>
-                ))}
-              </Text>
-            </Box>
-            <Box flexShrink={0} paddingLeft={TOGGLE_GAP}>{toggle}</Box>
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="column" width={columns}>
+        <Box height={1}>
+          {/* The toggle follows the figures, never pushed to the far edge; a line too long for the row is cut first. */}
+          <Box flexShrink={1}>
+            <Text wrap="truncate-end">
+              <Text dimColor>Context </Text>
+              {percent !== null && gauge('context-meter', percent)}
+              {percent !== null && <Text> </Text>}
+              <Text color={color} bold={tokens >= STEP_TOKENS}>{kilo(tokens)}</Text>
+              {state.window > 0 && <Text dimColor>/{kilo(state.window)}</Text>}
+              {limit !== null && <Text dimColor>{GROUP}5h </Text>}
+              {limit !== null && gauge('limit-meter', limit.percent)}
+              {limit !== null && <Text color={alarm(limit.percent)}> {Math.round(limit.percent)}%</Text>}
+              {limit !== null && resetIn !== null && <Text dimColor> {resetIn}</Text>}
+              {cache !== null && (
+                <Text key="cache">
+                  <Text dimColor>{GROUP}</Text>
+                  <Text color={cacheColor} dimColor={cacheColor === undefined}>{cache.label}</Text>
+                </Text>
+              )}
+              {grouping && <Text key="grouping" color="warning">{`${GROUP}${state.streak} single calls`}</Text>}
+              {rebuilding && <Text key="graph" dimColor>{`${GROUP}graph rebuilding`}</Text>}
+              <Text dimColor>{GROUP}{span(at - state.startedAt)} · {state.turn} turn{state.turn > 1 ? 's' : ''}</Text>
+              {state.cost !== null && <Text dimColor> · </Text>}
+              {state.cost !== null && <Text>{dollars(state.cost)}</Text>}
+              {showsTop && !expanded && <Text dimColor>{GROUP}Top </Text>}
+              {showsTop && !expanded && shown.map((one, index) => (
+                <Text key={`top-${index}`}>
+                  {index > 0 && <Text dimColor> · </Text>}
+                  <Text>{one.label} </Text>
+                  <Text dimColor>{kilo(one.tokens)}</Text>
+                </Text>
+              ))}
+            </Text>
           </Box>
-          {expanded && (
-            <Box flexDirection="column" paddingLeft={2}>
-              <Box>
-                <Box width={LABEL_CELLS} flexShrink={0}><Text dimColor>Step</Text></Box>
-                <Text color={color} dimColor={color === undefined} wrap="truncate-end">{stepLabel(tokens)}</Text>
-              </Box>
-              {cache?.detail !== undefined && (
-                <Box>
-                  <Box width={LABEL_CELLS} flexShrink={0}><Text dimColor>Cache</Text></Box>
-                  <Text color={cache.color} wrap="truncate-end">{cache.detail}</Text>
-                </Box>
-              )}
-              {grouping && (
-                <Box>
-                  <Box width={LABEL_CELLS} flexShrink={0}><Text dimColor>Batch</Text></Box>
-                  <Text color="yellow" wrap="truncate-end">
-                    {`${state.streak} turns with a single tool call: send independent calls together (each turn resends the whole context)`}
-                  </Text>
-                </Box>
-              )}
-              {showsTop && (
-                <Box>
-                  <Box width={LABEL_CELLS} flexShrink={0}><Text dimColor>{header}</Text></Box>
-                  <Box flexDirection="column">
-                    {shown.map((one, index) => (
-                      <Text key={`top-${index}`} wrap="truncate-end">
-                        <Text dimColor>{index + 1}. </Text>
-                        <Text>{one.label} </Text>
-                        <Text bold>{kilo(one.tokens)}</Text>
-                      </Text>
-                    ))}
-                  </Box>
-                </Box>
-              )}
-            </Box>
-          )}
+          <Box flexShrink={0} paddingLeft={TOGGLE_GAP}>{toggle}</Box>
         </Box>
-        {below}
+        {expanded && (
+          <Box flexDirection="column" paddingLeft={2}>
+            <Box height={1}>
+              {labelOf('Step')}
+              <Text color={color} wrap="truncate-end">{stepLabel(tokens)}</Text>
+            </Box>
+            {cache?.detail !== undefined && (
+              <Box height={1}>
+                {labelOf('Cache')}
+                <Text color={cacheColor} wrap="truncate-end">{cache.detail}</Text>
+              </Box>
+            )}
+            {grouping && (
+              <Box height={1}>
+                {labelOf('Batching')}
+                <Text wrap="truncate-end">
+                  <Text color="warning">{`${state.streak} turns with a single tool call`}</Text>
+                  <Text dimColor>: send independent calls together, each turn resends the whole context</Text>
+                </Text>
+              </Box>
+            )}
+            {showsTop && (
+              <Box>
+                {labelOf(header)}
+                <Box flexDirection="column">
+                  {shown.map((one, index) => {
+                    const cells = topLine(one.label, one.tokens, topWidth)
+                    return (
+                      <Text key={`top-${index}`} wrap="truncate-end">
+                        <Text>{cells.label}</Text>
+                        <Text>{cells.tokens}</Text>
+                      </Text>
+                    )
+                  })}
+                </Box>
+              </Box>
+            )}
+          </Box>
+        )}
       </Box>
-    )
+      {below}
+    </Box>
+  )
 }

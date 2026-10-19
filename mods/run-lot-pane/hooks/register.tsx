@@ -34,6 +34,7 @@ const TIME_WIDTH = 7
 const TOKENS_WIDTH = 7
 const PANE_COLUMNS = 100
 const MODEL_WIDTH = 14
+const rule = (cells: number): string => '─'.repeat(Math.max(0, cells))
 const WIDE_COLUMNS = 56
 const SHEET_PATTERN = /-PLAN-(F\d+)\.md$/
 const LOT_PATTERN = /(?:^|[\\/])([^\\/]+?)-PLAN-(F\d+)\.md$/
@@ -99,6 +100,94 @@ export const progressBar =(reached: number, total: number, width: number) => {
     { key: 'filled', text: '━'.repeat(filled), isFilled: true },
     { key: 'rest', text: '─'.repeat(width - filled), isFilled: false },
   ]
+}
+
+// The pane's rows are laid out for a terminal, where leading spaces indent a row under its parent and `⎿` hangs
+// a detail. In the desktop's proportional face those spaces shrink to slivers and the hierarchy blurs: there each
+// indent becomes a padding of as many cells, a spacer Text a Box as wide, and the `⎿` goes. The terminal's first
+// level, two spaces under a title, is dropped: on a desktop a block's surface groups its rows, so they align with
+// its title and a nested row keeps only what sets it under its parent.
+type Tree = { type: string; props: Record<string, unknown>; children?: unknown[] }
+const isTree = (node: unknown): node is Tree => typeof node === 'object' && node !== null && 'type' in node && 'props' in node
+const INDENT_MIN = 2
+const INDENT_BASE = 2
+const isNothing = (node: unknown) => node === null || node === undefined || node === false || node === ''
+
+const leadOf = (node: unknown): { node: unknown; spaces: number } => {
+  if (typeof node === 'string') {
+    const found = /^( *)(?:⎿ ?)?/.exec(node)
+    return { node: node.slice(found?.[0].length ?? 0), spaces: found?.[1]?.length ?? 0 }
+  }
+  if (!isTree(node) || node.type !== 'Text') return { node, spaces: 0 }
+  const children = [...(node.children ?? [])].flat()
+  let spaces = 0
+  while (children.length > 0) {
+    if (isNothing(children[0])) {
+      children.shift()
+      continue
+    }
+    const inner = leadOf(children[0])
+    spaces += inner.spaces
+    const isEmptied = inner.node === '' || (isTree(inner.node) && inner.node.type === 'Text' && (inner.node.children ?? []).flat().every(isNothing))
+    if (isEmptied && inner.spaces > 0) {
+      children.shift()
+      continue
+    }
+    children[0] = inner.node
+    break
+  }
+  return { node: { ...node, children }, spaces }
+}
+
+const polish = (node: unknown, inBox: boolean): unknown => {
+  if (Array.isArray(node)) return node.map(one => polish(one, inBox)).filter(one => one !== null)
+  if (!isTree(node)) return node
+  if (node.type === 'Text') {
+    const { node: stripped, spaces } = leadOf(node)
+    if (spaces < INDENT_MIN) return node
+    const pad = spaces - INDENT_BASE
+    const isBlank = isTree(stripped) && (stripped.children ?? []).flat().every(isNothing)
+    if (isBlank && inBox) return pad === 0 ? null : { type: 'Box', props: { width: pad, flexShrink: 0 }, children: [] }
+    if (!inBox || pad === 0) return stripped
+    return { type: 'Box', props: { paddingLeft: pad, flexShrink: 1, minWidth: 0 }, children: [stripped] }
+  }
+  // A one-cell height clips a desktop line, taller than a cell: the rows overlap. There it is a floor instead.
+  const props = node.type === 'Box' && node.props.height === 1 ? { ...withoutHeight(node.props), minHeight: 1 } : node.props
+  return node.children === undefined ? { ...node, props } : { ...node, props, children: node.children.map(one => polish(one, node.type === 'Box')).filter(one => one !== null) }
+}
+
+const withoutHeight = ({ height: _, ...rest }: Record<string, unknown>) => rest
+
+export const desktopTree = (surface: string, tree: JSX.Element): JSX.Element => (surface === 'desktop' ? (polish(tree, false) as JSX.Element) : tree)
+
+// The desktop's progress bar: drawn, in the hex of the tone a terminal names, since an SVG reads no theme key.
+const METER = { width: 180, height: 6 } as const
+const INKS: Record<string, string> = {
+  claude: '#d97757',
+  success: '#3fa66b',
+  warning: '#d99a1e',
+  error: '#d64545',
+  cyan: '#2fa3b8',
+}
+export const inkOf = (tone: string): string => INKS[tone] ?? '#8a8f98'
+// The desktop sets its blocks apart by shade, not by line: a translucent grey surface reads on a light or a dark
+// theme alike, and a row that asks for attention (running, failed, waiting) takes a faint wash of its tone.
+const SURFACE = '#80808014'
+const WASH: Record<string, string> = {
+  claude: '#d977571f',
+  error: '#d6454524',
+  warning: '#d99a1e24',
+  cyan: '#2fa3b824',
+}
+export const washOf = (tone: string | undefined): string | undefined => (tone === undefined ? undefined : WASH[tone])
+export const meterSource = (share: number, ink: string): string => {
+  const { width, height } = METER
+  const filled = Math.round(Math.min(1, Math.max(0, share)) * width)
+  const radius = height / 2
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`
+    + `<rect width="${width}" height="${height}" rx="${radius}" fill="${ink}" fill-opacity="0.18"/>`
+    + (filled > 0 ? `<rect width="${Math.max(filled, height)}" height="${height}" rx="${radius}" fill="${ink}"/>` : '')
+    + '</svg>'
 }
 
 export const kilo = (tokens: number): string => {
@@ -3161,23 +3250,56 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => desktopTree(e.surface, await (async (): Promise<JSX.Element> => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const Svg = e.surface === 'desktop' ? $.ui.resolve(e).Svg : undefined
     const Input = e.surface === 'terminal' || e.surface === 'desktop' || e.surface === 'vscode' ? $.ui.resolve(e).Input : undefined
-    const accent = e.surface === 'desktop' ? 'claude' : undefined
-    const tddTone = (label: string) => (e.surface !== 'desktop' ? undefined : label === 'RED' ? 'error' : label === 'GREEN' ? 'success' : undefined)
-    // On a desktop a row's text tells its stage apart, not its glyph alone: done in grey,
-    // running in bold, to come lighter and in italics. The terminal keeps its own styles.
+    // The desktop draws in a proportional face: a type scale, spacing steps, real buttons and drawn bars
+    // there; the terminal keeps its text layout.
+    const isDesktop = e.surface === 'desktop'
+    const frame = isDesktop ? { paddingX: 'sm' as const, gap: 'xs' as const } : {}
+    // On a desktop each block of the view sits on a grey surface, so the blocks read apart at a glance.
+    // A row asking for attention on a desktop: a faint wash of its tone behind it, the rest left neutral.
+    const washed = (key: string, tone: string | undefined, child: JSX.Element) => {
+      const wash = isDesktop ? washOf(tone) : undefined
+      return wash === undefined ? child : <Box key={`${key}-wash`} flexDirection="column" backgroundColor={wash} {...BLEED}>{child}</Box>
+    }
+    // A wash reaches one cell into the surface's padding on each side: the row's text keeps the column of the rows
+    // around it, aligned, while its tone spans the whole width.
+    const BLEED = { marginX: -1, paddingX: 1 } as const
+    // A block's heading on a desktop: small, grey, semibold; the content carries the contrast.
+    const heading = isDesktop ? { size: 'footnote' as const, weight: 'semibold' as const, color: 'inactive' } : {}
+    const card = (terminal: Record<string, unknown>) =>
+      isDesktop
+        ? { backgroundColor: SURFACE, paddingX: 2, paddingY: 'sm' as const, marginTop: 'sm' as const, gap: 'xs' as const }
+        : terminal
+    const action = (key: string, label: string, onPress: () => void, hotkey?: string) =>
+      isDesktop ? (
+        <Button key={key} label={label} hotkey={hotkey} onPress={onPress} />
+      ) : (
+        <Button key={key} hotkey={hotkey} plain dimColor onPress={onPress}>
+          {label}
+        </Button>
+      )
+    // On a desktop a row's text tells its stage apart, not its glyph alone: done in the plain text colour,
+    // running in bold, to come dimmed grey. Colour is kept for state: a `RED` or `GREEN` label is a name, never
+    // tinted, so it never clashes with a row's wash. The terminal keeps its own styles.
+    // The terminal reads the three stages the same way: done in the text colour, running in bold, to come dim.
     type Stage = 'done' | 'running' | 'pending'
     const staged = (stage: Stage, terminal: { color?: string; bold?: boolean }, tone?: string) =>
       e.surface !== 'desktop'
-        ? terminal
-        : stage === 'done'
-          ? { color: tone ?? 'inactive' }
+        ? stage === 'done'
+          ? { color: terminal.color }
           : stage === 'running'
-            ? { color: tone, bold: true }
-            : { color: 'subtle', italic: true }
+            ? { color: terminal.color, bold: true }
+            : { color: 'inactive', dimColor: true }
+        : stage === 'done'
+          ? { color: tone === 'inactive' ? undefined : tone }
+          : stage === 'running'
+            ? { color: tone === 'inactive' ? undefined : tone, bold: true }
+            : { color: 'inactive', dimColor: true }
+    // A TDD mark's label: plain once reached, dimmed before.
+    const markLabel = (isReached: boolean) => (isReached ? {} : { color: 'inactive', dimColor: true })
     const list = (await read($, runs)).map(completeRun)
     const at = await read($, now)
     const session = await read($, usage)
@@ -3205,12 +3327,14 @@ export const register: Register = on => {
     // A desktop's proportional font draws the bar wider than its columns: kept shorter there.
     const barWidth = Math.max(8, Math.min(e.surface === 'desktop' ? 28 : 40, columns - 28))
     const go = (change: Partial<Navigation>) => () => void update($, nav, state => ({ ...state, prompted: null, ...change }))
-    const close = <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
+    const close = isDesktop
+      ? <Button key="close" label="Close" role="dismiss" onPress={() => closePane($)} />
+      : <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
     // A desktop draws a Button natively, its children's colours dropped: there the row keeps
     // its own colours and a trailing › opens it; the terminal presses the whole row.
     const pressable = (key: string, onPress: () => void, content: JSX.Element | JSX.Element[], hotkey?: string) =>
       e.surface === 'desktop' ? (
-        <Box key={`${key}-row`}>
+        <Box key={`${key}-row`} flexShrink={1} minWidth={0}>
           {content}
           <Text> </Text>
           <Button key={key} label="›" hotkey={hotkey} plain dimColor onPress={onPress} />
@@ -3241,12 +3365,25 @@ export const register: Register = on => {
       ))
     const row = (key: string, left: JSX.Element, right?: JSX.Element | JSX.Element[], wraps = false) => (
       <Box key={key} {...(wraps ? { minHeight: 1 } : { height: 1 })}>
-        <Box flexGrow={1} flexShrink={1}>
+        <Box flexGrow={1} flexShrink={1} {...(isDesktop ? { minWidth: 0, overflow: 'hidden' as const } : {})}>
           {left}
         </Box>
         {right}
       </Box>
     )
+
+    const cell = (key: string, width: number, text: string, color?: string, isLeft = false) => (
+      <Box key={key} width={width} flexShrink={0} justifyContent={isLeft ? 'flex-start' : 'flex-end'}>
+        <Text color={color} wrap="truncate-end">
+          {text}
+        </Text>
+      </Box>
+    )
+    const figureCells = (key: string, count: string, time: string, tokens: string, timeColor = 'inactive') => [
+      cell(`${key}-count`, COUNT_WIDTH, count, 'inactive'),
+      cell(`${key}-time`, TIME_WIDTH, time, timeColor),
+      cell(`${key}-tokens`, TOKENS_WIDTH, tokens, 'inactive'),
+    ]
 
     const agentTone = (agent: WorkflowAgent) =>
       agent.state === 'running' ? 'claude' : agent.state === 'error' ? 'error' : agent.state === 'interrupted' ? 'inactive' : 'success'
@@ -3255,22 +3392,45 @@ export const register: Register = on => {
     const stallOf = (agent: WorkflowAgent) => stallReasons(agent, typicalTools(known, current?.agents ?? [], agent), at)
     const agentAge = (agent: WorkflowAgent) => duration((agent.endedAt ?? at) - agent.startedAt)
     const markTone = (mark: PhaseRow['mark']) => (mark === 'running' ? 'claude' : mark === 'done' ? 'success' : 'inactive')
-    const markGlyph = (mark: PhaseRow['mark']) => (mark === 'running' ? spin : mark === 'done' ? '⏺' : '○')
+    const markGlyph = (mark: PhaseRow['mark']) => (mark === 'running' ? spin : mark === 'done' ? '✓' : '○')
 
+    // On the terminal a block opens on its title, bold, at the content column, and a dim rule to the pane's edge.
+    const titled = (title: string, after: (JSX.Element | false | null)[] = [], room = columns - 2) => (
+      <Text wrap="truncate-end">
+        {'  '}
+        <Text bold>{title}</Text>
+        {after}
+        <Text dimColor>{` ${rule(room - [...title].length - 1)}`}</Text>
+      </Text>
+    )
     const section = (key: string, title: string, lines: JSX.Element[]) => (
-      <Box key={key} flexDirection="column" marginTop={1}>
-        <Text bold color={accent}>
-          {title}
-        </Text>
+      <Box key={key} flexDirection="column" {...card({ marginTop: 1 })}>
+        {isDesktop ? (
+          <Text bold {...heading}>
+            {title}
+          </Text>
+        ) : (
+          <Box key={`${key}-title`} height={1}>
+            {titled(title)}
+          </Box>
+        )}
         {lines}
       </Box>
     )
-    const line = (key: string, text: string, color?: string, wrap: 'truncate-end' | 'truncate-start' | 'wrap' = 'truncate-end') => (
-      <Text key={key} color={color} wrap={wrap}>
-        {'  '}
-        {text}
-      </Text>
-    )
+    // A wrapped line hangs on the terminal: its next lines start at its own column, not the pane's edge.
+    const line = (key: string, text: string, color?: string, wrap: 'truncate-end' | 'truncate-start' | 'wrap' = 'truncate-end') =>
+      !isDesktop && wrap === 'wrap' ? (
+        <Box key={key} paddingLeft={2}>
+          <Text color={color} wrap="wrap">
+            {text}
+          </Text>
+        </Box>
+      ) : (
+        <Text key={key} color={color} wrap={wrap}>
+          {'  '}
+          {text}
+        </Text>
+      )
 
     const callRows = (agent: WorkflowAgent, call: ToolTrace, width: number) => {
       const isStuck = call.state === 'running' && agent.state !== 'running'
@@ -3287,16 +3447,47 @@ export const register: Register = on => {
       ]
       if (call.error !== null) {
         rows.push(
-          <Text key={`call-error-${call.id}`} color={recovered ? 'inactive' : 'error'} wrap="wrap">
-            {'          ⎿ '}
-            {call.error}
-          </Text>,
+          isDesktop ? (
+            <Text key={`call-error-${call.id}`} color={recovered ? 'inactive' : 'error'} wrap="wrap">
+              {'          ⎿ '}
+              {call.error}
+            </Text>
+          ) : (
+            <Box key={`call-error-${call.id}`} paddingLeft={12}>
+              <Text color={recovered ? 'inactive' : 'error'} wrap="wrap">
+                {call.error}
+              </Text>
+            </Box>
+          ),
         )
       }
       return rows
     }
 
-    const agentButton = (agent: WorkflowAgent, prefix: string, from: Screen, mark = '') => (
+    // On the terminal an agent of a list keeps its figures in the columns of the phases: time and tokens right-aligned.
+    const agentButton = (agent: WorkflowAgent, prefix: string, from: Screen, mark = '') => !isDesktop ? (
+      row(
+        `agent-${agent.id}`,
+        <Box>
+          <Text>{prefix}</Text>
+          {pressable(
+            `open-${agent.id}`,
+            go({ screen: 'agent', agentId: agent.id, back: from }),
+            [
+              <Text key="glyph" color={agentTone(agent)}>{agentGlyph(agent)} </Text>,
+              <Text key="label" bold={agent.state === 'running'} {...(agent.state === 'interrupted' ? { color: 'inactive', dimColor: true } : {})}>{agent.label}</Text>,
+              <Text key="meta" color="inactive">
+                {activityOf(agent, at) === null ? '' : ` · ${activityOf(agent, at)}`}
+                {agent.state === 'running' && agent.lastTool !== null ? ` · ${agent.lastTool} (${agent.tools})` : ''}
+                {agent.tokens > 0 ? ` · ctx ${kilo(agent.context)}` : ''}
+              </Text>,
+              ...(mark !== '' ? [<Text key="mark" color="warning">{`  ${mark}`}</Text>] : []),
+            ],
+          )}
+        </Box>,
+        figureCells(`card-${agent.id}`, '', agentAge(agent), agent.tokens > 0 ? kilo(agent.tokens) : ''),
+      )
+    ) : (
       <Box key={`agent-${agent.id}`} height={1}>
         <Text color="inactive">{prefix}</Text>
         {pressable(
@@ -3304,7 +3495,9 @@ export const register: Register = on => {
           go({ screen: 'agent', agentId: agent.id, back: from }),
           [
             <Text key="glyph" color={agentTone(agent)}>{agentGlyph(agent)} </Text>,
-            <Text key="label" color={agent.state === 'error' ? 'error' : agent.state === 'running' ? undefined : 'inactive'}>{agent.label}</Text>,
+            isDesktop
+              ? <Text key="label" color={agent.state === 'error' ? 'error' : agent.state === 'running' ? undefined : 'inactive'}>{agent.label}</Text>
+              : <Text key="label" bold={agent.state === 'running'} {...(agent.state === 'interrupted' ? { color: 'inactive', dimColor: true } : {})}>{agent.label}</Text>,
             <Text key="meta" color="inactive">
               {' '}
               · {agentAge(agent)}
@@ -3319,9 +3512,18 @@ export const register: Register = on => {
     )
 
     const crumbs = (trail: string, title: string) =>
-      row(
+      isDesktop ? (
+        <Box key="header" flexDirection="row" alignItems="flex-start" gap="sm">
+          <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+            <Text size="footnote" dimColor wrap="truncate-end">{trail}</Text>
+            <Text size="heading" weight="semibold" wrap="truncate-end">{title}</Text>
+          </Box>
+          {close}
+        </Box>
+      ) : row(
         'header',
         <Text wrap="truncate-end">
+          <Text color="claude">✻ </Text>
           <Text color="inactive">{trail} › </Text>
           <Text bold>{title}</Text>
         </Text>,
@@ -3332,7 +3534,7 @@ export const register: Register = on => {
     const viewHeader = (name: string, after: (JSX.Element | false)[]) =>
       row(
         'header',
-        <Text wrap="truncate-end">
+        <Text wrap="truncate-end" {...(isDesktop ? { size: 'heading' as const, weight: 'semibold' as const } : {})}>
           <Text color="claude">✻ </Text>
           <Text bold>{name}</Text>
           {after}
@@ -3340,13 +3542,19 @@ export const register: Register = on => {
         close,
       )
 
-    const backBar = (target: Screen) => (
-      <Box key="nav" height={1}>
-        <Button key="back" hotkey="b" plain onPress={go({ screen: target })}>
-          back
-        </Button>
-      </Box>
-    )
+    const backBar = (target: Screen) =>
+      isDesktop ? (
+        <Box key="nav" flexDirection="row" marginTop="xs">
+          <Button key="back" label="← Back" hotkey="b" onPress={go({ screen: target })} />
+        </Box>
+      ) : (
+        <Box key="nav" height={1}>
+          <Text>{'  '}</Text>
+          <Button key="back" hotkey="b" plain dimColor onPress={go({ screen: target })}>
+            back
+          </Button>
+        </Box>
+      )
 
     const lotTone = (state: LotState) =>
       state === 'running' ? 'claude' : state === 'completed' ? 'success' : state === 'killed' ? 'warning' : state === 'failed' ? 'error' : state === 'waiting' ? WAITING_TONE : 'inactive'
@@ -3354,8 +3562,24 @@ export const register: Register = on => {
       state === 'running' ? spin : state === 'completed' || state === 'done' ? '✓' : state === 'pending' ? '○' : state === 'killed' ? '⏹' : state === 'waiting' ? '?' : '✗'
     const openLot = (lot: string | null) => go({ lot, screen: 'run', phase: null, agentId: null, toggled: [] })
     const lotBar =
-      planRun === null ? null : (
+      planRun === null ? null : isDesktop ? (
+        <Box key="lots" flexDirection="row" flexWrap="wrap" alignItems="center" gap="xs">
+          <Button key="plan" label="Plan" variant={lotInView === null ? 'primary' : 'secondary'} onPress={openLot(null)} />
+          {planRun.lots.map(entry => {
+            const state = lotStateOf(planRun, entry)
+            const label = `${lotGlyph(state)} ${entry.lot}`
+            return planRun.agents.some(agent => agent.lot === entry.lot) ? (
+              <Button key={`open-lot-${entry.lot}`} label={label} variant={entry.lot === lotInView ? 'primary' : 'secondary'} onPress={openLot(entry.lot)} />
+            ) : (
+              <Box key={`lot-${entry.lot}`} paddingX="xs">
+                <Text color={lotTone(state)}>{label}</Text>
+              </Box>
+            )
+          })}
+        </Box>
+      ) : (
         <Box key="lots" height={1}>
+          <Text>{'  '}</Text>
           <Button key="plan" hotkey="p" plain dimColor={lotInView !== null} onPress={openLot(null)}>
             plan
           </Button>
@@ -3385,7 +3609,7 @@ export const register: Register = on => {
 
     if (current === undefined) {
       return (
-        <Box flexDirection="column" marginTop={1}>
+        <Box flexDirection="column" marginTop={1} {...frame}>
           {viewHeader('Workflow', [])}
           <Text color="inactive" wrap="truncate-end">
             {'  ⎿  '}No workflow run yet in this session.
@@ -3438,7 +3662,13 @@ export const register: Register = on => {
 
     const isPlanView = planRun !== null && lotInView === null
     const gap = (key: string) => <Text key={key}>{'  '}</Text>
-    const steerBar = (
+    const steerBar = isDesktop ? (
+      <Box key="steer-bar" flexDirection="row" flexWrap="wrap" gap="xs" marginTop="sm">
+        {action('open-validate', `To validate${unanswered > 0 ? ` (${unanswered})` : ''}`, go({ screen: 'validate' }), 'v')}
+        {isPlanView && action('open-graph', 'Graph', go({ screen: 'graph' }), 'g')}
+        {noteTarget !== null && action('note', 'Note', ask({ kind: 'note', target: noteTarget }), 'n')}
+      </Box>
+    ) : (
       <Box key="steer-bar" height={1}>
         {gap('steer-gap')}
         <Button key="open-validate" hotkey="v" plain dimColor onPress={go({ screen: 'validate' })}>
@@ -3480,22 +3710,64 @@ export const register: Register = on => {
         : section(
             'notes',
             `Notes · ${notes.length}`,
-            notes.map(note => line(`note-${note.id}`, `${note.isTaken ? '✓' : '✎'} ${note.batch} · ${note.text} · ${note.isTaken ? 'consumed' : 'pending'}`, note.isTaken ? 'inactive' : 'warning')),
+            notes.map(note =>
+              isDesktop ? (
+                line(`note-${note.id}`, `${note.isTaken ? '✓' : '✎'} ${note.batch} · ${note.text} · ${note.isTaken ? 'consumed' : 'pending'}`, note.isTaken ? 'inactive' : 'warning')
+              ) : (
+                <Text key={`note-${note.id}`} wrap="truncate-end">
+                  {'  '}
+                  <Text color={note.isTaken ? 'success' : 'warning'}>{note.isTaken ? '✓ ' : '✎ '}</Text>
+                  <Text color="inactive">{`${note.batch}  `}</Text>
+                  <Text>{note.text}</Text>
+                  <Text color="inactive">{` · ${note.isTaken ? 'consumed' : 'pending'}`}</Text>
+                </Text>
+              ),
+            ),
           )
+    // On the terminal a contest takes two lines, each cut to the pane: what was contested, then the answer it got.
     const roundRows = (indent: string) =>
-      rounds.flatMap(round => [
-        <Text key={`round-${round.round}`} bold={round.diverged} color={round.diverged ? 'error' : 'inactive'} wrap="truncate-end">
-          {indent}
-          {roundLine(round)}
-        </Text>,
-        ...round.contested.map((contest, index) => (
-          <Text key={`round-${round.round}-contest-${index}`} color="inactive" wrap="wrap">
-            {indent}
-            {'  ↳ '}
-            {contestLine(contest)}
-          </Text>
-        )),
-      ])
+      isDesktop
+        ? rounds.flatMap(round => [
+            <Text key={`round-${round.round}`} bold={round.diverged} color={round.diverged ? 'error' : 'inactive'} wrap="truncate-end">
+              {indent}
+              {roundLine(round)}
+            </Text>,
+            ...round.contested.map((contest, index) => (
+              <Text key={`round-${round.round}-contest-${index}`} color="inactive" wrap="wrap">
+                {indent}
+                {'  ↳ '}
+                {contestLine(contest)}
+              </Text>
+            )),
+          ])
+        : rounds.flatMap(round => {
+            const said = roundLine(round)
+            const cut = said.indexOf(' · diverging')
+            return [
+              <Text key={`round-${round.round}`} wrap="truncate-end">
+                {indent}
+                <Text color="inactive">{cut < 0 ? said : said.slice(0, cut)}</Text>
+                {cut >= 0 && <Text color="error">{said.slice(cut)}</Text>}
+              </Text>,
+              ...round.contested.flatMap((contest, index) => {
+                const said = contestLine(contest)
+                const at = said.lastIndexOf(' → ')
+                const [asked, answered] = [said.slice(0, at), said.slice(at + 3)]
+                return [
+                  <Text key={`round-${round.round}-contest-${index}`} color="inactive" wrap="truncate-end">
+                    {indent}
+                    {'  ↳ '}
+                    {asked}
+                  </Text>,
+                  <Text key={`round-${round.round}-answer-${index}`} wrap="truncate-end">
+                    {indent}
+                    {'    → '}
+                    {answered}
+                  </Text>,
+                ]
+              }),
+            ]
+          })
 
     if (where.screen === 'validate') {
       const decided = (decision: Decision) => (decision === 'keep' ? 'kept' : decision === 'reject' ? 'rejected' : 'amended')
@@ -3516,24 +3788,50 @@ export const register: Register = on => {
               <Text bold>{entry.batch === '' ? 'run' : entry.batch}</Text>
               <Text color="inactive"> · {entry.step}</Text>
             </Text>
-            <Text key={`entry-text-${entry.id}`} wrap="wrap">
-              {'    '}
-              {entry.text}
-              {entry.why === null ? '' : ` (${entry.why})`}
-            </Text>
-            <Text key={`entry-state-${entry.id}`} color={state.color} wrap="wrap">
-              {'    '}
-              {state.text}
-            </Text>
+            {isDesktop ? (
+              <Text key={`entry-text-${entry.id}`} wrap="wrap">
+                {'    '}
+                {entry.text}
+                {entry.why === null ? '' : ` (${entry.why})`}
+              </Text>
+            ) : (
+              <Box key={`entry-text-${entry.id}`} paddingLeft={4}>
+                <Text wrap="wrap">
+                  {entry.text}
+                  {entry.why === null ? '' : <Text color="inactive">{` (${entry.why})`}</Text>}
+                </Text>
+              </Box>
+            )}
+            {isDesktop ? (
+              <Text key={`entry-state-${entry.id}`} color={state.color} wrap="wrap">
+                {'    '}
+                {state.text}
+              </Text>
+            ) : (
+              <Box key={`entry-state-${entry.id}`} paddingLeft={4}>
+                <Text wrap="wrap">
+                  <Text color={state.color}>{state.text.slice(0, 2)}</Text>
+                  <Text color={given === undefined ? 'inactive' : undefined}>{state.text.slice(2)}</Text>
+                </Text>
+              </Box>
+            )}
             {given?.applied?.relaunch != null && line(`entry-relaunch-${entry.id}`, `  relaunch: ${given.applied.relaunch}`, 'inactive', 'wrap')}
             {given?.applied == null && (
-              <Box key={`entry-actions-${entry.id}`} height={1}>
-                <Text>{'    '}</Text>
-                <Button key={`keep-${entry.id}`} label="✓ keep" plain dimColor onPress={() => answer(entry, 'keep')} />
-                {gap(`reject-gap-${entry.id}`)}
-                <Button key={`reject-${entry.id}`} label="✗ reject" plain dimColor onPress={ask({ kind: 'reject', target: entry.id })} />
-                {gap(`amend-gap-${entry.id}`)}
-                <Button key={`amend-${entry.id}`} label="✎ amend" plain dimColor onPress={ask({ kind: 'amend', target: entry.id })} />
+              <Box key={`entry-actions-${entry.id}`} {...(isDesktop ? { marginTop: 'xs' as const } : { height: 1 })}>
+                {!isDesktop && <Text>{'    '}</Text>}
+                {isDesktop ? (
+                  <Box key={`entry-buttons-${entry.id}`} flexDirection="row" gap="xs">
+                    <Button key={`keep-${entry.id}`} label="✓ keep" variant="primary" onPress={() => answer(entry, 'keep')} />
+                    <Button key={`reject-${entry.id}`} label="✗ reject" onPress={ask({ kind: 'reject', target: entry.id })} />
+                    <Button key={`amend-${entry.id}`} label="✎ amend" onPress={ask({ kind: 'amend', target: entry.id })} />
+                  </Box>
+                ) : [
+                  <Button key={`keep-${entry.id}`} label="✓ keep" plain dimColor onPress={() => answer(entry, 'keep')} />,
+                  gap(`reject-gap-${entry.id}`),
+                  <Button key={`reject-${entry.id}`} label="✗ reject" plain dimColor onPress={ask({ kind: 'reject', target: entry.id })} />,
+                  gap(`amend-gap-${entry.id}`),
+                  <Button key={`amend-${entry.id}`} label="✎ amend" plain dimColor onPress={ask({ kind: 'amend', target: entry.id })} />,
+                ]}
               </Box>
             )}
             {asked !== null && Input !== undefined && (
@@ -3551,11 +3849,12 @@ export const register: Register = on => {
         )
       }
       return (
-        <Box flexDirection="column" marginTop={1}>
+        <Box flexDirection="column" marginTop={1} {...frame}>
           {crumbs(isPlanView ? planRun!.name : `${current.name}${batchInView === null ? '' : ` ${batchInView}`}`, 'to validate')}
           {backBar('run')}
           {lotBar}
           {bannerRow}
+          {!isDesktop && <Box key="validate-gap" height={1} />}
           {workPath !== null && line('apply-hint', `Applied at the next /run-plan or /run-lot start, or now with cctoolkit run-validate apply ${absolute(workPath)}`, 'inactive', 'wrap')}
           {entries.length === 0 && line('no-entry', 'Nothing to validate.', 'inactive')}
           {entries.map(entryBlock)}
@@ -3569,7 +3868,7 @@ export const register: Register = on => {
       const graphTone = (state: GraphState) =>
         state === 'done' ? 'success' : state === 'running' ? 'claude' : state === 'question' ? WAITING_TONE : state === 'aside' || state === 'failed' ? 'error' : state === 'blocked' ? 'warning' : 'inactive'
       return (
-        <Box flexDirection="column" marginTop={1}>
+        <Box flexDirection="column" marginTop={1} {...frame}>
           {crumbs(planRun.name, 'graph')}
           {backBar('run')}
           {lotBar}
@@ -3587,7 +3886,14 @@ export const register: Register = on => {
                     {'  '}
                     {one.prefix}
                   </Text>
-                  <Text color={graphTone(one.state)}>{one.text}</Text>
+                  {one.text.startsWith(`${graphGlyph(one.state)} `) ? (
+                    <Text key="node">
+                      <Text color={graphTone(one.state)}>{one.text.slice(0, 2)}</Text>
+                      <Text bold={one.state === 'running'} {...(one.state === 'waiting' ? { color: 'inactive', dimColor: true } : {})}>{one.text.slice(2)}</Text>
+                    </Text>
+                  ) : (
+                    <Text color="inactive">{one.text}</Text>
+                  )}
                 </Text>
               ))}
             </Box>
@@ -3617,12 +3923,12 @@ export const register: Register = on => {
       const outcomeColor = agent.state === 'error' ? 'error' : undefined
       const toolWidth = Math.min(10, Math.max(4, ...agent.calls.map(call => call.tool.length)))
       return (
-        <Box flexDirection="column" marginTop={1}>
+        <Box flexDirection="column" marginTop={1} {...frame}>
           {crumbs(`${current.name} › ${agent.phase ?? NO_PHASE}`, `agent ${agent.index}`)}
           {backBar(where.back)}
           {lotBar}
           {bannerRow}
-          <Box marginTop={1}>
+          <Box marginTop={1} {...(isDesktop ? {} : { paddingLeft: 2 })}>
             <Text bold wrap="wrap">
               {agent.label}
             </Text>
@@ -3704,11 +4010,12 @@ export const register: Register = on => {
       const phase = phaseInView
       const insight = phaseInsight(phase, current, at)
       return (
-        <Box flexDirection="column" marginTop={1}>
+        <Box flexDirection="column" marginTop={1} {...frame}>
           {crumbs(current.name, phase.title)}
           {backBar('run')}
           {lotBar}
           {bannerRow}
+          {!isDesktop && <Box key="phase-gap" height={1} />}
           <Text wrap="truncate-end">
             {'  '}
             <Text color={markTone(phase.mark)}>
@@ -3768,19 +4075,6 @@ export const register: Register = on => {
         toggled: state.toggled.includes(title) ? state.toggled.filter(one => one !== title) : [...state.toggled, title],
       }))
 
-    const cell = (key: string, width: number, text: string, color?: string, isLeft = false) => (
-      <Box key={key} width={width} flexShrink={0} justifyContent={isLeft ? 'flex-start' : 'flex-end'}>
-        <Text color={color} wrap="truncate-end">
-          {text}
-        </Text>
-      </Box>
-    )
-    const figureCells = (key: string, count: string, time: string, tokens: string, timeColor = 'inactive') => [
-      cell(`${key}-count`, COUNT_WIDTH, count, 'inactive'),
-      cell(`${key}-time`, TIME_WIDTH, time, timeColor),
-      cell(`${key}-tokens`, TOKENS_WIDTH, tokens, 'inactive'),
-    ]
-
     const figureRow = (key: string, label: string, first: string, second: string) => (
       <Box key={key} height={1}>
         <Box width={10} flexShrink={0}>
@@ -3816,7 +4110,16 @@ export const register: Register = on => {
       </Text>
     )
     const progressRow = (reached: number, total: number, tone: string, tally: (string | number)[] | null = null) =>
-      total > 0 && (
+      total > 0 && (Svg !== undefined ? (
+        <Box key="progress" flexDirection="row" alignItems="center" gap="sm" marginTop="xs">
+          <Svg key="progress-bar" source={meterSource(reached / total, inkOf(tone))} alt={`progress ${reached}/${total}`} width={METER.width} height={METER.height} />
+          {tally !== null && (
+            <Text size="footnote" tabular color="inactive">
+              {tally}
+            </Text>
+          )}
+        </Box>
+      ) : (
         <Text wrap="truncate-end">
           {'  '}
           {progressBar(reached, total, barWidth).map(part => (
@@ -3831,10 +4134,10 @@ export const register: Register = on => {
             </Text>
           )}
         </Text>
-      )
+      ))
     // A framed block in the tone of how it ended: the run's outcome, a batch of the plan needing attention.
     const endBlock = (key: string, tone: string, title: string | string[], reason: JSX.Element[], report: string | null | undefined, merge: JSX.Element[] | false = false) => (
-      <Box key={key} flexDirection="column" marginTop={1} marginLeft={2} paddingX={1} borderStyle="round" borderColor={tone}>
+      <Box key={key} flexDirection="column" {...(isDesktop ? { backgroundColor: washOf(tone) ?? SURFACE, marginTop: 'sm' as const, padding: 'sm' as const, gap: 'xs' as const } : { borderStyle: 'round', borderColor: tone, marginTop: 1, marginLeft: 2, paddingX: 1 })}>
         <Text bold color={tone} wrap="wrap">
           {title}
         </Text>
@@ -3857,8 +4160,19 @@ export const register: Register = on => {
         outcome.report,
         outcome.merge !== undefined && mergeBlock(`${prefix}merge`, outcome.merge),
       )
-    const figuresBox = (label: string, tokens: number) => (
-      <Box marginTop={1} flexDirection="column">
+    const sessionFigure = `${session.context === null ? '—' : `ctx ${kilo(session.context)}`}${session.percent === null ? '' : ` (${session.percent}%)`}`
+    const figuresBox = (label: string, tokens: number) => !isDesktop ? (
+      <Box key="figures" marginTop={1} height={1}>
+        <Text wrap="truncate-end">
+          {'  '}
+          <Text color="inactive">Session </Text>
+          <Text>{sessionFigure}</Text>
+          <Text color="inactive">{`   ${label} `}</Text>
+          <Text>{`${kilo(tokens)} tok`}</Text>
+        </Text>
+      </Box>
+    ) : (
+      <Box flexDirection="column" {...card({ marginTop: 1 })}>
         {figureRow(
           'session',
           'Session',
@@ -3871,10 +4185,14 @@ export const register: Register = on => {
     const columnsTitle = (key: string, title: string, cells: string) =>
       row(
         key,
-        <Text bold color={accent}>
-          {'  '}
-          {title}
-        </Text>,
+        isDesktop ? (
+          <Text bold {...heading}>
+            {'  '}
+            {title}
+          </Text>
+        ) : (
+          titled(title[0] + title.slice(1).toLowerCase(), [], columns - figuresWidth - 3)
+        ),
         figureCells(cells, 'agents', 'time', 'tokens'),
       )
 
@@ -3886,24 +4204,32 @@ export const register: Register = on => {
       const said = retryFor(agent)
       const shown = said?.attempt ?? attempt
       const retry = shown > 1 ? ` ↻ ${shown}` : ''
-      const labelWidth = columns - 7 - agentsRightWidth - retry.length - 1
+      // The terminal nests an agent one level under its phase: its glyph under the phase's title, its detail under its label.
+      const lead = isDesktop ? '     ' : '    '
+      const under = isDesktop ? '         ' : '      '
+      const labelWidth = columns - lead.length - 2 - agentsRightWidth - retry.length - 1
       const live = [
         activityOf(agent, at) ?? '',
         agent.lastTool === null ? '' : `${agent.lastTool} (${agent.tools})`,
         agent.tokens > 0 ? `ctx ${kilo(agent.context)}` : '',
       ].filter(one => one !== '')
       return (
-        <Box key={`agent-${agent.id}`} flexDirection="column">
+        <Box key={`agent-${agent.id}`} flexDirection="column" {...(isDesktop ? { gap: 'xs' as const } : {})}>
           {row(
             `agent-row-${agent.id}`,
             <Box>
-              <Text>{'     '}</Text>
+              <Text>{lead}</Text>
               {pressable(
                 `open-${agent.id}`,
                 go({ screen: 'agent', agentId: agent.id, back: 'run' }),
                 [
                   <Text key="glyph" color={agentTone(agent)}>{agentGlyph(agent)} </Text>,
-                  <Text key="label" {...staged(agent.state === 'running' ? 'running' : 'done', { color: labelColor }, labelColor)}>
+                  <Text
+                    key="label"
+                    {...(isDesktop || agent.state !== 'interrupted'
+                      ? staged(agent.state === 'running' ? 'running' : 'done', { color: isDesktop ? labelColor : undefined }, labelColor)
+                      : { color: 'inactive', dimColor: true })}
+                  >
                     {fit(agent.label, labelWidth)}
                   </Text>,
                   ...(retry !== '' ? [<Text key="retry" color="warning">{retry}</Text>] : []),
@@ -3918,18 +4244,27 @@ export const register: Register = on => {
           {agent.state === 'running' && (live.length > 0 || stalls.length > 0) && (
             <Text wrap="truncate-end">
               <Text color="inactive">
-                {'         '}
+                {under}
                 {live.join(' · ')}
               </Text>
               {stalls.length > 0 && <Text color="warning">{`${live.length > 0 ? ' · ' : ''}${stalls.join(' · ')}`}</Text>}
             </Text>
           )}
-          {(said?.reasons ?? []).map((reason, index) => (
-            <Text key={`retry-${agent.id}-${index}`} color="warning" wrap="truncate-end">
-              {'         '}
-              {`↻ attempt ${index + 1} rejected: ${reason}`}
-            </Text>
-          ))}
+          {(said?.reasons ?? []).map((reason, index) =>
+            isDesktop ? (
+              <Text key={`retry-${agent.id}-${index}`} color="warning" wrap="truncate-end">
+                {'         '}
+                {`↻ attempt ${index + 1} rejected: ${reason}`}
+              </Text>
+            ) : (
+              <Text key={`retry-${agent.id}-${index}`} wrap="truncate-end">
+                {under}
+                <Text color="warning">↻ </Text>
+                <Text color="inactive">{`attempt ${index + 1} rejected: `}</Text>
+                {reason}
+              </Text>
+            ),
+          )}
         </Box>
       )
     }
@@ -3971,7 +4306,7 @@ export const register: Register = on => {
       const room = columns - 4 - phase.title.length - (hasAgents ? figuresWidth : 0)
       const attempts = attemptsOf(phase.agents)
       return (
-        <Box key={`phase-${phase.title}`} flexDirection="column">
+        <Box key={`phase-${phase.title}`} flexDirection="column" {...(isDesktop ? { gap: 'xs' as const, marginTop: 'xs' as const, ...(phase.mark === 'running' ? { backgroundColor: washOf('claude'), ...BLEED } : {}) } : {})}>
           {row(
             `phase-row-${phase.title}`,
             <Box flexShrink={1}>
@@ -3992,8 +4327,7 @@ export const register: Register = on => {
                     key="title"
                     {...staged(
                       phase.mark,
-                      { bold: phase.mark === 'running', color: phase.mark === 'pending' ? 'inactive' : tddTone(phase.title) },
-                      tddTone(phase.title),
+                      { bold: phase.mark === 'running', color: phase.mark === 'pending' ? 'inactive' : undefined },
                     )}
                   >
                     {phase.title}
@@ -4007,7 +4341,7 @@ export const register: Register = on => {
           {isOpen(phase) &&
             phase.agents.map(agent => agentRow(agent, attempts[agent.id] ?? 1, typicalMs(known, current.agents, agent)))}
           {isOpen(phase) && phase.earlier.map(agent => agentRow(agent, 1, null))}
-          {phase.title === AUDIT_PHASE && roundRows('     ')}
+          {phase.title === AUDIT_PHASE && roundRows(isDesktop ? '     ' : '    ')}
         </Box>
       )
     }
@@ -4026,7 +4360,7 @@ export const register: Register = on => {
             ).map(([label, value], index) => (
               <Text key={label}>
                 {index > 0 ? '  ' : ''}
-                {isWide && <Text color={value === DONE ? (tddTone(label) ?? 'inactive') : 'inactive'}>{label} </Text>}
+                {isWide && <Text {...markLabel(value === DONE)}>{label} </Text>}
                 <Text color={value === DONE ? 'success' : 'inactive'}>{markOf(value)}</Text>
               </Text>
             ))}
@@ -4036,6 +4370,9 @@ export const register: Register = on => {
     )
 
     const currentSheetStep = sheet?.steps.find(one => !isStepDone(one))
+    // On the terminal the step or cycle being worked on while the run goes turns its glyph into the spinner.
+    const sheetGlyph = (isDone: boolean, isStarted: boolean, isCurrent: boolean) =>
+      isDone ? '✓' : !isDesktop && isCurrent && isStarted && current.status === 'running' ? spin : isStarted ? '◐' : '○'
     const stepRows = (shown: Sheet) =>
       shown.steps.flatMap(one => {
         const isDone = isStepDone(one)
@@ -4046,7 +4383,7 @@ export const register: Register = on => {
             `step-${one.number}`,
             <Text wrap="truncate-end">
               {'  '}
-              <Text color={isDone ? 'success' : isStarted ? 'claude' : 'inactive'}>{isDone ? '✓' : isStarted ? '◐' : '○'} </Text>
+              <Text color={isDone ? 'success' : isStarted ? 'claude' : 'inactive'}>{sheetGlyph(isDone, isStarted, one === currentSheetStep)} </Text>
               <Text
                 {...staged(isDone ? 'done' : one === currentSheetStep ? 'running' : 'pending', {
                   bold: one === currentSheetStep,
@@ -4061,10 +4398,18 @@ export const register: Register = on => {
           ...one.corrections.map(correction =>
             row(
               `correction-${one.number}-${correction.id}`,
-              <Text wrap="truncate-end" color={isPhaseDone(correction.tdd) ? 'inactive' : 'warning'}>
-                {'    ↳ '}
-                {fit(`${correction.id} ${correction.finding}`, titleWidth - 4)}
-              </Text>,
+              isDesktop ? (
+                <Text wrap="truncate-end" color={isPhaseDone(correction.tdd) ? 'inactive' : 'warning'}>
+                  {'    ↳ '}
+                  {fit(`${correction.id} ${correction.finding}`, titleWidth - 4)}
+                </Text>
+              ) : (
+                <Text wrap="truncate-end">
+                  {'    '}
+                  <Text color={isPhaseDone(correction.tdd) ? 'inactive' : 'warning'}>↳ </Text>
+                  {fit(`${correction.id} ${correction.finding}`, titleWidth - 4)}
+                </Text>
+              ),
               [marksCell(`correction-marks-${one.number}-${correction.id}`, correction.tdd)],
             ),
           ),
@@ -4083,7 +4428,7 @@ export const register: Register = on => {
           ).map(([label, isReached], index) => (
             <Text key={label}>
               {index > 0 ? '  ' : ''}
-              {isWide && <Text color={isReached ? (tddTone(label) ?? 'inactive') : 'inactive'}>{label} </Text>}
+              {isWide && <Text {...markLabel(isReached)}>{label} </Text>}
               {cycle.live === label ? (
                 <Text color="claude">{spin}</Text>
               ) : (
@@ -4104,7 +4449,7 @@ export const register: Register = on => {
             `cycle-${one.id}`,
             <Text wrap="truncate-end">
               {'  '}
-              <Text color={isDone ? 'success' : isStarted ? 'claude' : 'inactive'}>{isDone ? '✓' : isStarted ? '◐' : '○'} </Text>
+              <Text color={isDone ? 'success' : isStarted ? 'claude' : 'inactive'}>{sheetGlyph(isDone, isStarted, one === currentCycle)} </Text>
               <Text
                 {...staged(isDone ? 'done' : one === currentCycle ? 'running' : 'pending', {
                   bold: one === currentCycle,
@@ -4119,10 +4464,19 @@ export const register: Register = on => {
           ...one.unreachable.map(method =>
             row(
               `cycle-unreachable-${one.id}-${method}`,
-              <Text wrap="truncate-end" color="warning">
-                {'    '}
-                {fit(`↳ unreachable, not written: ${method}`, columns - 6)}
-              </Text>,
+              isDesktop ? (
+                <Text wrap="truncate-end" color="warning">
+                  {'    '}
+                  {fit(`↳ unreachable, not written: ${method}`, columns - 6)}
+                </Text>
+              ) : (
+                <Text wrap="truncate-end">
+                  {'    '}
+                  <Text color="warning">↳ </Text>
+                  <Text color="inactive">unreachable, not written: </Text>
+                  {fit(method, columns - 32)}
+                </Text>
+              ),
             ),
           ),
         ]
@@ -4141,7 +4495,7 @@ export const register: Register = on => {
       const planReason =
         planOutcome?.reason == null ? '' : withoutRepeated(planOutcome.reason, attention.map(({ entry }) => entry.outcome?.reason ?? ''))
       return (
-        <Box flexDirection="column" marginTop={1}>
+        <Box flexDirection="column" marginTop={1} {...frame}>
           {viewHeader(planRun.name, [
             code !== null && <Text key="header-code" color="inactive"> · {code}</Text>,
           ])}
@@ -4152,7 +4506,7 @@ export const register: Register = on => {
           {steerBar}
           {steerLines}
           {steer.breaker !== null && (
-            <Box key="breaker" flexDirection="column" marginTop={1} marginLeft={2} paddingX={1} borderStyle="round" borderColor="error">
+            <Box key="breaker" flexDirection="column" {...(isDesktop ? { backgroundColor: washOf('error'), marginTop: 'sm' as const, padding: 'sm' as const, gap: 'xs' as const } : { borderStyle: 'round', borderColor: 'error', marginTop: 1, marginLeft: 2, paddingX: 1 })}>
               <Text bold color="error" wrap="wrap">
                 ⛔ Plan stopped — common cause
               </Text>
@@ -4173,20 +4527,24 @@ export const register: Register = on => {
             ),
           )}
           {figuresBox('Plan', totalsOf(planRun.agents).tokens)}
-          <Box marginTop={1} flexDirection="column">
+          <Box flexDirection="column" {...card({ marginTop: 1 })}>
             {columnsTitle('lots-title', 'BATCHES', 'lots')}
             {states.map(({ entry, state }) => {
               const agents = planRun.agents.filter(agent => agent.lot === entry.lot)
               const view = agents.length > 0 ? lotRun(planRun, entry.lot) : null
               const left = (
-                <Text key={`plan-lot-text-${entry.lot}`} wrap="wrap">
+                <Text key={`plan-lot-text-${entry.lot}`} wrap="truncate-end">
                   {'  '}
                   <Text color={lotTone(state)}>{lotGlyph(state)} </Text>
-                  <Text bold={state === 'running'}>{entry.lot}</Text>
-                  <Text color={state === 'failed' ? 'error' : 'inactive'}> {lotDetailOf(planRun, entry, state, at)}</Text>
+                  <Text bold={state === 'running'} {...(!isDesktop && state === 'pending' ? { color: 'inactive', dimColor: true } : {})}>{entry.lot}</Text>
+                  <Text color={state === 'failed' ? 'error' : 'inactive'} {...(!isDesktop && state === 'pending' ? { dimColor: true } : {})}>
+                    {' '}
+                    {fit(lotDetailOf(planRun, entry, state, at), columns - figuresWidth - entry.lot.length - (isDesktop ? 12 : 7))}
+                  </Text>
                 </Text>
               )
-              return row(
+              const rowTone = state === 'running' ? 'claude' : state === 'failed' ? 'error' : state === 'waiting' ? WAITING_TONE : state === 'killed' ? 'warning' : undefined
+              return washed(`plan-lot-${entry.lot}`, rowTone, row(
                 `plan-lot-${entry.lot}`,
                 view === null ? (
                   left
@@ -4203,8 +4561,7 @@ export const register: Register = on => {
                       duration(view.durationMs ?? at - view.startedAt),
                       kilo(totalsOf(agents).tokens),
                     ),
-                true,
-              )
+              ))
             })}
           </Box>
           {notesSection}
@@ -4219,14 +4576,14 @@ export const register: Register = on => {
     }
 
     return (
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column" marginTop={1} {...frame}>
         {viewHeader(
           current.name,
           lot === null
             ? []
             : [
                 <Text key="header-dot" color="inactive"> · </Text>,
-                <Text key="header-lot" bold color="claude">{lot.lot}</Text>,
+                <Text key="header-lot" bold color={isDesktop ? 'claude' : undefined}>{lot.lot}</Text>,
                 <Text key="header-code" color="inactive"> · {lot.code}</Text>,
               ],
         )}
@@ -4244,26 +4601,37 @@ export const register: Register = on => {
         {steerLines}
         {outcomeBlock(current.outcome, current.status, current.outcome?.reason ?? null, '')}
         {figuresBox('Run', totalsOf(current.agents).tokens)}
-        <Box marginTop={1} flexDirection="column">
+        <Box flexDirection="column" {...card({ marginTop: 1 })}>
           {columnsTitle('phases-title', 'PHASES', 'title')}
           {rows.map(phaseRow)}
         </Box>
         {sheet !== null && (
-          <Box key="sheet" marginTop={1} flexDirection="column">
+          <Box key="sheet" flexDirection="column" {...card({ marginTop: 1 })}>
             {row(
               'sheet-title',
-              <Text wrap="truncate-end">
-                <Text bold color={accent}>
-                  {'  '}
-                  SHEET {sheet.lot}
-                </Text>
-                {sheet.hypotheses > 0 && (
-                  <Text color="inactive">
-                    {' '}
-                    · {sheet.hypotheses} {sheet.hypotheses > 1 ? 'hypotheses' : 'hypothesis'}
+              isDesktop ? (
+                <Text wrap="truncate-end">
+                  <Text bold>
+                    {'  '}
+                    SHEET {sheet.lot}
                   </Text>
-                )}
-              </Text>,
+                  {sheet.hypotheses > 0 && (
+                    <Text color="inactive">
+                      {' '}
+                      · {sheet.hypotheses} {sheet.hypotheses > 1 ? 'hypotheses' : 'hypothesis'}
+                    </Text>
+                  )}
+                </Text>
+              ) : (
+                titled(
+                  `Sheet ${sheet.lot}`,
+                  [sheet.hypotheses > 0 && <Text key="hypotheses" color="inactive">{` · ${`${sheet.hypotheses} ${sheet.hypotheses > 1 ? 'hypotheses' : 'hypothesis'}`}`}</Text>],
+                  columns - 3 - (sheet.cycles === undefined
+                    ? `${sheet.steps.filter(isStepDone).length}/${sheet.steps.length} steps`
+                    : `${sheet.cycles.filter(one => one.state === 'done').length}/${sheet.cycles.length} cycles`).length
+                    - (sheet.hypotheses > 0 ? ` · ${`${sheet.hypotheses} ${sheet.hypotheses > 1 ? 'hypotheses' : 'hypothesis'}`}`.length : 0),
+                )
+              ),
               sheet.cycles === undefined ? (
                 <Text color={sheet.isDone ? 'success' : 'inactive'}>
                   {sheet.steps.filter(isStepDone).length}/{sheet.steps.length} steps
@@ -4279,14 +4647,12 @@ export const register: Register = on => {
         )}
         {notesSection}
         {step !== null && (
-          <Box key="actions" marginTop={1} height={1}>
-            <Text>{'  '}</Text>
-            <Button key="current" hotkey="c" plain dimColor onPress={go({ screen: 'phase', phase: step.row.title })}>
-              current step
-            </Button>
+          <Box key="actions" marginTop={1} {...(isDesktop ? {} : { height: 1 })}>
+            {!isDesktop && <Text>{'  '}</Text>}
+            {action('current', isDesktop ? 'Current step' : 'current step', go({ screen: 'phase', phase: step.row.title }), 'c')}
           </Box>
         )}
       </Box>
     )
-  })
+  })()))
 }

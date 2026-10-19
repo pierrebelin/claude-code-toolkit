@@ -13,7 +13,9 @@ import {
   nextStreak,
   replay,
   stepLabel,
+  tokenColor,
   topContributions,
+  topLine,
 } from '../hooks/register'
 
 const HOUR = 60 * 60 * 1000
@@ -47,8 +49,15 @@ describe('pure figures', () => {
     expect(kilo(950)).toBe('950')
     expect(kilo(68_240)).toBe('68.2k')
     expect(kilo(1_000_000)).toBe('1M')
-    expect(meter(13)).toBe('█░░░░░░░░░')
-    expect(meterColor(60)).toBe('yellow')
+    expect(meter(13)).toBe('█░░░░░░░')
+    expect(meterColor(59)).toBe('success')
+    expect(meterColor(60)).toBe('warning')
+    expect(meterColor(85)).toBe('error')
+    expect(tokenColor(99_000)).toBeUndefined()
+    expect(tokenColor(160_000)).toBe('warning')
+    expect(tokenColor(260_000)).toBe('error')
+    expect(topLine('Read Handler.cs', 3_000, 18)).toEqual({ label: 'Read Handler.cs   ', tokens: '  3.0k' })
+    expect(topLine('Read SPEC-catalog-lifecycle.md', 946, 12)).toEqual({ label: 'Read SPEC-c…', tokens: '   946' })
     expect(span(14 * 60_000 + 37_000)).toBe('14m')
     expect(span(65 * 60_000)).toBe('1h5m')
   })
@@ -110,11 +119,27 @@ test('band shows step and cache after a turn, on every surface', async ($, on) =
     const ui = await $.ui.mount({ plugin: 'context-band', surface, ...(surface === 'desktop' ? ABOVE : BAND) })
     expect(await ui.find({ type: 'Text', text: /150k step/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /Cache \(10m\)/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^ 50%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^ ?50%$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /1 turn\b/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /\$4\.13/ })).toBeDefined()
     await ui.unmount()
   }
+
+  // The terminal sets its groups apart by space, no rule; past the 150k step the figure is amber and bold.
+  const ui = await $.ui.mount({ plugin: 'context-band', surface: 'terminal', ...BAND })
+  expect(await ui.find({ type: 'Text', text: /│/ })).toBeUndefined()
+  const figure = await ui.find({ type: 'Text', text: /^160\.0k$/ })
+  expect(figure?.props.color).toBe('warning')
+  expect(figure?.props.bold).toBe(true)
+  expect((await ui.find({ type: 'Text', text: /^ 50%$/ }))?.props.color).toBeUndefined()
+  // Each meter whole in the colour of its state: the context at 16 %, the 5-hour limit at 50 %, both at rest.
+  expect((await ui.find({ type: 'Text', text: /^█░{7}$/ }))?.props.color).toBe('success')
+  expect((await ui.find({ type: 'Text', text: /^█{3}░{5}$/ }))?.props.color).toBe('success')
+  expect((await ui.find({ key: 'top-toggle' }))?.props.label).toBe('▸ details')
+  await ui.press({ key: 'top-toggle' })
+  expect((await ui.find({ type: 'Text', text: /150k step reached/ }))?.props.color).toBe('warning')
+  expect((await ui.find({ key: 'top-toggle' }))?.props.label).toBe('▾ details')
+  await ui.unmount()
 })
 
 test('band yields when no turn has been measured', async ($, on) => {
@@ -200,8 +225,14 @@ test('top contributions show two above the engine hint, the toggle lists them al
   expect(await ui.find({ type: 'Text', text: /Read B\.cs/ })).toBeUndefined()
   expect(await ui.find({ key: 'top-toggle' })).toBeDefined()
 
+  expect((await ui.find({ key: 'top-toggle' }))?.props.label).toBe('▸ details +4')
   await ui.press({ key: 'top-toggle' })
   expect(await ui.find({ type: 'Text', text: /Read E\.cs/ })).toBeDefined()
+  // Expanded, one row per contributor: labels in one column, tokens right-aligned in the next.
+  const rows = (await ui.findAll({ type: 'Text', text: /^Read [A-E]\.cs +\d/ })).map(one => one.text)
+  expect(rows).toHaveLength(5)
+  expect(new Set(rows.map(one => one.length)).size).toBe(1)
+  expect(rows[0]).toMatch(/^Read [A-E]\.cs {2}\d+\.\dk$/)
 
   await ui.press({ key: 'top-toggle' })
   expect(await ui.find({ type: 'Text', text: /Read E\.cs/ })).toBeUndefined()
@@ -249,6 +280,23 @@ test('session start replays the transcript when the band is empty', async ($, on
   const ui = await $.ui.mount({ plugin: 'context-band', surface: 'terminal', ...BAND })
   expect(await ui.find({ type: 'Text', text: /Read Big\.cs/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /1 turn\b/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the desktop draws its meters as bars, no block glyph, and folds the details behind one button', async ($, on) => {
+  const clock = world(on, 160_000)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.turn.complete(turn)
+  await clock.advance(50 * 60 * 1000)
+  const ui = await $.ui.mount({ plugin: 'context-band', surface: 'desktop', ...ABOVE })
+  expect((await ui.findAll({ type: 'Svg' })).map(one => one.props.alt)).toEqual(['context 16% full', '5-hour limit 50% used'])
+  expect(await ui.find({ type: 'Text', text: /[█░│]/ })).toBeUndefined()
+  // Past the 150k step the context figure sits on an amber wash; the session figure, asking nothing, on none.
+  expect((await ui.find({ key: 'context' }))?.props.backgroundColor).toBe('#d99a1e24')
+  expect((await ui.find({ key: 'session' }))?.props.backgroundColor).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /150k step/ })).toBeUndefined()
+  await ui.press({ key: 'top-toggle' })
+  expect(await ui.find({ type: 'Text', text: /150k step/ })).toBeDefined()
   await ui.unmount()
 })
 
