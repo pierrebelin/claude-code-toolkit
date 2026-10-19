@@ -95,7 +95,7 @@ A batch takes tens of minutes and a dozen agents, a whole plan several times tha
 
 ![run-lot-pane following a whole plan](docs/screenshots/demo-plan-running.png)
 
-Open a batch and it shows each phase, which agent is working, the tests going red then green, the tokens spent, and the final verdict. The pane also steers the run: review what it decided without you, pause a plan between two batches, leave a note for a batch's agents ([keys](mods/README.md#run-lot-pane--follow-an-autonomous-batch)).
+Open a batch and it shows each phase, which agent is working, the tests going red then green, the tokens spent, and the final verdict. The pane also steers the run: review what it decided without you, leave a note for a batch's agents ([keys](mods/README.md#run-lot-pane--follow-an-autonomous-batch)).
 
 ![run-lot-pane during a batch](docs/screenshots/demo-running.png)
 
@@ -103,7 +103,7 @@ Open a batch and it shows each phase, which agent is working, the tests going re
 claude plugin install run-lot-pane@cctoolkit --scope project
 ```
 
-Three more mods — a browser of the knowledge base that spends no model context, a live view of the spec as it's written, and a context meter telling you when to `/clear`: [`mods/README.md`](mods/README.md).
+Two more mods — a browser of the knowledge base that spends no model context and shows the spec live as it's written, and a context meter telling you when to `/clear`: [`mods/README.md`](mods/README.md).
 
 ## Opinionated by design
 

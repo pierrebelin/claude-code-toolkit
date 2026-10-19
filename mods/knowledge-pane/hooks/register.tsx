@@ -1,10 +1,31 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Base, ContextRow, HistoryRow, IndexState, KObject, Kind, Level, Merge, MergeObject, Navigation, Sync, View } from '../types'
+import type {
+  Base,
+  ContextRow,
+  Decision,
+  HistoryRow,
+  IndexState,
+  KObject,
+  Kind,
+  Level,
+  Merge,
+  MergeObject,
+  Navigation,
+  OpenQuestion,
+  SpecDoc,
+  SpecItem,
+  SpecKind,
+  SpecSection,
+  Sync,
+  Tracked,
+  View,
+} from '../types'
 
 const PANE = 'knowledge-pane'
 const TITLE = 'Knowledge'
+const SPEC_TITLE = 'Spec'
 const TICK_MS = 3_000
 const DEFAULT_ROOT = 'docs/business'
 const CONFIG = '.claude/kit.config.json'
@@ -18,8 +39,24 @@ const HISTORY_SHOWN = 5
 const RESULTS_SHOWN = 40
 const ID_PATTERN = /^(?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D)-[\w?]+|ADR-[\w?]+)$/
 const INDEX_COMMAND = 'cctoolkit knowledge-index'
+const SKILL = 'business-spec'
+const SPEC_PATTERN = /(?:^|[\\/])todo[\\/][^\\/]+[\\/]SPEC(?:-[^\\/]+)?\.md$/
+// The open questions: the section whose heading carries the anchor, else, in a spec written before
+// the anchors, the title the `/plan-implementation` gate reads (`skills/plan-implementation/SKILL.md`).
+const OPEN_QUESTIONS_ANCHOR = 'open-questions'
+const OPEN_QUESTIONS_TITLE = /^12\. (?:Open questions|Questions ouvertes)/
+// A spec's use cases and rules: `CU-01`, or a knowledge-base id `CAT-CU-01`.
+const SPEC_ID = /^(?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM)-\d+|(?:CU|RM)-[\w.]+)$/
+const isRule = (id: string): boolean => /(?:^|-)RM-/.test(id)
+const isUseCase = (id: string): boolean => /(?:^|-)CU-/.test(id)
+const SEVERITY_PATTERN = /\*\*(?:s[ée]v[ée]rit[ée]|severity)\*\*\s*:?\s*([^·\n]+)/i
+const RECOMMENDED_PATTERN = /\((?:recommand[ée]e?|recommended)\)/i
+const EDITING_TOOLS = ['Edit', 'Write', 'MultiEdit']
+const BLOCKING = ['bloquant', 'blocking']
+const MAJOR = ['majeur', 'major', 'warning']
 
 const HOME: Navigation = { stack: [{ kind: 'home' }], query: '', seed: '', expanded: [], collapsed: [] }
+const IDLE: Tracked = { isArmed: false, topic: null, path: null, mtimeMs: 0, doc: null, readAt: null }
 
 // The search field starts from the query each time the search comes back on top.
 const seeded = (next: Navigation): Navigation => (next.stack[next.stack.length - 1]?.kind === 'search' ? { ...next, seed: next.query } : next)
@@ -47,6 +84,8 @@ const nav = atom({ plugin: 'knowledge-pane', key: 'nav' } as const, HOME)
 const full = atom({ plugin: 'knowledge-pane', key: 'full' } as const, {} as Record<string, string>)
 const now = atom({ plugin: 'knowledge-pane', key: 'now' } as const, 0)
 const isShown = atom({ plugin: 'knowledge-pane', key: 'isShown' } as const, false)
+const tracked = atom({ plugin: 'knowledge-pane', key: 'tracked' } as const, IDLE)
+const decisions = atom({ plugin: 'knowledge-pane', key: 'decisions' } as const, [] as Decision[])
 
 export const fold = (text: string): string =>
   text
@@ -75,6 +114,35 @@ const counted = (count: number, one: string, many = `${one}s`): string => `${cou
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((one): one is string => typeof one === 'string') : [])
 
 const textOf = (value: unknown): string => (typeof value === 'string' ? value : '')
+
+const cellsOf = (line: string): string[] =>
+  line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map(cell => cell.trim())
+
+const isSeparator = (line: string): boolean => /^\|?\s*:?-{3,}/.test(line.trim())
+
+// An object heading as `lib/knowledge.py` (`HEADING`) reads it: `<#…> <id> — <title>`, the em dash only.
+// The anchor ending it (`<!-- kit:new -->`) is not part of the title.
+const HEADING = /^(#{1,6})\s+(\S+)\s+—\s+(.*?)\s*(?:<!--.*-->)?\s*$/
+
+export const headingOf = (line: string): { level: number; id: string; title: string } | null => {
+  const found = HEADING.exec(line)
+  return found === null ? null : { level: (found[1] ?? '').length, id: found[2] ?? '', title: (found[3] ?? '').trim() }
+}
+
+// A `## ` heading: its number when it has one, its title, the `<!-- kit:<name> -->` anchor ending it.
+const SECTION = /^##\s+(?:(\d+)\.\s*)?(.*?)\s*(?:<!--\s*kit:([\w-]+)\s*-->|<!--.*-->)?\s*$/
+
+export const sectionOf = (line: string): { number: string; title: string; anchor: string | undefined } | null => {
+  const found = SECTION.exec(line)
+  return found === null ? null : { number: found[1] ?? '', title: (found[2] ?? '').trim(), anchor: found[3] }
+}
+
+export const sectionLabel = (section: { number: string; title: string }): string => (section.number ? `${section.number}. ${section.title}` : section.title)
 
 // Fields of `.index/knowledge.jsonl`, a frozen literal of the kit (`docs/FROZEN-LITERALS.md`).
 export const parseIndex = (jsonl: string): KObject[] =>
@@ -107,16 +175,6 @@ export const parseIndex = (jsonl: string): KObject[] =>
       return []
     }
   })
-
-const cellsOf = (line: string): string[] =>
-  line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map(cell => cell.trim())
-
-const isSeparator = (line: string): boolean => /^\|?\s*:?-{3,}/.test(line.trim())
 
 // The table under a `<!-- kit:cols … -->` anchor, header row dropped, read by position.
 export const tableAfter = (text: string, cols: string): string[][] => {
@@ -164,14 +222,11 @@ export const deltaId = (token: string): string => token.replace(/^[+~-]/, '')
 export const historyOf = (rows: HistoryRow[], id: string): HistoryRow[] => rows.filter(row => row.delta.some(token => deltaId(token) === id))
 
 // An object's own lines, heading excluded: from its heading to the next heading of the same or a higher level.
-// The heading as `lib/knowledge.py` (`HEADING`) reads it: `<#…> <id> — <title>`, the em dash only.
 export const sliceObject = (text: string, id: string): string | null => {
   const lines = text.split('\n')
-  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const heading = new RegExp(`^(#{1,6})\\s+${escaped}\\s+—\\s`)
-  const at = lines.findIndex(line => heading.test(line))
+  const at = lines.findIndex(line => headingOf(line)?.id === id)
   if (at < 0) return null
-  const level = (heading.exec(lines[at] ?? '')?.[1] ?? '#').length
+  const level = headingOf(lines[at] ?? '')?.level ?? 1
   const rest = lines.slice(at + 1)
   const stop = rest.findIndex(line => {
     const found = /^(#{1,6})\s/.exec(line)
@@ -254,10 +309,10 @@ export const parseOverview = (text: string): { role: string; parts: OverviewPart
   let isTableHead = false
   for (const line of text.split('\n')) {
     if (/^#\s/.test(line)) continue
-    const heading = /^##\s+(.*?)\s*(?:<!--.*-->)?\s*$/.exec(line)
+    const heading = sectionOf(line)
     if (heading !== null) {
       if (current !== null) parts.push({ title: current.title, body: current.lines.join('\n').trim() })
-      current = { title: heading[1] ?? '', lines: [] }
+      current = { title: sectionLabel(heading), lines: [] }
       continue
     }
     if (/^\s*<!--.*-->\s*$/.test(line)) {
@@ -279,21 +334,199 @@ export const parseOverview = (text: string): { role: string; parts: OverviewPart
   return { role: role.join('\n').trim(), parts }
 }
 
-const SVG_STYLE =
-  '<style>text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif}.ink{fill:#52514e}.head{fill:#52514e;font-weight:600}.muted{fill:#52514e;opacity:.7}' +
-  '.empty{fill:#52514e;fill-opacity:.08}.glyph{font-size:10px;font-weight:600}.rule{stroke:#52514e;stroke-opacity:.35}' +
-  '.hit{fill:#52514e;fill-opacity:0}g.mark:hover .hit{fill-opacity:.14}' +
-  '@media (prefers-color-scheme: dark){.ink,.head,.muted{fill:#c3c2b7}.empty{fill:#c3c2b7}.rule{stroke:#c3c2b7}.hit{fill:#c3c2b7}}</style>'
-const SPECIFIED = '#3b82c4'
-const OBSERVED = '#fab219'
+export const isSpecPath = (path: string): boolean => SPEC_PATTERN.test(path)
+
+// On Windows a tool's `file_path` comes as `C:\x\repo\todo\…`, the root maybe as `C:/x/repo`:
+// both are compared with `/`, the drive's case aside.
+const slashed = (path: string): string => path.replace(/\\/g, '/')
+const isDrive = (path: string): boolean => /^[A-Za-z]:/.test(path)
+export const isAbsolutePath = (path: string): boolean => /^(?:[A-Za-z]:)?[\\/]/.test(path)
+
+export const relativePath = (path: string, root: string | null): string => {
+  if (root === null) return path
+  const [file, base] = [slashed(path), slashed(root).replace(/\/$/, '')]
+  const cased = (one: string): string => (isDrive(base) ? one.toLowerCase() : one)
+  return cased(file).startsWith(`${cased(base)}/`) ? file.slice(base.length + 1) : path
+}
+
+export const severityTone = (severity: string | null): 'error' | 'warning' | 'inactive' => {
+  const folded = fold(severity ?? '')
+  if (BLOCKING.some(word => folded.startsWith(word))) return 'error'
+  if (MAJOR.some(word => folded.startsWith(word))) return 'warning'
+  return 'inactive'
+}
+
+// A table read by its header names, folded.
+export const parseTable = (body: string): Record<string, string>[] => {
+  const rows = body.split('\n').filter(line => line.trim().startsWith('|') && !isSeparator(line))
+  const [header, ...data] = rows
+  if (header === undefined) return []
+  const names = cellsOf(header).map(fold)
+  return data.map(row => Object.fromEntries(cellsOf(row).map((cell, index) => [names[index] ?? `${index}`, cell])))
+}
+
+const cellOf = (row: Record<string, string>, ...names: string[]): string =>
+  Object.entries(row).find(([name]) => names.some(one => name.startsWith(one)))?.[1] ?? ''
+
+export const parseOpenQuestions = (body: string): OpenQuestion[] =>
+  parseTable(body)
+    .map(row => ({
+      id: cellOf(row, '#'),
+      severity: cellOf(row, 'sev'),
+      question: cellOf(row, 'question'),
+      impact: cellOf(row, 'impact'),
+      options: cellOf(row, 'option'),
+    }))
+    .filter(question => question.question !== '')
+
+const trimBlank = (lines: string[]): string => lines.join('\n').trim()
+
+export const questionsSection = (sections: SpecSection[]): SpecSection | undefined =>
+  sections.find(one => one.anchor === OPEN_QUESTIONS_ANCHOR) ??
+  sections.find(one => one.anchor === undefined && OPEN_QUESTIONS_TITLE.test(`${one.number}. ${one.title}`))
+
+// A use case or a rule of a spec: an object heading of level 3 with a spec id.
+const specItemOf = (line: string) => {
+  const found = headingOf(line)
+  return found !== null && found.level === 3 && SPEC_ID.test(found.id) ? found : null
+}
+
+// A section without a number (`## Notes`) is keyed by its position, shown by its title alone.
+export const sectionKey = (section: SpecSection, index: number): string => section.number || `#${index + 1}`
+
+export const sectionCounts = (doc: SpecDoc): Record<string, number> => {
+  const questions = questionsSection(doc.sections)
+  return Object.fromEntries(
+    doc.sections.map((section, index) => [
+      sectionKey(section, index),
+      section === questions ? doc.openQuestions.length : section.body.split('\n').filter(line => specItemOf(line) !== null).length,
+    ]),
+  )
+}
+
+export const parseSpec = (text: string): SpecDoc => {
+  const lines = text.split('\n')
+  const title = (lines.find(line => /^#\s/.test(line)) ?? '').replace(/^#\s+/, '').trim()
+  const summary = lines
+    .filter(line => line.startsWith('>'))
+    .map(line => line.replace(/^>\s?/, '').trim())
+    .join(' ')
+    .trim()
+  const sections: SpecSection[] = []
+  const items: SpecItem[] = []
+  let section: { number: string; title: string; anchor: string | undefined; lines: string[] } | null = null
+  let item: { id: string; name: string; lines: string[] } | null = null
+  const closeItem = () => {
+    if (item === null) return
+    const body = trimBlank(item.lines)
+    const severity = isRule(item.id) ? (SEVERITY_PATTERN.exec(body)?.[1]?.trim() ?? null) : null
+    items.push({ id: item.id, name: item.name, tag: severity, body })
+    item = null
+  }
+  const closeSection = () => {
+    closeItem()
+    if (section !== null) sections.push({ number: section.number, title: section.title, ...(section.anchor === undefined ? {} : { anchor: section.anchor }), body: trimBlank(section.lines) })
+    section = null
+  }
+  for (const line of lines) {
+    if (/^##\s/.test(line)) {
+      closeSection()
+      const heading = sectionOf(line)
+      if (heading !== null) section = { ...heading, lines: [] }
+      continue
+    }
+    if (section === null) continue
+    section.lines.push(line)
+    const found = specItemOf(line)
+    if (found !== null) {
+      closeItem()
+      item = { id: found.id, name: found.title, lines: [] }
+    } else if (/^###\s/.test(line)) closeItem()
+    else if (item !== null) item.lines.push(line)
+  }
+  closeSection()
+  const questions = questionsSection(sections)
+  return {
+    title,
+    summary,
+    sections,
+    useCases: items.filter(one => isUseCase(one.id)),
+    rules: items.filter(one => isRule(one.id)),
+    openQuestions: questions === undefined ? [] : parseOpenQuestions(questions.body),
+  }
+}
+
+export const isSpecSkill = (skill: unknown): boolean =>
+  typeof skill === 'string' && (skill === SKILL || skill.endsWith(`:${SKILL}`))
+
+export const promptTopic = (text: string): string | null | undefined => {
+  const typed = /^\s*\/(?:[\w-]+:)?business-spec\b(.*)$/s.exec(text)
+  if (typed !== null) return (typed[1] ?? '').trim() || null
+  const expanded = /<command-name>\/?(?:[\w-]+:)?business-spec<\/command-name>/.test(text)
+  if (!expanded) return undefined
+  return /<command-args>([\s\S]*?)<\/command-args>/.exec(text)?.[1]?.trim() || null
+}
+
+type Asked = { question?: unknown; header?: unknown; options?: unknown }
+
+const labelsOf = (options: unknown): string[] =>
+  Array.isArray(options)
+    ? options.map(option => (option as { label?: unknown }).label).filter((label): label is string => typeof label === 'string')
+    : []
+
+export const recommendedOf = (options: string[]): string | null =>
+  options.find(option => RECOMMENDED_PATTERN.test(option)) ?? options[0] ?? null
+
+export const askedOf = (id: string, questions: unknown): Decision[] =>
+  (Array.isArray(questions) ? (questions as Asked[]) : [])
+    .filter(one => typeof one.question === 'string')
+    .map((one, index) => {
+      const options = labelsOf(one.options)
+      return {
+        id: `${id}-${index}`,
+        header: typeof one.header === 'string' ? one.header : '',
+        question: one.question as string,
+        options,
+        recommended: recommendedOf(options),
+        answer: null,
+        note: null,
+        isPending: true,
+      }
+    })
+
+type Answered = { answers?: unknown; annotations?: unknown; response?: unknown }
+
+export const withAnswers = (asked: Decision[], result: unknown): Decision[] => {
+  const answered = (result ?? {}) as Answered
+  const answers = (answered.answers ?? {}) as Record<string, unknown>
+  const annotations = (answered.annotations ?? {}) as Record<string, { notes?: unknown } | undefined>
+  const response = typeof answered.response === 'string' && answered.response.trim() !== '' ? answered.response.trim() : null
+  return asked.map(decision => {
+    const answer = answers[decision.question]
+    const notes = annotations[decision.question]?.notes
+    return {
+      ...decision,
+      answer: typeof answer === 'string' && answer !== '' ? answer : response,
+      note: typeof notes === 'string' && notes.trim() !== '' ? notes.trim() : null,
+      isPending: false,
+    }
+  })
+}
+
+export const isUnanswered = (decision: Decision): boolean => !decision.isPending && decision.answer === null
+
+export const isOffRecommendation = (decision: Decision): boolean =>
+  decision.answer !== null && decision.recommended !== null && !decision.answer.split(', ').includes(decision.recommended)
+
+const STATUS = { good: '#0ca30c', warning: '#fab219', critical: '#d03b3b', specified: '#3b82c4' } as const
 const CELL_INK = '#0b0b0b'
 const CELL = 18
-const STEP = 21
-const LABEL_WIDTH = 190
-const HEAD_HEIGHT = 62
-const LEGEND_HEIGHT = 30
-// The legend's last words end near x = 340: a matrix of few columns is drawn that wide all the same.
-const LEGEND_WIDTH = 345
+const CELL_GAP = 3
+const SVG_STYLE =
+  '<style>text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif}.ink{fill:#52514e}.head{fill:#52514e;font-weight:600}.muted{fill:#52514e;opacity:.7}' +
+  '.empty{fill:#52514e;fill-opacity:.08}.rule{stroke:#52514e;stroke-opacity:.35}.pending{fill:none;stroke:#52514e;stroke-dasharray:3 2}.none{fill:#c3c2b7}' +
+  '.glyph{font-size:10px;font-weight:600}.hit{fill:#52514e;fill-opacity:0}g.mark:hover .hit{fill-opacity:.14}' +
+  '@media (prefers-color-scheme: dark){.ink,.head,.muted{fill:#c3c2b7}.empty{fill:#c3c2b7}.rule,.pending{stroke:#c3c2b7}.none{fill:#52514e}.hit{fill:#c3c2b7}}</style>'
 
 export const escapeXml = (text: string): string =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -301,6 +534,47 @@ export const escapeXml = (text: string): string =>
 export const svgHeight = (source: string): number => Number(/<svg[^>]*\sheight="(\d+)"/.exec(source)?.[1] ?? 0)
 
 export const svgWidth = (source: string): number => Number(/<svg[^>]*\swidth="(\d+)"/.exec(source)?.[1] ?? 0)
+
+const px = (value: number): string => `${Math.round(value * 10) / 10}`
+
+const svgOf = (width: number, height: number, body: string): string =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${SVG_STYLE}${body}</svg>`
+
+type Paint = string | 'pending' | 'none'
+
+// One square with its glyph and its tooltip, a hit target wider than it.
+const cellSvg = (x: number, y: number, fill: Paint, glyph: string, title: string[]): string => {
+  const square =
+    fill === 'pending'
+      ? `<rect class="pending" x="${px(x + 0.5)}" y="${px(y + 0.5)}" width="${CELL - 1}" height="${CELL - 1}" rx="4"/>`
+      : fill === 'none'
+        ? `<rect class="none" x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="4"/>`
+        : `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="4" fill="${fill}"/>`
+  const isInked = fill !== 'pending' && fill !== 'none'
+  const text =
+    glyph === ''
+      ? ''
+      : `<text class="glyph${isInked ? '' : ' ink'}" x="${px(x + CELL / 2)}" y="${px(y + CELL / 2 + 3.5)}" text-anchor="middle"${isInked ? ` fill="${CELL_INK}"` : ''}>${escapeXml(glyph)}</text>`
+  return `<g class="mark"><title>${title.map(escapeXml).join('&#10;')}</title><rect class="hit" x="${x - 1.5}" y="${y - 1.5}" width="${CELL + 3}" height="${CELL + 3}" rx="5"/>${square}${text}</g>`
+}
+
+const swatchSvg = (x: number, y: number, fill: Paint): string =>
+  fill === 'pending'
+    ? `<rect class="pending" x="${x + 0.5}" y="${y - 8.5}" width="8" height="8" rx="2"/>`
+    : fill === 'none'
+      ? `<rect class="none" x="${x}" y="${y - 9}" width="9" height="9" rx="2"/>`
+      : `<rect x="${x}" y="${y - 9}" width="9" height="9" rx="2" fill="${fill}"/>`
+
+const headSvg = (title: string, count: string, left: number, width: number): string =>
+  `<text class="head" x="${left}" y="12">${escapeXml(title)}</text>` +
+  (count === '' ? '' : `<text class="muted" x="${left + width}" y="12" text-anchor="end">${escapeXml(count)}</text>`)
+
+const STEP = 21
+const LABEL_WIDTH = 190
+const HEAD_HEIGHT = 62
+const LEGEND_HEIGHT = 30
+// The legend's last words end near x = 340: a matrix of few columns is drawn that wide all the same.
+const LEGEND_WIDTH = 345
 
 export const shortId = (id: string): string => id.replace(/^[A-Z][A-Z0-9]{1,5}-(?=(?:CU|RM|D)-)/, '')
 
@@ -331,24 +605,16 @@ export const matrixSvg = (objects: KObject[], name: string): string => {
     .map((cu, row) => {
       const y = HEAD_HEIGHT + row * STEP
       const label = `<g class="mark"><title>${escapeXml(`${cu.id} — ${cu.title}`)}</title><text class="ink" x="0" y="${y + 13}">${escapeXml(fit(`${shortId(cu.id)} ${cu.title}`, 30))}</text></g>`
-      const cells = columns
+      const squares = columns
         .map((rule, index) => {
           const x = LABEL_WIDTH + index * STEP
           if (!rule.usecases.includes(cu.id)) return `<rect class="empty" x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="4"/>`
-          const fill = rule.level === null ? SPECIFIED : OBSERVED
-          const glyph = rule.level === null ? '' : (rule.level[0] ?? '')
           const status = rule.level === null ? 'specified' : `observed ${rule.level}`
           const place = isOwnRule(rule, cu) ? 'own rule' : isSharedRule(rule) ? 'cross-cutting' : `from ${rule.context}`
-          return (
-            `<g class="mark"><title>${escapeXml(`${cu.id} applies ${rule.id}`)}&#10;${escapeXml(rule.title)}&#10;${escapeXml(`${place} · ${status}`)}</title>` +
-            `<rect class="hit" x="${x - 1.5}" y="${y - 1.5}" width="${CELL + 3}" height="${CELL + 3}" rx="5"/>` +
-            `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="4" fill="${fill}"/>` +
-            (glyph === '' ? '' : `<text class="glyph" x="${x + CELL / 2}" y="${y + CELL / 2 + 3.5}" text-anchor="middle" fill="${CELL_INK}">${glyph}</text>`) +
-            '</g>'
-          )
+          return cellSvg(x, y, rule.level === null ? STATUS.specified : STATUS.warning, rule.level?.[0] ?? '', [`${cu.id} applies ${rule.id}`, rule.title, `${place} · ${status}`])
         })
         .join('')
-      return label + cells
+      return label + squares
     })
     .join('')
   const firstShared = columns.findIndex(isSharedRule)
@@ -358,10 +624,10 @@ export const matrixSvg = (objects: KObject[], name: string): string => {
       : ''
   const legendY = HEAD_HEIGHT + rows.length * STEP + 18
   const legend =
-    `<rect x="0" y="${legendY - 9}" width="9" height="9" rx="2" fill="${SPECIFIED}"/><text class="ink" x="13" y="${legendY}">specified</text>` +
-    `<rect x="84" y="${legendY - 9}" width="9" height="9" rx="2" fill="${OBSERVED}"/><text class="ink" x="97" y="${legendY}">observed (h · m · l)</text>` +
+    `${swatchSvg(0, legendY, STATUS.specified)}<text class="ink" x="13" y="${legendY}">specified</text>` +
+    `${swatchSvg(84, legendY, STATUS.warning)}<text class="ink" x="97" y="${legendY}">observed (h · m · l)</text>` +
     `<text class="muted" x="230" y="${legendY}">bold: cross-cutting</text>`
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${SVG_STYLE}<text class="head" x="0" y="12">Use cases × rules</text>${heads}${divider}${lines}${legend}</svg>`
+  return svgOf(width, height, `${headSvg('Use cases × rules', '', 0, width)}${heads}${divider}${lines}${legend}`)
 }
 
 export const matrixAlt = (objects: KObject[], name: string): string => {
@@ -369,6 +635,173 @@ export const matrixAlt = (objects: KObject[], name: string): string => {
   const columns = matrixColumns(objects, name)
   const applied = rows.map(({ cu }) => `${cu.id} applies ${columns.filter(rule => rule.usecases.includes(cu.id)).map(rule => rule.id).join(', ') || 'no rule'}`)
   return `${name}: ${counted(rows.length, 'use case')} × ${counted(columns.length, 'rule')}. ${applied.join('; ')}.`
+}
+
+const SVG_WIDTH = 560
+const COLUMN_GAP = 24
+const LEGEND_CHAR_PX = 6.2
+const LEGEND_LINE = 16
+
+type Cell = { fill: Paint; glyph: string; title: string[] }
+
+type Block = { svg: string; height: number }
+
+const cells = (items: Cell[], left: number, y: number, width: number): Block => {
+  const perRow = Math.max(1, Math.floor((width + CELL_GAP) / (CELL + CELL_GAP)))
+  const svg = items
+    .map((item, index) => cellSvg(left + (index % perRow) * (CELL + CELL_GAP), y + Math.floor(index / perRow) * (CELL + CELL_GAP), item.fill, item.glyph, item.title))
+    .join('')
+  return { svg, height: Math.ceil(items.length / perRow) * (CELL + CELL_GAP) - CELL_GAP }
+}
+
+const legend = (items: { fill: Paint; text: string }[], left: number, y: number, width: number): Block => {
+  let x = 0
+  let line = 0
+  const svg = items
+    .map(item => {
+      const room = 13 + [...item.text].length * LEGEND_CHAR_PX
+      if (x > 0 && x + room > width) {
+        x = 0
+        line += 1
+      }
+      const at = left + x
+      const base = y + line * LEGEND_LINE
+      x += room + 16
+      return `${swatchSvg(at, base, item.fill)}<text class="ink" x="${at + 13}" y="${base}">${escapeXml(item.text)}</text>`
+    })
+    .join('')
+  return { svg, height: (line + 1) * LEGEND_LINE }
+}
+
+type Severity = 'blocking' | 'major' | 'other'
+
+const SEVERITIES: { key: Severity; icon: string; fill: Paint }[] = [
+  { key: 'blocking', icon: '✖', fill: STATUS.critical },
+  { key: 'major', icon: '▲', fill: STATUS.warning },
+  { key: 'other', icon: '●', fill: 'none' },
+]
+
+const severityOf = (question: OpenQuestion): Severity => {
+  const tone = severityTone(question.severity)
+  return tone === 'error' ? 'blocking' : tone === 'warning' ? 'major' : 'other'
+}
+
+const bySeverity = (questions: OpenQuestion[]) =>
+  SEVERITIES.map(one => ({ ...one, items: questions.filter(question => severityOf(question) === one.key) }))
+
+const decisionParts = (asked: Decision[]) => {
+  const pending = asked.filter(one => one.isPending)
+  const none = asked.filter(isUnanswered)
+  const other = asked.filter(one => !one.isPending && !isUnanswered(one) && isOffRecommendation(one))
+  const kept = asked.filter(one => !one.isPending && !isUnanswered(one) && !isOffRecommendation(one))
+  return { pending, none, other, kept }
+}
+
+const nameOf = (decision: Decision): string => decision.header || decision.question
+
+const block = (title: string, count: string, items: Cell[], keys: { fill: Paint; text: string }[], left: number, width: number): Block => {
+  const grid = cells(items, left, 20, width)
+  const key = legend(keys, left, 20 + grid.height + 18, width)
+  return { svg: headSvg(title, count, left, width) + grid.svg + key.svg, height: 20 + grid.height + 6 + key.height }
+}
+
+const answerOf = (decision: Decision): string[] =>
+  [
+    nameOf(decision),
+    decision.header === '' ? '' : decision.question,
+    decision.isPending ? 'waiting for the answer' : decision.answer === null ? 'no answer' : `answer: ${decision.answer}`,
+    decision.recommended === null ? '' : `recommended: ${decision.recommended}`,
+  ].filter(one => one !== '')
+
+export const specGauge = (asked: Decision[], doc: SpecDoc | null): string => {
+  if (asked.length === 0 && doc === null) return ''
+  const isPair = doc !== null && asked.length > 0
+  const width = isPair ? (SVG_WIDTH - COLUMN_GAP) / 2 : SVG_WIDTH
+  const blocks: Block[] = []
+  if (doc !== null) {
+    if (doc.openQuestions.length === 0) {
+      blocks.push({
+        svg:
+          headSvg('Open questions', '', 0, width) +
+          `<rect x="0" y="20" width="${CELL}" height="${CELL}" rx="4" fill="${STATUS.good}"/><text class="glyph" x="${CELL / 2}" y="${20 + CELL / 2 + 3.5}" text-anchor="middle" fill="${CELL_INK}">✓</text><text class="ink" x="${CELL + 8}" y="33">no open question</text>`,
+        height: 20 + CELL,
+      })
+    } else {
+      const groups = bySeverity(doc.openQuestions)
+      blocks.push(
+        block(
+          'Open questions',
+          counted(doc.openQuestions.length, 'open', 'open'),
+          groups.flatMap(group =>
+            group.items.map(question => ({
+              fill: group.fill,
+              glyph: group.icon,
+              title: [`${question.id} · ${group.key}`, plain(question.question), question.impact === '' ? '' : `impact: ${plain(question.impact)}`].filter(one => one !== ''),
+            })),
+          ),
+          groups.filter(group => group.items.length > 0).map(group => ({ fill: group.fill, text: `${group.icon} ${group.items.length} ${group.key}` })),
+          0,
+          width,
+        ),
+      )
+    }
+  }
+  if (asked.length > 0) {
+    const { pending, none, other, kept } = decisionParts(asked)
+    blocks.push(
+      block(
+        'Decisions',
+        `${kept.length + other.length} of ${asked.length} answered`,
+        [
+          ...kept.map(one => ({ fill: STATUS.good, glyph: '✓', title: answerOf(one) })),
+          ...other.map(one => ({ fill: STATUS.warning, glyph: '≠', title: answerOf(one) })),
+          ...none.map(one => ({ fill: 'none', glyph: '–', title: answerOf(one) })),
+          ...pending.map(one => ({ fill: 'pending', glyph: '?', title: answerOf(one) })),
+        ],
+        [
+          ...(kept.length > 0 ? [{ fill: STATUS.good, text: `✓ ${kept.length} recommended kept` }] : []),
+          ...(other.length > 0 ? [{ fill: STATUS.warning, text: `≠ ${other.length} other choice` }] : []),
+          ...(none.length > 0 ? [{ fill: 'none', text: `– ${none.length} no answer` }] : []),
+          ...(pending.length > 0 ? [{ fill: 'pending', text: `? ${pending.length} pending` }] : []),
+        ],
+        isPair ? width + COLUMN_GAP : 0,
+        width,
+      ),
+    )
+  }
+  const height = Math.ceil(Math.max(...blocks.map(one => one.height)) + 4)
+  return svgOf(SVG_WIDTH, height, blocks.map(one => one.svg).join(''))
+}
+
+export const specGaugeAlt = (asked: Decision[], doc: SpecDoc | null): string => {
+  const parts: string[] = []
+  if (doc !== null) {
+    const groups = bySeverity(doc.openQuestions).filter(group => group.items.length > 0)
+    parts.push(
+      doc.openQuestions.length === 0
+        ? 'no open question'
+        : `${counted(doc.openQuestions.length, 'open question')} (${groups.map(group => `${group.items.length} ${group.key}`).join(', ')})`,
+    )
+  }
+  if (asked.length > 0) {
+    const { pending, none, other, kept } = decisionParts(asked)
+    const split = [
+      kept.length > 0 ? `${kept.length} recommended kept` : '',
+      other.length > 0 ? `${other.length} other choice${other.length === 1 ? '' : 's'}` : '',
+      none.length > 0 ? `${none.length} without answer` : '',
+      pending.length > 0 ? `${pending.length} pending` : '',
+    ].filter(one => one !== '')
+    parts.push(`${counted(asked.length, 'decision')} (${split.join(', ')})`)
+  } else parts.push('no decision')
+  if (doc === null) parts.push('spec not written yet')
+  return `Spec state: ${parts.join(', ')}.`
+}
+
+const blockingCount = (questions: OpenQuestion[]): number => questions.filter(one => severityTone(one.severity) === 'error').length
+
+export const questionsTone = (questions: OpenQuestion[]): 'error' | 'warning' | 'inactive' => {
+  const tones = questions.map(one => severityTone(one.severity))
+  return tones.includes('error') ? 'error' : tones.includes('warning') ? 'warning' : 'inactive'
 }
 
 const join = (...parts: string[]): string => parts.filter(part => part !== '').join('/')
@@ -605,6 +1038,12 @@ async function home($: EngineInterface): Promise<void> {
   await update($, nav, current => ({ ...HOME, query: current.query }))
 }
 
+// The stack without the spec view, so it is never on it twice.
+const withoutSpec = (current: Navigation): View[] => {
+  const stack = current.stack.filter(one => one.kind !== 'spec')
+  return stack.length > 0 ? stack : HOME.stack
+}
+
 // The plugin's own close never reaches its own ui.close hook: the flag is set here.
 async function closePane($: EngineInterface): Promise<void> {
   await $.ui.close({ id: PANE }).catch(() => undefined)
@@ -616,12 +1055,40 @@ async function openPane($: EngineInterface): Promise<void> {
   if (opened?.isPlaced) await update($, isShown, () => true)
 }
 
+async function showSpec($: EngineInterface): Promise<void> {
+  await update($, nav, (current): Navigation => ({ ...HOME, ...current, stack: [...withoutSpec({ ...HOME, ...current }), { kind: 'spec' }], expanded: [] }))
+  await openPane($)
+}
+
+async function arm($: EngineInterface, topic: string | null): Promise<void> {
+  await update($, tracked, () => ({ ...IDLE, isArmed: true, topic }))
+  await update($, decisions, () => [])
+  await showSpec($)
+}
+
+async function reloadSpec($: EngineInterface, path: string): Promise<void> {
+  const stat = await $.fs.stat(path).catch(() => null)
+  const text = stat === null ? null : await readText($, path)
+  if (stat === null || text === null) {
+    await update($, tracked, state => ({ ...state, path }))
+    return
+  }
+  const at = await $.clock.now()
+  await update($, tracked, state => ({ ...state, isArmed: true, path, mtimeMs: stat.mtimeMs, doc: parseSpec(text), readAt: at }))
+}
+
 async function tick($: EngineInterface): Promise<void> {
-  if (!(await read($, isShown))) return
+  const shown = await read($, isShown)
+  const spec = await read($, tracked)
+  if (!shown && !spec.isArmed) return
   const at = await $.clock.now()
   await update($, now, () => at)
+  if (spec.path !== null) {
+    const stat = await $.fs.stat(spec.path).catch(() => null)
+    if (stat !== null && stat.mtimeMs !== spec.mtimeMs) await reloadSpec($, spec.path)
+  }
   const current = await read($, base)
-  if (current.repo === '') return
+  if (!shown || current.repo === '') return
   const walked = await signatureOf($, current.repo, current.root)
   if (walked.signature !== current.signature) await reload($, walked)
 }
@@ -629,14 +1096,18 @@ async function tick($: EngineInterface): Promise<void> {
 export const register: Register = on => {
   let repo: string | null = null
 
-  // On a desktop, a button above the prompt opens and closes the pane once the repo holds a base.
+  // On a desktop, a button above the prompt opens and closes the pane once the repo holds a base or a spec is
+  // followed: its tab has no way back once closed but the commands.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.surface !== 'desktop' || e.props.hasSurvey || !(await read($, base)).isPresent) return next(e)
+    if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
+    if (!(await read($, base)).isPresent && !(await read($, tracked)).isArmed) return next(e)
     const { Box, Button } = $.ui.resolve(e)
     const shown = await read($, isShown)
+    const { stack } = { ...HOME, ...(await read($, nav)) }
+    const label = stack[stack.length - 1]?.kind === 'spec' ? `◫ ${SPEC_TITLE}` : `◫ ${TITLE}`
     return (
       <Box>
-        <Button key="toggle-knowledge-pane" label="◫ Knowledge" variant={shown ? 'primary' : 'secondary'} onPress={() => (shown ? closePane($) : openPane($))} />
+        <Button key="toggle-knowledge-pane" label={label} variant={shown ? 'primary' : 'secondary'} onPress={() => (shown ? closePane($) : openPane($))} />
       </Box>
     )
   })
@@ -655,9 +1126,14 @@ export const register: Register = on => {
       name: 'knowledge-pane',
       description: 'Browse the knowledge base: a context, an id or words to search; demo shows the kit example',
     })
+    await $.command.register({
+      name: 'spec-pane',
+      description: 'Open the /business-spec view of the knowledge pane (a SPEC path follows that spec, clear forgets it)',
+    })
     $.clock.every(TICK_MS, () => void tick($).catch(() => undefined))
     const current = await read($, base)
     if (!current.isDemo || current.repo === '') await switchTo($, e.cwd, await rootOf($, e.cwd), false).catch(() => undefined)
+    if ((await read($, tracked)).isArmed) void showSpec($)
     return next(e)
   })
 
@@ -686,6 +1162,32 @@ export const register: Register = on => {
     return { text: current.isPresent ? 'Knowledge pane opened.' : `Knowledge pane opened — no knowledge base under ${current.root}.` }
   })
 
+  on('command.run', { command: 'spec-pane' }, async ($, e) => {
+    if (e.args.trim() === 'clear') {
+      await update($, tracked, () => IDLE)
+      await update($, decisions, () => [])
+      await update($, nav, current => seeded({ ...HOME, ...current, stack: withoutSpec({ ...HOME, ...current }), expanded: [] }))
+      return { text: 'Spec pane cleared.' }
+    }
+    const asked = e.args.trim().replace(/^@/, '')
+    if (asked !== '') {
+      const path = isAbsolutePath(asked) || repo === null ? asked : `${repo}/${asked}`
+      if (!isSpecPath(path)) return { text: `Not a spec: ${asked} (expected todo/<code>/SPEC-<code>.md or todo/<slug>/SPEC.md).` }
+      await update($, tracked, () => ({ ...IDLE, isArmed: true }))
+      await update($, decisions, () => [])
+      await reloadSpec($, path)
+      if ((await read($, tracked)).doc === null) return { text: `Spec not found: ${asked}.` }
+    }
+    await showSpec($)
+    return { text: 'Spec pane opened.' }
+  })
+
+  on('prompt.submit', async ($, e, next) => {
+    const topic = promptTopic(e.text)
+    if (topic !== undefined) await arm($, topic)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   // Follow: the object a `cctoolkit ask --id` or `--handler` of the main thread asked for, while the pane is shown.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
@@ -702,18 +1204,57 @@ export const register: Register = on => {
     return answered
   }).catch(($, e, next) => next(e))
 
+  // Follow: the `/business-spec` of the main thread, its questions with their answers, then its SPEC file.
+  on('tool.call', async ($, e, next) => {
+    if (e.agentId !== undefined) return next(e)
+    const input = e as unknown as Record<string, unknown>
+
+    if (e.tool === 'Skill') {
+      if (isSpecSkill(input.skill)) {
+        const args = typeof input.args === 'string' && input.args.trim() !== '' ? input.args.trim() : null
+        const state = await read($, tracked)
+        if (!state.isArmed || state.path !== null || state.topic !== args) await arm($, args)
+      }
+      return next(e)
+    }
+
+    if (e.tool === 'AskUserQuestion') {
+      if (!(await read($, tracked)).isArmed) return next(e)
+      const asked = askedOf(e.tool_use_id ?? `q${await $.clock.now()}`, input.questions)
+      await update($, decisions, list => [...list, ...asked])
+      const answered = await next(e)
+      const done = withAnswers(asked, 'deny' in answered && answered.deny !== undefined ? {} : answered.result)
+      await update($, decisions, list => list.map(one => done.find(other => other.id === one.id) ?? one))
+      return answered
+    }
+
+    const path = input.file_path
+    const isEdit = EDITING_TOOLS.includes(e.tool)
+    if (typeof path !== 'string' || !isSpecPath(path) || (!isEdit && e.tool !== 'Read')) return next(e)
+    const state = await read($, tracked)
+    if (e.tool === 'Read' && (!state.isArmed || state.path !== null)) return next(e)
+    const answered = await next(e)
+    if (!state.isArmed) await showSpec($)
+    await reloadSpec($, path)
+    return answered
+  }).catch(($, e, next) => next(e))
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
     const { Box, Button, Text } = elements
     const Input = 'Input' in elements ? elements.Input : undefined
     const Svg = e.surface === 'desktop' && 'Svg' in elements ? elements.Svg : undefined
     const kb = await read($, base)
+    const spec = await read($, tracked)
+    const asked = await read($, decisions)
     const where: Navigation = { ...HOME, ...(await read($, nav)) }
     const texts = await read($, full)
     const at = await read($, now)
     const columns = e.props.bodyColumns
     const view: View = where.stack[where.stack.length - 1] ?? { kind: 'home' }
     const byId = new Map(kb.objects.map(one => [one.id, one]))
+    // On the spec, `b` folds the rows unfolded first, then walks back.
+    const isFolding = view.kind === 'spec' && where.expanded.length > 0
 
     const go = (next: View) => () => void push($, next).catch(() => undefined)
     // The search takes the ring on its field, so what is typed next fills it rather than the prompt.
@@ -733,6 +1274,7 @@ export const register: Register = on => {
         ...current,
         expanded: current.expanded.includes(slot) ? current.expanded.filter(one => one !== slot) : [...current.expanded, slot],
       }))
+    const foldAll = () => void update($, nav, current => ({ ...HOME, ...current, expanded: [] }))
     const isOpen = (group: string, byDefault = true) => (where.collapsed.includes(group) ? !byDefault : byDefault)
 
     const close = <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
@@ -749,19 +1291,31 @@ export const register: Register = on => {
         {close}
       </Box>
     )
-    const freshness = kb.readAt === null || at === 0 ? '' : ` · read ${ago(at - kb.readAt)} ago`
+    const freshness = (readAt: number | null) => (readAt === null || at === 0 ? '' : ` · read ${ago(at - readAt)} ago`)
+    const place =
+      view.kind !== 'spec'
+        ? `${kb.isDemo ? `demo · ${kb.root}` : kb.root}${freshness(kb.readAt)}`
+        : spec.path !== null
+          ? `${relativePath(spec.path, repo)}${freshness(spec.readAt)}`
+          : spec.isArmed
+            ? 'waiting for the SPEC file…'
+            : 'No /business-spec in this session yet.'
     const location = (
       <Text key="location" color="inactive" wrap="truncate-start">
         {'  ⎿  '}
-        {kb.isDemo ? `demo · ${kb.root}` : kb.root}
-        {freshness}
+        {place}
       </Text>
     )
     const keys = (
       <Box key="keys" height={1}>
         <Text>{'     '}</Text>
+        {isFolding && (
+          <Button key="fold-all" hotkey="b" plain dimColor onPress={foldAll}>
+            <Text>{`fold all (${where.expanded.length} open) `}</Text>
+          </Button>
+        )}
         {where.stack.length > 1 && (
-          <Button key="back" hotkey="b" plain dimColor onPress={() => void back($)}>
+          <Button key="back" hotkey={isFolding ? undefined : 'b'} plain dimColor onPress={() => void back($)}>
             <Text>back </Text>
           </Button>
         )}
@@ -770,7 +1324,7 @@ export const register: Register = on => {
             <Text>home </Text>
           </Button>
         )}
-        {view.kind !== 'search' && (
+        {kb.isPresent && view.kind !== 'search' && (
           <Button key="search" hotkey="s" plain dimColor onPress={toSearch}>
             <Text>search</Text>
           </Button>
@@ -848,9 +1402,22 @@ export const register: Register = on => {
 
     // --- home ---------------------------------------------------------------------------
     const homeView = () => {
+      const followed = spec.isArmed
+        ? [
+            <Box key="alert-spec" height={1}>
+              <Button key="open-spec" plain onPress={go({ kind: 'spec' })}>
+                <Text color="claude" bold>{`✎ ${spec.doc?.title || spec.topic || SPEC_TITLE}`}</Text>
+                <Text color="inactive">{spec.doc === null ? '  /business-spec, SPEC not written yet' : '  /business-spec'}</Text>
+              </Button>
+            </Box>,
+          ]
+        : []
       if (!kb.isPresent)
-        return [blank(`No knowledge base under ${kb.root} — /cctoolkit:knowledge-sync builds it. /knowledge-pane demo shows the kit example.`)]
-      const alerts: JSX.Element[] = []
+        return [
+          blank(`No knowledge base under ${kb.root} — /cctoolkit:knowledge-sync builds it. /knowledge-pane demo shows the kit example.`),
+          ...(followed.length > 0 ? [<Box key="alerts" flexDirection="column" marginTop={1}>{followed}</Box>] : []),
+        ]
+      const alerts: JSX.Element[] = [...followed]
       if (kb.index === 'missing')
         alerts.push(
           <Text key="alert-index" color="error" wrap="wrap">{`✗ No index yet (${kb.root}/${INDEX_JSONL}) — run ${INDEX_COMMAND}`}</Text>,
@@ -1124,6 +1691,173 @@ export const register: Register = on => {
       ]
     }
 
+    // --- spec ---------------------------------------------------------------------------
+    const specView = () => {
+      const doc = spec.doc
+      if (!spec.isArmed && doc === null) return []
+      const slot = (kind: SpecKind, id: string) => `${kind}:${id}`
+      const isUnfolded = (kind: SpecKind, id: string) => where.expanded.includes(slot(kind, id))
+      const detail = (kind: SpecKind, id: string): JSX.Element[] | null => {
+        if (kind === 'decision') {
+          const decision = asked.find(one => one.id === id)
+          if (decision === undefined) return null
+          return [
+            <Text key="d-question" bold wrap="wrap">
+              {decision.question}
+            </Text>,
+            ...decision.options.map((option, index) => {
+              const isChosen = decision.answer?.split(', ').includes(option) ?? false
+              return (
+                <Text key={`d-option-${index}`} wrap="wrap" color={isChosen ? 'success' : 'inactive'}>
+                  {isChosen ? '  ✓ ' : '    '}
+                  {option}
+                  {option === decision.recommended ? ' ★' : ''}
+                </Text>
+              )
+            }),
+            <Box key="d-answer" marginTop={1}>
+              <Text wrap="wrap" color={decision.isPending ? 'claude' : isUnanswered(decision) ? 'inactive' : isOffRecommendation(decision) ? 'warning' : undefined}>
+                {decision.isPending ? 'Waiting for the answer…' : decision.answer === null ? 'No answer' : `Answer: ${decision.answer}`}
+              </Text>
+            </Box>,
+            ...(decision.note === null ? [] : [<Text key="d-note" color="inactive" wrap="wrap">{`Note: ${decision.note}`}</Text>]),
+          ]
+        }
+        if (doc === null) return null
+        if (kind === 'openQuestion') {
+          const question = doc.openQuestions.find(one => one.id === id)
+          if (question === undefined) return null
+          return [
+            <Text key="q-severity" color={severityTone(question.severity)}>
+              {question.severity}
+            </Text>,
+            <Box key="q-impact-title" marginTop={1}>
+              <Text bold>Impact</Text>
+            </Box>,
+            ...paragraph('q-impact', question.impact),
+            <Box key="q-options-title" marginTop={1}>
+              <Text bold>Options</Text>
+            </Box>,
+            ...paragraph('q-options', question.options),
+          ]
+        }
+        if (kind === 'section') {
+          const section = doc.sections.find((one, index) => sectionKey(one, index) === id)
+          return section === undefined ? null : paragraph('s', section.body)
+        }
+        const item = (kind === 'useCase' ? doc.useCases : doc.rules).find(one => one.id === id)
+        return item === undefined ? null : paragraph('i', item.body)
+      }
+      const unfolded = (kind: SpecKind, id: string): JSX.Element[] => {
+        const body = isUnfolded(kind, id) ? detail(kind, id) : null
+        return body === null
+          ? []
+          : [
+              <Box key={`detail-${kind}-${id}`} flexDirection="column" marginLeft={4} marginBottom={1}>
+                {body}
+              </Box>,
+            ]
+      }
+      const entry = (kind: SpecKind, id: string, children: JSX.Element[]) => [
+        <Box key={`row-${kind}-${id}`} height={1}>
+          <Text color="inactive">{isUnfolded(kind, id) ? '▾ ' : '  '}</Text>
+          <Button key={`open-${kind}-${id}`} plain onPress={unfold(slot(kind, id))}>
+            {children}
+          </Button>
+        </Box>,
+        ...unfolded(kind, id),
+      ]
+
+      const pending = asked.filter(one => one.isPending).length
+      const decisionRows = asked.flatMap(decision =>
+        entry('decision', decision.id, [
+          <Text key="mark" color={decision.isPending ? 'claude' : isUnanswered(decision) ? 'inactive' : isOffRecommendation(decision) ? 'warning' : 'success'}>
+            {decision.isPending ? '? ' : isUnanswered(decision) ? '– ' : isOffRecommendation(decision) ? '≠ ' : '✓ '}
+          </Text>,
+          <Text key="text" wrap="truncate-end">
+            {fit(`${decision.header !== '' ? `${decision.header} · ` : ''}${decision.isPending ? decision.question : (decision.answer ?? 'no answer')}`, columns - 4)}
+          </Text>,
+        ]),
+      )
+      const openQuestions = doc?.openQuestions ?? []
+      const blocking = blockingCount(openQuestions)
+      const questionRows = openQuestions.flatMap(question => [
+        <Box key={`row-openQuestion-${question.id}`}>
+          <Text color="inactive">{isUnfolded('openQuestion', question.id) ? '▾ ' : '  '}</Text>
+          <Button key={`open-openQuestion-${question.id}`} plain onPress={unfold(slot('openQuestion', question.id))}>
+            <Text color={severityTone(question.severity)}>● {question.id}</Text>
+          </Button>
+          <Text> </Text>
+          <Box flexShrink={1} flexGrow={1}>
+            <Text key={`question-${question.id}`} wrap="wrap">
+              {plain(question.question)}
+            </Text>
+          </Box>
+        </Box>,
+        ...unfolded('openQuestion', question.id),
+      ])
+      const itemRows = (kind: SpecKind, items: SpecItem[]) =>
+        items.flatMap(item =>
+          entry(kind, item.id, [
+            <Text key="id" color="inactive">
+              {item.id}{' '}
+            </Text>,
+            <Text key="name" wrap="truncate-end">
+              {fit(item.name, columns - 3 - item.id.length)}
+            </Text>,
+          ]),
+        )
+      const counts = Svg === undefined || doc === null ? {} : sectionCounts(doc)
+      const questionsAt = doc === null ? undefined : questionsSection(doc.sections)
+      const countTone = questionsTone(openQuestions)
+      const sectionRows = (doc?.sections ?? []).flatMap((section, index) => {
+        const count = counts[sectionKey(section, index)] ?? 0
+        return entry('section', sectionKey(section, index), [
+          <Text key="text" wrap="truncate-end">
+            {fit(sectionLabel(section), columns - 2 - (count > 0 ? String(count).length + 2 : 0))}
+          </Text>,
+          ...(count > 0 ? [<Text key="count" color={section === questionsAt ? countTone : 'inactive'}>{`  ${count}`}</Text>] : []),
+        ])
+      })
+      const gauge = Svg === undefined ? '' : specGauge(asked, doc)
+
+      return [
+        ...(Svg !== undefined && gauge !== ''
+          ? [
+              <Box key="gauge" marginTop={1}>
+                <Svg key="gauge-svg" source={gauge} alt={specGaugeAlt(asked, doc)} width={svgWidth(gauge)} height={svgHeight(gauge)} isInteractive />
+              </Box>,
+            ]
+          : []),
+        ...(doc !== null && doc.summary !== ''
+          ? [
+              <Box key="summary" marginTop={1}>
+                <Text color="inactive" wrap="wrap">
+                  {plain(doc.summary)}
+                </Text>
+              </Box>,
+            ]
+          : []),
+        ...(asked.length > 0
+          ? [group('spec-decisions', 'Decisions', `${asked.length}${pending > 0 ? ` · ${pending} pending` : ''}`, decisionRows, pending > 0 ? 'claude' : undefined)]
+          : []),
+        ...(doc === null
+          ? []
+          : [
+              group(
+                'spec-questions',
+                'Open questions',
+                openQuestions.length === 0 ? 'none' : `${openQuestions.length}${blocking > 0 ? ` · ${blocking} blocking` : ''}`,
+                questionRows,
+                blocking > 0 ? 'error' : openQuestions.length > 0 ? 'warning' : 'success',
+              ),
+              ...(doc.useCases.length > 0 ? [group('spec-usecases', 'Use cases', `${doc.useCases.length}`, itemRows('useCase', doc.useCases))] : []),
+              ...(doc.rules.length > 0 ? [group('spec-rules', 'Business rules', `${doc.rules.length}`, itemRows('rule', doc.rules))] : []),
+              ...(doc.sections.length > 0 ? [group('spec-sections', 'Sections', `${doc.sections.length}`, sectionRows)] : []),
+            ]),
+      ]
+    }
+
     const titleOf = (): [string, string | undefined] => {
       if (view.kind === 'context') return [view.name, TITLE]
       if (view.kind === 'object') {
@@ -1133,6 +1867,7 @@ export const register: Register = on => {
       if (view.kind === 'merge') return [`Merge ${view.code}`, TITLE]
       if (view.kind === 'change') return [`${view.id} in ${view.code}`, 'Merge']
       if (view.kind === 'search') return ['Search', TITLE]
+      if (view.kind === 'spec') return [spec.doc?.title || spec.topic || SPEC_TITLE, spec.doc?.title ? SPEC_TITLE : undefined]
       return [TITLE, undefined]
     }
     const [title, trail] = titleOf()
@@ -1147,13 +1882,15 @@ export const register: Register = on => {
               ? changeView(view.code, view.id)
               : view.kind === 'search'
                 ? searchView()
-                : homeView()
+                : view.kind === 'spec'
+                  ? specView()
+                  : homeView()
 
     return (
       <Box flexDirection="column" marginTop={1}>
         {header(title, trail)}
         {location}
-        {kb.isPresent && keys}
+        {(kb.isPresent || where.stack.length > 1) && keys}
         {body}
       </Box>
     )

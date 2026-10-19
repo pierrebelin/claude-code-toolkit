@@ -57,7 +57,7 @@ const obj = (properties, optional = []) => ({
 })
 const status = (...values) => ({ type: 'string', enum: values })
 
-const PREFLIGHT = obj({ ok: bool, failure: str, worktree: str, commit: str, branch: str, stack: status('dotnet', 'js'), project: str, tmp: str, cache: str, sinceTarget: str, startedAt: int, copied: arr(str) })
+const PREFLIGHT = obj({ ok: bool, failure: str, worktree: str, commit: str, branch: str, stack: status('dotnet'), project: str, tmp: str, cache: str, sinceTarget: str, startedAt: int, copied: arr(str) })
 const FRAGMENT = obj({ status: status(MEASURED, MISSING, NOT_CONFIGURED), reason: str, file: str })
 const SONAR = obj({ sonarStatus: status(MEASURED, MISSING, NOT_CONFIGURED), sonarReason: str, coverageStatus: status(MEASURED, MISSING, NOT_CONFIGURED), coverageReason: str, coverageFile: str, reused: bool, file: str })
 const COLLECT = obj({ ok: bool, failure: str, statuses: arr(obj({ block: str, status: str, reason: str })) })
@@ -73,7 +73,7 @@ const CLEANED = obj({ ok: bool, endedAt: int, detail: str })
 
 const SHELL = { model: 'haiku', effort: 'low' }
 const STEP = { model: 'sonnet', effort: 'low' }
-const KIT_DOC = '`<kit>` = the folder `cctoolkit root` prints; the stack commands are `<kit>/skills/quality-report/commands-<stack>.md` — read only the section a step names, e.g. `sed -n \'/^### Title/,/^### /p\'`, never the whole file.'
+const KIT_DOC = '`<kit>` = the folder `cctoolkit root` prints; the stack commands are `<kit>/skills/quality-report/commands-dotnet.md` — read only the section a step names, e.g. `sed -n \'/^### Title/,/^### /p\'`, never the whole file.'
 const RULE_MISSING = 'A tool that fails, times out or gives unreadable output: its block is `missing` with the reason, its numbers `null` — never 0, never a figure from another commit or an older report — and the step goes on.'
 
 phase('Preflight')
@@ -85,8 +85,8 @@ const pre = await agent(
     '   A doctor line starting `FAIL` → `ok: false`, `failure` = that line verbatim, every other field empty or 0, stop.',
     '2. `cctoolkit audit-worktree create` → its JSON line: `worktree` = `path`, `commit`, `branch`, `copied`. Exit ≠ 0 → `ok: false`, `failure` = its stderr, stop.',
     '3. In one message, `C` = the commit\'s first 12 characters:',
-    '   - stack: `cd <worktree> && if ls *.sln *.slnx >/dev/null 2>&1 || ls */*.csproj >/dev/null 2>&1; then echo dotnet; elif [ -f package.json ]; then echo js; else echo none; fi` — `none` → `ok: false`, `failure` = `cannot detect the stack (.NET or JS/TS)`, stop;',
-    '   - `project`: the `.sln` name without extension (dotnet) or `name` of `package.json` (js);',
+    '   - stack: `cd <worktree> && if ls *.sln *.slnx >/dev/null 2>&1 || ls */*.csproj >/dev/null 2>&1; then echo dotnet; else echo none; fi` — `none` → `ok: false`, `failure` = `no .NET solution found`, stop;',
+    '   - `project`: the `.sln` name without extension;',
     `   - \`tmp\` = \`cctoolkit run-work tmp audit-<C>\`, \`cache\` = \`cctoolkit run-work tmp stryker-<C>\`, both run from \`${checkout}\` (absolute paths, created: \`mkdir -p\`);`,
     `   - \`sinceTarget\`: \`metadata.commit\` of the newest \`${checkout}/docs/metrics/quality-report-*.json\` (else its \`stryker.since_target\`), else \`git -C <worktree> rev-list -1 HEAD~50\`, else empty;`,
     '   - Docker: `command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && case "$(uname)" in Darwin) open -a Docker ;; MINGW*|MSYS*) (\"/c/Program Files/Docker/Docker/Docker Desktop.exe\" >/dev/null 2>&1 &) ;; esac; true` (it boots during the build).',
@@ -139,7 +139,7 @@ try {
       FRAME,
       '',
       'You run the build and the tests with coverage, nothing else.',
-      `1. Section \`## Step 1\` of the stack commands (Docker) when the suites need it; then the dependencies: \`dotnet restore\` (dotnet) or \`npm ci\` (js). A restore that fails → \`status: missing\`, \`reason\` = its error line, write \`{"build": {"duration_seconds": null}}\` into \`${tmp}/tests.json\`, stop.`,
+      `1. Section \`## Step 1\` of the stack commands (Docker) when the suites need it; then the dependencies: \`dotnet restore\`. A restore that fails → \`status: missing\`, \`reason\` = its error line, write \`{"build": {"duration_seconds": null}}\` into \`${tmp}/tests.json\`, stop.`,
       `2. Section \`## Step 2\`: the build, timed → \`build.duration_seconds\`; then every suite with coverage as written there, logs under \`${tmp}\` in place of \`/tmp/test-*.log\`, coverage files where the section puts them (the next step reads them). Bash timeout 600000. A suite longer than that: \`cctoolkit bg start audit-tests -- '<its command>'\`, then \`cctoolkit bg wait audit-tests --seconds ${WAIT_SECONDS}\` (Bash timeout 600000) until it no longer prints \`RUNNING\`, 6 times at most.`,
       `3. Write \`${tmp}/tests.json\`: \`{"tests": {<type>: {"passed", "failed", "skipped", "duration_seconds"}}, "build": {"duration_seconds"}}\` — one key per suite type of the schema (\`unit\`, \`integration\`, \`contract\`, \`architecture\`, \`e2e\`, or the repo's own), durations rounded to whole seconds, no \`total\` (the assembly sums it). A suite that did not run: its key with \`null\` values.`,
       '`status`: `measured` when every suite ran to the end (failures included: a failing test is a result), `missing` otherwise with the reason. `file` = the fragment path.',
@@ -156,11 +156,11 @@ try {
         FRAME,
         '',
         'You produce the `sonarqube` and `coverage` blocks.',
-        '1. Coverage first, whatever SonarQube does: section `## Step 3` of the stack commands, the merged and aggregated coverage (dotnet: 3a and 3b, ReportGenerator; js: aggregated coverage). `coverageFile` = absolute path of the per-file coverage the section produces (dotnet: `TestResults/MergedCoverage/SonarQube.xml`; js: `tests/reports/merged-lcov.info`), empty when absent.',
+        '1. Coverage first, whatever SonarQube does: section `## Step 3` of the stack commands, the merged and aggregated coverage (3a and 3b, ReportGenerator). `coverageFile` = absolute path of the per-file coverage the section produces (`TestResults/MergedCoverage/SonarQube.xml`), empty when absent.',
         '2. SonarQube: `not_configured` when neither `~/.sonar-token` nor a server answering `curl -sf http://localhost:9000/api/system/status` exists; `missing` when one exists without the other. Before any scan, read the last analysis: `api/project_analyses/search?project=<key>&ps=1` — its `revision` equal to the report commit → reuse it (`reused: true`), no scan.',
         `   Otherwise the scan of the section, its commands written into \`${tmp}/run-sonar.sh\` (not \`/tmp\`) and launched as \`cctoolkit bg start audit-sonar -- 'bash ${tmp}/run-sonar.sh'\`, then \`cctoolkit bg wait audit-sonar --seconds ${WAIT_SECONDS}\` (Bash timeout 600000) until it no longer prints \`RUNNING\`, 3 times at most — never Monitor, never \`nohup\`. Then the metrics fetch of the section (\`resolved=false\` on every issue count), once the server task is done. An analysis whose \`revision\` is not the report commit is \`missing\`.`,
         `3. Write \`${tmp}/sonar.json\`: \`{"sonarqube": {…}, "coverage": {…}}\` per the schema. \`coverage.lines\` / \`branches\` are SonarQube whole-project figures: SonarQube missing → those two \`null\`, the ReportGenerator / Jest figures kept in their own fields.`,
-        '`sonarStatus` / `coverageStatus` with their reasons (empty when measured); `coverage` is `measured` when at least the ReportGenerator / Jest figures exist. `file` = the fragment path.',
+        '`sonarStatus` / `coverageStatus` with their reasons (empty when measured); `coverage` is `measured` when at least the ReportGenerator figures exist. `file` = the fragment path.',
       ].join('\n'),
       { schema: SONAR, phase: 'Measures', label: 'sonarqube + coverage', ...STEP },
     ),
@@ -177,8 +177,8 @@ try {
       [
         FRAME,
         '',
-        'You produce the inventory: sections `### Test inventory`, `### API endpoint coverage` (dotnet) or `### Page coverage` (js), `### Codebase health` and `### Code size (src / tests, per layer)` of the stack commands, at the report commit.',
-        `Write \`${tmp}/inventory.json\`: \`{"tests": {<type>: {"files", "methods"}}, "api_endpoints" | "pages": {…}, "codebase": {"source_files", "total_files", "todo_count", "skipped_tests", "size": {…}}}\` per the schema — only those fields: the run results are another agent's.`,
+        'You produce the inventory: sections `### Test inventory`, `### API endpoint coverage`, `### Codebase health` and `### Code size (src / tests, per layer)` of the stack commands, at the report commit.',
+        `Write \`${tmp}/inventory.json\`: \`{"tests": {<type>: {"files", "methods"}}, "api_endpoints": {…}, "codebase": {"source_files", "total_files", "todo_count", "skipped_tests", "size": {…}}}\` per the schema — only those fields: the run results are another agent's.`,
         '`status` = `measured` unless a command failed; `file` = the fragment path.',
       ].join('\n'),
       { schema: FRAGMENT, phase: 'Measures', label: 'inventory', ...STEP },
@@ -187,7 +187,7 @@ try {
       [
         FRAME,
         '',
-        'You produce the git activity: sections `### Git activity (30 days)` and, .NET only, `### Change rate per period` of the stack commands, every window ending at the report commit date, `docs/` excluded.',
+        'You produce the git activity: sections `### Git activity (30 days)` and `### Change rate per period` of the stack commands, every window ending at the report commit date, `docs/` excluded.',
         `Write \`${tmp}/activity.json\`: \`{"activity": {…}}\` per the schema, without \`hotspots\` (another agent's).`,
         '`themes` = 2-3 lines on the main axes of the 30 days, read from the commit subjects (`git log --since=… --format=%s`): what changed, never a judgement. `ok: false` with `failure` when git fails.',
       ].join('\n'),
@@ -216,8 +216,8 @@ try {
       [
         FRAME,
         '',
-        `You launch Stryker, mode \`${mode}\`, from section \`### Stryker .NET (background)\` or \`### StrykerJS (background)\` of the stack commands.`,
-        '1. Not configured (dotnet: no `stryker-config*.json` under the test roots; js: no `stryker.config.json` or no `@stryker-mutator/core` in `package.json`) → `not_configured`, stop. Never install it here: the worktree is thrown away.',
+        `You launch Stryker, mode \`${mode}\`, from section \`### Stryker .NET (background)\` of the stack commands.`,
+        '1. Not configured (no `stryker-config*.json` under the test roots) → `not_configured`, stop. Never install it here: the worktree is thrown away.',
         `2. \`${cache}/mode\` holds \`${mode} ${mode === 'since' ? pre.sinceTarget : '-'}\` and \`${cache}\` holds a \`*.json\` mutation report → \`reused\`, stop: those reports belong to this commit.`,
         `3. Mode in the configs of the worktree only: full → \`"since": { "enabled": false }\`; since → \`"since": { "enabled": true, "target": "${pre.sinceTarget}" }\`${pre.sinceTarget ? '' : ' — no target known: `missing`, reason `no since target`, stop'}. StrykerJS has no \`since\`: it runs full whatever the mode.`,
         `4. One call: \`rm -f ${cache}/*.json ${cache}/mode; cctoolkit bg start audit-stryker -- '<the commands of the section, in sequence, without nohup, pkill nor log redirection>'\`. \`STARTED\` → \`started\`; otherwise \`missing\` with its output.`,
@@ -252,7 +252,7 @@ try {
           FRAME,
           '',
           'You read the Stryker results of this commit.',
-          `1. Reports: when \`${cache}\` holds no \`*.json\`, copy each \`mutation-report.json\` this run wrote (dotnet: the newest \`StrykerOutput/*/reports/mutation-report.json\` per config, named \`<config scope>.json\` — \`domain.json\`, \`application.json\`; js: \`reports/mutation/mutation.json\` as \`combined.json\`) into \`${cache}\`, then \`echo '${mode} ${mode === 'since' ? pre.sinceTarget : '-'}' > ${cache}/mode\`.`,
+          `1. Reports: when \`${cache}\` holds no \`*.json\`, copy each \`mutation-report.json\` this run wrote (the newest \`StrykerOutput/*/reports/mutation-report.json\` per config, named \`<config scope>.json\` — \`domain.json\`, \`application.json\`) into \`${cache}\`, then \`echo '${mode} ${mode === 'since' ? pre.sinceTarget : '-'}' > ${cache}/mode\`.`,
           `2. From those reports, write \`${tmp}/stryker.json\`: \`{"stryker": {…}}\` per the schema (\`date\` = ${date}, \`since_target\` = ${mode === 'since' ? `\`${pre.sinceTarget}\`` : '`null`'}, the scopes, \`fragile_files\` = the files with the most survivors).`,
           '`status` measured, `file` = the fragment path; no report found → `missing`.',
         ].join('\n'),

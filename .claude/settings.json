@@ -2,7 +2,6 @@
   "enabledPlugins": {
     "context-band@cctoolkit": true,
     "knowledge-pane@cctoolkit": true,
-    "run-lot-pane@cctoolkit": true,
-    "spec-pane@cctoolkit": true
+    "run-lot-pane@cctoolkit": true
   }
 }

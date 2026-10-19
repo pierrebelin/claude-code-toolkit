@@ -1,6 +1,6 @@
 ---
 name: verify-ddd-tdd
-description: "Check, after /implement-tdd, that a .NET batch respects the coding rules — correctness, reuse, simplification, cost — then its conformance to the plan, its handler test policy and its TDD evidence. Use before moving to the next batch, in fast mode by default or full on explicit request."
+description: "Use after /implement-tdd, before the next batch: audits a .NET batch (correctness, reuse, simplification, cost, plan conformance, test policy, TDD evidence). Fast by default, full on request."
 context: fork
 agent: cctoolkit:ddd-tdd-auditor
 background: false

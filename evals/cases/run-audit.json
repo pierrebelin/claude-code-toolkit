@@ -107,16 +107,16 @@
       }
     },
     {
-      "name": "audit-collect js: suppressions counted at the commit, test roots left out; no rules table not_configured; loop calls not_configured; uncommitted change makes the tree blocks missing",
-      "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && python3 {{KIT}}/scripts/audit-collect.py --stack js --ref main | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"codebase\"]; s=d[\"suppressions\"]; print(s[\"status\"], s[\"total\"], s[\"by_kind\"][\"NOSONAR\"], d[\"rules_coverage\"][\"status\"], d[\"loop_calls\"][\"status\"])'; echo x >> src/P.Domain/A.cs; python3 {{KIT}}/scripts/audit-collect.py --stack js --ref main | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"codebase\"]; print(d[\"rules_coverage\"][\"reason\"], d[\"suppressions\"][\"total\"])'",
+      "name": "audit-collect: suppressions counted at the commit, test roots left out; no rules table not_configured; uncommitted change makes the tree blocks missing",
+      "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && python3 {{KIT}}/scripts/audit-collect.py --ref main | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"codebase\"]; s=d[\"suppressions\"]; print(s[\"status\"], s[\"total\"], s[\"by_kind\"][\"NOSONAR\"], d[\"rules_coverage\"][\"status\"])'; echo x >> src/P.Domain/A.cs; python3 {{KIT}}/scripts/audit-collect.py --ref main | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"codebase\"]; print(d[\"rules_coverage\"][\"reason\"], d[\"suppressions\"][\"total\"])'",
       "expect": {
         "exit": 0,
-        "stdout": "measured 2 1 not_configured not_configured\nworking tree holds uncommitted changes 2"
+        "stdout": "measured 2 1 not_configured\nworking tree holds uncommitted changes 2"
       }
     },
     {
       "name": "audit-collect --out writes only the report fragment, {activity, codebase}: report-assemble refuses any other first-level key",
-      "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && python3 {{KIT}}/scripts/audit-collect.py --stack js --ref main --out {{FIX}}/repo-{{SID}}-out/c.json >/dev/null; python3 -c 'import json,sys; print(sorted(json.load(open(sys.argv[1]))))' {{FIX}}/repo-{{SID}}-out/c.json",
+      "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && python3 {{KIT}}/scripts/audit-collect.py --ref main --out {{FIX}}/repo-{{SID}}-out/c.json >/dev/null; python3 -c 'import json,sys; print(sorted(json.load(open(sys.argv[1]))))' {{FIX}}/repo-{{SID}}-out/c.json",
       "expect": {
         "exit": 0,
         "stdout": "['activity', 'codebase']"

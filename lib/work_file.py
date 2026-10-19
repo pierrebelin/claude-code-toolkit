@@ -16,7 +16,7 @@ One line of JSON per event:
         a rejected attempt of a step and why, written with the next attempt
     {"kind": "breaker", "run": "<stamp>", "asides": [...], "decision": "stop"|"continue", "cause": "..."}
         run-plan's check of the batches set aside for a common cause
-    {"kind": "ack", "batch": "F2", "ref": "<id>|pause", "what": "note-taken"|"applied"|"paused"}
+    {"kind": "ack", "batch": "F2", "ref": "<id>", "what": "note-taken"|"applied", "agent"?: "<id>"}
         a script's answer to a line of the pane file `run/.pane.jsonl` (lib/pane_file.py)
 
 Every append and rewrite holds an exclusive `flock`; a rewrite truncates in place (a rename would

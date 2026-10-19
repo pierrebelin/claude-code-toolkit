@@ -1451,32 +1451,11 @@ const interrupted = (agent: WorkflowAgent): WorkflowAgent => {
 const isFollowed = (list: WorkflowRun[], agentId: string) =>
   list.some(run => run.status === 'running' && run.agents.some(agent => agent.id === agentId))
 
-const SVG_WIDTH = 640
-const LABEL_MIN = 40
-const LABEL_MAX = 200
-const INDENT = 12
 const SVG_PAD = 10
 const SVG_TOP = 32
-const LANE = 16
-const BAR = 10
-const ROW_PAD = 4
-const CHAR_PX = 6.2
 const SMALL_PX = 5.6
-const AGENT_CHARS = 16
-const MIN_BAR = 3
-const MIN_HIT = 12
-const TICK_GAP = 60
-const MARKER_GAP = 60
-const TICK_STEPS = [30_000, 60_000, 120_000, 300_000, 600_000, 900_000, 1_800_000, 3_600_000, 7_200_000, 14_400_000]
 const NEUTRAL = '#2a78d6'
 const STATUS = { good: '#0ca30c', warning: '#fab219', serious: '#ec835a', critical: '#d03b3b' } as const
-const SVG_STYLE =
-  '<style>text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif}text.small{font-size:10px}' +
-  '.head{font-weight:600}.ink{fill:#52514e}.muted{fill:#52514e;opacity:.6}.rail{stroke:#e1e0d9}.mark{stroke:#52514e}.idle{fill:#52514e;opacity:.35}.span{fill:#52514e;opacity:.3}' +
-  '.ghost{fill:#2a78d6;fill-opacity:.08;stroke:#2a78d6;stroke-opacity:.7;stroke-dasharray:3 2}' +
-  '.hit{fill:#52514e;fill-opacity:0}g.bar:hover .hit{fill-opacity:.12}' +
-  '.live{animation:live 1.6s ease-in-out infinite}@keyframes live{50%{opacity:.25}}@media (prefers-reduced-motion:reduce){.live{animation:none}}' +
-  '@media (prefers-color-scheme: dark){.ink,.muted{fill:#c3c2b7}.rail{stroke:#2c2c2a}.mark{stroke:#c3c2b7}.idle,.hit,.span{fill:#c3c2b7}.ghost{fill-opacity:.14}}</style>'
 
 export const escapeXml = (text: string): string =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -1487,419 +1466,15 @@ export const svgWidth = (source: string): number => Number(/<svg[^>]*\swidth="(\
 
 const px = (value: number): string => `${Math.round(value * 10) / 10}`
 
-const textWidth = (text: string, size = CHAR_PX): number => [...text].length * size
-
-export const tickLabel = (ms: number): string => {
-  if (ms === 0) return '0'
-  if (ms < 60_000) return `${ms / 1000}s`
-  if (ms < 3_600_000) return `${ms / 60_000}m`
-  const minutes = (ms % 3_600_000) / 60_000
-  return `${Math.floor(ms / 3_600_000)}h${minutes === 0 ? '' : String(minutes).padStart(2, '0')}`
-}
-
-export const tickStep = (span: number, width: number): number => {
-  const most = Math.max(1, Math.floor(width / TICK_GAP))
-  return TICK_STEPS.find(step => span / step <= most) ?? TICK_STEPS[TICK_STEPS.length - 1] ?? 3_600_000
-}
-
-export const lanesOf = (spans: { from: number; to: number }[]): number[] => {
-  const ends: number[] = []
-  return spans.map(span => {
-    const free = ends.findIndex(end => end <= span.from)
-    const lane = free < 0 ? ends.length : free
-    ends[lane] = span.to
-    return lane
-  })
-}
-
-type BarKind = 'done' | 'live' | 'ghost' | 'idle'
-
-type TimelineBar = { from: number; to: number; tail?: number; fill: string; kind: BarKind; name: string; mark: string; title: string[] }
-
-type TimelineRow = { label: string; level?: 0 | 1; count?: string; span?: { from: number; to: number }; isMuted: boolean; note: string; bars: TimelineBar[] }
-
-type TimelineAxis = { start: number; end: number; now: number | null; eta: number | null; endLabel: string | null }
+const textWidth = (text: string, size: number): number => [...text].length * size
 
 const cut = (text: string, chars: number): string => ([...text].length > chars ? `${[...text].slice(0, chars - 1).join('')}…` : text)
-
-const LEGEND: [BarKind, string][] = [['done', 'agent'], ['live', 'running'], ['ghost', 'expected']]
-
-const legendSvg = (kinds: Set<BarKind>, y: number, from: number): string => {
-  let x = from
-  const shown = LEGEND.filter(([kind]) => kinds.has(kind))
-  if (shown.length < 2) return ''
-  return shown
-    .map(([kind, text]) => {
-      const swatch =
-        kind === 'ghost'
-          ? `<rect class="ghost swatch" x="${x}" y="${y - 8}" width="14" height="8" rx="2"/>`
-          : `<rect x="${x}" y="${y - 8}" width="14" height="8" rx="2" fill="${NEUTRAL}"/>` +
-            (kind === 'live' ? `<rect class="live" x="${x + 12}" y="${y - 10}" width="3" height="12" rx="1.5" fill="${NEUTRAL}"/>` : '')
-      const drawn = `${swatch}<text class="ink small" x="${x + 18}" y="${y}">${text}</text>`
-      x += 18 + textWidth(text, SMALL_PX) + 16
-      return drawn
-    })
-    .join('')
-}
-
-const timelineSvg = (rows: TimelineRow[], axis: TimelineAxis): string => {
-  const labelWidth = Math.min(LABEL_MAX, Math.max(LABEL_MIN, ...rows.map(row => (row.level === 1 ? INDENT : 0) + textWidth(`${row.label}${row.count === undefined ? '' : `  ${row.count}`}`))))
-  const left = labelWidth + 12
-  const labelChars = (row: TimelineRow): number => Math.floor((labelWidth - (row.level === 1 ? INDENT : 0) - (row.count === undefined ? 0 : textWidth(`  ${row.count}`))) / CHAR_PX)
-  const right = SVG_WIDTH - SVG_PAD
-  const span = Math.max(60_000, axis.end - axis.start)
-  const x = (at: number): number => left + ((Math.min(Math.max(at, axis.start), axis.start + span) - axis.start) / span) * (right - left)
-  let y = SVG_TOP
-  const kinds = new Set<BarKind>()
-  const laid = rows.map(row => {
-    const placed = row.bars
-      .map(bar => {
-        kinds.add(bar.kind)
-        const from = x(bar.from)
-        const width = Math.max(MIN_BAR, x(bar.to) - from)
-        const tail = bar.tail === undefined ? 0 : Math.max(0, x(bar.tail) - from - width)
-        const text = [bar.name, bar.mark].filter(one => one !== '').join('  ')
-        const room = text === '' ? 0 : textWidth(text, SMALL_PX) + 6
-        return { bar, from, width, tail, text, room, isAfter: from + width + tail + room <= right }
-      })
-      .sort((a, b) => a.from - b.from)
-    const lanes = lanesOf(placed.map(one => ({ from: one.from - (one.isAfter ? 0 : one.room), to: one.from + one.width + one.tail + (one.isAfter ? one.room : 0) + 4 })))
-    const height = Math.max(1, ...lanes.map(lane => lane + 1)) * LANE + 2 * ROW_PAD
-    const top = y
-    y += height
-    return { row, placed, lanes, top, height }
-  })
-  const bottom = y
-  const body: string[] = []
-  const step = tickStep(span, right - left)
-  for (let offset = 0; offset <= span; offset += step) {
-    const at = x(axis.start + offset)
-    body.push(`<line class="rail" x1="${px(at)}" y1="${SVG_TOP - 4}" x2="${px(at)}" y2="${bottom}"/>`)
-    if (axis.endLabel === null || right - at > 44) body.push(`<text class="ink" x="${px(at)}" y="24" text-anchor="middle">${tickLabel(offset)}</text>`)
-  }
-  if (axis.endLabel !== null) body.push(`<text class="ink" x="${right}" y="24" text-anchor="end">${escapeXml(axis.endLabel)}</text>`)
-  for (const [index, { row, placed, lanes, top, height }] of laid.entries()) {
-    const baseline = px(top + ROW_PAD + LANE / 2 + 4)
-    if (laid[index + 1]?.row.level !== 1) body.push(`<line class="rail" x1="0" y1="${top + height}" x2="${right}" y2="${top + height}"/>`)
-    const isHead = row.level === 0 && rows.some(one => one.level === 1)
-    body.push(`<text class="${row.isMuted ? 'muted' : 'ink'}${isHead ? ' head' : ''}" x="${row.level === 1 ? INDENT : 0}" y="${baseline}">${escapeXml(cut(row.label, labelChars(row)))}${row.count === undefined ? '' : `<tspan class="muted" font-weight="400">  ${escapeXml(row.count)}</tspan>`}</text>`)
-    if (row.span !== undefined) body.push(`<rect class="span" x="${px(x(row.span.from))}" y="${px(top + ROW_PAD + LANE / 2 - 1)}" width="${px(Math.max(2, x(row.span.to) - x(row.span.from)))}" height="2" rx="1"/>`)
-    if (row.note !== '') body.push(`<text class="muted" x="${left + 4}" y="${baseline}">${escapeXml(row.note)}</text>`)
-    placed.forEach(({ bar, from, width, tail, text, isAfter }, order) => {
-      const laneTop = top + ROW_PAD + (lanes[order] ?? 0) * LANE
-      const barTop = laneTop + (LANE - BAR) / 2
-      const hit = Math.max(MIN_HIT, width + 6)
-      const shape =
-        bar.kind === 'ghost'
-          ? `<rect class="ghost" x="${px(from)}" y="${px(barTop)}" width="${px(width)}" height="${BAR}" rx="2"/>`
-          : bar.kind === 'idle'
-            ? `<rect class="idle" x="${px(from)}" y="${px(barTop)}" width="${px(width)}" height="${BAR}" rx="2"/>`
-            : (tail > 0 ? `<rect class="ghost" x="${px(from + width - 2)}" y="${px(barTop)}" width="${px(tail + 2)}" height="${BAR}" rx="2"/>` : '') +
-              `<rect x="${px(from)}" y="${px(barTop)}" width="${px(width)}" height="${BAR}" rx="2" fill="${bar.fill}"/>` +
-              (bar.kind === 'live' ? `<rect class="live" x="${px(from + width - 3)}" y="${px(barTop - 2)}" width="3" height="${BAR + 4}" rx="1.5" fill="${bar.fill}"/>` : '')
-      const label =
-        text === ''
-          ? ''
-          : `<text class="${bar.kind === 'ghost' ? 'muted' : 'ink'} small" x="${px(isAfter ? from + width + tail + 5 : from - 5)}" y="${px(barTop + BAR - 1)}"${isAfter ? '' : ' text-anchor="end"'}>${escapeXml(text)}</text>`
-      body.push(
-        `<g class="bar"><title>${bar.title.map(escapeXml).join('&#10;')}</title>` +
-          `<rect class="hit" x="${px(from + width / 2 - hit / 2)}" y="${px(laneTop)}" width="${px(hit)}" height="${LANE}" rx="2"/>${shape}${label}</g>`,
-      )
-    })
-  }
-  const markers = [
-    ...(axis.now === null ? [] : [{ at: x(axis.now), label: 'now', dash: false }]),
-    ...(axis.eta === null ? [] : [{ at: x(axis.eta), label: `ETA ~${coarse(axis.eta - (axis.now ?? axis.start))}`, dash: true }]),
-  ]
-  markers.forEach((marker, index) => {
-    const other = markers[1 - index]
-    const isClose = other !== undefined && Math.abs(other.at - marker.at) < MARKER_GAP
-    const isLast = marker.at + textWidth(marker.label) / 2 > right
-    const anchor = isLast || (isClose && marker.at <= (other?.at ?? 0)) ? 'end' : isClose ? 'start' : 'middle'
-    const at = anchor === 'end' ? marker.at - (isClose ? 3 : 0) : anchor === 'start' ? marker.at + 3 : marker.at
-    body.push(`<line class="mark" x1="${px(marker.at)}" y1="14" x2="${px(marker.at)}" y2="${bottom}"${marker.dash ? ' stroke-dasharray="3 3"' : ''}/>`)
-    body.push(`<text class="ink" x="${px(Math.min(at, right))}" y="10" text-anchor="${anchor}">${escapeXml(marker.label)}</text>`)
-  })
-  const legend = legendSvg(kinds, bottom + 18, left)
-  const height = Math.ceil(bottom + (legend === '' ? 4 : 24))
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_WIDTH}" height="${height}" viewBox="0 0 ${SVG_WIDTH} ${height}">${SVG_STYLE}${body.join('')}${legend}</svg>`
-}
-
-const agentMarks = (agent: WorkflowAgent, attempt: number, stalls: string[]): string[] =>
-  [
-    attempt > 1 ? `↻ ${attempt}` : '',
-    ...stalls,
-    agent.state === 'interrupted' ? '⊘ interrupted' : '',
-    agent.state === 'error' ? '✗ error' : '',
-  ].filter(one => one !== '')
-
-const agentBar = (agent: WorkflowAgent, attempt: number, stalls: string[], at: number): TimelineBar => {
-  const marks = agentMarks(agent, attempt, stalls)
-  const end = agent.endedAt ?? (agent.state === 'running' ? at : agent.lastActiveAt)
-  return {
-    from: agent.startedAt,
-    to: end,
-    fill: agent.state === 'error' ? STATUS.critical : stalls.length > 0 ? STATUS.warning : NEUTRAL,
-    kind: agent.state === 'interrupted' ? 'idle' : agent.state === 'running' ? 'live' : 'done',
-    name: '',
-    mark: marks.join(' '),
-    title: [
-      agent.label,
-      `${modelLabel(agent)} · ${agent.state}`,
-      `${duration(end - agent.startedAt)} · ${kilo(agent.tokens)} tok`,
-      agent.state === 'running' && agent.lastTool !== null ? `tool ${agent.lastTool} (${agent.tools})` : agent.tools > 0 ? `${agent.tools} tool calls` : '',
-      ...marks,
-    ].filter(one => one !== ''),
-  }
-}
-
-const ghostBar = (from: number, to: number, title: string[], mark = ''): TimelineBar => ({ from, to, fill: NEUTRAL, kind: 'ghost', name: '', mark, title })
-
-const stallsOf = (run: WorkflowRun, agent: WorkflowAgent, known: PhaseSamples, at: number): string[] =>
-  stallReasons(agent, typicalTools(known, run.agents, agent), at)
-
-const runEndOf = (run: WorkflowRun, at: number): number => (run.status === 'running' ? at : run.startedAt + (run.durationMs ?? at - run.startedAt))
-
-export const expectedPhases = (rows: PhaseRow[], known: PhaseSamples, at: number): Record<string, { from: number; to: number }> => {
-  const expected: Record<string, { from: number; to: number }> = {}
-  let cursor = at
-  for (const row of rows.filter(one => one.mark === 'running')) {
-    const typical = phaseTypical(known, row.title)
-    if (typical !== null && typical > row.span) {
-      expected[row.title] = { from: at, to: at + typical - row.span }
-      cursor = Math.max(cursor, at + typical - row.span)
-    }
-  }
-  const pending = rows.filter(one => one.mark === 'pending' && !CONDITIONAL_PHASES.includes(one.title))
-  for (let index = 0; index < pending.length; ) {
-    const mates = PARALLEL_PHASES.find(group => group.includes(pending[index]?.title ?? '')) ?? []
-    const group = [pending[index]!, ...pending.slice(index + 1).filter(one => mates.includes(one.title))]
-    let longest = 0
-    for (const row of group) {
-      const typical = phaseTypical(known, row.title)
-      if (typical === null) continue
-      expected[row.title] = { from: cursor, to: cursor + typical }
-      longest = Math.max(longest, typical)
-    }
-    cursor += longest
-    index += group.length
-  }
-  return expected
-}
 
 const CYCLE_PHASES = INTERLEAVED_PHASES.flat()
 
 const CYCLE_LABEL = new RegExp(`^(?:${CYCLE_PHASES.join('|')}) (\\S+)(?: w\\d+)? (.*?)(?: (?:haiku|sonnet|opus))?$`, 'i')
 
-type TimelineStep = { key: string; name: string; agents: WorkflowAgent[] }
-
-export const stepsOf = (phase: PhaseRow, sheet: Sheet | null): TimelineStep[] => {
-  const agents = [...phase.earlier, ...phase.agents].sort((a, b) => a.startedAt - b.startedAt)
-  const steps: TimelineStep[] = []
-  const stepOf = (key: string, name: string): TimelineStep => {
-    const found = steps.find(one => one.key === key)
-    if (found !== undefined) return found
-    const made = { key, name, agents: [] }
-    steps.push(made)
-    return made
-  }
-  const isCycles = CYCLE_PHASES.includes(phase.title) && (sheet?.cycles?.length ?? 0) > 0
-  if (isCycles) for (const cycle of sheet?.cycles ?? []) stepOf(cycle.id, `${cycle.id} ${cycle.behaviour}`)
-  for (const agent of agents) {
-    const cycle = CYCLE_LABEL.exec(agent.label)
-    const key = cycle === null ? agent.label : (cycle[1] ?? agent.label)
-    const known = sheet?.cycles?.find(one => one.id === key)
-    stepOf(key, cycle === null ? agent.label : known === undefined ? `${key} ${cycle[2] ?? ''}`.trim() : `${known.id} ${known.behaviour}`).agents.push(agent)
-  }
-  return steps
-}
-
-export const phaseTimeline = (run: WorkflowRun, at: number, known: PhaseSamples): string => {
-  const phases = phaseRows(run, at)
-  if (phases.length === 0) return ''
-  const remaining = remainingMs(run, phases, known)
-  const end = runEndOf(run, at)
-  const isRunning = run.status === 'running'
-  const expected = isRunning ? expectedPhases(phases, known, at) : {}
-  const rows = phases.flatMap((phase): TimelineRow[] => {
-    const attempts = attemptsOf(phase.agents)
-    const guess = expected[phase.title]
-    const isTail = guess !== undefined && phase.mark === 'running'
-    const tailed = (bar: TimelineBar): TimelineBar =>
-      isTail && bar.kind === 'live' && guess !== undefined ? { ...bar, tail: guess.to, title: [...bar.title, `expected ~${coarse(guess.to - guess.from)} more (typical of the past runs)`] } : bar
-    const steps = stepsOf(phase, run.sheet)
-    const all = [...phase.earlier, ...phase.agents]
-    const done = steps.filter(step => step.agents.some(agent => agent.state === 'done')).length
-    const head: TimelineRow = {
-      label: phase.title,
-      level: 0,
-      isMuted: phase.mark === 'pending' && all.length === 0,
-      note: '',
-      ...(steps.length > 1 ? { count: `${done}/${steps.length}` } : {}),
-      bars:
-        guess === undefined || isTail
-          ? []
-          : [ghostBar(guess.from, guess.to, [`${phase.title} · expected`, `~${coarse(guess.to - guess.from)}`, 'typical of the past runs'], `~${coarse(guess.to - guess.from)}`)],
-    }
-    const only = steps.length === 1 ? steps[0] : undefined
-    if (only !== undefined && only.agents.length > 0 && CYCLE_LABEL.exec(only.agents[0]?.label ?? '') === null) {
-      const bars = only.agents.map(agent => ({ ...tailed(agentBar(agent, attempts[agent.id] ?? 1, stallsOf(run, agent, known, at), at)), name: cut(only.name, AGENT_CHARS) }))
-      return [{ ...head, bars: [...bars, ...head.bars] }]
-    }
-    const span = all.length === 0 ? {} : { span: { from: Math.min(...all.map(agent => agent.startedAt)), to: Math.max(...all.map(agent => agent.endedAt ?? (agent.state === 'running' ? at : agent.lastActiveAt))) } }
-    return [
-      { ...head, ...span },
-      ...steps.map((step): TimelineRow => ({
-        label: step.name,
-        level: 1,
-        isMuted: step.agents.length === 0,
-        note: '',
-        bars: step.agents.map(agent => tailed(agentBar(agent, attempts[agent.id] ?? 1, stallsOf(run, agent, known, at), at))),
-      })),
-    ]
-  })
-  return timelineSvg(rows, {
-    start: run.startedAt,
-    end: isRunning && remaining !== null && remaining > 0 ? at + remaining : end,
-    now: isRunning ? at : null,
-    eta: isRunning && remaining !== null && remaining > 0 ? at + remaining : null,
-    endLabel: isRunning ? null : duration(end - run.startedAt),
-  })
-}
-
 const counted = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`
-
-export const phaseTimelineAlt = (run: WorkflowRun, at: number, known: PhaseSamples): string => {
-  const phases = phaseRows(run, at)
-  const live = run.agents.filter(agent => agent.state !== 'interrupted')
-  const attempts = attemptsOf(run.agents)
-  const remaining = remainingMs(run, phases, known)
-  const lot = lotOf(run.argument)
-  const time = run.status === 'running' ? `running for ${duration(at - run.startedAt)}` : `${run.status} in ${duration(runEndOf(run, at) - run.startedAt)}`
-  const flags = [
-    remaining !== null && remaining > 0 ? `ETA ~${coarse(remaining)}` : '',
-    ...([
-      [Object.values(attempts).filter(one => one > 1).length, 'retry', 'retries'],
-      [run.agents.filter(agent => stallsOf(run, agent, known, at).length > 0).length, 'stall'],
-      [run.agents.filter(agent => agent.state === 'interrupted').length, 'interruption'],
-      [run.agents.filter(agent => agent.state === 'error').length, 'error'],
-    ] as [number, string, string?][]).map(([count, one, many]) => (count > 0 ? counted(count, one, many) : '')),
-  ].filter(one => one !== '')
-  return `Phase timeline of ${run.name}${lot === null ? '' : ` ${lot.lot}`}: ${[
-    time,
-    `${phases.filter(phase => phase.mark === 'done').length} of ${phases.length} phases reached`,
-    counted(live.length, 'agent'),
-    ...flags,
-  ].join(', ')}.`
-}
-
-const LOT_MARKS: Record<LotState, string> = {
-  running: '● running', completed: '✓ done', done: '✓ done', failed: '✗ failed', killed: '⏹ stopped', waiting: '? question', pending: '⧗ pending',
-}
-
-const lotFill = (state: LotState): string =>
-  state === 'completed' || state === 'done' ? STATUS.good : state === 'failed' ? STATUS.critical : state === 'killed' ? STATUS.serious : state === 'waiting' ? STATUS.warning : NEUTRAL
-
-const lotNote = (entry: PlanLot, state: LotState): string =>
-  state === 'pending' ? (entry.deps.length > 0 ? `⧗ after ${entry.deps.join(', ')}` : '⧗ pending') : state === 'done' ? '✓ done before this run' : LOT_MARKS[state]
-
-export const planTimeline = (run: WorkflowRun, at: number): string => {
-  if (run.lots.length === 0) return ''
-  const isRunning = run.status === 'running'
-  const spans = run.lots.map(entry => {
-    const state = lotStateOf(run, entry)
-    const agents = run.agents.filter(agent => agent.lot === entry.lot)
-    if (agents.length === 0) return { entry, state, agents, view: null, from: 0, to: 0 }
-    const view = lotRun(run, entry.lot)
-    return { entry, state, agents, view, from: view.startedAt, to: view.status === 'running' ? at : view.startedAt + (view.durationMs ?? 0) }
-  })
-  const finished = spans.filter(one => one.view !== null && (one.state === 'completed' || one.state === 'done'))
-  const typical = finished.length === 0 ? null : finished.reduce((sum, one) => sum + (one.to - one.from), 0) / finished.length
-  const ends: Record<string, number> = {}
-  for (const one of spans) if (one.view !== null) ends[one.entry.lot] = one.state === 'running' && typical !== null ? Math.max(at, one.from + typical) : one.to
-  const guesses: Record<string, { from: number; to: number }> = {}
-  if (isRunning && typical !== null) {
-    for (const one of spans.filter(span => span.view === null && span.state === 'pending')) {
-      const from = Math.max(at, ...one.entry.deps.map(dep => ends[dep] ?? at))
-      guesses[one.entry.lot] = { from, to: from + typical }
-      ends[one.entry.lot] = from + typical
-    }
-  }
-  const lots: TimelineRow[] = spans.map(({ entry, state, agents, view, from, to }) => {
-    const guess = guesses[entry.lot]
-    const label = entry.view === null || entry.view.name === '' ? entry.lot : `${entry.lot} ${entry.view.name}`
-    if (view === null) {
-      return {
-        label,
-        isMuted: state === 'pending',
-        note: guess === undefined ? lotNote(entry, state) : '',
-        bars:
-          guess === undefined
-            ? []
-            : [ghostBar(guess.from, guess.to, [`${entry.lot} · expected`, `~${coarse(typical ?? 0)}, typical of this plan's batches`, entry.deps.length > 0 ? `after ${entry.deps.join(', ')}` : ''].filter(one => one !== ''), lotNote(entry, state))],
-      }
-    }
-    const active = [...agents].filter(agent => agent.state === 'running').sort((a, b) => b.index - a.index)[0]
-    const mark = state === 'running' && active !== undefined ? `${LOT_MARKS.running} · ${active.phase ?? NO_PHASE}` : state === 'failed' && entry.outcome !== null ? `✗ ${entry.outcome.label}` : LOT_MARKS[state]
-    const tail = state === 'running' && typical !== null && from + typical > at ? from + typical : undefined
-    return {
-      label,
-      isMuted: false,
-      note: '',
-      bars: [
-        {
-          from,
-          to,
-          fill: lotFill(state),
-          kind: state === 'running' ? 'live' : 'done',
-          ...(tail === undefined ? {} : { tail }),
-          name: '',
-          mark,
-          title: [
-            [entry.lot, entry.view?.name ?? ''].filter(one => one !== '').join(' · '),
-            `${state === 'completed' ? 'done' : state} · ${counted(agents.length, 'agent')} · ${duration(to - from)} · ${kilo(totalsOf(agents).tokens)} tok`,
-            active === undefined ? '' : `now: ${active.label}${active.lastTool === null ? '' : ` · ${active.lastTool} (${active.tools})`}`,
-            entry.audit === null ? '' : `audit ${auditLabel(entry.audit)}`,
-          ].filter(one => one !== ''),
-        },
-      ],
-    }
-  })
-  const supervisors = run.agents.filter(agent => agent.lot === null)
-  const rows: TimelineRow[] =
-    supervisors.length === 0
-      ? lots
-      : [...lots, { label: 'Supervisor', isMuted: false, note: '', bars: supervisors.map(agent => agentBar(agent, 1, [], at)) }]
-  const end = runEndOf(run, at)
-  const eta = isRunning ? Math.max(at, ...Object.values(ends)) : null
-  return timelineSvg(rows, {
-    start: run.startedAt,
-    end: eta !== null && eta > at ? eta : end,
-    now: isRunning ? at : null,
-    eta: eta !== null && eta > at ? eta : null,
-    endLabel: isRunning ? null : duration(end - run.startedAt),
-  })
-}
-
-const listed = (items: string[]): string =>
-  items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1] ?? ''}`
-
-export const planTimelineAlt = (run: WorkflowRun, at: number): string => {
-  const states = run.lots.map(entry => ({ lot: entry.lot, state: lotStateOf(run, entry) }))
-  const of = (...wanted: LotState[]) => states.filter(one => wanted.includes(one.state)).map(one => one.lot)
-  const parts = [
-    `${of('completed', 'done').length} of ${states.length} batches done`,
-    ...([
-      [of('running'), 'running'],
-      [of('waiting'), 'waiting for an answer'],
-      [of('failed'), 'failed'],
-      [of('killed'), 'stopped'],
-      [of('pending'), 'pending'],
-    ] as [string[], string][]).flatMap(([lots, label]) => (lots.length === 0 ? [] : [`${listed(lots)} ${label}`])),
-    run.status === 'running' ? `${duration(at - run.startedAt)} elapsed` : `${run.status} in ${duration(runEndOf(run, at) - run.startedAt)}`,
-  ]
-  return `Batch timeline of ${run.name}: ${parts.join(', ')}.`
-}
 
 // What the run files say beside the agents: the workflow's and its scripts' lines of
 // `run/.work.jsonl`, the user's answers of `run/.pane.jsonl` (written by this mod alone, whole),
@@ -2020,19 +1595,9 @@ export const asidesOf = (lines: WorkLine[]): Record<string, Aside> => {
 }
 
 export const paneLinesOf = (text: string): Fields[] =>
-  recordsOf(workLinesOf(text)).filter(line => line.kind === 'pause' || line.kind === 'note' || line.kind === 'validation')
+  recordsOf(workLinesOf(text)).filter(line => line.kind === 'note' || line.kind === 'validation')
 
 const acksOf = (work: WorkLine[]): Fields[] => recordsOf(work).filter(line => line.kind === 'ack')
-
-export type PauseState = 'off' | 'requested' | 'spent'
-
-// The last pause line wins; an `ack` of ref `pause` written after it says run-plan paused on it.
-export const pauseStateOf = (pane: Fields[], work: WorkLine[]): PauseState => {
-  const last = pane.filter(line => line.kind === 'pause').pop()
-  if (last === undefined || last.on !== true) return 'off'
-  const at = numberOf(last.at) ?? 0
-  return acksOf(work).some(ack => ack.ref === 'pause' && (numberOf(ack.at) ?? 0) > at) ? 'spent' : 'requested'
-}
 
 export type Note = { id: string; batch: string; text: string; at: number; isTaken: boolean }
 
@@ -2117,7 +1682,6 @@ export type FeedView = {
   questions: PendingQuestion[]
   breaker: Breaker | null
   asides: Record<string, Aside>
-  pause: PauseState
   notes: Note[]
   answers: Record<string, Answer>
 }
@@ -2127,7 +1691,7 @@ export const feedViewOf = (feed: RunFeed | null): FeedView => {
   const pane = paneLinesOf(feed?.pane ?? '')
   return {
     work, pane, questions: openQuestionsOf(work), breaker: breakerOf(work), asides: asidesOf(work),
-    pause: pauseStateOf(pane, work), notes: notesOf(pane, work), answers: answersOf(pane, work),
+    notes: notesOf(pane, work), answers: answersOf(pane, work),
   }
 }
 
@@ -2637,7 +2201,7 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
         { ...lot('F5', ['F1'], aside), audit: null }, lot('F6', ['F5'], null),
       ],
       outcome: isFinished
-        ? { label: 'BLOCKED', reason: 'batches set aside: F5 (holds back F6) — F1, F2, F3 done, paused by user before F4', report: DEMO_RUN_REPORT }
+        ? { label: 'BLOCKED', reason: 'batches set aside: F5 (holds back F6)', report: DEMO_RUN_REPORT }
         : null,
       agents: [...supervisors, ...f1, ...f5, ...f2, ...f3].sort((a, b) => a.index - b.index),
     }),
@@ -2869,13 +2433,11 @@ export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFini
     jsonLine({ kind: 'journal', run: DEMO_STAMP, text: `F5 ✗ — set aside — ${DEMO_ASIDE} — patch run/${DEMO_STAMP}-aside-F5.patch`, at: s - 900 }),
     jsonLine({ kind: 'ack', batch: 'F1', ref: 'n-demo-p1', what: 'note-taken', at: s - 1500 }),
     jsonLine({ kind: 'ack', batch: 'F1', ref: f1?.id ?? '', what: 'applied', at: s - 1400 }),
-    ...(isFinished ? [jsonLine({ kind: 'ack', ref: 'pause', what: 'paused', at: s - 30 })] : []),
   ]
   const pane = [
     jsonLine({ kind: 'note', id: 'n-demo-p1', batch: 'F1', text: 'reuse the archived flag of the catalog', at: s - 1600 }),
     jsonLine({ kind: 'validation', id: f1?.id ?? '', entry: { batch: 'F1', step: f1?.step ?? '', text: f1?.text ?? '', sheet: 'todo/product-archiving/PRD-ARCH-PLAN-F1.md' }, decision: 'keep', text: '', at: s - 1500 }),
     jsonLine({ kind: 'note', id: 'n-demo-p2', batch: 'F2', text: 'the archived filter stays off by default', at: s - 240 }),
-    jsonLine({ kind: 'pause', on: true, at: s - 120 }),
   ]
   return { runId: run.runId, root, work: work.join('\n'), pane: pane.join('\n'), reports }
 }
@@ -3400,7 +2962,7 @@ export const register: Register = on => {
       await update($, runs, list => [...list.filter(run => !run.runId.startsWith(DEMO)), ...loaded].slice(-KEPT_RUNS))
       const shown = loaded[loaded.length - 1]
       if (shown !== undefined) await update($, feed, () => demoFeedOf(shown, at, isPlan, isFinished, isMerged))
-      await update($, nav, state => ({ ...state, lot: null, screen: 'run' as const, prompted: null, notice: null }))
+      await update($, nav, state => ({ ...state, lot: null, screen: 'run' as const, prompted: null }))
       await update($, history, () => demoHistory())
       await update($, now, () => at)
       await refreshUsage($)
@@ -3642,7 +3204,7 @@ export const register: Register = on => {
     const spin = spinnerFrame(at)
     // A desktop's proportional font draws the bar wider than its columns: kept shorter there.
     const barWidth = Math.max(8, Math.min(e.surface === 'desktop' ? 28 : 40, columns - 28))
-    const go = (change: Partial<Navigation>) => () => void update($, nav, state => ({ ...state, prompted: null, notice: null, ...change }))
+    const go = (change: Partial<Navigation>) => () => void update($, nav, state => ({ ...state, prompted: null, ...change }))
     const close = <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
     // A desktop draws a Button natively, its children's colours dropped: there the row keeps
     // its own colours and a trailing › opens it; the terminal presses the whole row.
@@ -3786,17 +3348,6 @@ export const register: Register = on => {
       </Box>
     )
 
-    const isTimeline = Svg !== undefined && where.screen === 'timeline'
-    const timelineButton =
-      Svg === undefined ? null : (
-        <Box key="timeline-bar" height={1}>
-          <Text>{'  '}</Text>
-          <Button key="open-timeline" hotkey="t" plain dimColor onPress={go({ screen: 'timeline' })}>
-            ◫ timeline
-          </Button>
-        </Box>
-      )
-
     const lotTone = (state: LotState) =>
       state === 'running' ? 'claude' : state === 'completed' ? 'success' : state === 'killed' ? 'warning' : state === 'failed' ? 'error' : state === 'waiting' ? WAITING_TONE : 'inactive'
     const lotGlyph = (state: LotState) =>
@@ -3831,24 +3382,6 @@ export const register: Register = on => {
           })}
         </Box>
       )
-
-    const timelineScreen = (name: string, source: string, alt: string) => (
-      <Box flexDirection="column" marginTop={1}>
-        {crumbs(name, 'timeline')}
-        {backBar('run')}
-        {lotBar}
-        {bannerRow}
-        {Svg === undefined || source === '' ? (
-          <Text key="timeline-empty" color="inactive">
-            {'  ⎿  '}Nothing to draw yet.
-          </Text>
-        ) : (
-          <Box key="timeline" marginTop={1}>
-            <Svg key="timeline-svg" source={source} alt={alt} width={svgWidth(source)} height={svgHeight(source)} isInteractive />
-          </Box>
-        )}
-      </Box>
-    )
 
     if (current === undefined) {
       return (
@@ -3886,11 +3419,7 @@ export const register: Register = on => {
             planRun.lots[0])?.lot ?? null)
     const workPath = runFeed === null ? null : `${runFeed.root}/.work.jsonl`
     const absolute = (path: string) => slashed(isAbsolutePath(path) || root === null ? path : `${root}/${path}`)
-    const togglePause = () =>
-      planRun === null
-        ? update($, nav, state => ({ ...state, notice: 'pause applies to run-plan only' }))
-        : writePane($, { kind: 'pause', on: steer.pause !== 'requested' })
-    const ask = (prompted: Prompted) => () => update($, nav, state => ({ ...state, prompted, notice: null }))
+    const ask = (prompted: Prompted) => () => update($, nav, state => ({ ...state, prompted }))
     const submitNote = async (value: string) => {
       const text = value.trim()
       const aimed = planRun !== null && lotInView === null ? /^(F\d+)\s*:\s*([\s\S]+)$/.exec(text) : null
@@ -3921,10 +3450,6 @@ export const register: Register = on => {
             graph
           </Button>
         )}
-        {gap('pause-gap')}
-        <Button key="pause" hotkey="z" plain dimColor onPress={togglePause}>
-          {steer.pause === 'requested' ? 'cancel pause' : 'pause'}
-        </Button>
         {noteTarget !== null && gap('note-gap')}
         {noteTarget !== null && (
           <Button key="note" hotkey="n" plain dimColor onPress={ask({ kind: 'note', target: noteTarget })}>
@@ -3934,15 +3459,6 @@ export const register: Register = on => {
       </Box>
     )
     const steerLines = [
-      ...(planRun !== null && steer.pause !== 'off'
-        ? [
-            <Text key="pause-state" bold={steer.pause === 'requested'} color={steer.pause === 'requested' ? 'warning' : 'inactive'} wrap="truncate-end">
-              {'  '}
-              {steer.pause === 'requested' ? '⏸ pause requested' : '⏸ paused by user'}
-            </Text>,
-          ]
-        : []),
-      ...(where.notice ? [line('notice', where.notice, 'inactive')] : []),
       ...(where.prompted?.kind === 'note' && Input !== undefined
         ? [
             <Box key="note-row" height={1}>
@@ -4613,7 +4129,6 @@ export const register: Register = on => {
       })
 
     if (planRun !== null && lotInView === null) {
-      if (isTimeline) return timelineScreen(planRun.name, planTimeline(planRun, at), planTimelineAlt(planRun, at))
       const states = planRun.lots.map(entry => ({ entry, state: lotStateOf(planRun, entry) }))
       const finished = states.filter(one => one.state === 'completed' || one.state === 'done').length
       const planHeadline = headlineOf(planRun.status, planRun.outcome, planRun.lots.reduce((sum, entry) => sum + (entry.outcome === null ? (entry.asking ?? 0) : 0), 0))
@@ -4634,7 +4149,6 @@ export const register: Register = on => {
           {progressRow(finished, states.length, planHeadline.tone)}
           {lotBar}
           {bannerRow}
-          {timelineButton}
           {steerBar}
           {steerLines}
           {steer.breaker !== null && (
@@ -4704,8 +4218,6 @@ export const register: Register = on => {
       )
     }
 
-    if (isTimeline) return timelineScreen(current.name, phaseTimeline(current, at, known), phaseTimelineAlt(current, at, known))
-
     return (
       <Box flexDirection="column" marginTop={1}>
         {viewHeader(
@@ -4728,7 +4240,6 @@ export const register: Register = on => {
         {progressRow(reached, rows.length, headline.tone, [reached, '/', rows.length, ' phases'])}
         {lotBar}
         {bannerRow}
-        {timelineButton}
         {steerBar}
         {steerLines}
         {outcomeBlock(current.outcome, current.status, current.outcome?.reason ?? null, '')}

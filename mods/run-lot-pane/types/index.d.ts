@@ -153,7 +153,7 @@ export type SessionFigures = {
   percent: number | null
 }
 
-export type Screen = 'run' | 'phase' | 'agent' | 'timeline' | 'validate' | 'graph'
+export type Screen = 'run' | 'phase' | 'agent' | 'validate' | 'graph'
 
 export type Prompted = { kind: 'reject' | 'amend' | 'note'; target: string }
 
@@ -167,7 +167,6 @@ export type Navigation = {
   toggled: string[]
   lot: string | null
   prompted?: Prompted | null
-  notice?: string | null
 }
 
 declare module 'claude-code' {

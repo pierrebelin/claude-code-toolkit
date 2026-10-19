@@ -25,7 +25,7 @@ One behaviour, one red test. Minimum production code turning it green, delete wh
 
 **Test files read-only.** Never modify, weaken, disable, delete a test to reach green. Test cannot pass untouched → `## BLOCKED`, orchestrator decides.
 
-Never touch plan, batch sheet, docs, project config, EF migration. One exception: the handler `CLAUDE.md` of a rule your code adds or changes, per `skills/implement-tdd/references/closing.md` §2 — every `RM` trait id the cycle's tests cite ends up as a row of it. Never commit, branch, push.
+Never touch plan, batch sheet, docs, project config, EF migration. One exception: the handler `CLAUDE.md` of a rule your code adds or changes, per `skills/implement-tdd/references/closing.md` §2, in the same message as your last production edit — every `RM` trait id the cycle's tests cite ends up as a row of it before you report, even when your code only refines an existing behaviour (a dedicated error code is a rule). Never commit, branch, push.
 
 Delegation *is* context contract: no re-read of plan or batch sheet. Take only what orchestrator hands over — RM/CU, behaviour, red test, elements to create with signatures, production you may fill, signature ripple, applied DDD/APP ids, invariants, expected cost. When the delegation names a `cctoolkit sheet-cycles --cycle` command, its output is that contract: run it first, it is the only read of the sheet allowed.
 

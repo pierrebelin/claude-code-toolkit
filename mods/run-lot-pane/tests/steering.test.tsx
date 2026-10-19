@@ -4,7 +4,7 @@ import type { On } from 'claude-code'
 import type { PlanLot, WorkflowAgent, WorkflowRun } from '../types'
 import {
   answersOf, asidesOf, attemptLinesOf, auditRoundsOf, blankAgent, breakerOf, completeRun, contestLine, demoPlanRuns, entryIdOf, feedPathsOf, feedViewOf, feedWorkOf,
-  graphNodesOf, graphTreeLines, isAttemptOf, keptSections, notesOf, openQuestionsOf, paneLinesOf, parsePlanLots, pauseStateOf, pendingQuestionsOf, planGraph, planGraphAlt,
+  graphNodesOf, graphTreeLines, isAttemptOf, keptSections, notesOf, openQuestionsOf, paneLinesOf, parsePlanLots, pendingQuestionsOf, planGraph, planGraphAlt,
   questionBanner, retryOf, roundLine, svgHeight, svgWidth, toValidateOf, validateEntriesOf, withPaneLine, workLinesOf,
 } from '../hooks/register'
 import { BAND, paneAt, paneCommand, world } from './world'
@@ -79,12 +79,8 @@ describe('run files', () => {
     expect(asidesOf(work)).toEqual({ F3: { reason: 'audit Blocking not lifted', patch: 'run/2026-10-10-0912-aside-F3.patch' }, F5: { reason: '', patch: null } })
   })
 
-  test('pane file: pause requested then spent by its ack, notes pending or taken, the last answer of an entry and its application', () => {
+  test('pane file: notes pending or taken, the last answer of an entry and its application', () => {
     const pane = (...records: object[]) => paneLinesOf(records.map(one => JSON.stringify(one)).join('\n') + '\nnot json\n')
-    expect(pauseStateOf(pane(), [])).toBe('off')
-    expect(pauseStateOf(pane({ kind: 'pause', on: true, at: 10 }), lines({ kind: 'ack', ref: 'pause', what: 'paused', at: 9 }))).toBe('requested')
-    expect(pauseStateOf(pane({ kind: 'pause', on: true, at: 10 }), lines({ kind: 'ack', ref: 'pause', what: 'paused', at: 11 }))).toBe('spent')
-    expect(pauseStateOf(pane({ kind: 'pause', on: true, at: 10 }, { kind: 'pause', on: false, at: 12 }), [])).toBe('off')
     const notes = notesOf(pane({ kind: 'note', id: 'n-1', batch: 'F2', text: 'a', at: 1 }, { kind: 'note', id: 'n-2', batch: 'F3', text: 'b', at: 2 }), lines({ kind: 'ack', batch: 'F2', ref: 'n-1', what: 'note-taken', at: 3 }))
     expect(notes.map(one => [one.id, one.isTaken])).toEqual([['n-1', true], ['n-2', false]])
     const answers = answersOf(
@@ -100,7 +96,7 @@ describe('run files', () => {
       'v-1': { decision: 'amend', text: 'this way', at: 20, applied: null },
       'v-2': { decision: 'keep', text: '', at: 10, applied: { relaunch: '/run-plan p' } },
     })
-    expect(withPaneLine('', { kind: 'pause', on: true, at: 1 })).toBe('{"kind":"pause","on":true,"at":1}\n')
+    expect(withPaneLine('', { kind: 'note', id: 'n-1', at: 1 })).toBe('{"kind":"note","id":"n-1","at":1}\n')
     expect(withPaneLine('{"a":1}\n\n', { b: 2 })).toBe('{"a":1}\n{"b":2}\n')
   })
 
@@ -161,7 +157,7 @@ describe('run files', () => {
   })
 
   test('feed: the work lines the views read, the reports of the batches and of the run', () => {
-    expect(feedWorkOf(['{"kind":"cycle","slug":"a"}', '{"kind":"question","id":"q"}', 'oops', '{"kind":"ack","ref":"pause"}'].join('\n'))).toBe('{"kind":"question","id":"q"}\n{"kind":"ack","ref":"pause"}')
+    expect(feedWorkOf(['{"kind":"cycle","slug":"a"}', '{"kind":"question","id":"q"}', 'oops', '{"kind":"ack","ref":"n-1"}'].join('\n'))).toBe('{"kind":"question","id":"q"}\n{"kind":"ack","ref":"n-1"}')
     const lot = (id: string): PlanLot => ({ lot: id, sheet: null, deps: [], isDone: false, outcome: null, audit: null, view: null })
     const plan = completeRun({ runId: 'r', name: 'run-plan', startedAt: 0, child: { name: 'run-lot', phases: [], details: {}, labels: {} }, plan: 'todo/cat/CAT-PLAN.md', lots: [lot('F1')] } as unknown as WorkflowRun)
     expect(feedPathsOf(plan, 'todo/cat/run', lines({ kind: 'journal', run: '2026-10-10-0912', text: 'x' }))).toEqual([
@@ -218,7 +214,7 @@ const planWorld = (on: On, files: Record<string, string>, writes: string[] = [])
 }
 
 const PANE = paneAt(72, 60)
-test('demo: the pending question above the prompt and on every view, ticking; retry reasons; notes; pause refused outside run-plan', async ($, on) => {
+test('demo: the pending question above the prompt and on every view, ticking; retry reasons; notes', async ($, on) => {
   const { clock } = planWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await paneCommand($, 'demo')
@@ -237,10 +233,7 @@ test('demo: the pending question above the prompt and on every view, ticking; re
   await clock.advance(2_000)
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /recommendation applied in 7:30$/ })).toBeDefined()
-  expect((await ui.find({ key: 'pause' }))?.props.hotkey).toBe('z')
   expect(await ui.find({ key: 'open-graph' })).toBeUndefined()
-  await ui.press({ key: 'pause' })
-  expect(await ui.find({ type: 'Text', text: /pause applies to run-plan only/ })).toBeDefined()
   await ui.press({ key: 'open-demo-g2b' })
   expect(await ui.find({ type: 'Text', text: /^Retries · ↻ 2$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ {2}\? F4 — 2 questions/ })).toBeDefined()
@@ -298,17 +291,11 @@ test('demo end: audit rounds under the Audit phase, to validate in each state, a
   await desktop.unmount()
 })
 
-test('demo plan: pause requested and cancelled, graph as a tree on the terminal and an SVG on the desktop, entries of every batch; plan end paused', async ($, on) => {
+test('demo plan: graph as a tree on the terminal and an SVG on the desktop, entries of every batch; plan end', async ($, on) => {
   planWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await paneCommand($, 'demo plan')
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /^ {2}⏸ pause requested$/ })).toBeDefined()
-  expect((await ui.find({ key: 'pause' }))?.text).toBe('cancel pause')
-  await ui.press({ key: 'pause' })
-  expect(await ui.find({ type: 'Text', text: /⏸ pause requested/ })).toBeUndefined()
-  await ui.press({ key: 'pause' })
-  expect(await ui.find({ type: 'Text', text: /⏸ pause requested/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /✓ F1 · reuse the archived flag of the catalog · consumed/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /✎ F2 · the archived filter stays off by default · pending/ })).toBeDefined()
 
@@ -329,7 +316,6 @@ test('demo plan: pause requested and cancelled, graph as a tree on the terminal 
   expect(await ui.find({ type: 'Text', text: /^ {4}design blocked: no defensible export format, CSV or the catalog JSON feed — patch run\/2026-10-10-0912-aside-F5\.patch$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ {4}reuse the archived flag of the catalog$/ })).toBeDefined()
   await ui.press({ key: 'open-lot-F2' })
-  expect(await ui.find({ type: 'Text', text: /^ {2}⏸ pause requested$/ })).toBeDefined()
   expect(await ui.find({ key: 'open-graph' })).toBeUndefined()
   await ui.unmount()
 
@@ -346,7 +332,6 @@ test('demo plan: pause requested and cancelled, graph as a tree on the terminal 
 
   await paneCommand($, 'demo plan end')
   const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await end.find({ type: 'Text', text: /^ {2}⏸ paused by user$/ })).toBeDefined()
   await end.press({ key: 'open-validate' })
   expect(await end.find({ type: 'Text', text: /^ {4}restoring keeps the archive date in the history \(the audit trail is never rewritten\)$/ })).toBeDefined()
   expect(await end.find({ type: 'Text', text: /^ {4}archiving twice answers 409, not 204 \(the spec says refused, not ignored\)$/ })).toBeDefined()
@@ -400,13 +385,6 @@ test('a real run-plan: run files read from disk, the breaker stop, answers and n
   expect(await ui.find({ type: 'Text', text: /^✗ F1 Archive · set aside — audit Blocking not lifted/ })).toBeDefined()
   await ui.press({ key: 'back' })
 
-  await ui.press({ key: 'pause' })
-  expect(files[paneFile]).toMatch(/^\{"kind":"pause","on":true,"at":1760000010(\.\d+)?\}\n$/)
-  expect(await ui.find({ type: 'Text', text: /^ {2}⏸ pause requested$/ })).toBeDefined()
-  touch(work, `${files[work]}\n${JSON.stringify({ kind: 'ack', ref: 'pause', what: 'paused', at: S + 20 })}`)
-  await clock.advance(2_000)
-  expect(await ui.find({ type: 'Text', text: /^ {2}⏸ paused by user$/ })).toBeDefined()
-
   await ui.press({ key: 'open-validate' })
   const entries = toValidateOf(files['/repo/todo/cat/run/batches/F1.md']!, 'F1')
   const plan = await ui.find({ type: 'Text', text: /^ {4}common cause across F1, F3: the spec leaves the lock owner open$/ })
@@ -418,7 +396,7 @@ test('a real run-plan: run files read from disk, the breaker stop, answers and n
     kind: 'validation', id: entries[0]!.id, decision: 'reject', text: 'the lock is on the product',
     entry: { batch: 'F1', step: 'Design', text: 'lock on the catalog', sheet: '/repo/todo/cat/CAT-PLAN-F1.md' },
   })
-  expect(files[paneFile]!.trim().split('\n')).toHaveLength(2)
+  expect(files[paneFile]!.trim().split('\n')).toHaveLength(1)
   touch(work, `${files[work]}\n${JSON.stringify({ kind: 'ack', batch: 'F1', ref: entries[0]!.id, what: 'applied', relaunch: '/run-plan /repo/todo/cat/CAT-PLAN.md', hn: 'H2', cycles: [], at: answer.at + 1 })}`)
   await clock.advance(2_000)
   expect(await ui.find({ type: 'Text', text: /^ {4}✓ rejected: the lock is on the product · applied$/ })).toBeDefined()

@@ -49,7 +49,7 @@ const obj = (properties, optional = []) => ({
 
 const PREFLIGHT = obj({ ok: bool, failure: str, plan: str, root: str, kit: str, runRoot: str, stamp: str })
 const NEXT = obj({
-  kind: { type: 'string', enum: ['END', 'WAITING', 'BATCHES', 'PAUSED', 'ERROR'] },
+  kind: { type: 'string', enum: ['END', 'WAITING', 'BATCHES', 'ERROR'] },
   line: str,
   batches: arr(obj({ batch: str, repo: str, sheet: str })),
   held: arr(obj({ batch: str, by: arr(str) })),
@@ -231,7 +231,6 @@ while (!stop) {
   if (!next) { stop = 'plan-next-batch without result'; break }
   held = next.held || []
   if (next.kind === 'END') break
-  if (next.kind === 'PAUSED') { stop = 'paused by user'; log('⏸ paused by user between two batches'); break }
   if (next.kind !== 'BATCHES') { stop = next.line; break }
 
   const b = next.batches.find(x => samePath(x.repo, pre.root))
@@ -439,7 +438,7 @@ const rep = await agent(
   { schema: REPORT, phase: 'Report', label: 'report', model: 'haiku' },
 )
 
-const RESTART = `A blocked batch never ends the plan: its partial work is saved as \`run/<stamp>-aside-FX.patch\`, the tree goes back to the last batch commit (files the user modified before the batch left as they are), its saved cycles are cleared and the plan goes on with every batch that does not depend on it; \`${BLOCKED}\` here means batches were set aside (listed in \`setAside\` with their dependents) or the run met a technical stop (\`reason\`). The arbiter settles what it can, a question waits 10 min then takes its recommendation, so a batch is set aside for a technical stop, a production Blocking the audit fixes did not lift, a \`STOP\` answer, a question without answer nor recommendation, a step still stopped after its last attempt, or a gate still red after its repair. From the second batch set aside, an arbiter compares the reasons: a cause shared with an earlier one stops the plan, named under \`## Plan stopped — common cause\` of the run report with what to fix in the spec or the plan first. Fix the cause (reapply the patch with \`git apply\` to keep the partial work), write the decision into \`decisions\` of the cycles it touches in the \`## Cycles\` block of the batch sheet (and as \`Hn\` marked \`${USER}\`), then launch a new run-plan: batches ✅ DONE are skipped. A pause asked from the run-lot-pane mod stops the plan between two batches (\`paused by user\`): a new run-plan goes on from there. Never \`resumeFromRunId\`: replay re-runs finished work.`
+const RESTART = `A blocked batch never ends the plan: its partial work is saved as \`run/<stamp>-aside-FX.patch\`, the tree goes back to the last batch commit (files the user modified before the batch left as they are), its saved cycles are cleared and the plan goes on with every batch that does not depend on it; \`${BLOCKED}\` here means batches were set aside (listed in \`setAside\` with their dependents) or the run met a technical stop (\`reason\`). The arbiter settles what it can, a question waits 10 min then takes its recommendation, so a batch is set aside for a technical stop, a production Blocking the audit fixes did not lift, a \`STOP\` answer, a question without answer nor recommendation, a step still stopped after its last attempt, or a gate still red after its repair. From the second batch set aside, an arbiter compares the reasons: a cause shared with an earlier one stops the plan, named under \`## Plan stopped — common cause\` of the run report with what to fix in the spec or the plan first. Fix the cause (reapply the patch with \`git apply\` to keep the partial work), write the decision into \`decisions\` of the cycles it touches in the \`## Cycles\` block of the batch sheet (and as \`Hn\` marked \`${USER}\`), then launch a new run-plan: batches ✅ DONE are skipped. Never \`resumeFromRunId\`: replay re-runs finished work.`
 
 return {
   status: reason ? BLOCKED : DONE,

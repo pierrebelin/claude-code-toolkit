@@ -13,10 +13,7 @@ import json
 import os
 import sys
 
-DURATION_THRESHOLDS = {
-    "dotnet": {"unit": 120, "contract": 180, "integration": 600, "total": 900},
-    "js": {"unit": 60, "integration": 120, "total": 300},
-}
+DURATION_THRESHOLDS = {"unit": 120, "contract": 180, "integration": 600, "total": 900}
 
 problems = []
 warnings = []
@@ -61,9 +58,7 @@ def check_tests(report):
     if got_total is not None and expected_total and abs(got_total - expected_total) > 1:
         fail(f"tests.total.duration_seconds = {got_total}, sum per type = {expected_total}")
 
-    stack = ((report.get("metadata") or {}).get("stack")) or "dotnet"
-    thresholds = DURATION_THRESHOLDS.get(stack, {})
-    for name, limit in thresholds.items():
+    for name, limit in DURATION_THRESHOLDS.items():
         value = got_total if name == "total" else durations.get(name)
         if value is not None and value > limit:
             warn(f"tests.{name}: {value}s > threshold {limit}s — flag it as ⚠️ in the report")
@@ -183,14 +178,12 @@ def check_size(report):
             elif got != expected:
                 fail(f"codebase.size.{root}.{field} = {got}, sum of {breakdown} = {expected}")
 
-    stack = ((report.get("metadata") or {}).get("stack")) or "dotnet"
     activity = report.get("activity") or {}
     src = size.get("src") or {}
-    if stack == "dotnet":
-        for field, key in (("files", "cs_files_total"), ("lines", "cs_lines_total")):
-            got, expected = number(src.get(field)), number(activity.get(key))
-            if got is not None and expected is not None and got != expected:
-                fail(f"codebase.size.src.{field} = {got}, activity.{key} = {expected} — same scope expected")
+    for field, key in (("files", "cs_files_total"), ("lines", "cs_lines_total")):
+        got, expected = number(src.get(field)), number(activity.get(key))
+        if got is not None and expected is not None and got != expected:
+            fail(f"codebase.size.src.{field} = {got}, activity.{key} = {expected} — same scope expected")
 
 
 EVIDENCE_STATUSES = ("measured", "not_configured", "missing", "skipped")

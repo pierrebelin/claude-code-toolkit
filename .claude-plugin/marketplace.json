@@ -16,17 +16,12 @@
     {
       "name": "knowledge-pane",
       "source": "./mods/knowledge-pane",
-      "description": "Side pane browsing the business knowledge base: contexts, use cases and their rules, decisions, ADRs, history, a staged merge or sync; read-only, no model context spent"
+      "description": "Side pane browsing the business knowledge base: contexts, use cases and their rules, decisions, ADRs, history, a staged merge or sync; and following a /business-spec: decisions and answers, open questions, use cases, business rules, sections, unfolded inline on click; read-only, no model context spent"
     },
     {
       "name": "run-lot-pane",
       "source": "./mods/run-lot-pane",
-      "description": "Side pane following a run-lot run, or a run-plan run with a plan view and navigation between its batches: phases as columns, agents (model, duration, tokens per agent, slowness, stalls, retries, interruptions), estimated end, batch sheet, audit verdict and rounds, run outcome with the knowledge-base merge a plan staged, end toast; steers the run: entries to validate, pause, notes, dependency graph"
-    },
-    {
-      "name": "spec-pane",
-      "source": "./mods/spec-pane",
-      "description": "Side pane following a /business-spec: decisions and answers, open questions, use cases, business rules, sections; full content unfolded inline on click"
+      "description": "Side pane following a run-lot run, or a run-plan run with a plan view and navigation between its batches: phases as columns, agents (model, duration, tokens per agent, slowness, stalls, retries, interruptions), estimated end, batch sheet, audit verdict and rounds, run outcome with the knowledge-base merge a plan staged, end toast; steers the run: entries to validate, notes, dependency graph"
     }
   ]
 }

@@ -9,8 +9,8 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
     "date": "YYYY-MM-DD",
     "updated_at": "YYYY-MM-DD",
     "branch": "main branch analysed",
-    "stack": "dotnet | js",
-    "project_name": "project name (package.json name or .sln name)",
+    "stack": "dotnet",
+    "project_name": "project name (.sln name)",
     "commit": "sha of the main branch analysed",
     "evidence": {
       "tests":     { "status": "measured", "source": "local", "commit": "sha", "reason": null },
@@ -119,7 +119,7 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
       "top_files": [ { "file": "", "count": 0 } ]
     },
     "vulnerabilities": {
-      "status": "missing", "reason": "npm audit: request to registry failed", "commit": null,
+      "status": "missing", "reason": "dotnet list package: request to registry failed", "commit": null,
       "tool": null, "total": null, "by_severity": null, "packages": null
     },
     "loop_calls": {
@@ -183,26 +183,24 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
 **Schema v2.0 notes:**
 
 - `metadata.commit` / `metadata.evidence` (optional, older reports lack them): one entry per measured block — hotspots and the `codebase.*` blocks below carry their own —, `status` = `measured` | `not_configured` | `skipped` | `missing` (SKILL.md § Evidence status); `skipped` and `missing` carry a `reason`. `source` = `local` or the CI run ID; `commit` = the commit the result belongs to, equal to `metadata.commit` when measured. A block not `measured` has its own numbers at `null`, never `0`.
-- `metadata.stack`: `"dotnet"` or `"js"` — tells any consumer which interpretation applies.
+- `metadata.stack`: always `"dotnet"`; kept for the schema.
 - 🔴 Every `duration_seconds` (tests and build) is an integer number of seconds, rounded at collection: a runner float (`465.89999999999998`) leaks into the Markdown tables as unreadable digits.
-- `tests.contract`, `tests.architecture`: .NET-specific. `null` for JS/TS.
-- `tests.e2e`: Cypress/Playwright (JS/TS) or .NET E2E tests. `null` if not run.
+- `tests.e2e`: E2E tests. `null` if not run.
 - A repo with an extra suite of its own (DSL compilation, load tests, …) adds one key of the same shape next to these; the coherence script sums whatever types it declares.
-- **`coverage.lines`, `coverage.branches`**: **whole project** (all source files, not just the test-touched ones). Source: SonarQube (`lines_to_cover`, `uncovered_lines`, `conditions_to_cover`, `uncovered_conditions`). Not the Jest or ReportGenerator numbers: they count only test-imported files, giving misleading percentages.
+- **`coverage.lines`, `coverage.branches`**: **whole project** (all source files, not just the test-touched ones). Source: SonarQube (`lines_to_cover`, `uncovered_lines`, `conditions_to_cover`, `uncovered_conditions`). Not the ReportGenerator numbers: they count only test-imported files, giving misleading percentages.
 - `coverage.sonarqube_coverage_pct`: the global SonarQube coverage (lines + branches combined). The reference number for the report.
 - `coverage.files_covered` / `files_total` / `files_coverage_pct`: ratio of files touched by ≥1 test.
-- `coverage.statements`, `coverage.functions`: JS/TS-specific (Istanbul). `null` for .NET. **Also whole-project** through SonarQube when available, else `null`.
-- `coverage.methods_partial`, `coverage.methods_full`: .NET-specific (opencover). `null` for JS/TS.
-- `coverage.by_layer`: free-form object, **values = number (percentage)**, no nested objects. Example: `{ "entities": 23.0, "shared": 11.0 }`. .NET keys: `Domain`, `Application`, `Infrastructure`, `WebAPI`. JS/TS keys: `app`, `entities`, `features`, `shared`, `pages`, `widgets` — or any first-level dir under `src/`. A viewer expects one number per layer.
-- `api_endpoints`: .NET-specific. `null` for JS/TS.
-- `pages`: JS/TS-specific. `null` for .NET.
-- `lint`: ESLint errors/warnings (JS/TS) or Roslyn (.NET). `null` if not run.
+- `coverage.statements`, `coverage.functions`: always `null`; kept for the schema.
+- `coverage.methods_partial`, `coverage.methods_full`: opencover.
+- `coverage.by_layer`: free-form object, **values = number (percentage)**, no nested objects. Keys: `Domain`, `Application`, `Infrastructure`, `WebAPI`. A viewer expects one number per layer.
+- `pages`: always `null`; kept for the schema.
+- `lint`: Roslyn errors/warnings. `null` if not run.
 - `sonarqube.issues_by_layer`: same keys as `coverage.by_layer`; **each value is an object `{ bugs, code_smells }`**, never a bare number — a comparison view reads `d.code_smells` / `d.bugs`, a flat integer renders as `undefined smells`. `{}` when the breakdown is unavailable.
 - 🔴 **`sonarqube.issues_by_severity` and every issue count (per rule, green-coding, MAJOR/CRITICAL): query `api/issues/search` with `&resolved=false`.** Without it the API sums **open AND already-fixed (FIXED)** issues → inflated totals (e.g. 5,990 against ~1,850 really open). `issues_open_total` = total with `resolved=false`. `issues_resolved_total` = total with `resolved=true` (cumulative fixes, to show improvement). The *measures* (`code_smells`, `bugs` through `api/measures`) are already open-only — do not mix them with `issues/search` counts.
 - `sonarqube.creedengo` (optional, .NET green-coding rules): `{ total_issues, effort_minutes, issues_by_severity{}, issues_by_rule[{key,name,severity,count,tags[]}], top_directories[{directory,count}] }` — **`resolved=false`** here too. `null` when the plugin is absent. `issues_by_rule[].key` may carry the engine prefix (`external_roslyn:GCI93`) when the Creedengo plugin is not installed and the rules come from the embedded Roslyn analysers; strip it before pairing rules across reports.
-- `stryker.domain`, `stryker.application`: .NET-specific (two separate runs). JS/TS → only `stryker.combined`, set `domain`/`application` to `null`.
+- `stryker.domain`, `stryker.application`: two separate runs.
 - `activity.cs_periods` (optional): src `.cs` change rate over 7 / 14 / 30 / 90 days. `lines_modified` = additions + deletions inside pre-existing files, `lines_added` = lines of newly added files. Numerator scope `src/**/*.cs` minus `Migrations/`, `*.g.cs`, `*.Designer.cs` — must match `cs_files_total` / `cs_lines_total`, stored alongside (physical lines, from `git grep -c ''` at the report commit). Do not divide by `sonarqube.lines_of_code`: different scope (`tests/` included, blank/comment lines dropped) → ratios above 100%. Absent → the change-rate card is not rendered.
-- `codebase.size` (optional): code size snapshot at the report commit, `{ files, lines }` everywhere, physical lines. `src` / `tests` = totals; `src_by_layer` keys match `coverage.by_layer` (extra layers such as `SDK` allowed), `tests_by_project` keys = test project or first dir under `tests/`. Sums of `src_by_layer` and `tests_by_project` equal `src` and `tests` (checked by script). .NET: `size.src` equals `activity.cs_files_total` / `cs_lines_total` (same scope). Absent → the code size card is not rendered.
+- `codebase.size` (optional): code size snapshot at the report commit, `{ files, lines }` everywhere, physical lines. `src` / `tests` = totals; `src_by_layer` keys match `coverage.by_layer` (extra layers such as `SDK` allowed), `tests_by_project` keys = test project or first dir under `tests/`. Sums of `src_by_layer` and `tests_by_project` equal `src` and `tests` (checked by script). `size.src` equals `activity.cs_files_total` / `cs_lines_total` (same scope). Absent → the code size card is not rendered.
 - `activity.cs_periods[].by_layer` (optional): churn per layer for that window, `{ files, lines }` where `lines` = additions + deletions over every touched file (A, M and D). Keys must match `coverage.by_layer` / `sonarqube.issues_by_layer`. Absent → the per-layer churn card is not rendered.
 - `activity.hotspots` (optional): `cctoolkit hotspots --json` pasted as is — never edited by hand. `status: "missing"` (lizard absent) → `thresholds`, `quadrants`, `danger_zone_top`, `worst_function_top` are `null`. Quadrant counts sum to `files_analysed`. `commits` / `lines_changed` / `fixes` count the window (`window_days` before the commit date, `null` = whole history), `commits_all` the whole history. `fixes` is `null` when `fix_convention` is false — no `fix:` commit in the history, so zero would read as "no bug". `worst_function_top` = the Danger Zone recomputed on the worst function, files already in `danger_zone_top` left out. Absent → the hotspot card is not rendered.
 - `codebase.rules_coverage`, `suppressions`, `vulnerabilities`, `loop_calls` (optional, older reports lack them): `cctoolkit audit-collect`, pasted as is — never edited by hand. Each carries `{status, reason, commit}`; a block not `measured` has every other field `null`. `rules_coverage` = `rules-coverage --json` + `untagged-tests --json` (`unbound_tests` lists 30 at most, `unbound_tests_count` counts them all); `not_configured` when no rule sheet holds a rules table. `suppressions` counts the sources at the commit, test roots left out; `by_kind` and `by_layer` each sum to `total`. `vulnerabilities.packages` lists the high and critical ones; `by_severity` sums to `total`. `loop_calls` is C# only (`not_configured` for js); `files` lists 30 at most, the totals count them all.

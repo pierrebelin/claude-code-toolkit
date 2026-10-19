@@ -1,6 +1,6 @@
 ---
 name: business-spec
-description: "Use when a short, readable and testable business spec of a feature is wanted, after the business decisions have been clarified. Reads the business knowledge base first and writes what the feature changes in it, with global ids. No design and no technical implementation."
+description: "Use for a short, testable business spec of a feature once its business decisions are clarified. Reads the knowledge base, writes the feature's delta with global ids. No technical design."
 argument-hint: "[feature to specify]"
 ---
 

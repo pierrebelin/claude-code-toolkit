@@ -23,7 +23,7 @@ At most one batch per repository: two batches of one repo share a working tree.
 --outside FX  modified paths of FX's repo `cctoolkit pre-audit` will flag as outside the
               batch; exit 1 when any
 --next WORK   next batch, out-of-batch check and journal in one JSON line for run-plan:
-              `kind` END|WAITING|BATCHES|PAUSED (a pause asked in the run-lot-pane mod),
+              `kind` END|WAITING|BATCHES,
               `line` = the text output, `batches`, `held` (`[{"batch", "by"}]`), then
               `outsideBatch` and `outsidePaths`; when nothing is outside, appends the journal
               line `FX launched — <sheet>` of run --run STAMP to WORK
@@ -41,7 +41,6 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE / "lib"))
 import kit_config  # noqa: E402
-import pane_file  # noqa: E402
 import work_file  # noqa: E402
 
 DONE = re.compile(r"^### (?:Batch|Lot) (F\d+)\b.*✅ DONE", re.M)
@@ -318,11 +317,6 @@ def main():
         print(f"OK {len(batches)} batches, {len(done & set(by_id))} DONE")
         return
 
-    if args.journal and pane_file.pause_requested(Path(args.journal).parent, args.journal):
-        work_file.append(args.journal, {"kind": "ack", "ref": "pause", "what": "paused"})
-        work_file.append(args.journal, {"kind": "journal", "run": args.run, "text": "⏸ paused by user"})
-        print(json.dumps({"kind": "PAUSED", "line": "paused by user", "batches": [], "held": [], "outsideBatch": "", "outsidePaths": []}))
-        return
     kind, line, launched, held = next_batches(batches, done, in_scope, args.excluded, args.skip, repo_dir, sheet)
     if not args.journal:
         print(line)

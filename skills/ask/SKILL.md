@@ -1,6 +1,6 @@
 ---
 name: ask
-description: "Use when the user asks how the product behaves or why — a business rule, a use case, a decision, what a handler must guarantee — or before changing a handler outside the kit's flow. Answers from the business knowledge base through `cctoolkit ask`, each fact cited by its id, without reading the base's files whole."
+description: "Use when the user asks how the product behaves or why (business rule, use case, decision, handler guarantee), or before changing a handler outside the kit's flow. Answers from the knowledge base via `cctoolkit ask`, each fact cited by id."
 argument-hint: "<question> | <id> | <Handler>"
 ---
 

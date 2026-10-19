@@ -89,7 +89,7 @@ Paths, markers, the tag carrier and the build and test commands are `kit.config.
 | File | What to change |
 |------|----------------|
 | `skills/implement-tdd/references/test-scope.md` | test environment variable, namespace roots, the runner's filter syntax (the illustrations are the `clean-architecture` preset's): suites actually present, integration test splitting |
-| `skills/quality-report/commands-dotnet.md`, `commands-js.md` | suite list, SonarQube project key, Stryker config names; Jest config paths |
+| `skills/quality-report/commands-dotnet.md` | suite list, SonarQube project key, Stryker config names |
 | `skills/*/SKILL.md`, `skills/*/references/*.md` | code examples: namespaces and aggregate names |
 | `docs/CONTEXT-COST.md` | the measured figures — re-measure with `dev/turn-batching-check.py` of a kit checkout, then create `.claude/context-baseline.json` (`--until <date> --save-baseline`) |
 

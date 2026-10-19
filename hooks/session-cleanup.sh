@@ -9,7 +9,7 @@ case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;;
 sid=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unknown)
 
 # Every family a hook or the statusline writes under claude-<prefix>-<session>.
-PREFIXES="readbounds-seen catbounds-seen diffbounds-seen knowledge-seen batching-nudge batching-tick clearnudge implement-tdd-guard implement-tdd-effort effort"
+PREFIXES="readbounds-seen catbounds-seen diffbounds-seen knowledge-seen batching-nudge batching-tick clearnudge runnotes implement-tdd-guard implement-tdd-effort effort"
 
 # Also ${TMPDIR} (macOS: /var/folders/...), where the effort state is written; deduplicated.
 DIRS="/tmp"

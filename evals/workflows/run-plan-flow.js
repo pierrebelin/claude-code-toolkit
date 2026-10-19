@@ -1,11 +1,10 @@
 // Whole run-plan body driven by schema-shaped fake agents: F1 and F2 are set aside, F3 would run.
 // common: the breaker finds a cause shared by F1 and F2 — the plan stops before F3, a `breaker` line
 // written, the report given its common-cause section. distinct: the plan goes on and runs F3.
-// paused: the scheduler answers PAUSED after F1 — the plan stops cleanly, reason `paused by user`.
 // merge: every batch DONE — the merge is prepared, drafted by knowledge-merger and staged, the report
 // given its knowledge-base section, the result its `merge`. nomerge: every batch DONE, nothing to merge.
 // A security pass reads the batch commits after the final check; its findings (merge) go to `## To validate`.
-// Usage: node run-plan-flow.js <run-plan.js> common|distinct|paused|merge|nomerge
+// Usage: node run-plan-flow.js <run-plan.js> common|distinct|merge|nomerge
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
 const variant = process.argv[3] || 'common'
@@ -17,7 +16,6 @@ const agent = async (prompt, o) => {
   const l = o.label
   if (l === 'preflight') return { ok: true, failure: '', plan: '/r/todo/x/X-PLAN.md', root: '/r', kit: '/k', runRoot: '/r/todo/x/run', stamp: '2026-10-15-1000' }
   if (l === 'next batch') {
-    if (variant === 'paused' && next === 1) return { kind: 'PAUSED', line: 'paused by user', batches: [], held: [], outsideBatch: '', outsidePaths: [] }
     const b = order[next++]
     return b ? { kind: 'BATCHES', line: '', batches: [{ batch: b, repo: '/r', sheet: `todo/x/X-PLAN-${b}.md` }], held: [], outsideBatch: '', outsidePaths: [] } : { kind: 'END', line: '', batches: [], held: [], outsideBatch: '', outsidePaths: [] }
   }
@@ -54,7 +52,7 @@ const agent = async (prompt, o) => {
 const workflow = async (name, a) => {
   const b = /-(F\d+)\.md$/.exec(a.sheet)[1]
   labels.push(`run-lot ${b}`)
-  return b === 'F3' || (variant === 'paused' && b === 'F1') || variant === 'merge' || variant === 'nomerge'
+  return b === 'F3' || variant === 'merge' || variant === 'nomerge'
     ? { status: 'DONE', reason: '—', report: `todo/x/run/batches/${b}.md`, toReview: [], hypotheses: [], minors: [] }
     : { status: 'BLOCKED', reason: b === 'F1' ? 'design ambiguity on archive date' : 'archive date read from the request', report: `todo/x/run/batches/${b}.md`, toReview: [], hypotheses: [], minors: [] }
 }

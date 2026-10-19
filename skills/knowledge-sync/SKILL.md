@@ -1,6 +1,6 @@
 ---
 name: knowledge-sync
-description: "Use to build the business knowledge base the first time, or to align it with the code after changes made outside the kit's flow (hotfix, another developer, refactor), or when a reminder says the base is possibly behind. Drafts per bounded context, validated with the user, then written to the base. Run it before committing: the base update leaves with the code."
+description: "Use to build the business knowledge base, or align it with code changed outside the kit's flow (hotfix, refactor, another developer), or when reminded it may be behind. Run before committing."
 argument-hint: "[Context[,Context]] [--since <commit>]"
 ---
 

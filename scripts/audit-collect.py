@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """The model-free measures of the quality report, in one call and one JSON object.
 
-    cctoolkit audit-collect --stack dotnet|js [--ref <branch|sha>] [--exclude <glob>]... [--out <file>]
+    cctoolkit audit-collect [--ref <branch|sha>] [--exclude <glob>]... [--out <file>]
 
 `--out` writes the fragment `{activity, codebase}` for `cctoolkit report-assemble`; stdout
-carries it too, with `commit`, `stack` and `hotspots_markdown` (the §2 section). Run from
+carries it too, with `commit` and `hotspots_markdown` (the §2 section). Run from
 the audit worktree after the tests restored the dependencies. Each block carries
 `{status, reason, commit}`: `measured`, `not_configured` or `missing` (numbers `null`).
 Blocks: `activity.hotspots`, `codebase.rules_coverage` (rules-coverage + untagged-tests),
 `codebase.suppressions` (at the commit), `codebase.vulnerabilities`, `codebase.loop_calls`
-(access-cost, C# only). Those reading the working tree are `missing` when it differs from
+(access-cost). Those reading the working tree are `missing` when it differs from
 the commit. Exit 0 whatever the statuses; 2 on bad arguments.
 """
 import argparse
@@ -191,26 +191,6 @@ def dotnet_vulnerabilities(sha):
     return vulnerability_block(sha, "dotnet list package --vulnerable --include-transitive", list(found.values()))
 
 
-def npm_vulnerabilities(sha):
-    if not shutil.which("npm"):
-        return vulnerabilities_missing(sha, "missing", "npm not found")
-    if not os.path.isfile(os.path.join(ROOT, "package-lock.json")):
-        return vulnerabilities_missing(sha, "missing", "no package-lock.json: npm audit needs one")
-    code, out, err = run([shutil.which("npm"), "audit", "--json"])  # npm.cmd on Windows
-    try:
-        data = json.loads(out)
-    except ValueError:
-        return vulnerabilities_missing(sha, "missing", f"npm audit: {last_line(err or out)}")
-    if "error" in data:
-        return vulnerabilities_missing(sha, "missing", f"npm audit: {data['error'].get('summary') or data['error'].get('code')}")
-    found = []
-    for name, v in (data.get("vulnerabilities") or {}).items():
-        sev = (v.get("severity") or "").lower()
-        found.append({"name": name, "version": v.get("range"), "severity": "low" if sev == "info" else sev,
-                      "direct": bool(v.get("isDirect")),
-                      "advisory": next((x.get("url") for x in v.get("via", []) if isinstance(x, dict)), None)})
-    return vulnerability_block(sha, "npm audit", found)
-
 
 def vulnerability_block(sha, tool, found):
     by_severity = dict.fromkeys(SEVERITIES, 0)
@@ -222,16 +202,14 @@ def vulnerability_block(sha, tool, found):
     return block("measured", sha, tool=tool, total=len(found), by_severity=by_severity, packages=listed)
 
 
-def vulnerabilities(sha, stack, differs):
+def vulnerabilities(sha, differs):
     if differs:
         return vulnerabilities_missing(sha, "missing", differs)
-    return dotnet_vulnerabilities(sha) if stack == "dotnet" else npm_vulnerabilities(sha)
+    return dotnet_vulnerabilities(sha)
 
 
-def loop_calls(sha, stack, differs):
+def loop_calls(sha, differs):
     empty = dict(files_scanned=None, in_loop=None, in_lambda=None, memory_filter=None, files=None)
-    if stack != "dotnet":
-        return block("not_configured", sha, "access-cost reads C# only", **empty)
     if differs:
         return block("missing", sha, differs, **empty)
     code, out, err = run([sys.executable, os.path.join(SCRIPTS, "access-cost.py"), "--all", "--json"], timeout=600)
@@ -249,7 +227,6 @@ def loop_calls(sha, stack, differs):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--stack", choices=("dotnet", "js"), required=True)
     ap.add_argument("--ref", help="branch or commit analysed (default: origin/HEAD, else the current branch)")
     ap.add_argument("--exclude", action="append", default=[], help="glob of paths left out (repeatable)")
     ap.add_argument("--out", help="also write the JSON into this file")
@@ -263,13 +240,12 @@ def main():
     hot, hot_md = hotspots(sha, args.exclude)
     result = {
         "commit": sha,
-        "stack": args.stack,
         "activity": {"hotspots": hot},
         "codebase": {
             "rules_coverage": rules_coverage(sha, differs),
             "suppressions": suppressions(sha, args.exclude),
-            "vulnerabilities": vulnerabilities(sha, args.stack, differs),
-            "loop_calls": loop_calls(sha, args.stack, differs),
+            "vulnerabilities": vulnerabilities(sha, differs),
+            "loop_calls": loop_calls(sha, differs),
         },
         "hotspots_markdown": hot_md,
     }

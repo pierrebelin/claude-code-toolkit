@@ -4,6 +4,19 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.2.0 — 2026-10-19
+
+A lighter kit, again: one pane less, a stack less, less loaded per session and per cycle.
+
+- `cctoolkit`: shorter skill descriptions (about 1,100 characters less in every session's skill listing). `/cctoolkit:kit-init` and `/cctoolkit:learn` are no longer invoked by the model: type them yourself (doctor's `NOTE learn` still names `/learn`).
+- `cctoolkit` `run-lot`: the RED and GREEN contracts no longer restate what `tdd-test-author` and `tdd-implementer` already carry (unreachable throw sites, a behaviour already on disk, the handler `CLAUDE.md` row); the handler rule-sheet detail moves into `tdd-implementer`. Fewer tokens on every cycle, same behaviour.
+- `cctoolkit` `/cctoolkit:quality-report`: .NET only. The JS/TS stack is gone (`commands-js.md`, its branches in the `run-audit` workflow, `npm audit`, the JS duration thresholds); `cctoolkit audit-collect` loses `--stack`. The report JSON keeps schema `2.0`: `metadata.stack` is always `"dotnet"`, the JS-only keys stay `null`.
+- `cctoolkit`, `run-lot-pane`: a note (`n`) reaches the batch's agents while they work. The new `run-notes` hook (`PostToolUse`) hands every note of the batch to each of its agents at its next tool call, the agents already running included; before, a note waited for the next agent or retry. `cctoolkit run-notes` is gone, and the run-lot prompts no longer carry the notes themselves.
+- `cctoolkit`, `run-lot-pane`: the run-plan pause (`z`) is gone, with `PAUSED` of `plan-next-batch --next`.
+- `run-lot-pane`: the desktop timeline (`t`, `◫ timeline`) is gone. The plan view, the batch view, the dependency graph `g`, the entries to validate and the notes stay.
+- `knowledge-pane`: takes over `spec-pane`. During a `/cctoolkit:business-spec` the pane switches to the spec (decisions, open questions by severity, use cases, rules, sections, unfold on click, the desktop state head); `b` folds then goes back, the home lists the spec followed. `/spec-pane [path|clear]` keeps working, now from `knowledge-pane`. One desktop button, `◫ Spec` while the spec is on top, `◫ Knowledge` otherwise.
+- `spec-pane`: removed. A repo that installed it: `claude plugin uninstall spec-pane@cctoolkit --scope project` (a cached copy would register `/spec-pane` twice), then `claude plugin marketplace update cctoolkit`, `claude plugin install knowledge-pane@cctoolkit --scope project`, and restart Claude Code. A spec followed in a running session must be followed again.
+
 ## 2.1.0 — 2026-10-19
 
 Code review, from how Anthropic reviews Claude Code: findings verified before they are fixed, a bug class fixed whole, one security pass per plan. And a lighter kit: less loaded per document, dead code, old migrations and unused flags removed.

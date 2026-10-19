@@ -3,18 +3,16 @@
 
 The mod is the only writer (whole-file, no lock); the scripts answer with `ack` lines in the work file.
 
-    {"kind": "pause", "on": true|false, "at": <epoch s>}
-        the last line wins; `on` is spent once `plan-next-batch --next` paused the plan
-        (an `ack` of ref `pause` later than it)
     {"kind": "note", "id": "<id>", "batch": "F3", "text": "...", "at": ...}
-        a note for a batch, taken once (`cctoolkit run-notes take`, `ack` what `note-taken`)
+        a note for a batch, delivered once to each of its agents (lib/run_notes.py, `ack` what
+        `note-taken`, `agent` the agent's id)
     {"kind": "validation", "id": "<id>", "entry": {"batch", "step", "text", "sheet"?},
      "decision": "keep"|"reject"|"amend", "text": "...", "at": ...}
         the user's answer to one `## To validate` entry; the last line of an id wins;
         applied once (`cctoolkit run-validate apply`, `ack` what `applied`)
 
-The `ack` line of the work file: `{"kind": "ack", "batch", "ref": "<id>|pause", "what":
-"note-taken"|"applied"|"paused", "at", ...}`.
+The `ack` line of the work file: `{"kind": "ack", "batch", "ref": "<id>", "what":
+"note-taken"|"applied", "at", ...}`.
 """
 import json
 from pathlib import Path
@@ -38,7 +36,7 @@ def read(run_root) -> list[dict]:
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if isinstance(record, dict) and record.get("kind") in ("pause", "note", "validation"):
+        if isinstance(record, dict) and record.get("kind") in ("note", "validation"):
             out.append(record)
     return out
 
@@ -55,16 +53,8 @@ def last_by_id(records, kind) -> dict:
     return found
 
 
-def pause_requested(run_root, work) -> bool:
-    pauses = [r for r in read(run_root) if r.get("kind") == "pause"]
-    if not pauses or not pauses[-1].get("on"):
-        return False
-    spent = [a.get("at", 0) for a in acks(work) if a.get("ref") == "pause"]
-    return not spent or max(spent) < pauses[-1].get("at", 0)
-
-
-def pending_notes(run_root, work, batch) -> list[dict]:
-    taken = {a.get("ref") for a in acks(work) if a.get("what") == "note-taken"}
+def pending_notes(run_root, work, batch, agent) -> list[dict]:
+    taken = {a.get("ref") for a in acks(work) if a.get("what") == "note-taken" and a.get("agent") == agent}
     return [n for n in last_by_id(read(run_root), "note").values() if n.get("batch") == batch and n["id"] not in taken]
 
 

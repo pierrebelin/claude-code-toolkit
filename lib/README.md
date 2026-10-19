@@ -14,7 +14,8 @@ What the [hooks](../hooks/README.md) and the [scripts](../scripts/README.md) cal
 | `kit_testtag.py` | the `testTag` adapters: xUnit, pytest, JUnit, Jest |
 | `rule_sheet.py` | a rule sheet's sections (anchor, else exact folded title) and its `kit:rules` table, the fixed shape — read by `handler-claude-md-check.sh` and `rules-coverage` |
 | `tdd_scope.py` | for `hooks/tdd-scope-guard.sh`, `guard-tdd-scope.sh` and `cctoolkit tdd-scope`: the RED/GREEN write check: snapshot per agent, write log, tree comparison, RED rerun against `tdd.stubFailure`, restore; state under `work_file.tmp_dir("tdd-scope")` |
-| `pane_file.py` | for `run-notes`, `run-validate` and `plan-next-batch --next`: the pane file `run/.pane.jsonl`, written whole by the `run-lot-pane` mod alone (pause, notes, answers to `## To validate`), answered by `ack` lines of the work file |
+| `pane_file.py` | for `run_notes.py`, `run-validate`: the pane file `run/.pane.jsonl`, written whole by the `run-lot-pane` mod alone (notes, answers to `## To validate`), answered by `ack` lines of the work file |
+| `run_notes.py` | for `hooks/run-notes.sh`: the batch and work file an agent works for, read once from the first line of its run-lot prompt and cached per agent; each note of that batch it has not received, as additional context, then an `ack` naming the agent |
 | `work_file.py` | the run work file `run/.work.jsonl` of run-lot and run-plan: one JSON line per event, appended and rewritten under `flock`; read by `batch-baseline`, `run-work`, `run-question`, `sheet-cycles`, `plan-next-batch`, `pre-audit` |
 
 ## Modules

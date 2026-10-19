@@ -1,6 +1,7 @@
 ---
 name: kit-init
-description: "Use once per repo after enabling the cctoolkit plugin, or to reconfigure it: detects the stack, proposes a layout preset, asks the documents' language, writes .claude/kit.config.json, installs the rules, preset skills, settings and statusline the plugin cannot ship, drafts layer rules from the code when no preset fits, then runs the doctor."
+disable-model-invocation: true
+description: "Run once per repo after enabling cctoolkit, or to reconfigure it: stack, preset, language, kit.config.json, rules, preset skills, settings, statusline, doctor."
 argument-hint: "[optional preset name]"
 ---
 

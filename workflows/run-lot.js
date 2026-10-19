@@ -135,7 +135,6 @@ const LOADED = obj({
   cycles: arr(obj({ behaviour: str, rmcu: str, steps: arr(str), red: RED, green: GREEN }, ['green'])),
   index: INDEX,
   nextSheet: str,
-  notes: arr(str),
 })
 
 const FRAME = [
@@ -147,14 +146,8 @@ const FRAME = [
 
 const list = xs => (xs && xs.length ? xs.map(x => `\`${x}\``).join(', ') : 'none')
 
-// Notes the user attached to this batch in the run-lot-pane mod: those pending when the batch
-// starts ride on every contract; one added while it runs reaches the next retry or arbiter,
-// which take it themselves (`cctoolkit run-notes take` prints each note once).
-let notes = []
-const notesLine = () => (notes.length ? `\n\nNotes from the user for this batch, binding over the sheet: ${notes.join(' ; ')}` : '')
-const takeNotes = `cctoolkit run-notes take ${workFile} ${batch}`
 const attemptLine = (step, n, reason) => `cctoolkit run-work append ${workFile} <<'ATTEMPT_LINE'\n${JSON.stringify({ kind: 'attempt', batch, step, n, reason })}\nATTEMPT_LINE`
-const retryHead = (step, n, reason) => `\n\nBefore anything else, one call: \`${attemptLine(step, n, reason)}\` then \`${takeNotes}\` — a line it prints is a note from the user, binding over the sheet.`
+const retryHead = (step, n, reason) => `\n\nBefore anything else, one call: \`${attemptLine(step, n, reason)}\`.`
 const fileName = line => line.replace(/`/g, '').trim().replace(/^[ MADRCU?!]{1,2}\s+/, '').split(/\s+/)[0] || ''
 const short = (text, n = 40) => (text.length > n ? text.slice(0, n - 1) + '…' : text)
 
@@ -237,7 +230,6 @@ function arbitrate(step, reason, touched, earlier) {
       '',
       `You arbitrate a stop of this autonomous batch in place of the user, who reviews every decision you take after the whole plan has run. Step: ${step}. Stop reason: ${reason}`,
       earlier.length ? `Decisions already applied at this step, each followed by the same kind of stop: ${earlier.map(e => `« ${e.text} » then « ${e.reason} »`).join(' ; ')}. Never repeat one of them.` : '',
-      `First call: \`${takeNotes}\` — a line it prints is a note from the user for this batch: decide by it.${notes.length ? ` Notes already given: ${notes.join(' ; ')}.` : ''}`,
       'Read only what the reason names (test lines, production lines, the sheet section), by range; never edit a file.',
       'Decide so the batch goes on without weakening what the tests prove:',
       `- Test files modified at GREEN (${touched.length ? touched.join(', ') : 'none listed'}): the test itself is wrong (fixture bug, expectation written against the raw value a shared helper normalizes, expected key the fixture contradicts, compile ripple of a signature the sheet changes) → grant it, text \`allow-test: <path>\` once per file. The change removes, negates or loosens an assertion of the behaviour → text tells the GREEN to restore the test and fix production instead.`,
@@ -312,8 +304,7 @@ function redContract(c, declaratives) {
       'A red guard = the code already breaks it: ## BLOCKED with the violations listed.',
     ] : []),
     'An existing assertion on a literal or contract this behaviour changes is listed in `Rewritten by you`: rewrite it to the new expected value, never into a negative assertion (does-not-contain, not-equal) that would pass whatever the code does.',
-    'A contract method whose throw site no caller reaches (every path to it refused earlier, an exhaustive switch, a non-nullable result) is never written: list it in `unreachable` with the site `path:line` and why; the user decides on removing the dead guard after the plan.',
-    'Behaviour already in place on disk (a stopped run went further than its saved state: the contract methods exist in the test class and production is written): run them filtered, unchanged; exit 0 → `status: ALREADY_GREEN`, `table` = the methods run, `stubs` and `productionDiff` empty. Never write a new test that passes at once to get there: a method you write must fail first.',
+    'Behaviour already in place on disk → `status: ALREADY_GREEN`, `table` = the methods run, `stubs` and `productionDiff` empty.',
     ...(declaratives.length ? [
       `Declarative artefacts already written by the orchestrator (common-rules §4.5, neither yours nor stubs): ${declaratives.join(' ; ')}`,
     ] : []),
@@ -323,7 +314,7 @@ function redContract(c, declaratives) {
     '`productionDiff` = `src/` files you created or modified yourself, no annotation (display only: a hook compares the tree to your start), `stubs` = paths only of the stubs written, no annotation — every source file you changed must be listed there, the hook refuses the output otherwise, `table` = one row per method written or modified',
     '(`test` = `Class.Method`), `removed` = tests removed because already covered, `unreachable` = contract methods not written, site unreachable. `## BLOCKED` = `status: BLOCKED` + `diagnostic` (six RTK lines at most).',
     `Last step before the structured output, except on ## BLOCKED: one call, \`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` then the line \`{"kind": "cycle", "batch": "${batch}", "slug": "${slug(c.behaviour)}", "state": {"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": <your report>}}\` then \`CYCLE_STATE\`, \`<your report>\` = the object you return, same fields and values.`,
-  ].filter(l => l !== '').join('\n') + notesLine()
+  ].filter(l => l !== '').join('\n')
 }
 
 function greenContract(c, r) {
@@ -341,14 +332,11 @@ function greenContract(c, r) {
     `\`Cost\` line from \`cctoolkit access-cost --base ${workFile} ${batch} <production files>\`: lines this batch added flagged, earlier ones listed pre-existing`,
     '```',
     '',
-    'Handler `CLAUDE.md`: a rule your code adds or changes in a handler → `<kit>/skills/implement-tdd/references/closing.md` §2, in the same message as your last production edit.',
-    'Every `RM` trait id the tests of this cycle cite is a row of its handler table before you report: an id absent from it → add the row, even when your code only refines an existing behaviour (a dedicated error code is a rule).',
-    '',
     'Your `## GREEN` report goes through the structured output: `production` = paths modified or created (handler `CLAUDE.md` included), `exit` = code of the final filtered test,',
     '`testsDiff` = `tests/` files you created or modified yourself, no annotation (display only: a hook compares the tree to your start and refuses a changed test file not granted), `cost` = last line of `cctoolkit access-cost` verbatim,',
     '`independentOf` = the input the cost is independent of. `## BLOCKED` = `status: BLOCKED` + `diagnostic`.',
     `Last step before the structured output, except on ## BLOCKED: one call, \`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` then the line \`{"kind": "cycle", "batch": "${batch}", "slug": "${slug(c.behaviour)}", "state": {"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": ${JSON.stringify(r)}, "green": <your report>}}\` then \`CYCLE_STATE\`, \`<your report>\` = the object you return, same fields and values.`,
-  ].filter(l => l !== '').join('\n') + notesLine()
+  ].filter(l => l !== '').join('\n')
 }
 
 // What a RED or GREEN wrote and how its RED fails is checked on the tree by the hook
@@ -645,7 +633,7 @@ const loading = agent(
   [
     FRAME,
     '',
-    `First, one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit run-validate apply ${workFile}; cctoolkit batch-baseline snapshot ${workFile} ${batch}; ${takeNotes}\` — questions of an earlier run never answer this one; run-validate writes the answers given in the run-lot-pane mod into the sheets; the snapshot records the files already modified, left out of the batch diff and commit (kept when it exists); \`notes\` = every line \`run-notes\` printed, verbatim (empty when none).`,
+    `First, one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit run-validate apply ${workFile}; cctoolkit batch-baseline snapshot ${workFile} ${batch}\` — questions of an earlier run never answer this one; run-validate writes the answers given in the run-lot-pane mod into the sheets; the snapshot records the files already modified, left out of the batch diff and commit (kept when it exists).`,
     `Then in one message: \`cctoolkit sheet-cycles ${sheet} --states ${workFile}\`, \`${indexCommand(sheet)}\` and \`grep -E '^### (Batch|Lot) F[0-9]+' ${plan}\`.`,
     '`cycles` = the JSON array `--states` printed, each object as-is, no field changed (`[]` when no cycle was saved).',
     '`index` = the JSON line `sheet-cycles` printed, verbatim, whatever its exit code (0 valid, 1 invalid, 2 no block).',
@@ -677,7 +665,7 @@ function designPrompt(target, targetBatch) {
     'Declarative artefacts are never written by you: list them in `declaratives`, the run writes them before the first RED.',
     `Last: \`${indexCommand(target)}\` until exit 0, fixing what it lists; still exit 1 after three rounds → \`blocked: true\`, \`reason\` = its errors.`,
     '`review` = one line per choice made in place of the user (empty when none).',
-  ].filter(l => l !== '').join('\n') + notesLine()
+  ].filter(l => l !== '').join('\n')
 }
 
 const designAgent = (target, targetBatch, suffix = '') => agent(
@@ -699,8 +687,6 @@ const designRejected = x => (!x || !x.design ? 'design agent without result'
 
 const loaded = await loading
 saved = loaded || { cycles: [] }
-notes = loaded && loaded.notes ? loaded.notes.filter(n => n.trim()) : []
-if (notes.length) log(`${notes.length} note(s) from the user for ${batch}`)
 if (!loaded) log('resume state agent without result — no cycle reused')
 lotIndex = loaded ? loaded.index : null
 const nextSheet = loaded ? loaded.nextSheet.trim() : ''

@@ -51,6 +51,45 @@ export type Base = {
   signature: string
 }
 
+export type Decision = {
+  id: string
+  header: string
+  question: string
+  options: string[]
+  recommended: string | null
+  answer: string | null
+  note: string | null
+  isPending: boolean
+}
+
+export type SpecItem = { id: string; name: string; tag: string | null; body: string }
+
+// `anchor`: the `<!-- kit:<name> -->` ending the heading, when it carries one.
+export type SpecSection = { number: string; title: string; anchor?: string; body: string }
+
+export type OpenQuestion = { id: string; severity: string; question: string; impact: string; options: string }
+
+export type SpecDoc = {
+  title: string
+  summary: string
+  sections: SpecSection[]
+  useCases: SpecItem[]
+  rules: SpecItem[]
+  openQuestions: OpenQuestion[]
+}
+
+// The `/business-spec` of the session: armed when it starts, its SPEC file followed once written.
+export type Tracked = {
+  isArmed: boolean
+  topic: string | null
+  path: string | null
+  mtimeMs: number
+  doc: SpecDoc | null
+  readAt: number | null
+}
+
+export type SpecKind = 'useCase' | 'rule' | 'section' | 'openQuestion' | 'decision'
+
 export type View =
   | { kind: 'home' }
   | { kind: 'context'; name: string }
@@ -58,12 +97,21 @@ export type View =
   | { kind: 'merge'; code: string }
   | { kind: 'change'; code: string; id: string }
   | { kind: 'search' }
+  | { kind: 'spec' }
 
 // `seed`: the text the search field is drawn with, set as the search comes on top — never per keystroke, so a redraw cannot overwrite typing.
 export type Navigation = { stack: View[]; query: string; seed: string; expanded: string[]; collapsed: string[] }
 
 declare module 'claude-code' {
   interface PluginState {
-    'knowledge-pane': { base: Base; nav: Navigation; full: Record<string, string>; now: number; isShown: boolean }
+    'knowledge-pane': {
+      base: Base
+      nav: Navigation
+      full: Record<string, string>
+      now: number
+      isShown: boolean
+      tracked: Tracked
+      decisions: Decision[]
+    }
   }
 }

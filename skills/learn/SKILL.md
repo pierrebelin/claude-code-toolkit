@@ -1,6 +1,7 @@
 ---
 name: learn
-description: "Use when doctor prints `NOTE learn`, or the user asks to learn from past /verify-ddd-tdd verdicts: turns gaps recurring across batches into a rule, an audit criterion or a mechanical check, and retires the lines they make useless, after confirmation. With `memory`, audits the project auto-memory for stale, duplicated or contradictory entries instead."
+disable-model-invocation: true
+description: "Run when doctor prints `NOTE learn`: turns gaps recurring across /verify-ddd-tdd verdicts into a rule, audit criterion or mechanical check. `memory` audits the auto-memory instead."
 argument-hint: "[optional axis, e.g. Plan | memory]"
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: implement-tdd
-description: "Use when implementing a .NET/DDD batch or a whole plan under strict TDD: launches the run-lot workflow on the batch sheet (run-plan for a plan) and answers its questions from the session."
+description: "Use to implement a .NET/DDD batch or a whole plan under strict TDD: launches the run-lot workflow (run-plan for a plan) and answers its questions."
 argument-hint: "[batch FX <global plan path> | <global plan path> | batch FX — correction: manual finding]"
 ---
 

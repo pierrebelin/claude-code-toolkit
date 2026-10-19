@@ -315,7 +315,7 @@ Feeds `activity.hotspots` (§2 `Hotspots`) and `codebase.rules_coverage` (§3), 
 
 ```bash
 EXCL=(--exclude '*/Migrations/*' --exclude '*.g.cs' --exclude '*.Designer.cs')
-cctoolkit audit-collect --stack dotnet "${EXCL[@]}" --ref <commit> --out <tmp>/collect.json
+cctoolkit audit-collect "${EXCL[@]}" --ref <commit> --out <tmp>/collect.json
 ```
 
 Mass commits it lists (formatting, license headers) stay in the churn: add them to `.git-blame-ignore-revs`, or pass `--ignore-rev <sha>` when the user names them.

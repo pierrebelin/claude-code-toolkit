@@ -145,14 +145,6 @@
         "exit": 0,
         "stdout": "END F2:skipped F3:F2"
       }
-    },
-    {
-      "name": "--next answers PAUSED once when the pane asked for a pause, spends it (ack + journal), then schedules again",
-      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/x/run; cp {{FIX}}/X-PLAN.md {{FIX}}/X-PLAN-F2.md $d/todo/x/; git -C $d init -q; printf '{\"kind\":\"pause\",\"on\":true,\"at\":1}\\n' > $d/todo/x/run/.pane.jsonl; cd $d && W=$d/todo/x/run/.work.jsonl && a=$(python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --next $W --run S1 | jq -r .kind) && b=$(python3 {{KIT}}/scripts/plan-next-batch.py todo/x/X-PLAN.md --next $W --run S1 | jq -r .kind) && echo \"$a $b $(jq -r 'select(.kind==\"ack\").what' $W)\"",
-      "expect": {
-        "exit": 0,
-        "stdout": "PAUSED BATCHES paused"
-      }
     }
   ]
 }

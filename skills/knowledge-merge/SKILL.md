@@ -1,6 +1,6 @@
 ---
 name: knowledge-merge
-description: "Use when a delivered feature must enter the business knowledge base: after run-plan staged its merge, after a plan run batch by batch, or to merge what a plan abandoned for good delivered (--partial). Shows the diff and writes the base only on the user's confirmation."
+description: "Use to bring a delivered feature into the knowledge base: after run-plan staged its merge, after a plan run batch by batch, or --partial for an abandoned plan. Writes only on confirmation."
 argument-hint: "<todo/<code>/<CODE>-PLAN.md> [--partial]"
 ---
 
