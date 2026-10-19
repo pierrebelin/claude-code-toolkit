@@ -9,6 +9,7 @@ Reads ids in headings, `kit:` anchors and code in backticks only
 import os
 import re
 import subprocess
+import sys
 
 ID = r"(?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D)-\d+|ADR-\d+)"
 ID_RE = re.compile(rf"(?<![A-Za-z0-9-]){ID}(?![0-9A-Za-z])")
@@ -150,6 +151,30 @@ def history(path):
         if len(cells) >= 3 and DATE.match(cells[0]):
             rows.append((cells[0], cells[1], cells[2]))
     return rows
+
+
+PROVISIONAL = re.compile(r"(?<![A-Za-z0-9-])((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D))|ADR)-\?(\d+)(?![0-9A-Za-z])")
+
+
+def refuse(lines, tail):
+    """Each refusal on stderr, then the tail line (`nothing written`, `nothing staged`): exit 1."""
+    for line in lines:
+        print(f"refused: {line}", file=sys.stderr)
+    print(tail, file=sys.stderr)
+    return 1
+
+
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def base_texts(c):
+    """{rel: text} of the base's files but HISTORY.md and INDEX.md."""
+    top = base_dir(c)
+    return {os.path.relpath(p, top): read(p) for p in markdown_files(top)
+            if os.path.basename(p) not in ("HISTORY.md", "INDEX.md")}
 
 
 def git(root, *args):

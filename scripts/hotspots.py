@@ -41,11 +41,7 @@ QUADRANT = {(True, True): "danger_zone", (False, True): "cowboy_code",
 
 
 def git(*args, check=True):
-    r = subprocess.run(["git", "-C", ROOT, "-c", "core.quotePath=false", *args],
-                       capture_output=True, text=True, errors="replace")
-    if check and r.returncode != 0:
-        sys.exit(f"git {' '.join(args)}: {r.stderr.strip()}")
-    return r.stdout
+    return kit_config.git(ROOT, *args, check=check)
 
 
 def default_ref():
@@ -166,20 +162,7 @@ def churn(ref, cutoff, current, ignored, tracked_count):
 
 
 def blobs(ref, paths):
-    """{path: text} at `ref`, through one `git cat-file --batch`."""
-    stdin = "".join(f"{ref}:{p}\n" for p in paths).encode()
-    out = subprocess.run(["git", "-C", ROOT, "cat-file", "--batch"], input=stdin,
-                         capture_output=True).stdout
-    texts, i = {}, 0
-    for p in paths:
-        nl = out.index(b"\n", i)
-        header = out[i:nl].split()
-        i = nl + 1
-        if len(header) == 3 and header[1] == b"blob":
-            size = int(header[2])
-            texts[p] = out[i:i + size].decode("utf-8", errors="replace")
-            i += size + 1
-    return texts
+    return kit_config.git_blobs(ROOT, ref, paths)
 
 
 def complexity(ref, paths):

@@ -37,7 +37,6 @@ import json
 import re
 import subprocess
 import sys
-import unicodedata
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
@@ -58,9 +57,7 @@ DECISION_MARKS = re.compile(r"user decision|décision user|décision utilisateur
 REPORTS = ("batches/{b}.md",)
 
 
-def fold(text):
-    folded = unicodedata.normalize("NFD", text.strip().lower().replace("’", "'"))
-    return "".join(c for c in folded if unicodedata.category(c) != "Mn")
+fold = kit_config.fold
 
 
 def first_column(header, aliases):

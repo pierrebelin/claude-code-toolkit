@@ -45,11 +45,7 @@ TOOL_TIMEOUT = 300
 
 
 def git(*args, check=True):
-    r = subprocess.run(["git", "-C", ROOT, "-c", "core.quotePath=false", *args],
-                       capture_output=True, text=True, errors="replace")
-    if check and r.returncode != 0:
-        sys.exit(f"git {' '.join(args)}: {r.stderr.strip()}")
-    return r.stdout
+    return kit_config.git(ROOT, *args, check=check)
 
 
 def block(status, sha, reason=None, **fields):
@@ -142,18 +138,7 @@ def production_files(sha, excludes):
 
 
 def blobs(sha, paths):
-    stdin = "".join(f"{sha}:{p}\n" for p in paths).encode()
-    out = subprocess.run(["git", "-C", ROOT, "cat-file", "--batch"], input=stdin, capture_output=True).stdout
-    texts, i = {}, 0
-    for p in paths:
-        nl = out.index(b"\n", i)
-        header = out[i:nl].split()
-        i = nl + 1
-        if len(header) == 3 and header[1] == b"blob":
-            size = int(header[2])
-            texts[p] = out[i:i + size].decode("utf-8", errors="replace")
-            i += size + 1
-    return texts
+    return kit_config.git_blobs(ROOT, sha, paths)
 
 
 def suppressions(sha, excludes):

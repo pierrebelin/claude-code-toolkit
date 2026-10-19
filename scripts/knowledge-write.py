@@ -51,7 +51,7 @@ import knowledge_index  # noqa: E402
 
 STAGING = ".sync"
 LEVELS = ("high", "medium", "low")
-PROVISIONAL = re.compile(r"(?<![A-Za-z0-9-])((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D))|ADR)-\?(\d+)(?![0-9A-Za-z])")
+PROVISIONAL = knowledge.PROVISIONAL
 # Windows forbids `?` in a file name: a staged file spells it `~`, read back as `?`.
 FILE_MARK = re.compile(r"(?<![A-Za-z0-9-])((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D))|ADR)-~(\d+)(?![0-9A-Za-z])")
 PROV_HEADING = re.compile(r"^(#{1,6})\s+((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D)|ADR)-\?\d+)\s+—\s")
@@ -73,10 +73,7 @@ def usage(msg=None):
 
 
 def refuse(lines):
-    for line in lines:
-        print(f"refused: {line}", file=sys.stderr)
-    print("nothing written", file=sys.stderr)
-    return 1
+    return knowledge.refuse(lines, "nothing written")
 
 
 # --- paths ---------------------------------------------------------------------------------
@@ -121,10 +118,7 @@ def staged_contexts():
     return sorted({c for c in map(context_of_rel, staged_files()) if c})
 
 
-def write(path, text):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(text)
+write = knowledge.write
 
 
 def digest(text):
@@ -144,13 +138,7 @@ def state(files):
 
 
 def base_texts():
-    out = {}
-    for path in knowledge.markdown_files(base()):
-        rel = os.path.relpath(path, base())
-        if os.path.basename(rel) in ("HISTORY.md", "INDEX.md"):
-            continue
-        out[rel] = knowledge.read(path)
-    return out
+    return knowledge.base_texts(C)
 
 
 # --- status --------------------------------------------------------------------------------

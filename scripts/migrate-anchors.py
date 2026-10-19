@@ -19,7 +19,6 @@ A `## ` heading it does not recognise is reported, never guessed.
 import os
 import re
 import sys
-import unicodedata
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "lib"))
@@ -77,9 +76,7 @@ APPLIED = re.compile(r"^(\s*\|\s*)([^|]+?)(\s*\|.*)$")
 NA_LINE = re.compile(r"^(\s*[-*]\s*\*\*([^*]+)\*\*)(.*)$")
 
 
-def fold(s):
-    return "".join(c for c in unicodedata.normalize("NFD", s.strip().lower())
-                   if unicodedata.category(c) != "Mn")
+fold = kit_config.fold
 
 
 def kind_of(path):

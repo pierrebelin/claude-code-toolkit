@@ -25,6 +25,7 @@ import re
 import shlex
 import subprocess
 import sys
+import unicodedata
 
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRESETS = os.path.join(KIT, "presets")
@@ -72,6 +73,52 @@ def project_root():
     except OSError:
         top = ""
     return top or os.getcwd()
+
+
+def fold(s):
+    """Case, accents, outer spaces and the typographic apostrophe folded: how a parser compares titles."""
+    return "".join(c for c in unicodedata.normalize("NFD", s.strip().lower().replace("’", "'")) if unicodedata.category(c) != "Mn")
+
+
+def git(root, *args, check=True):
+    """stdout of a git command in root, paths unquoted; a failure exits naming it unless check is off."""
+    r = subprocess.run(["git", "-C", root, "-c", "core.quotePath=false", *args],
+                       capture_output=True, text=True, errors="replace")
+    if check and r.returncode != 0:
+        sys.exit(f"git {' '.join(args)}: {r.stderr.strip()}")
+    return r.stdout
+
+
+def git_blobs(root, ref, paths):
+    """{path: text} at ref, through one `git cat-file --batch`."""
+    stdin = "".join(f"{ref}:{p}\n" for p in paths).encode()
+    out = subprocess.run(["git", "-C", root, "cat-file", "--batch"], input=stdin, capture_output=True).stdout
+    texts, i = {}, 0
+    for p in paths:
+        nl = out.index(b"\n", i)
+        header = out[i:nl].split()
+        i = nl + 1
+        if len(header) == 3 and header[1] == b"blob":
+            size = int(header[2])
+            texts[p] = out[i:i + size].decode("utf-8", errors="replace")
+            i += size + 1
+    return texts
+
+
+def porcelain_paths(raw, sources=True):
+    """Paths of `git status --porcelain -z`; a rename's source too with sources."""
+    paths, entries, i = [], raw.split("\0"), 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        paths.append(entry[3:])
+        if entry[0] in "RC":
+            if sources:
+                paths.append(entries[i])
+            i += 1
+    return paths
 
 
 def script_config(testtag=False):

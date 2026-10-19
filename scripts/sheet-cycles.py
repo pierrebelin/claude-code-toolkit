@@ -22,10 +22,10 @@ import os
 import re
 import subprocess
 import sys
-import unicodedata
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "lib"))
+import work_file  # noqa: E402
 BATCH = [""]
 
 REQUIRED = {
@@ -93,11 +93,7 @@ def path_of(entry):
     return head.strip().strip("`").strip()
 
 
-def slug(text):
-    """Same as run-lot.js `slug`: the cycle state file name."""
-    s = "".join(c for c in unicodedata.normalize("NFD", text) if not ("̀" <= c <= "ͯ"))
-    s = re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
-    return s[:60]
+slug = work_file.slug
 
 
 def load(sheet):
@@ -237,7 +233,6 @@ def contract(c, phase):
 
 @functools.lru_cache(maxsize=None)
 def states(work, batch):
-    import work_file
     return work_file.cycle_states(work_file.read(work), batch)
 
 

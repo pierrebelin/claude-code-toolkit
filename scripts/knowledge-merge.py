@@ -43,7 +43,7 @@ MERGES = ".merge"
 DRAFTS = ".drafts"
 PACKET = ".packet.json"
 FEATURE = ".feature"
-PROVISIONAL = re.compile(r"(?<![A-Za-z0-9-])(?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D)|ADR)-\?\d+")
+PROVISIONAL = knowledge.PROVISIONAL
 PLAN_ID = re.compile(r"(?<![\w-])T\d+(?![\w-])(?:,\s*)?")
 DRAFT_FILE = re.compile(rf"^({knowledge.ID})(?:-[a-z0-9-]+)?\.md$")
 SECTIONS = ("vocabulary", "states", "relations")
@@ -59,16 +59,10 @@ def usage(msg=None):
 
 
 def refuse(lines):
-    for line in lines:
-        print(f"refused: {line}", file=sys.stderr)
-    print("nothing staged", file=sys.stderr)
-    return 1
+    return knowledge.refuse(lines, "nothing staged")
 
 
-def write(path, text):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(text)
+write = knowledge.write
 
 
 # --- the feature ---------------------------------------------------------------------------
@@ -162,13 +156,7 @@ def norm(title):
 
 # --- the base ------------------------------------------------------------------------------
 def base_texts():
-    out = {}
-    top = knowledge.base_dir(C)
-    for path in knowledge.markdown_files(top):
-        rel = os.path.relpath(path, top)
-        if os.path.basename(rel) not in ("HISTORY.md", "INDEX.md"):
-            out[rel] = knowledge.read(path)
-    return out
+    return knowledge.base_texts(C)
 
 
 def defined(texts):

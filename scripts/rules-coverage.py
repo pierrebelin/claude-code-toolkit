@@ -10,7 +10,6 @@ import json
 import os
 import re
 import sys
-import unicodedata
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "lib"))
@@ -35,8 +34,7 @@ APPLIED_LABEL = re.compile(r"(applied rules|regles appliquees)\b")
 NA_LABEL = re.compile(r"(non-applicable rules|regles non applicables)\b")
 
 
-def fold(s):
-    return "".join(c for c in unicodedata.normalize("NFD", s.strip().lower()) if unicodedata.category(c) != "Mn")
+fold = kit_config.fold
 
 # The DDD/APP/PERF referential: one markdown table per file, the id in the first cell.
 _SKILLS = next((d for d in (os.path.join(HERE, "skills"), os.path.join(HERE, ".claude", "skills")) if os.path.isdir(d)),

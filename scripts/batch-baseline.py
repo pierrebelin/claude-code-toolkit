@@ -49,17 +49,7 @@ def git(*args: str) -> str:
 def dirty() -> list[str]:
     out = subprocess.run(["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
                          capture_output=True, cwd=ROOT).stdout.decode("utf-8", errors="replace")
-    entries = out.split("\0")
-    paths, i = set(), 0
-    while i < len(entries):
-        entry = entries[i]
-        i += 1
-        if len(entry) < 4:
-            continue
-        paths.add(entry[3:])
-        if entry[0] in "RC":
-            paths.add(entries[i])
-            i += 1
+    paths = set(kit_config.porcelain_paths(out))
     return sorted(p for p in paths if not (RUN_DIR and (p + "/").startswith(RUN_DIR)))
 
 

@@ -86,18 +86,7 @@ def roots(cfg):
 def dirty(cfg):
     """Repo-relative paths under the roots that differ from HEAD (modified, untracked, deleted)."""
     raw = _git(cfg, "status", "--porcelain", "-z", "--untracked-files=all").decode("utf-8", "replace")
-    out, parts, i = set(), raw.split("\0"), 0
-    while i < len(parts):
-        entry = parts[i]
-        i += 1
-        if len(entry) < 4:
-            continue
-        path = entry[3:]
-        if entry[0] in "RC":
-            i += 1  # the rename's source follows
-        if cfg.under(path, roots(cfg)):
-            out.add(path)
-    return out
+    return {p for p in kit_config.porcelain_paths(raw, sources=False) if cfg.under(p, roots(cfg))}
 
 
 def tree(cfg):
