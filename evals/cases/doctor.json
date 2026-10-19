@@ -43,7 +43,7 @@
     },
     {
       "name": "a kit.config.json naming an unknown preset is a FAIL with the presets available",
-      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude/lib\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf '%s' '{\"preset\": \"onion\"}' > $R/.claude/kit.config.json\nbash {{KIT}}/tools/doctor --quiet",
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude/lib\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py {{KIT}}/lib/rule_sheet.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf '%s' '{\"preset\": \"onion\"}' > $R/.claude/kit.config.json\nbash {{KIT}}/tools/doctor --quiet",
       "env": {
         "CLAUDE_DOCTOR_ROOT": "{{FIX}}/doc-{{SID}}"
       },

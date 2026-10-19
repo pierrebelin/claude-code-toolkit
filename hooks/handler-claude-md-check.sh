@@ -18,7 +18,7 @@ KIT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)"
 
 # One python for parse + check.
 HOOK_INPUT="$INPUT" KIT_LIB="$KIT_LIB" python3 <<'PYEOF' 2>/dev/null
-import json, os, re, sys, unicodedata
+import json, os, sys
 
 try:
     _d = json.loads(os.environ.get("HOOK_INPUT") or "{}")
@@ -31,6 +31,7 @@ if not raw:
 sys.path.insert(0, os.environ["KIT_LIB"])
 try:
     import kit_config, kit_testtag
+    from rule_sheet import SHAPE, rule_rows, shape_issues
     C = kit_config.load()
     AD = kit_testtag.adapter(C)
 except Exception:
@@ -60,72 +61,8 @@ def read(path):
 is_handler_dir = C.is_use_case_dir
 
 
-# --- Index 1: rules declared in the handler CLAUDE.md files -------------------
-# rules[claude_md] = [(rule_id, label), ...]  ;  prefix_of[claude_md] = folder name
-# `## <title> <!-- kit:rules -->` or the bare title; columns by `<!-- kit:cols … -->`, else the header row.
-ANCHOR = re.compile(r"<!--\s*kit:([a-z][a-z0-9-]*)")
-COLS = re.compile(r"<!--\s*kit:cols\s+([\w,-]+)\s*-->")
-RULE_ID = re.compile(r"R[ML]-\d+")
-NONE_LINE = re.compile(r"(none|aucune?)\b")
-TITLES = {"regles metier": "rules", "regle metier": "rules", "business rules": "rules",
-          "business rule": "rules", "flux": "flow", "flow": "flow",
-          "evenements emis": "events", "emitted events": "events"}
-COL_LABELS = {"id": "id", "regle": "rule", "rule": "rule", "exception / resultat": "outcome",
-              "exception / result": "outcome", "exception / outcome": "outcome"}
-
-
-def fold(s):
-    return "".join(c for c in unicodedata.normalize("NFD", s.strip().lower())
-                   if unicodedata.category(c) != "Mn")
-
-
-def anchor_of(line):
-    m = ANCHOR.search(line)
-    return m.group(1) if m else None
-
-
-def section_of(heading):
-    """Anchor of a `## ` heading, else the section its bare title names (folded)."""
-    return anchor_of(heading) or TITLES.get(fold(heading[3:].split("<!--")[0]))
-
-
-def rule_rows(text):
-    """(rows, explicitly empty) of the section anchored kit:rules."""
-    rows, in_section, empty_ok, cols, header = [], False, False, ["id", "rule"], False
-    for line in text.splitlines():
-        if line.startswith("## "):
-            in_section = section_of(line) == "rules"
-            cols, header = ["id", "rule"], False
-            continue
-        if not in_section:
-            continue
-        # An explicitly empty section carries `<!-- kit:none -->` ("None (pure query)").
-        if anchor_of(line) == "none" or NONE_LINE.match(fold(line)):
-            empty_ok = True
-        c = COLS.search(line)
-        if c:
-            cols, header = c.group(1).split(","), True
-            continue
-        s = line.strip()
-        if not s.startswith("|"):
-            continue
-        cells = [x.strip() for x in s.strip("|").split("|")]
-        if not header:
-            header = True
-            named = [COL_LABELS.get(fold(x), "") for x in cells]
-            if "id" in named and not any(RULE_ID.fullmatch(x) for x in cells):
-                cols = named
-                continue
-        i = cols.index("id") if "id" in cols else 0
-        j = cols.index("rule") if "rule" in cols else 1
-        if i < len(cells) and RULE_ID.fullmatch(cells[i]):
-            rows.append((cells[i], cells[j] if j < len(cells) else ""))
-    return rows, empty_ok
-
-
-SHAPE = "sections anchored <!-- kit:rules -->, <!-- kit:flow -->, <!-- kit:events -->, in that order"
-
-
+# --- Index 1: rules declared in the rule sheets -------------------------------
+# rules[sheet] = [(rule_id, label), ...]  ;  prefix_of[sheet] = folder name
 rules, prefix_of = {}, {}
 all_md = set()
 for base, files in C.walk(C.use_case_roots):
@@ -158,6 +95,11 @@ if os.name == "nt":
     walked = {os.path.normcase(p): p for p in all_md} | {os.path.normcase(p): p for p, _, _, _ in methods.values()}
     target = walked.get(os.path.normcase(target), target)
 
+def tell(text):
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}},
+                     ensure_ascii=False))
+
+
 # --- Report scope ------------------------------------------------------------
 focus = set()
 if is_sheet:
@@ -170,7 +112,7 @@ elif not is_test:
         focus.add(md)
     elif is_handler_dir(d):
         rel = os.path.relpath(d, C.root_of(d, C.use_case_roots))
-        print(f"Reminder: no {SHEET} in {rel} — create one ({SHAPE}).")
+        tell(f"Reminder: no {SHEET} in {rel} — create one ({SHAPE}).")
         sys.exit(0)
     else:
         sys.exit(0)
@@ -184,39 +126,18 @@ else:
         untagged = sorted(k for k, (p, _, carried, bound) in methods.items()
                           if p == target and bound and not carried)
         if untagged:
-            print("Tests with no `RM` trait: " + ", ".join(untagged[:5]))
+            tell("Tests with no `RM` trait: " + ", ".join(untagged[:5]))
         sys.exit(0)
 
 if not focus:
     sys.exit(0)
-
-# --- Fixed shape -------------------------------------------------------------
-ALLOWED = ["rules", "flow", "events"]
-
-
-def shape_issues(md):
-    heads = [l for l in read(md).splitlines() if l.startswith("## ")]
-    issues = []
-    extra = [l[3:].split("<!--")[0].strip() for l in heads if section_of(l) not in ALLOWED]
-    if extra:
-        issues.append("forbidden sections: " + ", ".join(f"'{s}'" for s in extra))
-    kept = [section_of(l) for l in heads if section_of(l) in ALLOWED]
-    missing = [f"kit:{a}" for a in ALLOWED if a not in kept]
-    if missing:
-        issues.append("missing sections: " + ", ".join(missing))
-    if kept != [a for a in ALLOWED if a in kept]:
-        issues.append("expected order: kit:rules, kit:flow, kit:events")
-    if heads and not kept:
-        issues.append("no kit anchor and no recognised title — sheet written before the anchors: cctoolkit migrate-anchors --apply")
-    return issues
-
 
 # --- Report ------------------------------------------------------------------
 out = []
 for md in sorted(focus):
     rel_md = os.path.relpath(md, ROOT)
     if md not in rules:
-        issues = shape_issues(md)
+        issues = shape_issues(read(md))
         detail = (" — " + " ; ".join(issues)) if issues else ""
         out.append(f"{rel_md}: no rules table — fixed shape: title + description, {SHAPE}{detail}.")
         continue
@@ -234,7 +155,7 @@ for md in sorted(focus):
                      if bound and cls in md_classes and not carried)
 
     # The fixed shape only applies to a handler folder, not a shared one.
-    lines = shape_issues(md) if is_handler_dir(os.path.dirname(md)) else []
+    lines = shape_issues(read(md)) if is_handler_dir(os.path.dirname(md)) else []
     lines = [f"  {i}" for i in lines]
     if untested:
         lines.append(f"  rules with no test: {', '.join(untested)}")
@@ -255,9 +176,7 @@ if out:
                          if f"{prefix_of[md]}/{rid}" not in traits)
     if total_untested:
         msg.append(f"({total_untested} rules with no test across {C.use_case_label})")
-    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
-                                             "additionalContext": "\n".join(msg)}},
-                     ensure_ascii=False))
+    tell("\n".join(msg))
 PYEOF
 
 exit 0

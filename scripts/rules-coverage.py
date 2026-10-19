@@ -15,6 +15,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "lib"))
 import kit_config  # noqa: E402
 import kit_testtag  # noqa: E402
+import rule_sheet  # noqa: E402
 ROOT = kit_config.project_root()
 C = AD = None
 
@@ -25,11 +26,6 @@ def load_kit():
     _, C, AD = kit_config.script_config(testtag=True)
 
 
-# Sections are found by their `<!-- kit:… -->` anchor; a sheet without anchors by its folded EN/FR title.
-ANCHOR = re.compile(r"<!--\s*kit:([a-z][a-z0-9-]*)")
-COLS = re.compile(r"<!--\s*kit:cols\s+([\w,-]+)\s*-->")
-RULE_ID = re.compile(r"R[ML]-\d+")
-RULES_TITLE = re.compile(r"(business rules?|regles? metier)\b")
 APPLIED_LABEL = re.compile(r"(applied rules|regles appliquees)\b")
 NA_LABEL = re.compile(r"(non-applicable rules|regles non applicables)\b")
 
@@ -67,29 +63,8 @@ def scan_traits():
 
 
 def rules_of(md):
-    """(rule_id, label) of the `kit:rules` table rows, by position or by the `kit:cols` anchor."""
-    rows, in_section, cols = [], False, ["id", "rule"]
-    for line in open(md, encoding="utf-8").read().splitlines():
-        if line.startswith("## "):
-            m = ANCHOR.search(line)
-            title = fold(re.sub(r"<!--.*?-->", "", line[3:]))
-            in_section = m.group(1) == "rules" if m else bool(RULES_TITLE.match(title))
-            continue
-        if not in_section:
-            continue
-        c = COLS.search(line)
-        if c:
-            cols = c.group(1).split(",")
-            continue
-        s = line.strip()
-        if not s.startswith("|"):
-            continue
-        cells = [x.strip() for x in s.strip("|").split("|")]
-        i = cols.index("id") if "id" in cols else 0
-        j = cols.index("rule") if "rule" in cols else 1
-        if i < len(cells) and RULE_ID.fullmatch(cells[i]):
-            rows.append((cells[i], cells[j] if j < len(cells) else ""))
-    return rows
+    """(rule_id, label) of the `kit:rules` table rows."""
+    return rule_sheet.rule_rows(open(md, encoding="utf-8").read())[0]
 
 
 def handlers():
