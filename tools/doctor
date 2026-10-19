@@ -65,7 +65,7 @@ if command -v rtk >/dev/null 2>&1; then
 else
   report FAIL "rtk" "not on PATH — rewrite-rtk.sh has nothing to call"
 fi
-command -v graphify >/dev/null 2>&1 && report ok "binary graphify" "$(command -v graphify)" || report FAIL "binary graphify" "not on PATH — affected-blast-radius and the autosync are dead (INSTALL.md of the kit)"
+command -v graphify >/dev/null 2>&1 && report ok "binary graphify" "$(command -v graphify)" || report FAIL "binary graphify" "not on PATH — the graph autosync is dead (INSTALL.md of the kit)"
 command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report ok "binary ast-grep" || report WARN "binary ast-grep" "cctoolkit access-cost exits 3, COST stated by hand; structural search unavailable (brew install ast-grep)"
 
 # --- plugin registration and hook wiring ----------------------------------------

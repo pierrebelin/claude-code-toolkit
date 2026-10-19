@@ -8,6 +8,7 @@ export const meta = {
     { title: 'Gate', detail: 'report status, plan heading, build green, one repair, batch commit, journal' },
     { title: 'Aside', detail: 'blocked batch: partial work saved as a patch, tree restored to the batch start, dependents skipped; from the second, an arbiter looks for a cause common to the batches set aside — one stops the plan' },
     { title: 'Final check', detail: 'every test suite run whole once, integration included, after the last batch: reported, never blocking' },
+    { title: 'Security', detail: 'one read-only pass over the batch commits of the plan: findings listed for review, never blocking' },
     { title: 'Merge', detail: 'whole plan delivered, spec written against the knowledge base: its merge drafted and staged by knowledge-merger, never written — /cctoolkit:knowledge-merge shows it and writes it on confirmation' },
     { title: 'Report', detail: 'run/<stamp>.md: every decision taken without the user first, then batches, final check and journal; run lines of run/.work.jsonl removed, notification' },
   ],
@@ -339,6 +340,26 @@ if (finalCheck === null && ran.some(r => r.status === DONE) && !scope.startsWith
 for (const x of finalRed) toReview.push({ batch: '—', step: 'Final check', text: `${x.name} exit=${x.exit}${x.failed.length ? `: ${x.failed.join(', ')}` : ''} — not attributed: a batch of this run or a failure already on the starting tree; output removed with the temp folder of the run, rerun filtered to inspect` })
 if (finalRed.length) log(`final check red: ${finalRed.map(x => x.name).join(', ')}`)
 
+// One security pass over what the plan committed, read-only, never a stop: the audits judge a batch
+// against its sheet, none looks at the plan's changes for what an attacker can reach.
+const SECURITY = obj({ findings: arr(obj({ severity: { type: 'string', enum: ['Blocking', 'Major'] }, finding: str, evidence: str, fix: str })) })
+const committed = ran.map(r => (/\bcommitted ([0-9a-f]{4,40}):/.exec(r.commit || '') || [])[1]).filter(Boolean)
+const security = committed.length
+  ? await (phase('Security'), agent(
+      [
+        'Workflow run-plan, security pass after the last batch. Autonomous mode: nobody answers. Read-only: never edit, never a Git command that writes, never build nor run a test. Return the findings through the structured output; prose follows `language.docs` of `kit.config.json`.',
+        '',
+        `Batch commits of the plan: ${committed.join(' ')}. Read them with \`git show --stat <commit>\`, then bounded \`git show <commit> -- <path>\` on production files only, never tests.`,
+        'Look only for security defects these changes bring: authorisation missing, or checked on mere existence instead of the relationship that grants it; a resource of another organisation reachable; injection (SQL, command, path); a secret or personal data written to a log, a response or the repo; input reaching a query, a file path or an external call unvalidated; an unbounded read an anonymous caller can trigger.',
+        'Each finding: `severity` Blocking (exploitable as written) or Major (exploitable under an assumption you name), `finding` one line, `evidence` `path:line`, `fix` one line. No evidence, no finding; hardening wishes and style are not findings. Nothing found → `findings` empty.',
+      ].join('\n'),
+      { schema: SECURITY, phase: 'Security', label: 'security', model: 'sonnet', effort: 'medium' },
+    ).catch(() => null))
+  : null
+if (committed.length && !security) toReview.push({ batch: '—', step: 'Security', text: 'security pass without result: run /security-review on the plan commits' })
+for (const f of security ? security.findings : []) toReview.push({ batch: '—', step: 'Security', text: `${f.severity} — ${f.finding}`, why: `${f.evidence} ; proposed fix: ${f.fix}` })
+if (security && security.findings.length) log(`security: ${security.findings.length} finding(s) to validate`)
+
 // The base changes once per feature, when its plan is delivered whole: the merge is drafted and
 // staged here, autonomously, and written only by /cctoolkit:knowledge-merge on the user's word.
 // A stop, a batch set aside or a partial scope leaves the spec under todo/ for the run that ends it.
@@ -399,7 +420,7 @@ const rep = await agent(
     `Write \`${reportFile}\` in a single Write, headings verbatim, prose in the docs language of \`kit.config.json\`, from the two JSON below, without reading code, tests or batch reports. Header: plan, scope, start time = the \`start\` line of the journal, end time = \`date '+%Y-%m-%d %H:%M'\`. Then, in this order:`,
     '- table `| Batch | Status | Report | Commit | Patch |`, one row per batch of the first JSON, `Commit` = the hash `commit` starts with (`—` when absent)',
     ...(breaker ? ['- `## Plan stopped — common cause` — from `breaker` of the second JSON: the cause, the batches it reached, what to fix in the spec or the plan before relaunching (`fixBeforeRelaunch`), then the relaunch: a new `/run-plan` skips the batches ✅ DONE'] : []),
-    `- \`## To validate\` — from the second JSON, everything the run decided without the user (marked \`${TO_REVIEW}\`), to review after the plan, one \`###\` per kind: \`### Stop\` (\`stop\` verbatim, only when not null), \`### Batches set aside\` (\`toReview\` entries of step \`Set aside\`), \`### Start\` (\`toReview\` entries of step \`Start\`), \`### Final check\` (\`toReview\` entries of step \`Final check\`), \`### Audits to redo\` (\`audit\` = \`to redo\`: batch, report, command \`/verify-ddd-tdd batch FX\`), \`### Audit gaps carried\` (\`toReview\` entries of step \`Audit\`, and \`audit\` = \`GAPS carried\`), \`### Arbiter and design decisions\` (other \`toReview\` entries, step and why kept), \`### Assumptions\` (every \`h\`). One bullet per entry, prefixed by its batch; \`None.\` for an empty section.`,
+    `- \`## To validate\` — from the second JSON, everything the run decided without the user (marked \`${TO_REVIEW}\`), to review after the plan, one \`###\` per kind: \`### Stop\` (\`stop\` verbatim, only when not null), \`### Batches set aside\` (\`toReview\` entries of step \`Set aside\`), \`### Start\` (\`toReview\` entries of step \`Start\`), \`### Final check\` (\`toReview\` entries of step \`Final check\`), \`### Security\` (\`toReview\` entries of step \`Security\`),\`### Audits to redo\` (\`audit\` = \`to redo\`: batch, report, command \`/verify-ddd-tdd batch FX\`), \`### Audit gaps carried\` (\`toReview\` entries of step \`Audit\`, and \`audit\` = \`GAPS carried\`), \`### Arbiter and design decisions\` (other \`toReview\` entries, step and why kept), \`### Assumptions\` (every \`h\`). One bullet per entry, prefixed by its batch; \`None.\` for an empty section.`,
     '- `## Minor` — every minor of the first JSON, prefixed by its batch; `None.` when none',
     '- `## Final check` — table `| Suite | Exit | Failed tests |` from `finalCheck`; `Not run.` when `finalCheck` is null',
     '- `## Knowledge base` — from `merge` of the second JSON: `state` staged → its `lines` verbatim one bullet each, then its `warnings`, then the line `Staged, not written: <next> shows the diff and writes it on confirmation.`; refused, blocked or failed → its `lines` verbatim, then `Not staged: <next>.`; nothing → its line verbatim; `merge` null → `Not run.`',
