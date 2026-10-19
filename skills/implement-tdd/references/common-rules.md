@@ -1,4 +1,4 @@
-# Common rules — implementation skills (.NET)
+# Common rules — implementation skills
 
 Read by `tdd-test-author` and `tdd-implementer`; the `run-lot` design reads §4 point 5 only.
 Test rules → the repo's skills `/tests-unit-tests`, `/tests-integration-tests`, `/tests-contract-tests` (copied from the preset by `/cctoolkit:kit-init`, `rules/cctoolkit.md`).
@@ -13,9 +13,7 @@ Per-layer DDD conventions (naming, base classes, structure, pitfalls) → `.clau
 - **Surgical change**: every modified line ties to the behaviour at hand. No improving adjacent working code, no renaming/reformatting outside scope, no flexibility or configurability nobody asked for. File's local style beats personal preference. Delete orphans (`using`, variable, method, type) **your** change created; pre-existing dead code reported, not deleted. Adjacent bug outside the batch's RM/CU: reported, not fixed.
 - **Reuse before creation**: an existing element covering 80 % of the need is extended, not duplicated. A second type sharing an existing one's shape: rename or extend, never copy.
 - **Placement**: a business rule lives in the aggregate, never in a handler, repository, Infrastructure or WebAPI. Resource limits (request size, rate, page bounds) belong to WebAPI or query creation, never to Domain.
-- **`var`** for local variables.
-- **1 class = 1 file**, file name = class name.
-- DDD naming (Command/Handler/Repository/Endpoint/DomainEvent/Exception/EntityId…) → `.claude/rules/*.md`, `Naming` table of the layer.
+- Language conventions and DDD naming (Command/Handler/Repository/Endpoint/DomainEvent/Exception/EntityId…) → `.claude/rules/*.md`, `Naming` table of the layer.
 
 ## 2. Test-first TDD
 
@@ -72,6 +70,6 @@ Rules above written for the common case. Five situations make them give way — 
 
 4. **Data loss or security hole on the path the batch touches.** "Adjacent bug → report, don't fix" (§1, surgical change) covers a functional defect. Data corruption or authorisation leak on the modified path **stops the batch**: escalate immediately, before going on. No silent fix, no line buried in the final summary.
 
-5. **Declarative artifact written by the orchestrator.** Single list — `/implement-tdd`, `/plan-implementation` and `/verify-ddd-tdd` point here: EF entity + its `IEntityTypeConfiguration`, `DbSet` registration, DI registration, `Abstractions.Models` request/response DTO, registry entry several cycles of the batch add to one file (code constant, catalogue entry pairing a code with its message template, enum member) — written all at once, so the cycles stop sharing that file and run in one wave. EF migrations never: another project, never modified here. These are pure declaration and mapping, no branch, no validation, no business decision. Orchestrator writes them directly, no delegation, no red before them — correctness observed by the integration or contract test of the behaviour they serve, which does go through RED. Such an artifact carrying a branch, validation or mapping decision stops being declarative and goes back through RED. Assumed for cost by an explicit project decision the sheet records: not reported as a deviation.
+5. **Declarative artifact written by the orchestrator.** Single list — `/implement-tdd`, `/plan-implementation` and `/verify-ddd-tdd` point here: persistence mapping (ORM entity, its configuration and registration — EF: `IEntityTypeConfiguration`, `DbSet`), DI registration, request/response DTO, registry entry several cycles of the batch add to one file (code constant, catalogue entry pairing a code with its message template, enum member) — written all at once, so the cycles stop sharing that file and run in one wave. Database migrations never: never modified here. These are pure declaration and mapping, no branch, no validation, no business decision. Orchestrator writes them directly, no delegation, no red before them — correctness observed by the integration or contract test of the behaviour they serve, which does go through RED. Such an artifact carrying a branch, validation or mapping decision stops being declarative and goes back through RED. Assumed for cost by an explicit project decision the sheet records: not reported as a deviation.
 
 An exception names the rule it bends **and** the structural reason bending it. "Too simple to test", "I'll test afterwards", "while I'm here" are not structural reasons: they only make the work shorter.

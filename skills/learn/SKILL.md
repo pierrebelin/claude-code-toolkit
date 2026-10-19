@@ -38,7 +38,7 @@ Pick the narrowest owner. One motif → one destination.
 
 | Motif | Destination |
 |---|---|
-| Layer convention (naming, placement, base class, pitfall) | `.claude/rules/<layer>.md` — `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests` |
+| Layer convention (naming, placement, base class, pitfall) | `.claude/rules/<layer>.md` — `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests`, `csharp` |
 | Sheet written incomplete (ids unclassified, anchors missing, assumptions untraced) | kit: `skills/plan-implementation/` template or checklist |
 | Mistake the coding agents keep making | kit: `skills/implement-tdd/references/common-rules.md` |
 | Auditor misses or misjudges it | kit: axis table of `skills/verify-ddd-tdd/SKILL.md` |

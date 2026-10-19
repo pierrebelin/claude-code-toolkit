@@ -20,8 +20,7 @@ Behaviour through real handler/service. Mock Infrastructure only (repositories, 
 
 - Test/class naming → `.claude/rules/tests.md` (loads on opening a file under `tests/`).
 - Every test covering a documented rule carries it (`UnitTests` bind every test, `.claude/rules/tests.md`) under `[Fact]`/`[Theory]`: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`, `{HandlerFolder}` = handler folder under `src/{{PRODUCT}}.Application/**/`, id = row of its rules table (`kit:rules`). Two rules → two attributes. The attribute is the traceability: the table has no test column, a rule with no trait counts untested (`cctoolkit rules-coverage`).
-- Aggregate factory/method tested only through its handler/service, no direct aggregate test.
-- No interaction observation: no spy, counter, `CallCount`, `Called`, `Received`, `Verify`, call count — not even for cost.
+- Handler policy — no direct aggregate test, no interaction observation, what a query and a command assert: the kit's `skills/implement-tdd/references/test-scope.md` §5.
 - Builders, seeds, DSL, JSON, payloads, business data → fixture. Test class = facts + fixture calls.
 - Repetitive data → `[Theory]` + `MemberData` from fixture, business literals stay out of the test class.
 - Under 30 tests per file. No shared state, database, file system, network.

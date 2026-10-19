@@ -8,7 +8,7 @@ One folder per layout. `preset.json` pre-fills `layout`, `testTag`, `commands` a
 
 | Preset | Shape |
 |--------|-------|
-| `clean-architecture` | the default, the kit's original shape: projects per layer. Ships a layer pack in `rules/`: `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests`, and the test skills in `skills/`: `tests-unit-tests`, `tests-integration-tests`, `tests-contract-tests`, `tests-e2e-tests` |
+| `clean-architecture` | the default, the kit's original shape: projects per layer. Ships a layer pack in `rules/`: `domain`, `application-cqrs`, `infrastructure-ef`, `webapi-endpoints`, `tests`, `csharp` (language conventions), and the test skills in `skills/`: `tests-unit-tests`, `tests-integration-tests`, `tests-contract-tests`, `tests-e2e-tests` |
 | `vertical-slices` | one folder per feature under `src/Features`, holding handler, sheet and unit tests; markers for C#, Python, Java/Kotlin, TypeScript |
 | `hexagonal` | `src/domain`, `src/application`, `src/adapters`; same markers |
 
