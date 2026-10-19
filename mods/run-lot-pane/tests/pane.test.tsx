@@ -1281,7 +1281,6 @@ describe('batch plan through run-plan', () => {
     expect(planPathOf('todo/cat/CAT-PLAN.md --only F2')).toBe('todo/cat/CAT-PLAN.md')
     expect(planPathOf('todo/cat/CAT-PLAN-F2.md')).toBeNull()
     expect(promptLotOf(lotPrompt('F2'))).toEqual({ lot: 'F2', sheet: '/repo/todo/cat/CAT-PLAN-F2.md' })
-    expect(promptLotOf('mode: lot-suivant /repo/todo/cat/CAT-PLAN-F3.md /repo/todo/cat/CAT-PLAN-F2.md\n\nReturn')).toEqual({ lot: 'F2', sheet: '/repo/todo/cat/CAT-PLAN-F2.md' })
     expect(promptLotOf('Workflow run-plan, supervisor step. Gate of batch F2')).toBeNull()
   })
 

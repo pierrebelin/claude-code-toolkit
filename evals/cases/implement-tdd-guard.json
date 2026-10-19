@@ -12,17 +12,6 @@
       }
     },
     {
-      "name": "French closing line and launch: a second batch launched in a session that already closed one is refused",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Lot F1 terminé — validation manuelle requise\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd lot F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
-      "env": {
-        "TMPDIR": "{{FIX}}/tmp-{{SID}}"
-      },
-      "expect": {
-        "exit": 2,
-        "stderr": "Batch F1 already closed in this session — /clear before batch F2"
-      }
-    },
-    {
       "name": "the refusal names the cost, and asks for a /clear rather than a new run",
       "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
       "env": {
@@ -95,17 +84,6 @@
       },
       "expect": {
         "exit": 0
-      }
-    },
-    {
-      "name": "the French closing of a transcript written before the translation is matched too",
-      "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Lot F1 terminé — validation manuelle requise\"}]}}' > $R/t.jsonl; printf '%s' '{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"/implement-tdd batch F2\",\"session_id\":\"{{SID}}\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh",
-      "env": {
-        "TMPDIR": "{{FIX}}/tmp-{{SID}}"
-      },
-      "expect": {
-        "exit": 2,
-        "stderr": "Batch F1 already closed"
       }
     },
     {

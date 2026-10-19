@@ -81,11 +81,6 @@
       "content": "{\"agentType\": \"ddd-tdd-auditor\", \"description\": \"Audit lot F1\"}"
     },
     {
-      "path": "state-fr.json",
-      "kind": "text",
-      "content": "{\"files\": {}, \"treated\": [], \"refused\": [\"garder : a.md\"], \"rows\": [{\"id\": \"aaaaaaaaaa\", \"session\": \"s1\", \"date\": \"2026-10-01\", \"lot\": \"Audit lot F1\", \"severite\": \"Bloquant\", \"axe\": \"Périmètre\", \"ecart\": \"Hunk hors lot sans RM\", \"preuve\": \"x.cs:1\", \"correction\": \"retirer\"}, {\"id\": \"bbbbbbbbbb\", \"session\": \"s2\", \"date\": \"2026-10-02\", \"lot\": \"Audit lot F2\", \"severite\": \"Majeur\", \"axe\": \"Réutilisation\", \"ecart\": \"Second record de même forme\", \"preuve\": \"y.cs:2\", \"correction\": \"renommer\"}]}"
-    },
-    {
       "path": "rep/todo/product-archiving/run/batches/F1.md",
       "kind": "text",
       "content": "# Batch F1\n\n## Audit gaps\n\n- Major — Plan — single batch (evidence: `x.cs:1`). Fix: fix; applied in round 1: done.\n- Minor — Simplification — ignored (evidence: `x.cs:1`). Fix: none; not applied.\n\n## Validations\n\n- Major — Plan — outside the section (evidence: `x.cs:1`). Fix: none; not applied.\n"
@@ -278,18 +273,6 @@
       }
     },
     {
-      "name": "--axe is accepted as --axis, the French axis name included",
-      "cmd": "python3 {{KIT}}/scripts/learn-candidates.py --axe Périmètre",
-      "env": {
-        "LEARN_TRANSCRIPTS": "{{FIX}}/trfr",
-        "LEARN_STATE": "{{FIX}}/state-{{SID}}.json"
-      },
-      "expect": {
-        "exit": 0,
-        "stdout": "- [Blocking] Hunk hors lot sans RM"
-      }
-    },
-    {
       "name": "the summary of French verdicts names the English axes",
       "cmd": "python3 {{KIT}}/scripts/learn-candidates.py | grep -c '^Cost \\|^Scope \\|^Plan '",
       "env": {
@@ -299,58 +282,6 @@
       "expect": {
         "exit": 0,
         "stdout": "3"
-      }
-    },
-    {
-      "name": "a state file written with the French row keys loads, rows in the English vocabulary",
-      "cmd": "cp {{FIX}}/state-fr.json {{FIX}}/st-{{SID}}.json; python3 {{KIT}}/scripts/learn-candidates.py --axis Scope",
-      "env": {
-        "LEARN_TRANSCRIPTS": "{{FIX}}/trnone",
-        "LEARN_STATE": "{{FIX}}/st-{{SID}}.json",
-        "LEARN_MEMORY": "{{FIX}}/mem"
-      },
-      "expect": {
-        "exit": 0,
-        "stdout": "- [Blocking] Hunk hors lot sans RM"
-      }
-    },
-    {
-      "name": "a French state file is saved back with the English keys",
-      "cmd": "cp {{FIX}}/state-fr.json {{FIX}}/st-{{SID}}.json; python3 {{KIT}}/scripts/learn-candidates.py >/dev/null; jq -c '.rows[0] | keys' {{FIX}}/st-{{SID}}.json",
-      "env": {
-        "LEARN_TRANSCRIPTS": "{{FIX}}/trnone",
-        "LEARN_STATE": "{{FIX}}/st-{{SID}}.json",
-        "LEARN_MEMORY": "{{FIX}}/mem"
-      },
-      "expect": {
-        "exit": 0,
-        "stdout": "[\"axis\",\"batch\",\"date\",\"evidence\",\"fix\",\"gap\",\"id\",\"session\",\"severity\"]"
-      }
-    },
-    {
-      "name": "--axis Reuse finds the French row Réutilisation of an old state file",
-      "cmd": "cp {{FIX}}/state-fr.json {{FIX}}/st-{{SID}}.json; python3 {{KIT}}/scripts/learn-candidates.py --axis Reuse",
-      "env": {
-        "LEARN_TRANSCRIPTS": "{{FIX}}/trnone",
-        "LEARN_STATE": "{{FIX}}/st-{{SID}}.json",
-        "LEARN_MEMORY": "{{FIX}}/mem"
-      },
-      "expect": {
-        "exit": 0,
-        "stdout": "Second record de même forme"
-      }
-    },
-    {
-      "name": "--memoire hands back entries kept after a French « garder : » refusal",
-      "cmd": "cp {{FIX}}/state-fr.json {{FIX}}/st-{{SID}}.json; python3 {{KIT}}/scripts/learn-candidates.py --memoire",
-      "env": {
-        "LEARN_TRANSCRIPTS": "{{FIX}}/trnone",
-        "LEARN_STATE": "{{FIX}}/st-{{SID}}.json",
-        "LEARN_MEMORY": "{{FIX}}/mem"
-      },
-      "expect": {
-        "exit": 0,
-        "stdout": "garder : a.md"
       }
     },
     {

@@ -8,11 +8,11 @@ French `ECARTS`); a gap found in both is counted once. State: `.claude/learn-sta
 
 Usage:
   cctoolkit learn-candidates                   # summary per axis
-  cctoolkit learn-candidates --axis Plan       # untreated gaps of one axis (`--axe` accepted)
+  cctoolkit learn-candidates --axis Plan       # untreated gaps of one axis
   cctoolkit learn-candidates --count           # one line, for doctor
-  cctoolkit learn-candidates --treat-axis Plan # marks the axis treated (`--treat-axe` accepted)
+  cctoolkit learn-candidates --treat-axis Plan # marks the axis treated
   cctoolkit learn-candidates --refuse "motif"  # refused motif, never proposed again
-  cctoolkit learn-candidates --memory          # mechanical defects of the memory (`--memoire` accepted):
+  cctoolkit learn-candidates --memory          # mechanical defects of the memory:
                                                # index, frontmatter, dead repo paths
 """
 
@@ -51,9 +51,7 @@ AXES = (("Correctness", "Correction"), ("Reuse", "Réutilisation"), ("Simplifica
         ("Cost", "Coût"), ("Placement", "Placement"), ("Comments", "Commentaires"),
         ("Test", "Test"), ("Plan", "Plan"), ("Scope", "Périmètre"))
 ALIASES = {"stale plan": ("Plan", "Plan")}
-KEEP_PREFIXES = ("keep: ", "garder : ")
-ROW_KEYS = {"lot": "batch", "severite": "severity", "axe": "axis", "ecart": "gap",
-            "preuve": "evidence", "correction": "fix"}
+KEEP_PREFIXES = ("keep: ",)
 CELL = 240
 
 
@@ -65,19 +63,8 @@ def load_state():
         s = {}
     for key, empty in (("files", {}), ("rows", []), ("treated", []), ("refused", [])):
         s.setdefault(key, empty)
-    s["rows"] = [normalised(r) for r in s["rows"] if isinstance(r, dict)]
+    s["rows"] = [r for r in s["rows"] if isinstance(r, dict)]
     return s
-
-
-def normalised(row):
-    """A row saved with the French keys, severity and axis, in the English ones; the id kept."""
-    for old, new in ROW_KEYS.items():
-        if old in row:
-            value = row.pop(old)
-            row.setdefault(new, value)
-    row["severity"] = SEVERITIES.get(row.get("severity"), row.get("severity"))
-    row["axis"] = axis(row.get("axis", ""))
-    return row
 
 
 def save_state(s):
@@ -303,10 +290,10 @@ def memory_report():
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--count", action="store_true")
-    ap.add_argument("--axis", "--axe")
-    ap.add_argument("--treat-axis", "--treat-axe")
+    ap.add_argument("--axis")
+    ap.add_argument("--treat-axis")
     ap.add_argument("--refuse")
-    ap.add_argument("--memory", "--memoire", action="store_true")
+    ap.add_argument("--memory", action="store_true")
     args = ap.parse_args()
 
     if args.memory:

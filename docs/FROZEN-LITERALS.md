@@ -81,7 +81,6 @@ A repo that started in French keeps its deliverables as they are: specs, plans a
 
 | English | French alias |
 |---|---|
-| `REPORT.md`, `TO-VALIDATE.md` (older `run/<stamp>/` folders), `run/batches/FX.md`, older `run/FX/FX-report.md` | `RAPPORT.md`, `A-VALIDER.md`, `run/lots/FX.md`, `run/FX/FX-rapport.md` (moved to `run/batches/` by `cctoolkit run-work purge`, read where they are by the `run-lot-pane` mod) |
 | `## STATUS — DONE\|BLOCKED\|GAPS`, `Verdict:`, `Reason:`, `## To validate` | `## STATUT — TERMINÉ\|BLOQUÉ\|ECARTS`, `Verdict :`, `Raison :`, `## À valider` |
 | `Verdict:` values `VALID`, `GAPS`, `GAPS carried`, `to redo`, `none` | `VALIDE`, `ECARTS`, `ECARTS reportés`, `à refaire`, `aucun` |
 | `user decision to validate`, `user decision` | `décision user à valider`, `décision utilisateur` |
@@ -90,14 +89,12 @@ A repo that started in French keeps its deliverables as they are: specs, plans a
 | `## RED`, `## GREEN`, `## BLOCKED` | `## RED`, `## GREEN`, `## BLOQUÉ` |
 | `## RED` fields `Tests`, `Command`, `Production diff`, `Expected failure`, `Case covered`; `## GREEN` fields `Production`, `Command`, `Tests diff`, `Cost`, `Deleted at REFACTOR`, `Reported without fixing`; `exit N` on the `Command` line; the `Cost` line's `Infrastructure in loop or in-memory filter: none`, the whole line `Cost: 0 read + 0 write outside loop; …` | `Tests`, `Commande`, `Diff production`, `Échec attendu`, `Cas couvert`; `Production`, `Commande`, `Diff tests`, `Coût`, `Supprimé au REFACTOR`, `Signalé sans correction`; `exit N`; `Infrastructure en boucle ou filtre mémoire : aucun`, `Coût : 0 lecture + 0 écriture hors boucle ; …` |
 | `## Review — GAPS\|CLEAR` | `## Relecture — ECARTS\|RAS` |
-| `→ Batch FX complete — manual validation required` | `→ Lot FX terminé — validation manuelle requise` |
 | `### Batch execution`, columns `Batch` / `Depends on` / `Repo`, `### Batch FX — … — ✅ DONE` | `### Execution des lots`, `Lot` / `Depend de` / `Dépôt`, `### Lot FX — … — ✅ DONE` |
 | `## Assumptions`, `## Decisions`, `## Cycles`, `Correction Cn`, `TDD: …` (`COST`) | `## Hypotheses` / `## Hypothèses`, `## Decisions`, `## Cycles`, `Correction Cn`, `TDD : …` (`COUT`) |
 | `## TDD sequence`, `### Step <n> — …` | `## Déroulement TDD` (`Deroulement TDD` too), `### Étape <n> — …` |
 | `## Audit gaps` of `run/batches/FX.md` | `## Ecarts d'audit` |
 | sheet line `Integration test waiver: ` | `Dérogation TI : ` |
 | `rules-coverage --untested` line `… with no test — …` | `… sans test — …` |
-| reviewer first line `mode: next-batch` | `mode: lot-suivant` (older transcripts, read by the `run-lot-pane` mod) |
 | handler sheet without anchors: headings `## Business rules`, `## Flow`, `## Emitted events`; rules table columns `ID` / `Rule` / `Exception / Outcome` (or `Result`); empty section `None (…)` | `## Règles métier`, `## Flux`, `## Événements émis`; `ID` / `Règle` / `Exception / Résultat`; `Aucun (…)` — compared exactly after folding case and accents (`REGLES METIER` matches), a title with a suffix is not recognised |
 | spec section anchored `<!-- kit:open-questions -->`, severity values `Blocking`/`Major`; a rule's field `**Severity**`, values `blocking`/`warning` | spec without anchors: heading `## 12. Open questions` or `## 12. Questions ouvertes`, column `Sévérité`, values `Bloquant`/`Majeur`; `**Sévérité**`, `bloquant`/`majeur` |
 | anchors `<!-- kit:applied-rules -->`, `<!-- kit:na-rules -->`; output lines `not cited : `, `unknown references : `, `(none)`, `DEAD REFERENCE`, `UNBOUND TEST` | sheet row `\| Règles appliquées \|`, global plan line `**Regles non applicables**`; `non cités : `, `références inconnues : `, `(aucun)` / `(aucune)`, `RÉFÉRENCE MORTE`, `TEST NON RATTACHÉ` |

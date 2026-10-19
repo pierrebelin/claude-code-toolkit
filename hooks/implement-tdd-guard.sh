@@ -2,7 +2,7 @@
 # UserPromptSubmit + PreToolUse:Skill hook — one batch, one session.
 # Denies a second /implement-tdd in a session that already closed a batch, and a
 # launch at effort high or above. A closed batch = the skill's closing literal in the
-# transcript (frozen; English and French wordings). The launch's id is its first F<n>.
+# transcript (frozen). The launch's id is its first F<n>.
 # Escape hatch: re-issuing the identical launch passes (a marker, consumed).
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
@@ -71,7 +71,7 @@ transcript=$(echo "$input" | jq -r '.transcript_path // ""')
 [[ -n "$transcript" && -f "$transcript" ]] || exit 0
 
 # Cheap prefilter before paying jq on a large JSONL.
-grep -qE '(Lot F[0-9]+ termin|Batch F[0-9]+ complete)' "$transcript" 2>/dev/null || exit 0
+grep -qE 'Batch F[0-9]+ complete' "$transcript" 2>/dev/null || exit 0
 
 closed=$(jq -rs '
   [ .[]
@@ -79,8 +79,7 @@ closed=$(jq -rs '
     | (.message.content // [])[]
     | select(.type == "text")
     | .text
-    | scan("(?:Lot (F[0-9]+) terminé — validation manuelle requise)|(?:Batch (F[0-9]+) complete — manual validation required)")
-    | map(select(. != null))[]
+    | scan("Batch (F[0-9]+) complete — manual validation required")[]
   ] | last // ""' "$transcript" 2>/dev/null)
 
 [[ -n "$closed" ]] || exit 0

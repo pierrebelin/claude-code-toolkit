@@ -41,7 +41,7 @@ On the Bash tool's `PATH` while the plugin is enabled. `cctoolkit <script>` runs
 | `run-work` | the run work file `run/.work.jsonl`: `append`, `journal`, `drop`, `tmp` (temp folder for logs, never under `run/`), `purge` (every run: lines no run needs dropped, 3 runs kept) |
 | `batch-baseline` | the files of one batch against `HEAD`, the files the user had already modified at batch start left out (a `preexisting` line of hashes in `run/.work.jsonl`, no content): `snapshot <work> FX`, `diff <work> FX [--code] [--name-only]`, `base <work> FX <path>`, `restore <work> FX [--save <patch>]` sets a blocked batch aside, `commit <work> FX --sheet <sheet>` is the batch commit, the kit's only one, its message ending with the trailer `Kit-Batch: <plan folder>/FX` that tells `knowledge-scan` the change is already the plan's |
 | `kit-diff <repo>` | a manual copy against the kit: MISSING / ADDED / DRIFT / MERGED, plus anonymisation alerts — the migration's first step |
-| `learn-candidates` | the model-free half of `/learn`: the `## Audit gaps` of the `run-lot` reports (`todo/*/run/batches/FX.md`, kept after the transcripts are cleaned up), then the auditor sub-transcripts, a gap found in both counted once; reads French verdicts (`## Verdict — ECARTS`) and a `learn-state.json` written with French keys, saves it back in English |
+| `learn-candidates` | the model-free half of `/learn`: the `## Audit gaps` of the `run-lot` reports (`todo/*/run/batches/FX.md`, kept after the transcripts are cleaned up), then the auditor sub-transcripts, a gap found in both counted once; reads French verdicts (`## Verdict — ECARTS`) |
 
 ## Adapting
 
