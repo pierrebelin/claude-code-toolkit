@@ -1,5 +1,4 @@
-import { describe, expect, mock, test } from 'claude-code/testing'
-import type { Engine } from 'claude-code/testing'
+import { describe, expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import type { PlanLot, WorkflowAgent, WorkflowRun } from '../types'
@@ -8,6 +7,7 @@ import {
   graphNodesOf, graphTreeLines, isAttemptOf, keptSections, notesOf, openQuestionsOf, paneLinesOf, parsePlanLots, pauseStateOf, pendingQuestionsOf, planGraph, planGraphAlt,
   questionBanner, retryOf, roundLine, svgHeight, svgWidth, toValidateOf, validateEntriesOf, withPaneLine, workLinesOf,
 } from '../hooks/register'
+import { BAND, paneAt, paneCommand, world } from './world'
 
 const lines = (...records: object[]) => workLinesOf(records.map(one => JSON.stringify(one)).join('\n'))
 const NOW = 1_760_000_000_000
@@ -206,57 +206,22 @@ describe('plan graph', () => {
   })
 })
 
-const world = (on: On, files: Record<string, string>, writes: string[] = []) => {
-  const clock = mock.clock(on, { now: NOW })
-  const stamps: Record<string, number> = {}
-  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 84_000, window: 200_000, percent: 42 }, rateLimits: [], cost: { usd: 1 } } }))
-  on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.close', () => ({ value: undefined }))
-  on('ui.panes', () => ({ value: [] }))
-  on('fs.read', ($, e) => (files[e.path] === undefined ? { deny: `ENOENT ${e.path}` } : { value: files[e.path]! }))
-  on('fs.stat', ($, e) => (files[e.path] === undefined ? { deny: `ENOENT ${e.path}` } : { value: { kind: 'file', size: 1, mtimeMs: stamps[e.path] ?? 1, isLink: false } }))
-  on('fs.list', ($, e) => ({ deny: `ENOENT ${e.path}` }))
-  on('fs.write', ($, e) => {
-    files[e.path] = e.text
-    stamps[e.path] = (stamps[e.path] ?? 1) + 1
-    writes.push(e.path)
-    return { value: undefined }
-  })
+// The engine's world at NOW, plus the Workflow launch.
+const planWorld = (on: On, files: Record<string, string>, writes: string[] = []) => {
+  const made = world(on, files, { now: NOW, writes })
   on('tool.call', ($, e) =>
     e.tool === 'Workflow'
       ? { result: { status: 'async_launched', taskId: 't1', runId: 'wf_1', workflowName: (e as { name?: string }).name ?? 'run-lot', transcriptDir: '/h/.claude/projects/p/s1/subagents/workflows/wf_1', scriptPath: '/h/script.js' }, text: 'launched' }
       : { result: { type: 'text' }, text: 'ok' },
   )
-  on('ui.render', ($, e) => {
-    const { Box } = $.ui.resolve(e)
-    return <Box key="engine" />
-  })
-  const touch = (path: string, text: string) => {
-    files[path] = text
-    stamps[path] = (stamps[path] ?? 1) + 1
-  }
-  return { clock, touch }
+  return made
 }
 
-const PANE = {
-  component: 'Pane',
-  requestId: 'run-lot-pane',
-  props: { title: 'Workflow', isFocused: false, bodyColumns: 72, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} },
-} as const
-
-const BAND = {
-  component: 'AbovePrompt',
-  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
-} as const
-
-const demo = ($: Engine, args: string) => $.command.run({ command: 'run-lot-pane', args } as Parameters<typeof $.command.run>[0])
-
+const PANE = paneAt(72, 60)
 test('demo: the pending question above the prompt and on every view, ticking; retry reasons; notes; pause refused outside run-plan', async ($, on) => {
-  const { clock } = world(on, {})
+  const { clock } = planWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await demo($, 'demo')
+  await paneCommand($, 'demo')
   for (const surface of ['terminal', 'desktop'] as const) {
     const band = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...BAND })
     expect((await band.find({ key: 'question-banner' }))?.text).toBe('? F4 — 2 questions — recommendation applied in 7:32')
@@ -290,9 +255,9 @@ test('demo: the pending question above the prompt and on every view, ticking; re
 })
 
 test('demo end: audit rounds under the Audit phase, to validate in each state, answers written to the pane file', async ($, on) => {
-  world(on, {})
+  planWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await demo($, 'demo end')
+  await paneCommand($, 'demo end')
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /^ {5}R1 findings 3 → 2 · files 4$/ })).toBeDefined()
   const diverged = await ui.find({ type: 'Text', text: /^ {5}R2 findings 2 → 2 · files 5 · diverging, rounds stopped$/ })
@@ -334,9 +299,9 @@ test('demo end: audit rounds under the Audit phase, to validate in each state, a
 })
 
 test('demo plan: pause requested and cancelled, graph as a tree on the terminal and an SVG on the desktop, entries of every batch; plan end paused', async ($, on) => {
-  world(on, {})
+  planWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await demo($, 'demo plan')
+  await paneCommand($, 'demo plan')
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /^ {2}⏸ pause requested$/ })).toBeDefined()
   expect((await ui.find({ key: 'pause' }))?.text).toBe('cancel pause')
@@ -379,7 +344,7 @@ test('demo plan: pause requested and cancelled, graph as a tree on the terminal 
   expect(svg?.props.alt).toMatch(/^Batch graph: F1 done; F2 running after F1;/)
   await desktop.unmount()
 
-  await demo($, 'demo plan end')
+  await paneCommand($, 'demo plan end')
   const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await end.find({ type: 'Text', text: /^ {2}⏸ paused by user$/ })).toBeDefined()
   await end.press({ key: 'open-validate' })
@@ -420,7 +385,7 @@ test('a real run-plan: run files read from disk, the breaker stop, answers and n
     '/repo/todo/cat/run/batches/F1.md': '## STATUS — BLOCKED\n\n## To validate\n\n- Design — lock on the catalog (no rule names the owner)\n',
   }
   const writes: string[] = []
-  const { clock, touch } = world(on, files, writes)
+  const { clock, touch } = planWorld(on, files, writes)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'w1', name: 'run-plan', args: '/repo/todo/cat/CAT-PLAN.md' } as Parameters<typeof $.tool.call>[0])
   await clock.advance(10_000)

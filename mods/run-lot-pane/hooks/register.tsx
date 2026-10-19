@@ -3766,6 +3766,18 @@ export const register: Register = on => {
         close,
       )
 
+    // The run's name, then what names the plan or the batch in view.
+    const viewHeader = (name: string, after: (JSX.Element | false)[]) =>
+      row(
+        'header',
+        <Text wrap="truncate-end">
+          <Text color="claude">✻ </Text>
+          <Text bold>{name}</Text>
+          {after}
+        </Text>,
+        close,
+      )
+
     const backBar = (target: Screen) => (
       <Box key="nav" height={1}>
         <Button key="back" hotkey="b" plain onPress={go({ screen: target })}>
@@ -3841,14 +3853,7 @@ export const register: Register = on => {
     if (current === undefined) {
       return (
         <Box flexDirection="column" marginTop={1}>
-          {row(
-            'header',
-            <Text wrap="truncate-end">
-              <Text color="claude">✻ </Text>
-              <Text bold>Workflow</Text>
-            </Text>,
-            close,
-          )}
+          {viewHeader('Workflow', [])}
           <Text color="inactive" wrap="truncate-end">
             {'  ⎿  '}No workflow run yet in this session.
           </Text>
@@ -4227,19 +4232,14 @@ export const register: Register = on => {
       )
     }
 
-    const isRunning = current.status === 'running'
-    const elapsed = current.durationMs ?? at - current.startedAt
     const counted = current.agents.filter(isLive)
     const done = counted.filter(agent => agent.state !== 'running').length
     const remaining = remainingMs(current, rows, known)
     const headline = headlineOf(current.status, current.outcome, current.asking ?? 0)
-    const tone = headline.tone
     const reached = rows.filter(one => one.mark === 'done').length
     const step = currentStep(current, rows)
     const passes = passesOf(current)
-    const runTotals = totalsOf(current.agents)
     const lot = lotOf(current.argument)
-    const outcome = current.outcome
     const sheet = current.sheet === null ? null : withLiveCycles(current.sheet, current.agents)
     const isWide = columns >= WIDE_COLUMNS
     const figuresWidth = COUNT_WIDTH + TIME_WIDTH + TOKENS_WIDTH
@@ -4279,6 +4279,88 @@ export const register: Register = on => {
         <Text wrap="truncate-end">{second}</Text>
       </Box>
     )
+
+    // The plan view and the batch view open alike: the header, the headline with the time and the count done, the progress bar.
+    const statusLine = (run: WorkflowRun, headline: ReturnType<typeof headlineOf>, tally: (string | number)[], pass: JSX.Element | false = false, eta: JSX.Element | false = false) => (
+      <Text wrap="truncate-end">
+        {'  '}
+        <Text bold color={headline.tone}>
+          {run.status === 'running' ? spin : headline.glyph} {headline.text}
+        </Text>
+        {pass}
+        <Text>
+          {'   '}
+          {duration(run.durationMs ?? at - run.startedAt)}
+        </Text>
+        <Text color="inactive">
+          {'   '}
+          {tally}
+        </Text>
+        {eta}
+      </Text>
+    )
+    const progressRow = (reached: number, total: number, tone: string, tally: (string | number)[] | null = null) =>
+      total > 0 && (
+        <Text wrap="truncate-end">
+          {'  '}
+          {progressBar(reached, total, barWidth).map(part => (
+            <Text key={part.key} color={part.isFilled ? tone : 'inactive'}>
+              {part.text}
+            </Text>
+          ))}
+          {tally !== null && (
+            <Text color="inactive">
+              {'  '}
+              {tally}
+            </Text>
+          )}
+        </Text>
+      )
+    // A framed block in the tone of how it ended: the run's outcome, a batch of the plan needing attention.
+    const endBlock = (key: string, tone: string, title: string | string[], reason: JSX.Element[], report: string | null | undefined, merge: JSX.Element[] | false = false) => (
+      <Box key={key} flexDirection="column" marginTop={1} marginLeft={2} paddingX={1} borderStyle="round" borderColor={tone}>
+        <Text bold color={tone} wrap="wrap">
+          {title}
+        </Text>
+        {reason}
+        {report != null && (
+          <Text color="inactive" wrap="wrap">
+            Report: {relativePath(report, root)}
+          </Text>
+        )}
+        {merge}
+      </Box>
+    )
+    const outcomeBlock = (outcome: Outcome | null, status: RunStatus, reason: string | null, prefix: string) =>
+      outcome !== null &&
+      endBlock(
+        'outcome',
+        outcomeTone(outcome, status),
+        outcome.label,
+        reasonBlock(`${prefix}reason`, reason ?? ''),
+        outcome.report,
+        outcome.merge !== undefined && mergeBlock(`${prefix}merge`, outcome.merge),
+      )
+    const figuresBox = (label: string, tokens: number) => (
+      <Box marginTop={1} flexDirection="column">
+        {figureRow(
+          'session',
+          'Session',
+          `${session.context === null ? '—' : `ctx ${kilo(session.context)}`}${session.percent === null ? '' : ` (${session.percent}%)`}`,
+          '',
+        )}
+        {figureRow('run', label, `${kilo(tokens)} tok`, '')}
+      </Box>
+    )
+    const columnsTitle = (key: string, title: string, cells: string) =>
+      row(
+        key,
+        <Text bold color={accent}>
+          {'  '}
+          {title}
+        </Text>,
+        figureCells(cells, 'agents', 'time', 'tokens'),
+      )
 
     const agentRow = (agent: WorkflowAgent, attempt: number, typical: number | null) => {
       const isSlowAgent = isSlow(agent, typical, at)
@@ -4535,9 +4617,6 @@ export const register: Register = on => {
       const states = planRun.lots.map(entry => ({ entry, state: lotStateOf(planRun, entry) }))
       const finished = states.filter(one => one.state === 'completed' || one.state === 'done').length
       const planHeadline = headlineOf(planRun.status, planRun.outcome, planRun.lots.reduce((sum, entry) => sum + (entry.outcome === null ? (entry.asking ?? 0) : 0), 0))
-      const planTone = planHeadline.tone
-      const planElapsed = planRun.durationMs ?? at - planRun.startedAt
-      const planTotals = totalsOf(planRun.agents)
       const supervisors = planRun.agents.filter(agent => agent.lot === null)
       const code = planRun.plan === null ? null : (planRun.plan.split(/[\\/]/).pop() ?? '').replace(/\.md$/, '')
       const planOutcome = planRun.outcome
@@ -4548,39 +4627,11 @@ export const register: Register = on => {
         planOutcome?.reason == null ? '' : withoutRepeated(planOutcome.reason, attention.map(({ entry }) => entry.outcome?.reason ?? ''))
       return (
         <Box flexDirection="column" marginTop={1}>
-          {row(
-            'header',
-            <Text wrap="truncate-end">
-              <Text color="claude">✻ </Text>
-              <Text bold>{planRun.name}</Text>
-              {code !== null && <Text color="inactive"> · {code}</Text>}
-            </Text>,
-            close,
-          )}
-          <Text wrap="truncate-end">
-            {'  '}
-            <Text bold color={planTone}>
-              {planRun.status === 'running' ? spin : planHeadline.glyph} {planHeadline.text}
-            </Text>
-            <Text>
-              {'   '}
-              {duration(planElapsed)}
-            </Text>
-            <Text color="inactive">
-              {'   '}
-              {finished}/{states.length} batches
-            </Text>
-          </Text>
-          {states.length > 0 && (
-            <Text wrap="truncate-end">
-              {'  '}
-              {progressBar(finished, states.length, barWidth).map(part => (
-                <Text key={part.key} color={part.isFilled ? planTone : 'inactive'}>
-                  {part.text}
-                </Text>
-              ))}
-            </Text>
-          )}
+          {viewHeader(planRun.name, [
+            code !== null && <Text key="header-code" color="inactive"> · {code}</Text>,
+          ])}
+          {statusLine(planRun, planHeadline, [finished, '/', states.length, ' batches'])}
+          {progressRow(finished, states.length, planHeadline.tone)}
           {lotBar}
           {bannerRow}
           {timelineButton}
@@ -4597,71 +4648,19 @@ export const register: Register = on => {
               </Text>
             </Box>
           )}
-          {planOutcome !== null && (
-            <Box
-              key="outcome"
-              flexDirection="column"
-              marginTop={1}
-              marginLeft={2}
-              paddingX={1}
-              borderStyle="round"
-              borderColor={outcomeTone(planOutcome, planRun.status)}
-            >
-              <Text bold color={outcomeTone(planOutcome, planRun.status)} wrap="wrap">
-                {planOutcome.label}
-              </Text>
-              {planReason !== '' && reasonBlock('plan-reason', planReason)}
-              {planOutcome.report !== null && (
-                <Text color="inactive" wrap="wrap">
-                  Report: {relativePath(planOutcome.report, root)}
-                </Text>
-              )}
-              {planOutcome.merge !== undefined && mergeBlock('plan-merge', planOutcome.merge)}
-            </Box>
+          {outcomeBlock(planOutcome, planRun.status, planReason, 'plan-')}
+          {attention.map(({ entry, state }) =>
+            endBlock(
+              `attention-${entry.lot}`,
+              lotTone(state),
+              [lotGlyph(state), ' ', entry.lot, ' · ', entry.outcome?.label ?? ''],
+              reasonBlock(`reason-${entry.lot}`, entry.outcome?.reason ?? ''),
+              entry.outcome?.report,
+            ),
           )}
-          {attention.map(({ entry, state }) => (
-            <Box
-              key={`attention-${entry.lot}`}
-              flexDirection="column"
-              marginTop={1}
-              marginLeft={2}
-              paddingX={1}
-              borderStyle="round"
-              borderColor={lotTone(state)}
-            >
-              <Text bold color={lotTone(state)} wrap="wrap">
-                {lotGlyph(state)} {entry.lot} · {entry.outcome?.label}
-              </Text>
-              {reasonBlock(`reason-${entry.lot}`, entry.outcome?.reason ?? '')}
-              {entry.outcome?.report != null && (
-                <Text color="inactive" wrap="wrap">
-                  Report: {relativePath(entry.outcome.report, root)}
-                </Text>
-              )}
-            </Box>
-          ))}
+          {figuresBox('Plan', totalsOf(planRun.agents).tokens)}
           <Box marginTop={1} flexDirection="column">
-            {figureRow(
-              'session',
-              'Session',
-              `${session.context === null ? '—' : `ctx ${kilo(session.context)}`}${session.percent === null ? '' : ` (${session.percent}%)`}`,
-              '',
-            )}
-            {figureRow('run', 'Plan', `${kilo(planTotals.tokens)} tok`, '')}
-          </Box>
-          <Box marginTop={1} flexDirection="column">
-            {row(
-              'lots-title',
-              <Text bold color={accent}>
-                {'  '}
-                BATCHES
-              </Text>,
-              [
-                cell('lots-count', COUNT_WIDTH, 'agents', 'inactive'),
-                cell('lots-time', TIME_WIDTH, 'time', 'inactive'),
-                cell('lots-tokens', TOKENS_WIDTH, 'tokens', 'inactive'),
-              ],
-            )}
+            {columnsTitle('lots-title', 'BATCHES', 'lots')}
             {states.map(({ entry, state }) => {
               const agents = planRun.agents.filter(agent => agent.lot === entry.lot)
               const view = agents.length > 0 ? lotRun(planRun, entry.lot) : null
@@ -4709,98 +4708,33 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" marginTop={1}>
-        {row(
-          'header',
-          <Text wrap="truncate-end">
-            <Text color="claude">✻ </Text>
-            <Text bold>{current.name}</Text>
-            {lot !== null && <Text color="inactive"> · </Text>}
-            {lot !== null && <Text bold color="claude">{lot.lot}</Text>}
-            {lot !== null && <Text color="inactive"> · {lot.code}</Text>}
-          </Text>,
-          close,
+        {viewHeader(
+          current.name,
+          lot === null
+            ? []
+            : [
+                <Text key="header-dot" color="inactive"> · </Text>,
+                <Text key="header-lot" bold color="claude">{lot.lot}</Text>,
+                <Text key="header-code" color="inactive"> · {lot.code}</Text>,
+              ],
         )}
-        <Text wrap="truncate-end">
-          {'  '}
-          <Text bold color={tone}>
-            {isRunning ? spin : headline.glyph} {headline.text}
-          </Text>
-          {passes.count > 1 && <Text color="warning">{`  ↻ pass ${passes.count}`}</Text>}
-          <Text>
-            {'   '}
-            {duration(elapsed)}
-          </Text>
-          <Text color="inactive">
-            {'   '}
-            {done}/{counted.length} agents
-          </Text>
-          {remaining !== null && remaining > 0 && (
-            <Text color="inactive">{`   ETA ~${coarse(remaining)}`}</Text>
-          )}
-        </Text>
-        {rows.length > 0 && (
-          <Text wrap="truncate-end">
-            {'  '}
-            {progressBar(reached, rows.length, barWidth).map(part => (
-              <Text key={part.key} color={part.isFilled ? tone : 'inactive'}>
-                {part.text}
-              </Text>
-            ))}
-            <Text color="inactive">
-              {'  '}
-              {reached}/{rows.length} phases
-            </Text>
-          </Text>
+        {statusLine(
+          current,
+          headline,
+          [done, '/', counted.length, ' agents'],
+          passes.count > 1 && <Text color="warning">{`  ↻ pass ${passes.count}`}</Text>,
+          remaining !== null && remaining > 0 && <Text color="inactive">{`   ETA ~${coarse(remaining)}`}</Text>,
         )}
+        {progressRow(reached, rows.length, headline.tone, [reached, '/', rows.length, ' phases'])}
         {lotBar}
         {bannerRow}
         {timelineButton}
         {steerBar}
         {steerLines}
-        {outcome !== null && (
-          <Box
-            key="outcome"
-            flexDirection="column"
-            marginTop={1}
-            marginLeft={2}
-            paddingX={1}
-            borderStyle="round"
-            borderColor={outcomeTone(outcome, current.status)}
-          >
-            <Text bold color={outcomeTone(outcome, current.status)} wrap="wrap">
-              {outcome.label}
-            </Text>
-            {outcome.reason !== null && reasonBlock('reason', outcome.reason)}
-            {outcome.report !== null && (
-              <Text color="inactive" wrap="wrap">
-                Report: {relativePath(outcome.report, root)}
-              </Text>
-            )}
-            {outcome.merge !== undefined && mergeBlock('merge', outcome.merge)}
-          </Box>
-        )}
+        {outcomeBlock(current.outcome, current.status, current.outcome?.reason ?? null, '')}
+        {figuresBox('Run', totalsOf(current.agents).tokens)}
         <Box marginTop={1} flexDirection="column">
-          {figureRow(
-            'session',
-            'Session',
-            `${session.context === null ? '—' : `ctx ${kilo(session.context)}`}${session.percent === null ? '' : ` (${session.percent}%)`}`,
-            '',
-          )}
-          {figureRow('run', 'Run', `${kilo(runTotals.tokens)} tok`, '')}
-        </Box>
-        <Box marginTop={1} flexDirection="column">
-          {row(
-            'phases-title',
-            <Text bold color={accent}>
-              {'  '}
-              PHASES
-            </Text>,
-            [
-              cell('title-count', COUNT_WIDTH, 'agents', 'inactive'),
-              cell('title-time', TIME_WIDTH, 'time', 'inactive'),
-              cell('title-tokens', TOKENS_WIDTH, 'tokens', 'inactive'),
-            ],
-          )}
+          {columnsTitle('phases-title', 'PHASES', 'title')}
           {rows.map(phaseRow)}
         </Box>
         {sheet !== null && (

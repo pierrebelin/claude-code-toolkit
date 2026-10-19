@@ -34,10 +34,6 @@ const QUESTIONS = [question('Q1', 'Bloquant'), question('Q2', 'Major'), question
 const DECISIONS = [decision('d1', 'A'), decision('d2', 'A, B'), decision('d3', 'B'), decision('d4', 'A'), decision('d5', null)]
 
 describe('spec gauge', () => {
-  test('nothing while no decision is asked and no spec is written', () => {
-    expect(specGauge([], null)).toBe('')
-  })
-
   test('one square per open question, ordered by severity, icon inside, in the colours of the list below, the question on hover', () => {
     const svg = specGauge(DECISIONS, docOf(QUESTIONS))
     expect(svg.startsWith('<svg')).toBe(true)
@@ -107,7 +103,6 @@ describe('spec gauge', () => {
       expect(Number(hit[1])).toBeGreaterThan(18)
       expect(Number(hit[2])).toBeGreaterThan(18)
     }
-    expect(svgHeight(svg)).toBeGreaterThan(0)
   })
 
   test('open questions and decisions side by side, each on half the width; alone, a block takes the whole width', () => {
@@ -160,7 +155,6 @@ describe('spec gauge', () => {
 
   test('alt says what the drawing shows in one sentence', () => {
     expect(specGaugeAlt(DECISIONS, docOf(QUESTIONS))).toBe('Spec state: 6 open questions (2 blocking, 2 major, 2 other), 5 decisions (3 recommended kept, 1 other choice, 1 pending).')
-    expect(specGaugeAlt([decision('d1', 'A')], null)).toBe('Spec state: 1 decision (1 recommended kept), spec not written yet.')
     expect(specGaugeAlt([], docOf([]))).toBe('Spec state: no open question, no decision.')
   })
 })

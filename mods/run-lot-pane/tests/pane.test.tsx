@@ -10,6 +10,8 @@ import {
   mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
   activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples,
 } from '../hooks/register'
+import { PANE, paneAt, paneCommand, world } from './world'
+import type { Directory, Stamps, World } from './world'
 
 const SESSION = '/home/u/.claude/projects/p/s1'
 const PROJECT = '/home/u/.claude/projects/p'
@@ -520,14 +522,7 @@ describe('history, estimated end, stall, cost and alert', () => {
   })
 })
 
-type Stamps = Record<string, number>
-type Directory = Record<string, { name: string; kind: 'file' | 'dir'; mtimeMs?: number }[]>
-type Options = {
-  closed?: string[]
-  stamps?: Stamps
-  dirs?: Directory
-  reads?: string[]
-  toasts?: string[]
+type Options = World & {
   usage?: (agentId: string | undefined) => Partial<ModelUsage> | undefined
   hold?: Promise<void>
   workflowName?: string
@@ -535,11 +530,10 @@ type Options = {
   bashFails?: boolean
 }
 
-const world = (on: On, files: Record<string, string>, options: Options = {}) => {
-  const { closed = [], stamps = {}, dirs = {}, reads = [], toasts = [] } = options
-  const clock = mock.clock(on)
+// The engine's world, plus the Workflow launch, the agents it spawns and their model calls.
+const runWorld = (on: On, files: Record<string, string>, options: Options = {}) => {
+  const { clock } = world(on, files, options)
   let agents = 0
-  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 84_000, window: 200_000, percent: 42 }, rateLimits: [], cost: { usd: 1 } } }))
   on('turn.step', async function* ($, e) {
     if (options.stream !== undefined) yield* options.stream(e)
     return {
@@ -550,50 +544,11 @@ const world = (on: On, files: Record<string, string>, options: Options = {}) => 
       },
     }
   })
-  on('ui.toast', ($, e) => {
-    toasts.push(e.text)
-    return { value: undefined }
-  })
-  on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.close', ($, e) => {
-    closed.push(e.id)
-    return { value: undefined }
-  })
-  const keyOf = (path: string) => Object.keys(files).find(key => key === path || (!key.startsWith('/') && path.endsWith(`/${key}`)))
-  on('fs.read', ($, e) => {
-    const key = keyOf(e.path)
-    reads.push(key ?? e.path)
-    return key === undefined ? { deny: `ENOENT ${e.path}` } : { value: files[key] ?? '' }
-  })
-  on('fs.stat', ($, e) => {
-    const key = keyOf(e.path)
-    return key === undefined
-      ? { deny: `ENOENT ${e.path}` }
-      : { value: { kind: 'file', size: 1, mtimeMs: stamps[key] ?? 1, isLink: false } }
-  })
-  on('fs.list', ($, e) => {
-    const path = e.path ?? ''
-    const entries = dirs[Object.keys(dirs).find(key => key === path || (!key.startsWith('/') && path.endsWith(`/${key}`))) ?? path]
-    return entries === undefined
-      ? { deny: `ENOENT ${e.path}` }
-      : { value: entries.map(entry => ({ name: entry.name, kind: entry.kind, size: 1, mtimeMs: entry.mtimeMs ?? 0, isLink: false })) }
-  })
   on('tool.call', async ($, e) => {
     if (e.tool === 'Bash') await options.hold
+    const launched = { status: 'async_launched', taskId: 't1', runId: RUN, workflowName: options.workflowName ?? 'run-lot', transcriptDir: DIR, scriptPath: `${SESSION}/workflows/scripts/run-lot-${RUN}.js` }
     return e.tool === 'Workflow'
-      ? {
-          result: {
-            status: 'async_launched',
-            taskId: 't1',
-            runId: RUN,
-            workflowName: options.workflowName ?? 'run-lot',
-            transcriptDir: DIR,
-            scriptPath: `${SESSION}/workflows/scripts/run-lot-${RUN}.js`,
-          },
-          text: 'launched',
-        }
+      ? { result: launched, text: 'launched' }
       : e.tool === 'Bash' && options.bashFails === true
         ? { result: { type: 'text' }, text: 'Exit code 1\n', isError: true }
         : { result: { type: 'text' }, text: 'ok' }
@@ -603,20 +558,8 @@ const world = (on: On, files: Record<string, string>, options: Options = {}) => 
     return { model: 'claude-sonnet-5-5', agentId: `a${agents}` }
   })
   on('turn.complete', () => ({ text: '' }))
-  on('ui.render', ($, e) => {
-    const { Box } = $.ui.resolve(e)
-    return <Box key="engine" />
-  })
   return clock
 }
-
-const PANE = {
-  component: 'Pane',
-  requestId: 'run-lot-pane',
-  props: { title: 'Workflow', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
-} as const
-
-const paneAt = (bodyColumns: number) => ({ ...PANE, props: { ...PANE.props, bodyColumns } })
 
 type Finder = { find: (query: { key: string }) => Promise<{ children: unknown[] } | undefined> }
 
@@ -658,7 +601,7 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
     [`${PROJECT}/s0/workflows`]: [{ name: 'wf_old.json', kind: 'file', mtimeMs: 5 }],
     [`${PROJECT}/s1/workflows`]: [{ name: `${RUN}.json`, kind: 'file', mtimeMs: 9 }],
   }
-  const clock = world(on, files, { stamps, dirs, reads, toasts })
+  const clock = runWorld(on, files, { stamps, dirs, reads, toasts })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   await $.agent.spawn(spawn('design', 1))
@@ -766,7 +709,7 @@ test('audit verdict read from the audit agent’s structured answer, the last on
     [`${SESSION}/workflows/scripts/run-lot-${RUN}.js`]: AUDIT_SCRIPT,
     [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ description: 'audit', workflowPhase: 'Audit' }),
   }
-  world(on, files)
+  runWorld(on, files)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($, null)
   await $.agent.spawn(spawn('audit', 1))
@@ -798,7 +741,7 @@ test('agent view: structured verdict as outcome, every call in order, recovered 
     [`${SESSION}/workflows/scripts/run-lot-${RUN}.js`]: AUDIT_SCRIPT,
     [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ description: 'audit', workflowPhase: 'Audit' }),
   }
-  world(on, files, { bashFails: true })
+  runWorld(on, files, { bashFails: true })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($, null)
   await $.agent.spawn(spawn('audit', 1, 'Workflow run-lot, batch F1. Global plan: p.md.\nAutonomous mode.\n\nmode: fast F1 s.md'))
@@ -832,7 +775,7 @@ test('agent view: structured verdict as outcome, every call in order, recovered 
 
 test('empty pane without a run, calls outside a workflow ignored, close button present', async ($, on) => {
   const closed: string[] = []
-  world(on, {}, { closed })
+  runWorld(on, {}, { closed })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await $.agent.spawn({ ...spawn('hors workflow', 1), workflow: undefined })
   for (const surface of ['terminal', 'desktop'] as const) {
@@ -846,9 +789,9 @@ test('empty pane without a run, calls outside a workflow ignored, close button p
 
 test('running demo: columns, model, retry, slow agent, stalled, interrupted, estimated end, all phases shown, sheet, narrow width', async ($, on) => {
   const toasts: string[] = []
-  world(on, {}, { toasts })
+  runWorld(on, {}, { toasts })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await $.command.run({ command: 'run-lot-pane', args: 'demo' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo')
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
     expect(await ui.find({ type: 'Text', text: /✻ run-lot · F4 · CAT-LIFECYCLE/ })).toBeDefined()
@@ -893,9 +836,9 @@ test('running demo: columns, model, retry, slow agent, stalled, interrupted, est
 
 test('finished demo: verdict on the Audit row, outcome in a coloured box, slow agent finished, sheet closed', async ($, on) => {
   const toasts: string[] = []
-  world(on, {}, { toasts })
+  runWorld(on, {}, { toasts })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await $.command.run({ command: 'run-lot-pane', args: 'demo end' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo end')
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...paneAt(62) })
     expect(await ui.find({ type: 'Text', text: /✓ completed\s+19m35\s+14\/14 agents/ })).toBeDefined()
@@ -915,7 +858,7 @@ test('finished demo: verdict on the Audit row, outcome in a coloured box, slow a
     await ui.unmount()
   }
   expect(toasts).toEqual([])
-  await $.command.run({ command: 'run-lot-pane', args: 'clear' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'clear')
   const empty = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await empty.find({ type: 'Text', text: /No workflow run yet/ })).toBeDefined()
   expect(demoRuns(0)).toHaveLength(1)
@@ -937,7 +880,7 @@ test('stop read then resume: agent left running is interrupted, stale stopped jo
   const toasts: string[] = []
   const stamps: Stamps = {}
   const files: Record<string, string> = { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1', 'a2'], 'GREEN') }
-  const clock = world(on, files, { stamps, toasts })
+  const clock = runWorld(on, files, { stamps, toasts })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await clock.advance(1_000)
   await launch($)
@@ -981,7 +924,7 @@ test('stop read then resume: agent left running is interrupted, stale stopped jo
 test('relaunch before the stop is read: running agent interrupted, journal older than the relaunch ignored, new agent followed', async ($, on) => {
   const stamps: Stamps = {}
   const files: Record<string, string> = { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1', 'a2'], 'GREEN') }
-  const clock = world(on, files, { stamps })
+  const clock = runWorld(on, files, { stamps })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await clock.advance(1_000)
   await launch($)
@@ -1012,7 +955,7 @@ test('tokens per agent: its own model calls summed, the main thread left out', a
     input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, [field]: tokens,
   })
   const files: Record<string, string> = { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1', 'a2'], 'RED') }
-  world(on, files, { usage: id => usages[id ?? 'main'] })
+  runWorld(on, files, { usage: id => usages[id ?? 'main'] })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   await $.agent.spawn(spawn('RED 1', 1))
@@ -1051,7 +994,7 @@ test('estimated end in the header from the phases of earlier runs', async ($, on
     [PROJECT]: [{ name: 's1', kind: 'dir' }, { name: 's0', kind: 'dir' }],
     [`${PROJECT}/s0/workflows`]: [{ name: 'wf_old.json', kind: 'file', mtimeMs: 5 }],
   }
-  const clock = world(on, files, { dirs })
+  const clock = runWorld(on, files, { dirs })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   await $.agent.spawn(spawn('design', 1))
@@ -1067,7 +1010,7 @@ test('stalling agent: yellow reason under the agent row and in its card, idle ou
     release = resolve
   })
   const files: Record<string, string> = { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1', 'a2', 'a3'], 'RED') }
-  const clock = world(on, files, { hold, usage: id => (id === 'a2' ? { cache_read_input_tokens: 160_000 } : {}) })
+  const clock = runWorld(on, files, { hold, usage: id => (id === 'a2' ? { cache_read_input_tokens: 160_000 } : {}) })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   for (const index of [1, 2, 3]) await $.agent.spawn(spawn(`RED ${index}`, index))
@@ -1117,7 +1060,7 @@ const activityLine = async ($: Engine): Promise<string | undefined> => {
 
 test('followed stream: waiting for the first chunk, thinking then output with characters and throughput, nothing once the request ends', async ($, on) => {
   const seen: (string | undefined)[] = []
-  let clock: ReturnType<typeof world> | null = null
+  let clock: ReturnType<typeof runWorld> | null = null
   const stream = async function* (): AsyncGenerator<TurnStepChunk> {
     await clock?.advance(40_000)
     seen.push(await activityLine($))
@@ -1131,7 +1074,7 @@ test('followed stream: waiting for the first chunk, thinking then output with ch
     yield output(640)
     seen.push(await activityLine($))
   }
-  clock = world(on, { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1'], 'RED') }, { stream })
+  clock = runWorld(on, { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1'], 'RED') }, { stream })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   await $.agent.spawn(spawn('RED 1', 1))
@@ -1142,7 +1085,7 @@ test('followed stream: waiting for the first chunk, thinking then output with ch
 
 test('followed stream: one write per second at most, never per chunk', async ($, on) => {
   const seen: (string | undefined)[] = []
-  let clock: ReturnType<typeof world> | null = null
+  let clock: ReturnType<typeof runWorld> | null = null
   const stream = async function* (): AsyncGenerator<TurnStepChunk> {
     for (let index = 0; index < 7; index++) {
       yield output(100)
@@ -1150,7 +1093,7 @@ test('followed stream: one write per second at most, never per chunk', async ($,
       await clock?.advance(200)
     }
   }
-  clock = world(on, { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1'], 'RED') }, { stream })
+  clock = runWorld(on, { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1'], 'RED') }, { stream })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   await $.agent.spawn(spawn('RED 1', 1))
@@ -1160,7 +1103,7 @@ test('followed stream: one write per second at most, never per chunk', async ($,
 
 test('signals during a stream: slow at a sustained 4 tok/s, never idle nor slow at 150 tok/s, idle after 60 s without a chunk, waiting beyond 120 s', async ($, on) => {
   const seen: (string | undefined)[] = []
-  let clock: ReturnType<typeof world> | null = null
+  let clock: ReturnType<typeof runWorld> | null = null
   const steady = async function* (size: number): AsyncGenerator<TurnStepChunk> {
     yield output(0)
     for (let second = 1; second <= 70; second++) {
@@ -1185,7 +1128,7 @@ test('signals during a stream: slow at a sustained 4 tok/s, never idle nor slow 
     }
     yield* steady(600)
   }
-  clock = world(on, { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1'], 'RED') }, { stream })
+  clock = runWorld(on, { [SCRIPT_PATH]: SCRIPT, ...phaseMeta(['a1'], 'RED') }, { stream })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   await $.agent.spawn(spawn('RED 1', 1))
@@ -1440,7 +1383,7 @@ const result = await workflow('run-lot', b.sheet)
     [`${DIR}/agent-a3.meta.json`]: JSON.stringify({ workflowPhase: 'Report' }),
     [`${DIR}/agent-a4.meta.json`]: JSON.stringify({ workflowPhase: '▸ run-lot' }),
   }
-  const clock = world(on, files, { workflowName: 'run-plan' })
+  const clock = runWorld(on, files, { workflowName: 'run-plan' })
   const kept: Record<string, unknown> = {}
   on('store.set', async (_, e) => {
     kept[e.key] = e.value
@@ -1499,7 +1442,7 @@ const result = await workflow('run-lot', b.sheet)
     [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ workflowPhase: 'Preflight' }),
     [`${DIR}/agent-a2.meta.json`]: JSON.stringify({ workflowPhase: 'Design' }),
   }
-  const clock = world(on, files, { workflowName: 'run-plan' })
+  const clock = runWorld(on, files, { workflowName: 'run-plan' })
   mock.store(on, { 'lot:p:CAT-F1': { agents: 17, durationMs: 3_723_000, tokens: 900_000, cost: 12.5, endedAt: 1 } })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($, RUN_PLAN_PATH)
@@ -1516,9 +1459,9 @@ const result = await workflow('run-lot', b.sheet)
 })
 
 test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
-  world(on, {})
+  runWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await $.command.run({ command: 'run-lot-pane', args: 'demo plan' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo plan')
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /1\/6 batches/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / GREEN · GREEN C3 hide$/ })).toBeDefined()
@@ -1529,7 +1472,7 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /^ {9}tool Bash 2 min · Bash \(17\) · ctx \d+k$/ })).toBeDefined()
   await ui.unmount()
 
-  await $.command.run({ command: 'run-lot-pane', args: 'demo plan end' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo plan end')
   const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await end.find({ type: 'Text', text: /3\/6 batches/ })).toBeDefined()
   expect(await end.find({ key: 'outcome' })).toBeDefined()
@@ -1538,9 +1481,9 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
 })
 
 test('plan merge demo: the plan delivered whole, its knowledge-base merge staged under the outcome, the Final check and Merge steps', async ($, on) => {
-  world(on, {})
+  runWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await $.command.run({ command: 'run-lot-pane', args: 'demo plan merge' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo plan merge')
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
     expect(await ui.find({ type: 'Text', text: /2\/2 batches/ })).toBeDefined()
@@ -1556,7 +1499,7 @@ test('plan merge demo: the plan delivered whole, its knowledge-base merge staged
     await ui.unmount()
   }
 
-  await $.command.run({ command: 'run-lot-pane', args: 'demo plan end' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo plan end')
   const end = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await end.find({ key: 'outcome' })).toBeDefined()
   expect(await end.find({ type: 'Text', text: /Knowledge base/ })).toBeUndefined()
@@ -1714,7 +1657,7 @@ test('pane counts cycles from the cycle states, flags unreachable methods', asyn
     ].join('\n') + '\n',
   }
   stamps[WORK_FILE] = 1
-  const clock = world(on, files, { stamps })
+  const clock = runWorld(on, files, { stamps })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await launch($)
   await $.agent.spawn(spawn('next batch review', 1))

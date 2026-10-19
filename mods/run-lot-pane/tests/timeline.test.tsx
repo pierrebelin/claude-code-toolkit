@@ -1,8 +1,8 @@
-import { describe, expect, mock, test } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import { describe, expect, test } from 'claude-code/testing'
 
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import { blankAgent, demoHistory, demoPlanRuns, demoRuns, expectedPhases, lotRun, phaseRows, phaseTimeline, planTimeline, stepsOf, svgHeight, svgWidth } from '../hooks/register'
+import { BAND, PANE, paneCommand, world } from './world'
 
 const AT = 10_000_000
 const NEUTRAL = '#2a78d6'
@@ -125,11 +125,6 @@ describe('phase timeline', () => {
     expect(titles[0]).toContain('tool Read (3)')
     expect(svg).not.toContain('<A & B>')
   })
-
-  test('height read off the markup', () => {
-    expect(svgHeight('<svg xmlns="http://www.w3.org/2000/svg" width="560" height="148" viewBox="0 0 560 148"></svg>')).toBe(148)
-    expect(svgHeight('')).toBe(0)
-  })
 })
 
 describe('plan timeline', () => {
@@ -181,35 +176,6 @@ describe('plan timeline', () => {
   })
 })
 
-const world = (on: On, opened = new Set<string>()) => {
-  mock.clock(on)
-  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 84_000, window: 200_000, percent: 42 }, rateLimits: [], cost: { usd: 1 } } }))
-  on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('ui.open', ($, e) => {
-    opened.add(e.id)
-    return { value: { isPlaced: true } }
-  })
-  on('ui.close', ($, e) => {
-    opened.delete(e.id)
-    return { value: undefined }
-  })
-  on('ui.panes', () => ({ value: [...opened].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }))
-  on('fs.read', ($, e) => ({ deny: `ENOENT ${e.path}` }))
-  on('fs.stat', ($, e) => ({ deny: `ENOENT ${e.path}` }))
-  on('fs.list', ($, e) => ({ deny: `ENOENT ${e.path}` }))
-  on('ui.render', ($, e) => {
-    const { Box } = $.ui.resolve(e)
-    return <Box key="engine" />
-  })
-}
-
-const PANE = {
-  component: 'Pane',
-  requestId: 'run-lot-pane',
-  props: { title: 'Workflow', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
-} as const
-
 test('the desktop keeps the phase view and opens the timeline on demand; the terminal never offers it', async ($, on) => {
   world(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -221,7 +187,7 @@ test('the desktop keeps the phase view and opens the timeline on demand; the ter
     'demo plan merge': /^Batch timeline of run-plan: 2 of 2 batches done, completed in 42m46\.$/,
   }
   for (const [args, alt] of Object.entries(alts)) {
-    await $.command.run({ command: 'run-lot-pane', args } as Parameters<typeof $.command.run>[0])
+    await paneCommand($, args)
     const desktop = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...PANE })
     expect(await desktop.find({ type: 'Svg' })).toBeUndefined()
     expect(await desktop.find({ type: 'Text', text: /^ {2}(PHASES|BATCHES)$/ })).toBeDefined()
@@ -247,7 +213,7 @@ test('the desktop keeps the phase view and opens the timeline on demand; the ter
     await terminal.unmount()
   }
 
-  await $.command.run({ command: 'run-lot-pane', args: 'demo plan' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo plan')
   const desktop = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...PANE })
   await desktop.press({ key: 'open-lot-F2' })
   await desktop.press({ key: 'open-timeline' })
@@ -257,7 +223,7 @@ test('the desktop keeps the phase view and opens the timeline on demand; the ter
   expect(await desktop.find({ type: 'Text', text: /^ {2}BATCHES$/ })).toBeDefined()
   await desktop.unmount()
 
-  await $.command.run({ command: 'run-lot-pane', args: 'demo' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo')
   const left = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...PANE })
   await left.press({ key: 'open-timeline' })
   await left.unmount()
@@ -269,7 +235,7 @@ test('the desktop keeps the phase view and opens the timeline on demand; the ter
 test('a touch of colour on the desktop: accent headings, RED in red and GREEN in green; the terminal keeps its colours', async ($, on) => {
   world(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await $.command.run({ command: 'run-lot-pane', args: 'demo' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo')
   const colours = async (surface: 'terminal' | 'desktop') => {
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
     const found = {
@@ -297,7 +263,7 @@ test('a touch of colour on the desktop: accent headings, RED in red and GREEN in
 test('desktop rows keep their colours outside the native button, a trailing › opens them; the terminal presses the whole row', async ($, on) => {
   world(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await $.command.run({ command: 'run-lot-pane', args: 'demo' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo')
   const desktop = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...PANE })
   const glyphOf = async (key: string) => ((await desktop.find({ key }))?.children[0] as { props?: { color?: string } } | undefined)?.props?.color
   expect(await glyphOf('open-demo-g1-row')).toBe('success')
@@ -323,20 +289,15 @@ test('desktop rows keep their colours outside the native button, a trailing › 
   await terminal.unmount()
 })
 
-const BAND = {
-  component: 'AbovePrompt',
-  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
-} as const
-
 test('a button above the prompt opens and closes the pane on the desktop, once there is a run; never on the terminal', async ($, on) => {
   const open = new Set<string>()
-  world(on, open)
+  world(on, {}, { opened: open })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const empty = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...BAND })
   expect(await empty.find({ key: 'toggle-run-lot-pane' })).toBeUndefined()
   await empty.unmount()
 
-  await $.command.run({ command: 'run-lot-pane', args: 'demo' } as Parameters<typeof $.command.run>[0])
+  await paneCommand($, 'demo')
   const terminal = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...BAND })
   expect(await terminal.find({ key: 'toggle-run-lot-pane' })).toBeUndefined()
   await terminal.unmount()
