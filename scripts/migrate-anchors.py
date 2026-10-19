@@ -22,24 +22,9 @@ import sys
 import unicodedata
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# The kit (plugin cache, toolkit checkout): scripts/ next to lib/. A copy predating
-# the plugin: <repo>/scripts/ next to <repo>/.claude/lib/.
-for _lib in (os.path.join(HERE, "lib"), os.path.join(HERE, ".claude", "lib")):
-    if os.path.isfile(os.path.join(_lib, "kit_config.py")):
-        sys.path.insert(0, _lib)
-        break
-try:
-    from kit_config import project_root
-    ROOT = project_root()
-except ImportError:
-    ROOT = HERE
-try:
-    import kit_config
-    C = kit_config.load(ROOT)
-except ImportError:
-    sys.exit("kit_config.py not found beside scripts/ — reinstall the cctoolkit plugin")
-except kit_config.KitConfigError as e:
-    sys.exit(f"kit.config.json: {e} — cctoolkit doctor")
+sys.path.insert(0, os.path.join(HERE, "lib"))
+import kit_config  # noqa: E402
+ROOT, C = kit_config.script_config()
 APPS = C.dirs(C.use_case_roots)
 TODO = os.path.join(ROOT, "todo")
 SKIP = {"bin", "obj", "bin-linux", "obj-linux", "Properties", "node_modules"}

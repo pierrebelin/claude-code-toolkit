@@ -170,18 +170,6 @@ def main(argv):
         except (kit_config.KitConfigError, KeyError, TypeError, re.error) as e:
             presets.append({"preset": name, "error": str(e), "useCaseFolders": 0})
     presets.sort(key=lambda p: (-p["useCaseFolders"], p["preset"] != kit_config.DEFAULT_PRESET, p["preset"]))
-    legacy = [d for d in ("hooks", "lib", "agents", "tools", "presets", "evals")
-              if os.path.isdir(os.path.join(cl, d))]
-    # .claude/skills/ also holds the repo's own skills: only a plugin skill's name betrays a copy.
-    if any(os.path.isdir(os.path.join(cl, "skills", s)) for s in os.listdir(os.path.join(HERE, "skills"))
-           if os.path.isdir(os.path.join(HERE, "skills", s))):
-        legacy.insert(2, "skills")
-    if os.path.isfile(os.path.join(cl, "scripts", "pre-audit.sh")):
-        legacy.append("scripts")
-    if os.path.isfile(os.path.join(cl, "mods", ".claude-plugin", "marketplace.json")):
-        legacy.append("mods")
-    if os.path.isfile(os.path.join(root, "scripts", "pre-audit.sh")):
-        legacy.append("../scripts")
     print(json.dumps({
         "root": root,
         "stacks": st,
@@ -197,7 +185,6 @@ def main(argv):
             if os.path.isdir(os.path.join(cl, "rules")) else [],
             "settings": os.path.isfile(os.path.join(cl, "settings.json")),
             "statusline": os.path.isfile(os.path.join(cl, "statusline-command.sh")),
-            "legacyCopy": legacy,
         },
     }, indent=2, ensure_ascii=False))
     return 0

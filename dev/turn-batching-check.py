@@ -23,11 +23,8 @@ import time
 PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "lib"))
-try:
-    from kit_config import project_root
-    REPO_ROOT = project_root()
-except ImportError:
-    REPO_ROOT = HERE
+from kit_config import project_root  # noqa: E402
+REPO_ROOT = project_root()
 DEFAULT_PROJECT = re.sub(r"[^A-Za-z0-9]+", "-", os.path.basename(REPO_ROOT)).strip("-")
 READ_TOOLS = {"Read", "Grep", "Glob"}
 # Emitted verbatim by hooks/read-bounds.sh — frozen literal.

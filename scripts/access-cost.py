@@ -28,13 +28,8 @@ import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "lib"))
-try:
-    import kit_config
-    from kit_config import project_root
-    ROOT = project_root()
-except ImportError:
-    kit_config = None
-    ROOT = HERE
+import kit_config  # noqa: E402
+ROOT = kit_config.project_root()
 BASELINE = os.path.join(HERE, "scripts", "batch-baseline.py")
 CONFIG = os.path.join(HERE, "scripts", "access-cost", "sgconfig.yml")
 
@@ -101,12 +96,7 @@ def added_since(base, path):
 
 
 def kit():
-    if kit_config is None:
-        sys.exit("kit_config.py not found beside scripts/ — reinstall the cctoolkit plugin")
-    try:
-        return kit_config.load(ROOT)
-    except kit_config.KitConfigError as e:
-        sys.exit(f"kit.config.json: {e} — cctoolkit doctor")
+    return kit_config.script_config()[1]
 
 
 def cs_files(names, config=None):

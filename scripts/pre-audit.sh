@@ -19,7 +19,6 @@ BATCH="$1"
 SHEET="$2"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KIT_PY="$HERE/lib/kit_config.py"
-[[ -f "$KIT_PY" ]] || KIT_PY="$HERE/.claude/lib/kit_config.py"
 SCRIPTS="$HERE/scripts"
 ROOT="$(python3 "$KIT_PY" root)" || exit 2
 cd "$ROOT" || exit 1

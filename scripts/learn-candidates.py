@@ -29,11 +29,8 @@ import unicodedata
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "lib"))
-try:
-    from kit_config import project_root
-    ROOT = project_root()
-except ImportError:
-    ROOT = HERE
+from kit_config import project_root  # noqa: E402
+ROOT = project_root()
 STATE = os.environ.get("LEARN_STATE") or os.path.join(ROOT, ".claude", "learn-state.json")
 REPORTS = os.path.join(os.environ.get("LEARN_REPORTS") or ROOT, "todo", "*", "run", "batches", "F*.md")
 TRANSCRIPTS = os.environ.get("LEARN_TRANSCRIPTS") or os.path.join(

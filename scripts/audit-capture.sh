@@ -29,7 +29,6 @@ while [[ $# -gt 0 ]]; do
 done
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KIT_PY="$HERE/lib/kit_config.py"
-[[ -f "$KIT_PY" ]] || KIT_PY="$HERE/.claude/lib/kit_config.py"
 SCRIPTS="$HERE/scripts"
 ROOT="$(python3 "$KIT_PY" root)" || exit 2
 cd "$ROOT" || exit 1

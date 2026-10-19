@@ -19,15 +19,9 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for _lib in (os.path.join(HERE, "lib"), os.path.join(HERE, ".claude", "lib")):
-    if os.path.isfile(os.path.join(_lib, "kit_config.py")):
-        sys.path.insert(0, _lib)
-        break
-try:
-    from kit_config import project_root
-    ROOT = project_root()
-except ImportError:
-    sys.exit("kit_config.py not found beside scripts/ — reinstall the cctoolkit plugin")
+sys.path.insert(0, os.path.join(HERE, "lib"))
+from kit_config import project_root  # noqa: E402
+ROOT = project_root()
 
 PREFIX = "cctoolkit-audit-"
 UNTRACKED = (".claude/kit.config.json", ".claude/settings.local.json", ".claude/presets")

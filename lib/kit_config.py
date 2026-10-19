@@ -74,6 +74,22 @@ def project_root():
     return top or os.getcwd()
 
 
+def script_config(testtag=False):
+    """(root, config), plus the test-tag adapter with testtag: a script's start. A broken config exits, naming the doctor."""
+    root = project_root()
+    try:
+        c = load(root)
+        if not testtag:
+            return root, c
+        import kit_testtag
+        try:
+            return root, c, kit_testtag.adapter(c)
+        except kit_testtag.TestTagError as e:
+            raise KitConfigError(str(e)) from e
+    except KitConfigError as e:
+        sys.exit(f"kit.config.json: {e} — cctoolkit doctor")
+
+
 def config_path(root):
     return os.path.join(root, ".claude", "kit.config.json")
 

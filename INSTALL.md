@@ -32,7 +32,6 @@ This step is the one that matters. The plugin brings skills, agents and hooks, b
 | Step | What happens |
 |------|--------------|
 | Detect | `cctoolkit detect-stack` and `cctoolkit doctor`: manifests, test framework, product name guess, use-case folders each preset recognises in your tree |
-| Migrate | a manual copy of the kit found in `.claude/` → saves its local edits, then removes it on confirmation; the repo's own skills, scripts, config and rules stay. Commit the deletions and the settings change together |
 | Choose | one round of questions: the preset (ranked on your real folders), the documents' language, the code language, the product when ambiguous |
 | Config | writes `.claude/kit.config.json` — only what differs from the preset — validates it, offers `migrate-anchors` on specs, plans and handler sheets older than the `<!-- kit:… -->` anchors |
 | Rules | copies the universal rules and the preset's layer rules into `.claude/rules/`, `{{PRODUCT}}` substituted, dead `paths:` globs rewritten from your layout. **No preset fits?** It drafts one rule per layer from your most-changed files, each convention cited `file:line`, marked "review before trusting" |

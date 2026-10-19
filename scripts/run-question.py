@@ -31,8 +31,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
-for _lib in (HERE / "lib", HERE / ".claude" / "lib"):
-    sys.path.insert(0, str(_lib))
+sys.path.insert(0, str(HERE / "lib"))
 import work_file  # noqa: E402
 
 POLL = 2.0

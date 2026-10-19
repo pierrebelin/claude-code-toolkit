@@ -86,9 +86,6 @@ for f in "$CL/settings.json" "$CL/settings.local.json" "${CLAUDE_CONFIG_DIR:-$HO
     enabled_in="$enabled_in $name"
     [ "$f" = "$CL/settings.local.json" ] && local_hooks=1
   fi
-  # A pre-plugin copy wired by path: every guard fires twice.
-  legacy=$(jq -r '.hooks // {} | to_entries[] | .value[] | .hooks[]? | .command // empty' "$f" 2>/dev/null | grep -c '\.claude/hooks/')
-  [ "${legacy:-0}" -gt 0 ] && report WARN "legacy hook wiring" "$name registers $legacy command(s) under .claude/hooks/ — remove its \"hooks\" key (/cctoolkit:kit-init)"
 done
 if [ -n "$enabled_in" ]; then
   report ok "plugin enabled" "cctoolkit in${enabled_in}"
@@ -122,18 +119,6 @@ EOF
     printf '%s' "$commands" | grep -q "$b" || report WARN "hook script not registered" "$b — never fires (dead hook, or add it to hooks/hooks.json)"
   done
 fi
-# A copy predating the plugin: two kits in one session.
-if [ "$ROOT" != "$KIT" ]; then
-  # One probe per folder; SKILL.md, not the folder: a repo file kept there is no copy.
-  for p in hooks/bash-dispatch.sh lib/guard-git.sh skills/implement-tdd/SKILL.md agents/tdd-implementer.md tools/doctor presets evals/run.sh scripts/pre-audit.sh; do
-    [ -e "$CL/$p" ] && report WARN "legacy copy" ".claude/${p%%/*}/ from a manual install — delete it once the plugin is enabled (/cctoolkit:kit-init)"
-  done
-  [ -f "$ROOT/scripts/pre-audit.sh" ] \
-    && report WARN "legacy copy" "scripts/ holds the kit's scripts from a manual install — delete them (/cctoolkit:kit-init)"
-  # The mods' old in-copy marketplace: both enabled draw every band and pane twice.
-  [ -f "$CL/mods/.claude-plugin/marketplace.json" ] \
-    && report WARN "legacy mods" ".claude/mods/ is a marketplace from a manual install — delete it, enable the mods as <mod>@cctoolkit (/cctoolkit:kit-init)"
-fi
 
 # --- repo-owned files ------------------------------------------------------------
 # What a plugin cannot ship: the rules and the config, written by /cctoolkit:kit-init.
@@ -143,15 +128,6 @@ if [ -f "$CL/rules/markdown-output.md" ]; then
     || report WARN "rules outdated" ".claude/rules/markdown-output.md predates the <!-- kit:… --> anchors — its frozen literals are no longer the parsers' (replace it: /cctoolkit:kit-init)"
 else
   report FAIL "rules" ".claude/rules/markdown-output.md absent — the skills cite it on every document (/cctoolkit:kit-init)"
-fi
-# Instructions still pointing into a removed copy.
-if [ "$ROOT" != "$KIT" ]; then
-  # The template statusline keeps .claude/lib/ as a fallback behind the plugin cache.
-  sl="$CL/statusline-command.sh"; grep -q 'plugins/cache' "$sl" 2>/dev/null && sl=
-  # A folder cited alone ("after editing .claude/hooks") is stale too once it is gone.
-  stale=$(grep -oE '\.claude/(hooks|lib|scripts|tools|evals)(/[A-Za-z0-9_.-]+)?' "$ROOT/CLAUDE.md" "$CL"/rules/*.md ${sl:+"$sl"} 2>/dev/null \
-    | while IFS=: read -r f ref; do [ -e "$ROOT/$ref" ] || echo "${f#"$ROOT"/}"; done | sort | uniq -c | awk '{printf "%s%s (%s)", sep, $2, $1; sep=", "}')
-  [ -n "$stale" ] && report WARN "stale kit paths" "$stale — paths of a removed copy: \`cctoolkit <name>\` replaces scripts and tools, the plugin the rest"
 fi
 
 # --- dispatcher modules --------------------------------------------------------

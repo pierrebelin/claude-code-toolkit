@@ -13,30 +13,17 @@ import sys
 import unicodedata
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for _lib in (os.path.join(HERE, "lib"), os.path.join(HERE, ".claude", "lib")):
-    if os.path.isfile(os.path.join(_lib, "kit_config.py")):
-        sys.path.insert(0, _lib)
-        break
-try:
-    from kit_config import project_root
-    ROOT = project_root()
-except ImportError:
-    ROOT = HERE
+sys.path.insert(0, os.path.join(HERE, "lib"))
+import kit_config  # noqa: E402
+import kit_testtag  # noqa: E402
+ROOT = kit_config.project_root()
 C = AD = None
 
 
 def load_kit():
     """Layout and tag adapter, for the coverage report only: `--ids` works on a broken config."""
-    global C, AD, kit_testtag
-    try:
-        import kit_config
-        import kit_testtag
-        C = kit_config.load(ROOT)
-        AD = kit_testtag.adapter(C)
-    except ImportError:
-        sys.exit("kit_config.py not found beside scripts/ — reinstall the cctoolkit plugin")
-    except (kit_config.KitConfigError, kit_testtag.TestTagError) as e:
-        sys.exit(f"kit.config.json: {e} — cctoolkit doctor")
+    global C, AD
+    _, C, AD = kit_config.script_config(testtag=True)
 
 
 # Sections are found by their `<!-- kit:… -->` anchor; a sheet without anchors by its folded EN/FR title.

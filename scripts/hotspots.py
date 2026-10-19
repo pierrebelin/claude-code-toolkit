@@ -29,18 +29,9 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for _lib in (os.path.join(HERE, "lib"), os.path.join(HERE, ".claude", "lib")):
-    if os.path.isfile(os.path.join(_lib, "kit_config.py")):
-        sys.path.insert(0, _lib)
-        break
-try:
-    import kit_config
-    ROOT = kit_config.project_root()
-    C = kit_config.load(ROOT)
-except ImportError:
-    sys.exit("kit_config.py not found beside scripts/ — reinstall the cctoolkit plugin")
-except kit_config.KitConfigError as e:
-    sys.exit(f"kit.config.json: {e} — cctoolkit doctor")
+sys.path.insert(0, os.path.join(HERE, "lib"))
+import kit_config  # noqa: E402
+ROOT, C = kit_config.script_config()
 
 MASS_SHARE = 0.25          # a commit touching more of the tracked files is a mass change
 PARSER_SUSPECT_NLOC = 200  # that many code lines and no function found: check the parser
