@@ -10,7 +10,7 @@
   },
   {
    "name": "knowledge-scan --json, bootstrap: tagged and untagged tests counted per handler, rule sheet path",
-   "cmd": "K={{KIT}}/scripts; cd {{FIX}}/ks-boot; export CLAUDE_PROJECT_DIR=$PWD\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin); h=d['contexts'][0]['inventory']['handlers'][0]; print(h['name'], h['ruleSheet'], h['rules'], h['tests'], d['overviewBudget'])\"\n",
+   "cmd": "K={{KIT}}/scripts; cd {{FIX}}/ks-boot || exit 1; export CLAUDE_PROJECT_DIR=$PWD\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin); h=d['contexts'][0]['inventory']['handlers'][0]; print(h['name'], h['ruleSheet'], h['rules'], h['tests'], d['overviewBudget'])\"\n",
    "expect": {
     "stdout": "ArchiveProductCommandHandler src/Shop.Application/Catalog/Products/ArchiveProduct/CLAUDE.md 2 {'tagged': 1, 'untagged': 1} 1500",
     "exit": 0
@@ -26,7 +26,7 @@
   },
   {
    "name": "knowledge-scan: a foreign commit on a handler is routed to its use case with its diff",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-foreign-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git commit -qam 'fix: save after archive'\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin)['contexts'][0]['delta']; c=d['changes'][0]; print(d['commits'], c['status'], c['useCases'], c['handlers'], 'p.Save()' in c['diff'], d['needsAgent'])\"\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-foreign-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git commit -qam 'fix: save after archive'\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin)['contexts'][0]['delta']; c=d['changes'][0]; print(d['commits'], c['status'], c['useCases'], c['handlers'], 'p.Save()' in c['diff'], d['needsAgent'])\"\n",
    "expect": {
     "stdout": "1 M ['CAT-CU-01'] ['ArchiveProductCommandHandler'] True True",
     "exit": 0
@@ -34,7 +34,7 @@
   },
   {
    "name": "knowledge-scan: a commit with a Kit-Batch trailer is covered, its files left out",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-batch-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git commit -qam 'feat: save' -m 'Kit-Batch: todo/archive/F1'\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin)['contexts'][0]['delta']; print(d['commits'], d['skipped'][0]['why'], d['covered'], len(d['changes']), d['needsAgent'])\"\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-batch-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git commit -qam 'feat: save' -m 'Kit-Batch: todo/archive/F1'\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin)['contexts'][0]['delta']; print(d['commits'], d['skipped'][0]['why'], d['covered'], len(d['changes']), d['needsAgent'])\"\n",
    "expect": {
     "stdout": "0 Kit-Batch 1 0 False",
     "exit": 0
@@ -42,7 +42,7 @@
   },
   {
    "name": "knowledge-scan: a commit adding a sync row to the context's HISTORY.md is covered with its code",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-syncrow-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && python3 $K/knowledge-write.py mark --context Catalog >/dev/null && git add -A && git commit -qm 'fix: save, base synced'\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin)['contexts'][0]['delta']; print(d['commits'], [s['why'] for s in d['skipped']], len(d['changes']))\"\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-syncrow-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && python3 $K/knowledge-write.py mark --context Catalog >/dev/null && git add -A && git commit -qm 'fix: save, base synced'\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin)['contexts'][0]['delta']; print(d['commits'], [s['why'] for s in d['skipped']], len(d['changes']))\"\n",
    "expect": {
     "stdout": "0 ['sync'] 0",
     "exit": 0
@@ -50,7 +50,7 @@
   },
   {
    "name": "knowledge-scan: the working tree is read beside the commits",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-wt-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin)['contexts'][0]['delta']; print(d['commits'], d['worktree'], d['changes'][0]['path'].endswith('ArchiveProductCommandHandler.cs'), d['changes'][0]['useCases'])\"\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-wt-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; d=json.load(sys.stdin)['contexts'][0]['delta']; print(d['commits'], d['worktree'], d['changes'][0]['path'].endswith('ArchiveProductCommandHandler.cs'), d['changes'][0]['useCases'])\"\n",
    "expect": {
     "stdout": "0 True True ['CAT-CU-01']",
     "exit": 0
@@ -58,7 +58,7 @@
   },
   {
    "name": "knowledge-scan: whitespace, import and comment lines are noise — no agent",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-noise-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak -e 's/using System;/using System;\\nusing System.Linq;/' -e 's|// load then archive|// loads, then archives|' -e 's/^    public void Handle/        public void Handle/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git commit -qam 'style: tidy'\npython3 $K/knowledge-scan.py --context Catalog\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-noise-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak -e 's/using System;/using System;\\nusing System.Linq;/' -e 's|// load then archive|// loads, then archives|' -e 's/^    public void Handle/        public void Handle/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git commit -qam 'style: tidy'\npython3 $K/knowledge-scan.py --context Catalog\n",
    "expect": {
     "stdout": "changes 0, mechanical 0, noise only 1, ~0 tokens — no agent needed",
     "exit": 0
@@ -66,7 +66,7 @@
   },
   {
    "name": "knowledge-scan: a pure rename of a handler is mechanical — no agent",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-mv-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\ngit mv src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs src/Shop.Application/Catalog/Products/GetProduct/ReadProductQueryHandler.cs && git commit -qm 'refactor: rename'\npython3 $K/knowledge-scan.py --context Catalog\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-mv-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\ngit mv src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs src/Shop.Application/Catalog/Products/GetProduct/ReadProductQueryHandler.cs && git commit -qm 'refactor: rename'\npython3 $K/knowledge-scan.py --context Catalog\n",
    "expect": {
     "stdout": "rename: GetProductQueryHandler → ReadProductQueryHandler (CAT-CU-02)",
     "exit": 0
@@ -74,7 +74,7 @@
   },
   {
    "name": "knowledge-scan: a deleted handler is a mechanical retire",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-rm-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\ngit rm -q src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs && git commit -qm 'refactor: drop the query'\npython3 $K/knowledge-scan.py --context Catalog\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-rm-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\ngit rm -q src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs && git commit -qm 'refactor: drop the query'\npython3 $K/knowledge-scan.py --context Catalog\n",
    "expect": {
     "stdout": "retire: GetProductQueryHandler (CAT-CU-02)",
     "exit": 0
@@ -82,7 +82,7 @@
   },
   {
    "name": "knowledge-scan: sync rows of two merged branches are both marks — only what came after is read",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-merge-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\ngit checkout -qb side\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && python3 $K/knowledge-write.py mark --context Catalog >/dev/null && git add -A && git commit -qm 'fix: side'\ngit checkout -q - && sed -i.bak 's/Handle() { }/Handle() { Load(); }/' src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs && rm src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs.bak && python3 $K/knowledge-write.py mark --context Catalog >/dev/null && git add -A && git commit -qm 'fix: main'\ngit merge -q --no-edit side && test $(grep -c '| sync ' docs/business/Catalog/HISTORY.md) = 3 || echo MERGE-FAILED\nprintf '// new\\npublic sealed class PublishProductCommandHandler { }\\n' > src/Shop.Application/Catalog/Products/GetProduct/Extra.cs && git add -A && git commit -qm 'feat: extra'\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; x=json.load(sys.stdin)['contexts'][0]; d=x['delta']; print(len(x['marks']), d['commits'], [c['path'].rsplit('/',1)[1] for c in d['changes']])\"\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-merge-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\ngit checkout -qb side\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && python3 $K/knowledge-write.py mark --context Catalog >/dev/null && git add -A && git commit -qm 'fix: side'\ngit checkout -q - && sed -i.bak 's/Handle() { }/Handle() { Load(); }/' src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs && rm src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs.bak && python3 $K/knowledge-write.py mark --context Catalog >/dev/null && git add -A && git commit -qm 'fix: main'\ngit merge -q --no-edit side && test $(grep -c '| sync ' docs/business/Catalog/HISTORY.md) = 3 || echo MERGE-FAILED\nprintf '// new\\npublic sealed class PublishProductCommandHandler { }\\n' > src/Shop.Application/Catalog/Products/GetProduct/Extra.cs && git add -A && git commit -qm 'feat: extra'\npython3 $K/knowledge-scan.py --json --context Catalog | python3 -c \"import json,sys; x=json.load(sys.stdin)['contexts'][0]; d=x['delta']; print(len(x['marks']), d['commits'], [c['path'].rsplit('/',1)[1] for c in d['changes']])\"\n",
    "expect": {
     "stdout": "2 1 ['Extra.cs']",
     "exit": 0
@@ -90,7 +90,7 @@
   },
   {
    "name": "knowledge-scan: a sync mark git no longer knows scans the context whole (full)",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-full-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/| sync [0-9a-f]* |/| sync deadbee |/' docs/business/Catalog/HISTORY.md && rm docs/business/Catalog/HISTORY.md.bak\npython3 $K/knowledge-scan.py --context Catalog | sed -n 3p\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-full-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/| sync [0-9a-f]* |/| sync deadbee |/' docs/business/Catalog/HISTORY.md && rm docs/business/Catalog/HISTORY.md.bak\npython3 $K/knowledge-scan.py --context Catalog | sed -n 3p\n",
    "expect": {
     "stdout": "Catalog — CAT — full",
     "exit": 0
@@ -98,7 +98,7 @@
   },
   {
    "name": "knowledge-scan --reminder: an edited handler names its use case; a new handler folder a new use case",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-rem-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nmkdir -p src/Shop.Application/Catalog/Products/PublishProduct && printf 'public sealed class PublishProductCommandHandler { }\\n' > src/Shop.Application/Catalog/Products/PublishProduct/PublishProductCommandHandler.cs\npython3 $K/knowledge-scan.py --reminder $R/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs src/Shop.Application/Catalog/Products/PublishProduct/PublishProductCommandHandler.cs\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-rem-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nmkdir -p src/Shop.Application/Catalog/Products/PublishProduct && printf 'public sealed class PublishProductCommandHandler { }\\n' > src/Shop.Application/Catalog/Products/PublishProduct/PublishProductCommandHandler.cs\npython3 $K/knowledge-scan.py --reminder $R/src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs src/Shop.Application/Catalog/Products/PublishProduct/PublishProductCommandHandler.cs\n",
    "expect": {
     "stdout": "knowledge base possibly behind: CAT-CU-01 ← ArchiveProductCommandHandler.cs, new use case ← PublishProductCommandHandler.cs — /cctoolkit:knowledge-sync Catalog",
     "exit": 0
@@ -106,7 +106,7 @@
   },
   {
    "name": "knowledge-scan --reminder --staged: silent when the same change stages the context's sync row",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-remst-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git add src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs\nprintf 'before=%s\\n' \"$(python3 $K/knowledge-scan.py --reminder --staged | wc -l | tr -d ' ')\"\npython3 $K/knowledge-write.py mark --context Catalog >/dev/null && git add -A\nprintf 'after=%s\\n' \"$(python3 $K/knowledge-scan.py --reminder --staged | wc -l | tr -d ' ')\"\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-remst-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git add src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs\nprintf 'before=%s\\n' \"$(python3 $K/knowledge-scan.py --reminder --staged | wc -l | tr -d ' ')\"\npython3 $K/knowledge-write.py mark --context Catalog >/dev/null && git add -A\nprintf 'after=%s\\n' \"$(python3 $K/knowledge-scan.py --reminder --staged | wc -l | tr -d ' ')\"\n",
    "expect": {
     "stdout": "before=1\nafter=0",
     "exit": 0
@@ -114,7 +114,7 @@
   },
   {
    "name": "knowledge-scan --reminder: silent and exit 0 without a base or with a broken config",
-   "cmd": "K={{KIT}}/scripts; cd {{FIX}}/ks-boot; export CLAUDE_PROJECT_DIR=$PWD\npython3 $K/knowledge-scan.py --reminder src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs; echo \"rc=$?\"; R={{FIX}}/ks-bad-{{SID}}; rm -rf $R; mkdir -p $R/.claude; printf '{ nope' > $R/.claude/kit.config.json; CLAUDE_PROJECT_DIR=$R python3 $K/knowledge-scan.py --reminder x.cs; echo \"rc=$?\"\n",
+   "cmd": "K={{KIT}}/scripts; cd {{FIX}}/ks-boot || exit 1; export CLAUDE_PROJECT_DIR=$PWD\npython3 $K/knowledge-scan.py --reminder src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs; echo \"rc=$?\"; R={{FIX}}/ks-bad-{{SID}}; rm -rf $R; mkdir -p $R/.claude; printf '{ nope' > $R/.claude/kit.config.json; CLAUDE_PROJECT_DIR=$R python3 $K/knowledge-scan.py --reminder x.cs; echo \"rc=$?\"\n",
    "expect": {
     "stdout": "rc=0\nrc=0",
     "exit": 0
@@ -122,7 +122,7 @@
   },
   {
    "name": "pre-commit hook: prints the reminder on stderr and exits 0, never blocks the commit",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-pc-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nexport CLAUDE_CONFIG_DIR=$R/.no-config; bash $K/install-git-hooks.sh --pre-commit $R >/dev/null\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git add src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs\n.git/hooks/pre-commit 2>&1; echo \"rc=$?\"; printf '{ nope' > .claude/kit.config.json; .git/hooks/pre-commit; echo \"rc=$?\"\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-pc-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nexport CLAUDE_CONFIG_DIR=$R/.no-config; bash $K/install-git-hooks.sh --pre-commit $R >/dev/null\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save();/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs && rm src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs.bak && git add src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs\n.git/hooks/pre-commit 2>&1; echo \"rc=$?\"; printf '{ nope' > .claude/kit.config.json; .git/hooks/pre-commit; echo \"rc=$?\"\n",
    "expect": {
     "stdout": "knowledge base possibly behind: CAT-CU-01 ← ArchiveProductCommandHandler.cs — /cctoolkit:knowledge-sync Catalog\nrc=0\nrc=0",
     "exit": 0
@@ -130,7 +130,7 @@
   },
   {
    "name": "install-git-hooks --pre-commit refuses to replace an existing pre-commit hook",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-pc2-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nprintf '#!/bin/sh\\n' > .git/hooks/pre-commit; bash $K/install-git-hooks.sh --pre-commit $R\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-pc2-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nprintf '#!/bin/sh\\n' > .git/hooks/pre-commit; bash $K/install-git-hooks.sh --pre-commit $R\n",
    "expect": {
     "stderr": "already exists",
     "exit": 1
