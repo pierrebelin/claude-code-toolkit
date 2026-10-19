@@ -20,6 +20,7 @@
 # re-issuing the identical launch lets it through. The first attempt drops a marker,
 # the second consumes it.
 set -u
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 input=$(cat)
 

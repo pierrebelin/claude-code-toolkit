@@ -25,6 +25,14 @@
       }
     },
     {
+      "name": "windows: CLAUDE_PLUGIN_ROOT is rewritten on load",
+      "cmd": "CLAUDE_PLUGIN_ROOT='c:\\Users\\me\\.claude\\plugins\\cache\\cctoolkit' bash -c 'OSTYPE=msys; CCTOOLKIT_PYTHON=python3; . {{KIT}}/lib/platform.sh; printf %s \"$CLAUDE_PLUGIN_ROOT\"'",
+      "expect": {
+        "stdout": "C:/Users/me/.claude/plugins/cache/cctoolkit",
+        "exit": 0
+      }
+    },
+    {
       "name": "windows: python3 and jq become functions a child bash inherits, Python in UTF-8 mode",
       "cmd": "bash -c 'OSTYPE=msys; CCTOOLKIT_PYTHON=python3; . {{KIT}}/lib/platform.sh; bash -c \"printf %s-%s-%s \\$(type -t python3) \\$(type -t jq) \\$(python3 -c \\\"import sys; print(sys.flags.utf8_mode)\\\")\"'",
       "expect": {
@@ -53,6 +61,22 @@
       "cmd": "printf '' | bash -c 'OSTYPE=msys; unset CLAUDE_ENV_FILE; . {{KIT}}/hooks/windows-env.sh'; echo $?",
       "expect": {
         "stdout": "0",
+        "exit": 0
+      }
+    },
+    {
+      "name": "a hook reached through a backslashed path runs again from its /-path, stdin intact: platform.sh found, the decision taken, nothing on stderr",
+      "cmd": "T={{FIX}}/bs-{{SID}}; rm -rf $T; mkdir -p $T; ln -s {{KIT}}/hooks $T/hooks; ln -s {{KIT}}/lib $T/lib; cp {{KIT}}/hooks/explore-guard.sh \"$T/hooks\\\\explore-guard.sh\"; out=$(printf '%s' '{\"tool_name\":\"Agent\",\"session_id\":\"{{SID}}\",\"tool_input\":{\"subagent_type\":\"Explore\",\"prompt\":\"x\"}}' | bash \"$T/hooks\\\\explore-guard.sh\" 2>$T/err); printf 'deny=%s stderr=%s' \"$(printf '%s' \"$out\" | grep -c '\"permissionDecision\": \"deny\"')\" \"$(wc -c <$T/err | tr -d ' ')\"; rm -rf $T",
+      "expect": {
+        "stdout": "deny=1 stderr=0",
+        "exit": 0
+      }
+    },
+    {
+      "name": "every hook wired in hooks.json opens with the backslashed-path rerun, before it reads stdin",
+      "cmd": "cd {{KIT}}; n=0; for h in $(grep -o 'hooks/[a-z-]*\\.sh' hooks/hooks.json | sort -u); do g=$(grep -n 'exec \"$BASH\" \"${BASH_SOURCE\\[0\\]//' $h | head -1 | cut -d: -f1); i=$(grep -nE '\\$\\(cat|^[A-Za-z_]+=\\$\\(cat' $h | head -1 | cut -d: -f1); [ -n \"$g\" ] && { [ -z \"$i\" ] || [ \"$g\" -lt \"$i\" ]; } || { echo \"missing: $h\"; n=$((n+1)); }; done; echo \"hooks missing it: $n\"",
+      "expect": {
+        "stdout": "hooks missing it: 0",
         "exit": 0
       }
     }

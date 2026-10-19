@@ -26,6 +26,8 @@
 # GRAPHIFY_AUTOSYNC_LOCK exist for the evals, which point them at a stub and at
 # run-scoped paths.
 
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
+
 # Repo resolved by lib/project-root.sh ($CLAUDE_PROJECT_DIR in a session). Without
 # that, a hardcoded default would update the graph of ANOTHER repo from this hook.
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/project-root.sh"

@@ -69,8 +69,20 @@ Native Windows works through Git Bash, which Claude Code uses for hooks, the sta
 - **jq**: `winget install jqlang.jq`, or Scoop or Chocolatey. The kit passes `-b` to it, because a native jq otherwise writes CRLF.
 - **Symlinks** (optional): with Developer Mode on, a worktree gets a real link to `graphify-out/`. With it off, it gets a junction, and `.claude/settings.local.json` is copied instead of linked.
 - **Line endings**: the plugin and the `.claude/` scripts check out as LF whatever `core.autocrlf` says (`.gitattributes`), so the hooks still run on a CRLF clone.
+- **Git Bash elsewhere**: Claude Code looks for Git Bash where Git for Windows installs it. A portable or custom install → set `CLAUDE_CODE_GIT_BASH_PATH` to its `bash.exe` before starting Claude Code.
 
 Desktop notifications at the end of a batch use `osascript` on macOS. On Windows the batch finishes without one.
+
+### Check it works
+
+After `/cctoolkit:kit-init` and a restart, in a session at the repo root:
+
+1. `cctoolkit doctor` → no `FAIL` line, `ok   binary python3` and `ok   binary jq` among the first.
+2. `type python3 jq` through the Bash tool → `python3 is a function`, `jq is a function`: the `SessionStart` hook handed `lib/platform.sh` to the Bash tool. A path instead → that hook did not run.
+3. The statusline shows under the prompt.
+4. No `hook error` line at session start or on the first edit. If one shows up, `claude --debug` names the hook and its error.
+
+Step 2 or 4 failing: the hooks do not run. Report it with the output of `cctoolkit doctor` and `claude --debug` before going further: without the hooks, the guards and the TDD scope are not enforced.
 
 ## Updating
 

@@ -24,6 +24,7 @@
 # hookSpecificOutput.additionalContext: on PostToolUse, plain stdout at exit 0 lands in the
 # transcript only and never reaches the model (231 emissions, 0 read, probe of 2026-09-13).
 
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 INPUT=$(cat)
 

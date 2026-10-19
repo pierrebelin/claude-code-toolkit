@@ -5,6 +5,7 @@
 # Every other agent and the main chain leave at the string match below, before any jq or
 # python: the Edit|Write matcher fires on every edit of every session.
 set -u
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 INPUT=$(cat)
 case "$INPUT" in *tdd-implementer*|*tdd-test-author*) ;; *) exit 0 ;; esac

@@ -26,6 +26,7 @@
 # ran four more: 31 ms per Read for the pair. The nudge was then sourced from here
 # until 2026-10-09, removed after 44 reminders for 1 delegation that followed.
 set -u
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"

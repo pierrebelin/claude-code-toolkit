@@ -10,6 +10,7 @@
 #         split what the expensive chain loads from what its subagents load.
 # Report: cctoolkit context-report
 set -u
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/project-root.sh" 2>/dev/null \
   || PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 LOG_DIR="$PROJECT_ROOT/.claude"

@@ -17,7 +17,12 @@
 #   - paths arrive as `C:\x\repo\a.cs` (hook payload), `C:/x/repo` (git,
 #     ${CLAUDE_PLUGIN_ROOT}) or `/c/x/repo` (pwd). `kit_path VAR` rewrites VAR in
 #     place to the one form `C:/x/repo/a.cs`, which bash, git and Python all
-#     accept; CLAUDE_PROJECT_DIR is rewritten on load. No fork: `printf -v`.
+#     accept; CLAUDE_PROJECT_DIR and CLAUDE_PLUGIN_ROOT are rewritten on load.
+#     No fork: `printf -v`.
+# A hook finds this file through `${BASH_SOURCE[0]%/*}`, which splits on `/`
+# only. Should Claude Code hand `${CLAUDE_PLUGIN_ROOT}` to bash with backslashes,
+# every hook opens with one `case` line that runs it again from the same path
+# written with `/`, before it reads stdin.
 # The functions are exported (`export -f`), so a `bash child.sh` inherits them;
 # a bash started by a native program may lose them, hence the `declare -F`.
 [ -n "${_KIT_PLATFORM:-}" ] && declare -F kit_path >/dev/null && return 0
@@ -79,7 +84,10 @@ fi
 jq() { command jq -b "$@"; }
 export -f jq kit_path
 
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  kit_path CLAUDE_PROJECT_DIR
-  export CLAUDE_PROJECT_DIR
-fi
+for _kit_var in CLAUDE_PROJECT_DIR CLAUDE_PLUGIN_ROOT; do
+  if [ -n "${!_kit_var:-}" ]; then
+    kit_path "$_kit_var"
+    export "$_kit_var"
+  fi
+done
+unset _kit_var

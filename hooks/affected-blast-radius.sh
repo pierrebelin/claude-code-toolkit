@@ -25,6 +25,7 @@
 # name) while `ProductId` resolves clean. A hook that narrates its own
 # misses trains the reader to skip it.
 set -u
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 # Paused 2026-10-09 to 2026-10-23, for a comparison: 300 injections (210 kB) over

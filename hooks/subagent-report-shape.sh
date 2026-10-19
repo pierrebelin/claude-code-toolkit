@@ -21,6 +21,7 @@
 # The reason is always written in English, with the English labels.
 
 # The heredoc is python's own stdin, so the payload travels through the environment.
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 INPUT=$(cat)
 

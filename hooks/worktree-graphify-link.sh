@@ -15,6 +15,7 @@
 # Do NOT run `graphify update` from a worktree: it would rewrite the shared graph
 # from the worktree branch state.
 set -u
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
 command -v git >/dev/null 2>&1 || exit 0

@@ -4,6 +4,15 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.0.4 — 2026-10-19
+
+Windows hardening, before a first install on a real Windows machine.
+
+- `cctoolkit`: every hook opens with one line that runs it again from its path written with `/` when Claude Code hands `${CLAUDE_PLUGIN_ROOT}` to bash with backslashes. Before this, a backslashed path kept every hook from finding `lib/platform.sh`, so no `python3` resolution, no `jq -b` and no path rewriting. On macOS and Linux the line does nothing.
+- `cctoolkit`: `lib/platform.sh` rewrites `CLAUDE_PLUGIN_ROOT` to the `C:/x/…` form on load, as it already did for `CLAUDE_PROJECT_DIR`.
+- `cctoolkit`: `INSTALL.md` § Windows gains a "Check it works" list: `cctoolkit doctor`, `type python3 jq` through the Bash tool, the statusline, no hook error at startup. It also names `CLAUDE_CODE_GIT_BASH_PATH` for a Git Bash outside its default place.
+- `cctoolkit`: the eval of `knowledge-write validate --accept` no longer cuts on `—` with `cut`, which refuses a multibyte delimiter outside a UTF-8 locale and always with GNU `cut` under Git Bash. A new eval checks that every hook wired in `hooks.json` carries the backslash line.
+
 ## 2.0.3 — 2026-10-16
 
 Native Windows support, through Git Bash (`INSTALL.md` § Windows).

@@ -15,6 +15,7 @@
 # Warning only, exit 0. Speaks through additionalContext: on PostToolUse plain stdout
 # never reaches the model.
 
+case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 input=$(cat)
 case "$input" in *'"file_path"'*) ;; *) exit 0 ;; esac
