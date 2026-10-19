@@ -23,7 +23,7 @@ Questions that do not depend on each other go in one message.
 
 ## Reading the output
 
-- `shown N of M`, N below M: the budget cut — narrow with `--context`, `--kind` or `--id`, never a larger `--budget` first.
+- `shown N of M`, N below M: the budget cut — narrow with `--context`, `--kind` or `--id`.
 - `shown 0 of 0`: rephrase once with the other vocabulary — the base is written in `language.docs`, the code in its own names (`archive` / `ArchiveProductCommandHandler`). Still nothing: the base does not cover it; say so, offer to look in the code.
 - An object marked `observed <level>` is deduced from the code, not validated: say so beside the fact, with its source.
 - Exit 1 (no base): say so, propose `/cctoolkit:knowledge-sync`.

@@ -2,7 +2,6 @@
 """Test methods carrying no rule tag: in a class that carries some (the `UNBOUND TEST` signal), or in a class with none.
 
     cctoolkit untagged-tests                        # report on stdout
-    cctoolkit untagged-tests -o <file.md>           # report into a file
     cctoolkit untagged-tests --json                 # counts per category and suite, as JSON
 """
 import collections
@@ -117,13 +116,7 @@ def main():
     if "--json" in sys.argv:
         print(json.dumps(counts(), indent=2, ensure_ascii=False))
         return
-    text = report()
-    if "-o" in sys.argv:
-        dest = sys.argv[sys.argv.index("-o") + 1]
-        open(dest, "w", encoding="utf-8").write(text)
-        print(f"report written: {dest}")
-    else:
-        sys.stdout.write(text)
+    sys.stdout.write(report())
 
 
 if __name__ == "__main__":

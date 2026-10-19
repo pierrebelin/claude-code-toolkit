@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The knowledge base against the code: what `/knowledge-sync` has to look at — read only.
 
-    cctoolkit knowledge-scan [--context C[,C]] [--since <commit> | --full] [--json]
+    cctoolkit knowledge-scan [--context C[,C]] [--since <commit>] [--json]
     cctoolkit knowledge-scan --reminder [--staged | <path>...]
 
 Per bounded context:
@@ -16,7 +16,7 @@ Per bounded context:
   the packet is `overBudget`.
 - `full` — a folder but no mark git still knows: the inventory again, the base beside it.
 
-`--since` replaces every mark by one commit; `--full` ignores them. Default output: a summary
+`--since` replaces every mark by one commit. Default output: a summary
 per context; `--json`: everything, for the extraction agent and the evals.
 
 `--reminder`: one line per context whose use cases the paths (or the staged files) touch —
@@ -52,7 +52,7 @@ CHAPTER = re.compile(r"^##\s+(.*?)\s*(?:<!--.*-->)?\s*$")
 def usage(msg=None):
     if msg:
         print(f"knowledge-scan: {msg}", file=sys.stderr)
-    print("usage: cctoolkit knowledge-scan [--context C[,C]] [--since <commit> | --full] [--json]\n"
+    print("usage: cctoolkit knowledge-scan [--context C[,C]] [--since <commit>] [--json]\n"
           "       cctoolkit knowledge-scan --reminder [--staged | <path>...]", file=sys.stderr)
     sys.exit(2)
 
@@ -535,15 +535,13 @@ def summary(result):
 
 def main(argv):
     global C
-    ctx_filter, since, full, as_json, remind, staged, paths = None, None, False, False, False, False, []
+    ctx_filter, since, as_json, remind, staged, paths = None, None, False, False, False, []
     it = iter(argv)
     for a in it:
         if a == "--context":
             ctx_filter = set(next(it, "").split(",")) - {""} or usage("--context expects a name")
         elif a == "--since":
             since = next(it, None) or usage("--since expects a commit")
-        elif a == "--full":
-            full = True
         elif a == "--json":
             as_json = True
         elif a == "--reminder":
@@ -554,8 +552,6 @@ def main(argv):
             usage(f"unknown option {a}")
         else:
             paths.append(a)
-    if since and full:
-        usage("--since and --full exclude each other")
     if (staged or paths) and not remind:
         usage("--staged and paths go with --reminder")
     try:
@@ -608,7 +604,7 @@ def main(argv):
         if not prefix:
             proposed = proposed_prefix(ctx, taken)
             taken.add(proposed)
-        marks = [since] if since else [] if full else (knowledge.sync_marks(C, ctx) if ctx in in_base else [])
+        marks = [since] if since else (knowledge.sync_marks(C, ctx) if ctx in in_base else [])
         mode = "incremental" if marks else "full" if ctx in in_base else "bootstrap"
         x = {"name": ctx, "prefix": prefix, "proposedPrefix": proposed, "mode": mode,
              "marks": [m[:7] for m in marks], "inBase": ctx in in_base}

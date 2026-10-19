@@ -89,19 +89,11 @@
    }
   },
   {
-   "name": "knowledge-scan: a sync mark git no longer knows scans the context whole (full); --full forces it",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-full-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/| sync [0-9a-f]* |/| sync deadbee |/' docs/business/Catalog/HISTORY.md && rm docs/business/Catalog/HISTORY.md.bak\npython3 $K/knowledge-scan.py --context Catalog | sed -n 3p; python3 $K/knowledge-scan.py --context Studio --full | sed -n 3p\n",
+   "name": "knowledge-scan: a sync mark git no longer knows scans the context whole (full)",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-full-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/| sync [0-9a-f]* |/| sync deadbee |/' docs/business/Catalog/HISTORY.md && rm docs/business/Catalog/HISTORY.md.bak\npython3 $K/knowledge-scan.py --context Catalog | sed -n 3p\n",
    "expect": {
-    "stdout": "Catalog — CAT — full\nStudio — STU — full",
+    "stdout": "Catalog — CAT — full",
     "exit": 0
-   }
-  },
-  {
-   "name": "knowledge-scan --since with --full is a usage error",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-usage-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R; export CLAUDE_PROJECT_DIR=$R\npython3 $K/knowledge-scan.py --since HEAD --full\n",
-   "expect": {
-    "stderr": "--since and --full exclude each other",
-    "exit": 2
    }
   },
   {

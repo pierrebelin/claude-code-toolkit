@@ -15,7 +15,7 @@
     cctoolkit hotspots --json                       # activity.hotspots of the report JSON
     cctoolkit hotspots --days 0                     # rank over the whole history
     cctoolkit hotspots --exclude '*/Migrations/*' --exclude '*.g.cs'
-    cctoolkit hotspots --ref <branch|sha> --top 10 --top-worst 5 --ignore-rev <sha>
+    cctoolkit hotspots --ref <branch|sha> --ignore-rev <sha>
 """
 import argparse
 import datetime
@@ -38,6 +38,8 @@ PARSER_SUSPECT_NLOC = 200  # that many code lines and no function found: check t
 FIX_SUBJECT = re.compile(r"^fix(\([^)]*\))?!?:", re.I)
 QUADRANT = {(True, True): "danger_zone", (False, True): "cowboy_code",
             (True, False): "fertile_ground", (False, False): "healthy_closure"}
+
+TOP, TOP_WORST = 10, 5  # Danger Zone files listed on the total complexity, then on the worst function
 
 
 def git(*args, check=True):
@@ -259,15 +261,15 @@ def build(args):
     fixes = facts["fix_convention"]
     counts, rows, (t_churn, t_cx) = rank(files, stats, cx, "total", fixes)
     _, worst_rows, (_, t_worst) = rank(files, stats, cx, "worst", fixes)
-    shown = {d["file"] for d in rows[:args.top]}
+    shown = {d["file"] for d in rows[:TOP]}
     report.update({
         "thresholds": {"commits": t_churn, "complexity_total": t_cx, "complexity_worst": t_worst,
                        "rule": "median of the analysed files"},
         "quadrants": counts,
         "parser_suspect": sorted(p for p in files
                                  if cx[p]["functions"] == 0 and cx[p]["nloc"] >= PARSER_SUSPECT_NLOC),
-        "danger_zone_top": rows[:args.top],
-        "worst_function_top": [d for d in worst_rows if d["file"] not in shown][:args.top_worst],
+        "danger_zone_top": rows[:TOP],
+        "worst_function_top": [d for d in worst_rows if d["file"] not in shown][:TOP_WORST],
     })
     return report
 
@@ -329,8 +331,6 @@ def main():
                     help="churn window ending at the analysed commit's date; 0 = whole history (default 365)")
     ap.add_argument("--exclude", action="append", default=[], help="glob of paths left out (repeatable)")
     ap.add_argument("--ignore-rev", action="append", default=[], help="commit left out of the churn (repeatable)")
-    ap.add_argument("--top", type=int, default=10, help="Danger Zone files listed on the total complexity")
-    ap.add_argument("--top-worst", type=int, default=5, help="files listed on the worst function")
     ap.add_argument("--json", action="store_true", help="print the activity.hotspots object")
     args = ap.parse_args()
     report = build(args)

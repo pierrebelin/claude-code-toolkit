@@ -2,7 +2,7 @@
 """Questions to the knowledge base — the one way a skill, an agent or the user reads it
 beyond `INDEX.md`, an `OVERVIEW.md` or a use-case file.
 
-    cctoolkit ask "<question>" [--context C[,C]] [--kind usecase|rule|decision|adr] [--budget N]
+    cctoolkit ask "<question>" [--context C[,C]] [--kind usecase|rule|decision|adr]
         ranked cards (id, title, kind, use cases, status, first line, `path:line`);
         an id written in the question comes first.
     cctoolkit ask --id <id>[,<id>]
@@ -16,7 +16,7 @@ beyond `INDEX.md`, an `OVERVIEW.md` or a use-case file.
         `HISTORY.md` rows, newest first.
 
 Every answer ends with `shown N of M`: N printed, M found; N below M is the budget
-(`knowledge.askBudget`, `--budget`, tokens = characters / 4) cutting.
+(`knowledge.askBudget`, tokens = characters / 4) cutting.
 
 Refreshes `.index/`, never `INDEX.md`. Exit 0, 1 no base, 2 usage, 3 config defect.
 """
@@ -45,7 +45,7 @@ ne on ou par pas pour qu quand que quel quelle quelles quels qui quoi sa se ses 
 def usage(msg=None):
     if msg:
         print(f"ask: {msg}", file=sys.stderr)
-    print('usage: cctoolkit ask "<question>" [--context C,…] [--kind usecase|rule|decision|adr] [--budget N]\n'
+    print('usage: cctoolkit ask "<question>" [--context C,…] [--kind usecase|rule|decision|adr]\n'
           "       cctoolkit ask --id <id>[,<id>] | --handler <Name> | --context C,… | --history [--context C,…] [--id <id>]",
           file=sys.stderr)
     sys.exit(2)
@@ -254,7 +254,7 @@ def ask_history(c, ctxs, oid, out):
 
 
 def main(argv):
-    opts = {"context": None, "kind": None, "id": None, "handler": None, "budget": None}
+    opts = {"context": None, "kind": None, "id": None, "handler": None}
     flags, words = set(), []
     it = iter(argv)
     for a in it:
@@ -296,18 +296,13 @@ def main(argv):
     if not os.path.isdir(knowledge.base_dir(c)):
         print(f"no knowledge base under {c.knowledge_root} — /cctoolkit:knowledge-sync builds it", file=sys.stderr)
         return 1
-    budget = c.ask_budget
-    if opts["budget"]:
-        if not opts["budget"].isdigit() or int(opts["budget"]) <= 0:
-            usage("--budget is a positive number of tokens")
-        budget = int(opts["budget"])
     unknown = sorted(ctxs - set(knowledge.contexts(c)))
     if unknown:
         print(f"ask: no context {', '.join(unknown)} in {c.knowledge_root} — contexts: {', '.join(knowledge.contexts(c)) or 'none'}",
               file=sys.stderr)
         return 2
     rows, _, _ = knowledge_index.refresh(c)
-    out = Out(budget)
+    out = Out(c.ask_budget)
     if mode == "question":
         ask_question(rows, question, ctxs, kind, out)
     elif mode == "id":

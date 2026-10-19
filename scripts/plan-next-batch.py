@@ -12,7 +12,7 @@ headings too) and the `### Batch FX — … — ✅ DONE` headings. Prints, for 
 
 At most one batch per repository: two batches of one repo share a working tree.
 
-    cctoolkit plan-next-batch <plan> [--until FX | --only FX] [--exclude FX,FY] [--skip FX,FY] [--root DIR] [--check]
+    cctoolkit plan-next-batch <plan> [--until FX | --only FX] [--exclude FX,FY] [--skip FX,FY] [--check]
 
 --until FX    scope = FX and its transitive dependencies
 --only FX     scope = FX alone; its dependencies must already be ✅ DONE
@@ -30,7 +30,6 @@ At most one batch per repository: two batches of one repo share a working tree.
 --context FX  design context of FX for run-lot: earlier batches' audit gaps, the sheets'
               `user decision`/GAPS lines, FX's stopped report and saved cycles, the sheet's
               source and test paths that do not exist
---root        directory `Repo` paths resolve against (default: git toplevel of the plan)
 """
 import argparse
 import json
@@ -261,7 +260,6 @@ def main():
     scope = parser.add_mutually_exclusive_group()
     scope.add_argument("--until")
     scope.add_argument("--only")
-    parser.add_argument("--root")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--outside")
     parser.add_argument("--exclude", dest="excluded", default="")
@@ -274,7 +272,7 @@ def main():
     plan = Path(args.plan).resolve()
     if not plan.is_file():
         fail(f"{args.plan}: plan not found")
-    root = Path(args.root).resolve() if args.root else default_root(plan)
+    root = default_root(plan)
     batches, done = parse(plan)
     by_id = {b["id"]: b for b in batches}
     sheet = lambda lot: plan.parent / f"{plan.stem}-{lot}.md"

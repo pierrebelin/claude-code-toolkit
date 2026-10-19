@@ -91,7 +91,7 @@
     },
     {
       "name": "ask: the budget cuts after the first item and says so",
-      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A archive --budget 60\n",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}, \"askBudget\": 60}}' > $R/.claude/kit.config.json\ncd $R; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\n$A archive\n",
       "expect": {
         "stdout": "shown 1 of 7 — budget reached: narrow with --context, --kind or --id",
         "exit": 0
