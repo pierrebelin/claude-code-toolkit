@@ -79,5 +79,5 @@ def shape_issues(text):
     if kept != [a for a in ALLOWED if a in kept]:
         issues.append("expected order: kit:rules, kit:flow, kit:events")
     if heads and not kept:
-        issues.append("no kit anchor and no recognised title — sheet written before the anchors: cctoolkit migrate-anchors --apply")
+        issues.append("no kit anchor and no recognised title — anchor each heading: <!-- kit:rules -->, <!-- kit:flow -->, <!-- kit:events -->")
     return issues

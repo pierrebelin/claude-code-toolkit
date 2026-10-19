@@ -33,7 +33,7 @@ This step is the one that matters. The plugin brings skills, agents and hooks, b
 |------|--------------|
 | Detect | `cctoolkit detect-stack` and `cctoolkit doctor`: manifests, test framework, product name guess, use-case folders each preset recognises in your tree |
 | Choose | one round of questions: the preset (ranked on your real folders), the documents' language, the code language, the product when ambiguous |
-| Config | writes `.claude/kit.config.json` — only what differs from the preset — validates it, offers `migrate-anchors` on specs, plans and handler sheets older than the `<!-- kit:… -->` anchors |
+| Config | writes `.claude/kit.config.json` — only what differs from the preset — and validates it |
 | Rules | copies the universal rules and the preset's layer rules into `.claude/rules/`, `{{PRODUCT}}` substituted, dead `paths:` globs rewritten from your layout. **No preset fits?** It drafts one rule per layer from your most-changed files, each convention cited `file:line`, marked "review before trusting" |
 | Skills | copies the preset's test skills (`tests-*`) into `.claude/skills/`, `{{PRODUCT}}` substituted; a local copy that differs is shown and kept unless you choose otherwise |
 | Settings | merges permissions and env into `.claude/settings.json`, installs the statusline, completes `.claude/.gitignore` |

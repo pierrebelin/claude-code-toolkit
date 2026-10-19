@@ -50,8 +50,6 @@ Only what differs from the chosen preset's `preset.json`, plus `language`, `pres
 
 Then `cctoolkit config validate .` — any `FAIL` → fix the file before going on.
 
-Then `cctoolkit migrate-anchors` (dry run): specs and plans written before the `<!-- kit:… -->` anchors are invisible to the skills and gates locating a section by its anchor, and a rule sheet whose titles are not exactly `Business rules` / `Règles métier` (a suffix, another wording) is invisible to the parsers — `rules-coverage` counts 0 rules and reports each tagged test as a dead reference. `anchors to write: 0` → nothing to do. Otherwise show the count and the `UNRECOGNISED HEADING` lines (free-form headings, left as they are), AskUserQuestion: apply (Recommended) / skip. Apply → `cctoolkit migrate-anchors --apply`, then the first two lines of `cctoolkit rules-coverage` go into the report.
-
 ## 4. Rules
 
 Into `.claude/rules/`, `{{PRODUCT}}` replaced by `product` in every copied line (unset → leave the placeholder, say so):
@@ -92,7 +90,6 @@ Then `cctoolkit doctor`. Then one summary:
 | `.claude/kit.config.json` | written / kept / merged — keys set |
 | `.claude/rules/…` | copied / drafted / kept, one row each |
 | `.claude/skills/tests-*` | copied / kept / replaced / merged, one row each |
-| anchors | `migrate-anchors`: n written across m files / none needed / skipped |
 | `.claude/settings.json`, statusline, `.gitignore`, `.gitattributes` | merged / created / kept |
 | `.caveman.json` | written with its mode / not asked (caveman unused) / declined |
 

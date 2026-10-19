@@ -97,10 +97,10 @@
       }
     },
     {
-      "name": "a sheet whose titles are neither anchored nor exactly a known title is named, with the migration to run",
+      "name": "a sheet whose titles are neither anchored nor exactly a known title is named, with the anchors to add",
       "cmd": "R={{FIX}}/hcm-{{SID}}\nA=$R/src/Acme.Application/Catalog/CreateProduct\nT=$R/tests/Acme.UnitTests/Catalog\nmkdir -p $R/.claude/hooks $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py {{KIT}}/lib/rule_sheet.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\nprintf 'readme\\n' > $R/README.md\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Règles métier (RM)\n\n| ID | Règle | Exception / Résultat |\n|----|-------|----------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n\n## Flux détaillé\n\n1. Load the catalog, create the product, save.\n\n## Événements émis (domaine)\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$A/CLAUDE.md'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
       "expect": {
-        "context": "cctoolkit migrate-anchors --apply",
+        "context": "no kit anchor and no recognised title — anchor each heading",
         "exit": 0
       }
     },
