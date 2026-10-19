@@ -114,58 +114,6 @@ git -C <worktree> diff HEAD > /tmp/wt.patch
 git apply /tmp/wt.patch               # applies to the working tree, no commit (asks for approval)
 ```
 
-## Guard details
-
-**`guard-cat-bounds.sh`** denies a bare `cat` on a file past the line and byte bounds
-(values and subagent bar: `lib/README.md`). It never fires on a pipe (`cat f | grep x` is already filtered),
-on a redirect (`cat f > out` never enters the context), on binary or rendered formats, or on a
-second identical command from the same agent. `read-bounds.sh` applies the same two bounds since
-2026-09-12 — it tested the line count alone before, so a 119-line, 18 kB plan passed a `Read` and
-was denied a `cat`. Since the same day it also measures `head` and `tail` by the span they ask
-for: `head -20 f` and `tail -n +250 f` on a 300-line file pass, `head -n 5000 f`, `head -200 f`
-and `tail -n +1 f` are dumps in disguise and are denied as `Unbounded head on` / `Unbounded tail
-on`. Spotify's hook covers the same verbs without the arithmetic and blocks `head -20` on a big
-file, the one read we want.
-
-**`guard-integration-filter.sh`** denies a `dotnet test` on the `IntegrationTests` project that
-carries neither `--filter-class` nor `--filter-method`, subagents included. `rtk` prefix,
-`cd … &&`, env assignments and output redirections are all fine — only the project and the
-presence of a filter are inspected; a `dotnet build` of that project passes. The rule lived in
-`implement-tdd/references/test-scope.md` §2 since 2026-09-08 and was ignored twice on 2026-09-10
-(sessions `f3d96035`, `24978db7`): 602 s each, the longest tool call of both sessions. No escape
-hatch: a doubt about scope is settled by widening the filter one level, never by running everything.
-
-## clear-nudge — the step on replayed context
-
-`UserPromptSubmit` hook (`hooks/clear-nudge.sh`). Reads the last assistant `usage` in the
-transcript — `input + cache_creation + cache_read` is what the next turn replays — and appends
-one line of `additionalContext` at every step of `CLAUDE_CLEAR_NUDGE_STEP` tokens (150k), once
-per step, asking the model to tell the user that `/clear` is due if the phase is done. Marker
-`/tmp/claude-clearnudge-<session>`, purged by `session-cleanup.sh`. Cache reads are ~60 % of
-the 30-day bill and nothing else guards them → `docs/CONTEXT-COST.md`.
-
-## doctor — the read-only readiness check
-
-`cctoolkit doctor [--quiet] [--evals]`. One line per check, `ok` / `WARN` / `FAIL`, every
-non-ok line naming the command that repairs; it never repairs itself (Spotify's rule for its own
-`doctor`). Checks: the binaries the hooks need (`jq`, `python3`, `perl`, `rtk` and its identity
-through `rtk gain`, `graphify`, `ast-grep`); `cctoolkit` enabled in a settings file
-of the repo or the user, every settings file valid; every command of `hooks/hooks.json` pointing
-at an existing script and every `hooks/*.sh` registered there (a script nobody registered is a
-dead hook); leftovers of a manual install — `.claude/hooks/` registrations, `.claude/{hooks,lib,
-skills,agents,tools,presets,evals}`, `scripts/` — that would run beside the plugin;
-`.claude/rules/markdown-output.md` present;
-the dispatcher's `MODULES` present in `lib/`; the git `post-checkout` hook that links the config
-into new worktrees; `graphify-out/graph.json` present, its lag through `graphify-freshness.sh`,
-the last autosync refusal in `/tmp/graphify-hook.log`;
-`+x` on tools, `bin/` and evals; `kit.config.json` through `kit_config.py validate`; `/tmp` leftovers older than three days; opt-in, with `CLAUDE_DOCTOR_BUDGET_LINES=<n>` set, a `NOTE` when the repo's `.claude/{skills,agents,rules,hooks,scripts,lib,workflows,docs}` hold more than `n` lines (every addition there is read or run every session).
-Also the knowledge base's `INDEX.md` behind the base (`knowledge-index --check`), a merge staged under `<knowledge.root>/.merge/` and never written; `kit.config.json` `knowledge` keys through the same validation. `--evals` also runs the hook evals and reports their summary line.
-
-Registered on `SessionStart` as `doctor --quiet || true`, after `session-cleanup.sh`: silent when
-healthy, so it costs the context nothing; a WARN or FAIL line reaches the model at startup, and
-the `|| true` keeps a broken setup from blocking the session. `CLAUDE_DOCTOR_ROOT` points it at
-another checkout (the evals use it).
-
 ## Injection-channel probes
 
 An eval proves the script emits the right bytes; it never proves the model reads them. The two

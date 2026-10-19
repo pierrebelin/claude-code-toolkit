@@ -6,17 +6,13 @@ Four optional panes drawn inside Claude Code (terminal or desktop Code tab), to 
 
 A `/cctoolkit:run-lot` batch runs for tens of minutes across a dozen agents. The pane shows it live: phases with their agents, time and tokens, each agent's model and current tool, retries and stalls flagged as they happen, the batch sheet ticking RED → GREEN → COST (or its `## Cycles` block, each cycle done once its `cycle` line in `run/.work.jsonl` says so), an estimated end, then the outcome and the audit verdict; `c` opens the phase of the current step. Opens by itself when a Workflow starts; `/run-lot-pane demo` shows an example. In Claude Desktop's Code tab, `t` (or the `◫ timeline` button) opens a timeline of the run, `b` comes back: each phase over its real steps (the sheet's cycles by name, the other steps by agent), a bar per agent on its step's row, `now` and `ETA` marks, dashed bars for what is still expected, retries, stalls and interruptions marked on the bars, the agent's model, duration, tokens and current tool on hover.
 
-![run-lot-pane during a run: a question waiting for its answer, phases with their agents, model and effort, time and tokens, a retry and its rejected attempt, a stall warning, the batch sheet's cycles, the notes](run-lot-pane/screenshots/demo-running.png)
-
-End of the same run, its outcome, audit verdict and audit rounds: [`demo-end.png`](run-lot-pane/screenshots/demo-end.png).
+![run-lot-pane during a run: a question waiting for its answer, phases with their agents, model and effort, time and tokens, a retry and its rejected attempt, a stall warning, the batch sheet's cycles, the notes](../docs/screenshots/demo-running.png)
 
 A `/cctoolkit:run-plan` run opens on the plan: batches with their state, agents, time and tokens, then the supervisor steps between them. `1`-`9` opens a batch in the view above, `p` returns to the plan; `/run-lot-pane demo plan` shows an example. On the desktop, `t` on the plan opens its timeline, `b` returns to the plan: one row per batch named after its sheet with its state (done, running, waiting on its dependencies), the batches to come placed after their dependencies up to the plan's `ETA`, and the supervisor steps. A plan delivered whole — every batch `DONE`, no stop, no `--until` or `--only` — goes through a `Final check` step (every suite run whole once) and a `Merge` step (`merge prepare`, then the `knowledge-merger` agent drafting and staging the merge), and its knowledge-base merge shows under the outcome: staged and not written yet, in amber, with the files it touches, the warnings left and `/cctoolkit:knowledge-merge <plan>` to review and write it; refused, blocked or failed, in red. `/run-lot-pane demo plan merge` shows one.
 
-![run-lot-pane on a run-plan: six batches, one done, one running, one set aside, three waiting on their dependencies, a pause requested, the notes, the supervisor steps](run-lot-pane/screenshots/demo-plan-running.png)
+![run-lot-pane on a run-plan: six batches, one done, one running, one set aside, three waiting on their dependencies, a pause requested, the notes, the supervisor steps](../docs/screenshots/demo-plan-running.png)
 
-Batch F2 opened from the plan: [`demo-plan-lot.png`](run-lot-pane/screenshots/demo-plan-lot.png). End of the plan, a batch set aside and the pause applied: [`demo-plan-end.png`](run-lot-pane/screenshots/demo-plan-end.png).
-
-![run-lot-pane on a run-plan delivered whole: two batches done, the knowledge-base merge staged under the outcome with the files it touches and a warning, the final check and merge steps](run-lot-pane/screenshots/demo-plan-merge.png)
+![run-lot-pane on a run-plan delivered whole: two batches done, the knowledge-base merge staged under the outcome with the files it touches and a warning, the final check and merge steps](../docs/screenshots/demo-plan-merge.png)
 
 The pane also steers the run through `run/.pane.jsonl`, a file the mod alone writes and the kit's scripts answer in `run/.work.jsonl`. `v` lists what the run decided without you (the `## To validate` entries of the reports, a divergence, a batch set aside, the breaker's stop, the notes taken): keep, reject or amend each one, applied at the next `/run-plan` or `/run-lot` start or at once with `cctoolkit run-validate apply <work file>`. `z` asks run-plan to pause between two batches, `n` leaves a note the next agent of the batch reads, `g` draws the plan's dependency graph. A question waiting for its answer shows on every view and above the prompt, with the time left before its recommendation applies.
 
@@ -24,21 +20,19 @@ The pane also steers the run through `run/.pane.jsonl`, a file the mod alone wri
 
 During a `/cctoolkit:business-spec`, the pane keeps the decisions you answered, the open questions by severity, the use cases, business rules and sections in view, refreshed on every write. A click unfolds a row in place. Opens by itself when the skill starts; `/spec-pane <path>` follows an existing spec. In Claude Desktop's Code tab, the spec state heads the pane: side by side, a square per open question by severity and per decision kept, changed, without an answer or pending, the question or the answer on hover; the outline gives each part its count.
 
-![spec-pane: open questions by severity, use cases and business rules, one of each unfolded](spec-pane/screenshots/spec.png)
+![spec-pane: open questions by severity, use cases and business rules, one of each unfolded](../docs/screenshots/spec.png)
 
 ## `knowledge-pane` — browse the knowledge base
 
 The business knowledge base under `knowledge.root`, browsed without spending a token of model context: the pane reads the files itself and writes nothing. The home lists the contexts of `INDEX.md` with their counts and summary, the ADRs, the objects still `observed` by level and the last `HISTORY.md` rows, and warns when a merge is prepared or staged (`partial` for a partial merge) or a sync staged, and not written yet, or when the index lags — with the command to run, `cctoolkit knowledge-index`, which the pane never launches. A context opens on its `OVERVIEW.md`, its use cases with their own rules, the cross-cutting rules, the decisions, the ADRs that cite it and its history; an object on its whole text, a use case's own rules, what it applies to, what cites it, its handlers, its `path:line` and its history rows. Every id is a row to press, `b` walks back, `h` goes home, `s` searches by id, title or handler. While the pane is open, a `cctoolkit ask --id` or `--handler` of the session shows the object it asked for. A staged merge lists its objects, `+` new, `~` modified, `−` retired, each opening on the base as it is, the staged text (or the draft) beneath it. `/knowledge-pane [Context|id|words]` opens it; `/knowledge-pane demo` shows the kit example with a staged merge; while it is shown, the pane neither follows `cctoolkit ask` nor checks the index against the files. In Claude Desktop's Code tab, a `◫ Knowledge` button above the prompt opens and closes it, and a context opens on a matrix of its use cases by the rules they apply, observed ones in amber.
 
-![knowledge-pane on the demo base: a staged merge, the Catalog context, an ADR, an observed rule, the last history rows](knowledge-pane/screenshots/demo-home.png)
-
-A context with the matrix heading it, as the desktop draws it — a composite: the terminal render of the `Catalog` context view with the desktop's matrix SVG inserted at its head: [`context-matrix.png`](knowledge-pane/screenshots/context-matrix.png).
+![knowledge-pane on the demo base: a staged merge, the Catalog context, an ADR, an observed rule, the last history rows](../docs/screenshots/demo-home.png)
 
 ## `context-band` — know when to `/clear`
 
 A line under the prompt, above it in Claude Desktop's Code tab: context meter, 5h limit, prompt-cache expiry, session time and cost. `[Show all]` adds the `/clear` step (150k, ceiling 250k) and what filled the context over the last turns. Always on.
 
-![context-band under the prompt: context meter, 5h limit, cache, /clear step, top contributor](context-band/screenshots/band.png)
+![context-band under the prompt: context meter, 5h limit, cache, /clear step, top contributor](../docs/screenshots/band.png)
 
 ## Install
 

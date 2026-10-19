@@ -28,7 +28,7 @@ The product name is the `{{PRODUCT}}` placeholder, never substituted in the kit 
 
 ## Language
 
-**English everywhere in the kit** — instruction files (`skills/`, `agents/`, `rules/`), documentation (`README.md`, `CLAUDE.md`, `RESOURCES.md`), hook comments and messages, script output, and the contracts between agents. Template blocks ship in English too. What the skills write into the target repo follows its `kit.config.json` `language` (`presets/README.md` § `kit.config.json`); a template change keeps every `<!-- kit:… -->` anchor.
+**English everywhere in the kit** — instruction files (`skills/`, `agents/`, `rules/`), documentation (`README.md`, `CLAUDE.md`, `docs/`), hook comments and messages, script output, and the contracts between agents. Template blocks ship in English too. What the skills write into the target repo follows its `kit.config.json` `language` (`presets/README.md` § `kit.config.json`); a template change keeps every `<!-- kit:… -->` anchor.
 
 ## Frozen literals
 

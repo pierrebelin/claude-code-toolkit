@@ -93,11 +93,11 @@ The base is plain Markdown, so you can review and commit it like code. The worke
 
 A batch takes tens of minutes and a dozen agents, a whole plan several times that. The **`run-lot-pane`** mod shows it live inside Claude Code. On a plan, it opens on the plan: each batch with its state, time and tokens, and the supervisor checking between batches.
 
-![run-lot-pane following a whole plan](mods/run-lot-pane/screenshots/demo-plan-running.png)
+![run-lot-pane following a whole plan](docs/screenshots/demo-plan-running.png)
 
 Open a batch and it shows each phase, which agent is working, the tests going red then green, the tokens spent, and the final verdict. The pane also steers the run: review what it decided without you, pause a plan between two batches, leave a note for a batch's agents ([keys](mods/README.md#run-lot-pane--follow-an-autonomous-batch)).
 
-![run-lot-pane during a batch](mods/run-lot-pane/screenshots/demo-running.png)
+![run-lot-pane during a batch](docs/screenshots/demo-running.png)
 
 ```bash
 claude plugin install run-lot-pane@cctoolkit --scope project
@@ -126,7 +126,6 @@ If your team works differently, half of it will feel like noise. Full list: [`sk
 | Every skill and agent | [`skills/README.md`](skills/README.md) |
 | Autonomous runs, resuming a stopped batch | [`docs/TOOLING.md`](docs/TOOLING.md) |
 | Layouts and configuration | [`presets/README.md`](presets/README.md) |
-| Other repos configuring a coding agent | [RESOURCES.md](RESOURCES.md) |
 
 ## Licence
 
