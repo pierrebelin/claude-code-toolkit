@@ -10,6 +10,7 @@ Code review, from how Anthropic reviews Claude Code: findings verified before th
 
 - `cctoolkit` `run-lot`: before a fix round, each Blocking or Major on `Correctness`, `Reuse` or `Placement` is checked once by a fresh read-only agent, in parallel. A refuted finding is not fixed, is not reported again, and is listed under `## To validate`. A verdict left with Minors only passes `VALID`. This costs nothing on a `VALID` audit; it saves the fix round and the re-audit a false finding used to cost.
 - `cctoolkit` `/verify-ddd-tdd`: a `Correctness`, `Cost` or `Placement` deviation is a pattern. The auditor greps it over the batch's files and reports every instance in one gap, so the class is not fixed one round at a time.
+- `cctoolkit`: the `affected-blast-radius` hook is gone, with the `kit_config.py match` command only it called. Paused since 2026-10-09, it had shown no measurable effect over 30 days and 300 injections. `graphify affected` stays available by hand and in `/plan-implementation`.
 - `cctoolkit` `run-plan`: new `Security` phase after the final check. One read-only pass over the plan's batch commits (authorisation, cross-organisation access, injection, leaked secrets or personal data, unvalidated input). Its findings go under `### Security` of the run report's `## To validate`, never a stop.
 
 ## 2.0.4 — 2026-10-19

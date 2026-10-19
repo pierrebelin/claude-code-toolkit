@@ -58,13 +58,6 @@ nodes out of 25 where budget 2000 keeps 42 out of 61. Filter the output, do not 
 
 `explain` is left unfiltered on purpose — it emits 37-500 B and has nothing to trim.
 
-**`affected` fires by itself on a Domain edit** (`affected-blast-radius.sh`, `PreToolUse:Edit|Write`; currently paused — [`hooks/README.md`](../hooks/README.md)): editing
-an aggregate or a value object attaches the blast radius of the edited type, rolled up per project.
-The raw output is never injected — 421 lines / 65 kB on a central id, against 8 rolled-up lines. Call
-`graphify affected "<symbol>"` by hand for the file:line detail. Since 0.9.58 node ids are
-path-qualified, so a bare label can answer `No unique node match`; the hook disambiguates through
-`explain` with the edited file's path, and stays silent when that fails.
-
 **`update` refuses to write when the graph shrinks.** Missing-chunks guard:
 `WARNING: new graph has N nodes but existing graph.json has M. Refusing to overwrite`. A drop is
 normal after a refactor that deletes code — rerun with `--force`. Trap: **`update` exits 0 even

@@ -169,22 +169,6 @@
       }
     },
     {
-      "name": "match aggregate: a clean-architecture value object matches",
-      "cmd": "python3 {{KIT}}/lib/kit_config.py match aggregate /r/src/Acme.Catalog.Domain/Products/ValueObjects/ProductId.cs && echo yes",
-      "expect": {
-        "stdout": "yes",
-        "exit": 0
-      }
-    },
-    {
-      "name": "match aggregate: a handler does not",
-      "cmd": "python3 {{KIT}}/lib/kit_config.py match aggregate /r/src/Acme.Application/Catalog/CreateProduct/CreateProductCommandHandler.cs || echo no",
-      "expect": {
-        "stdout": "no",
-        "exit": 0
-      }
-    },
-    {
       "name": "diff-comments: the pytest prefix is # under a vertical-slices layout",
       "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib $R/scripts\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\ncp {{KIT}}/scripts/rules-coverage.py {{KIT}}/scripts/untagged-tests.py $R/scripts/\nprintf '%s' '{\"preset\": \"vertical-slices\", \"testTag\": {\"framework\": \"pytest\"}}' > $R/.claude/kit.config.json\nF=$R/src/Features/CreateProduct\nmkdir -p $F\ncat > $F/create_product_handler.py <<'PYEOF'\nclass CreateProductHandler:\n    async def handle(self, command):\n        pass\nPYEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $F/test_create_product.py <<'PYEOF'\nimport pytest\n\n\n@pytest.mark.rm(\"CreateProduct/RM-01\")\n@pytest.mark.asyncio\nasync def test_rejects_a_name_already_used():\n    pass\n\n\nclass TestCatalog:\n    @pytest.mark.rm(\"CreateProduct/RM-09\")\n    def test_rejects_a_closed_catalog(self):\n        pass\n\n    def test_carries_no_tag(self):\n        pass\nPYEOF\nprintf '%s\\n' '+++ b/src/Features/CreateProduct/create_product_handler.py' '@@ -1,0 +1,2 @@' '+# why' '+x = \"#no\"' | python3 $R/.claude/lib/kit_config.py diff-comments $R\n",
       "expect": {

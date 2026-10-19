@@ -23,7 +23,6 @@ CLI (hooks, shell scripts, and the skills through `cctoolkit root`):
     kit_config.py root                     # the repo root, resolved as above
     kit_config.py validate                 # one `LEVEL name detail` line per finding (tools/doctor)
     kit_config.py shell <root>             # shell assignments for scripts/pre-audit.sh, audit-capture.sh
-    kit_config.py match aggregate <path>   # exit 0 when <path> is an aggregate or value object
     kit_config.py command <name> [<suite>] # commands.<name>, {product} and {suite} expanded; empty = unset
     kit_config.py diff-comments <root>     # added comment lines under the source roots (diff on stdin)
     kit_config.py diff-interaction <root>  # added lines of the interaction suites (diff on stdin)
@@ -464,11 +463,6 @@ def _cli(argv):
             print(f"{level}\t{name}\t{detail}")
         return 0
     try:
-        if cmd == "match":
-            c = load()
-            path = argv[3]
-            pats = c.aggregate if argv[2] == "aggregate" else []
-            return 0 if any(fnmatch.fnmatchcase(path, p) for p in pats) else 1
         if cmd == "command":
             run = load().command(argv[2], argv[3] if len(argv) > 3 else None)
             if run:
