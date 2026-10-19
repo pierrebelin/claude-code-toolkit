@@ -23,7 +23,7 @@ $ARGUMENTS
 - No path → `ls todo/*/*-PLAN.md`; several → ask.
 - **`batch FX — correction: manual finding`** → one `Edit` of the sheet: a new cycle in its `## Cycles` block (`behaviour` = `Correction Cn — [finding]`, wave after the last, contract fields per `references/design.md`), then `cctoolkit sheet-cycles <sheet> --index` exit 0. Sheet without the block → sub-step `Correction Cn — [finding]` under the affected step, the run's design writes the block. Finding changing scope, an RM/CU or a design decision → stop, `/business-spec` or `/plan-implementation`. Then launch `run-lot` on the sheet.
 
-Before launching: `cctoolkit plan-next-batch <plan> --outside FX` exit 0, `cctoolkit doctor` without FAIL, test containers reachable when the batch touches Infrastructure (`docs/TOOLING.md`, workflow `run-lot`).
+Before launching: `cctoolkit plan-next-batch <plan> --outside FX` exit 0, `cctoolkit doctor` without FAIL, test containers reachable when the batch touches Infrastructure.
 
 ## Questions during the run
 

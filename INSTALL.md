@@ -20,7 +20,7 @@ Project scope writes the marketplace (`extraKnownMarketplaces`) and the plugin (
 
 Other ways:
 - inside a session: `/plugin marketplace add pierrebelin/claude-code-toolkit`, then `/plugin install cctoolkit@cctoolkit`, scope picked in the dialog;
-- `--scope local` keeps it to your checkout; a worktree then needs `cctoolkit install-git-hooks` ([`docs/TOOLING.md`](docs/TOOLING.md));
+- `--scope local` keeps it to your checkout; a worktree then needs `cctoolkit install-git-hooks` ([`scripts/README.md`](scripts/README.md));
 - a local checkout of this repo works as the marketplace too.
 
 ## 2. Run `/cctoolkit:kit-init`

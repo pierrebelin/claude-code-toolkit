@@ -42,7 +42,7 @@ flowchart LR
 | Stops | a batch that cannot pass is set aside, only its dependents wait; batches set aside for one shared cause stop the plan | the batch comes back `DONE`, or with what needs your eyes |
 | Fits | a plan you trust, a run over lunch or overnight | a new plan, a tricky batch, a team that reviews every commit |
 
-**Whole plan** runs the batches in the order the plan allows. A stop is settled by an agent rather than a question, and what it decided without you opens the run report, to read after the plan. A batch that still cannot pass is set aside with its partial work saved, and the batches that do not depend on it carry on. Each batch that passes gets its own commit; you review them together at the end. Details: [`docs/TOOLING.md`](docs/TOOLING.md#workflow-run-plan--whole-plan-one-run-lot-per-batch).
+**Whole plan** runs the batches in the order the plan allows. A stop is settled by an agent rather than a question, and what it decided without you opens the run report, to read after the plan. A batch that still cannot pass is set aside with its partial work saved, and the batches that do not depend on it carry on. Each batch that passes gets its own commit; you review them together at the end.
 
 **Batch by batch** keeps you in the loop: each batch ends on a report and its own commit, you read it and start the next one with a clean context.
 
@@ -65,7 +65,7 @@ flowchart LR
 
 The orchestrator writes neither tests nor code: it splits the work, checks the diffs, validates the cost and settles the design. One agent writes the failing test, another makes it pass without touching it, a third audits.
 
-A batch that stops short: fix the cause and run `/cctoolkit:run-lot` on the same sheet again, it resumes from the cycles already done. `/cctoolkit:implement-tdd` launches the chain from a plan path, `/cctoolkit:verify-ddd-tdd` audits a batch on demand ([`docs/TOOLING.md`](docs/TOOLING.md)).
+A batch that stops short: fix the cause and run `/cctoolkit:run-lot` on the same sheet again, it resumes from the cycles already done. `/cctoolkit:implement-tdd` launches the chain from a plan path, `/cctoolkit:verify-ddd-tdd` audits a batch on demand.
 
 Want to see the files? **[`examples/`](examples/README.md)** walks one small feature from spec to report.
 
@@ -124,7 +124,6 @@ If your team works differently, half of it will feel like noise. Full list: [`sk
 | A feature from spec to report | [`examples/`](examples/README.md) |
 | The knowledge base's format | [`knowledge-format.md`](skills/knowledge-sync/references/knowledge-format.md) |
 | Every skill and agent | [`skills/README.md`](skills/README.md) |
-| Autonomous runs, resuming a stopped batch | [`docs/TOOLING.md`](docs/TOOLING.md) |
 | Layouts and configuration | [`presets/README.md`](presets/README.md) |
 
 ## Licence

@@ -19,7 +19,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `workflows/` | `run-lot` (one batch), `run-plan` (whole plan) and `run-audit` (the quality report), as Workflow scripts |
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
-| `docs/` | context cost, tooling, the frozen literals registry |
+| `docs/` | context cost, the frozen literals registry, the README screenshots |
 | `dev/` | maintainer tools: `bump.sh`, `release-check.sh`, `turn-batching-check.py` (batching and context fill measured from the transcripts), `knowledge-pane-demo.sh` (the mod's demo copy of `examples/docs/business/`) |
 
 ## Anonymisation — do not break it
@@ -49,7 +49,7 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 | what the repo's own settings carry (permissions, env, statusline, plugin enablement) | `templates/` — merged into the repo by `/cctoolkit:kit-init`, never read from here |
 | a script or tool the skills call | `scripts/` or `tools/`, reached through `bin/cctoolkit <name>` — never a path in a skill, an agent or a reference |
 | description of the kit's behaviour | `README.md` for the workflow, `INSTALL.md` for installation and update, the folder's `README.md` for a brick |
-| measurement, protocol or procedure too long for `CLAUDE.md` | `docs/CONTEXT-COST.md`, `docs/TOOLING.md` — opened on demand, so the standing rule stays in `CLAUDE.md` and only points here |
+| measurement, protocol or procedure too long for `CLAUDE.md` | `docs/CONTEXT-COST.md` — opened on demand, so the standing rule stays in `CLAUDE.md` and only points here |
 | repo-wide scanner or one-shot migration | `scripts/` — never a hook: a hook fires per edit, a scan reads the whole repo |
 | a maintainer tool for this checkout only (version bump, release check) | `dev/` — never shipped as a `cctoolkit` command |
 

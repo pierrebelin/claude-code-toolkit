@@ -4,7 +4,7 @@ Installed, each skill is typed with the plugin's prefix — `/cctoolkit:implemen
 
 ## Skills
 
-Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-plan <plan>` for the whole plan, or `/cctoolkit:run-lot <sheet>` per batch (Workflow scripts, `docs/TOOLING.md`). `implement-tdd` only launches that chain from a plan path (and applies a `— correction:` to a sheet); `verify-ddd-tdd` audits a batch on demand. Around it, the knowledge base: `knowledge-sync` builds it and catches up with changes made outside the chain, `business-spec` reads it, `knowledge-merge` writes a delivered plan into it, `ask` answers from it.
+Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-plan <plan>` for the whole plan, or `/cctoolkit:run-lot <sheet>` per batch (Workflow scripts, `workflows/`). `implement-tdd` only launches that chain from a plan path (and applies a `— correction:` to a sheet); `verify-ddd-tdd` audits a batch on demand. Around it, the knowledge base: `knowledge-sync` builds it and catches up with changes made outside the chain, `business-spec` reads it, `knowledge-merge` writes a delivered plan into it, `ask` answers from it.
 
 | Skill | When |
 |-------|------|
