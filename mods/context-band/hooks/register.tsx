@@ -347,9 +347,8 @@ export const register: Register = on => {
 const BAR = { width: 64, height: 6 } as const
 // A translucent grey: the details' surface reads on a light or a dark theme alike, no frame needed.
 const SURFACE = '#80808014'
-// A figure that asks for attention (the /clear step reached, the 5-hour limit or the cache running out) sits on a
-// faint wash of its tone; every figure keeps the same padding, washed or not, so the band stays aligned.
-const WASH: Record<string, string> = { warning: '#d99a1e24', error: '#d6454524' }
+// A figure that asks for attention (the /clear step reached, the 5-hour limit or the cache running out) takes its
+// tone on its own text and bar, never on a box around it: the band stays one plain line.
 const BAR_INK = { ok: '#3fa66b', warning: '#d99a1e', high: '#d4652c', critical: '#d64545' } as const
 
 const tone = (percent: number): keyof typeof BAR_INK => {
@@ -404,8 +403,8 @@ async function desktopView(
   const bar = (key: string, value: number, ink: keyof typeof BAR_INK, alt: string) =>
     Svg === undefined ? null : <Svg key={key} source={barSource(value, BAR_INK[ink])} alt={alt} width={BAR.width} height={BAR.height} />
   const label = (text: string) => <Text size="footnote" dimColor>{text}</Text>
-  const metric = (key: string, children: (JSX.Element | null)[], theme?: string) => (
-    <Box key={key} flexDirection="row" alignItems="center" gap="xs" flexShrink={0} paddingX={1} {...(theme !== undefined && WASH[theme] !== undefined ? { backgroundColor: WASH[theme] } : {})}>
+  const metric = (key: string, children: (JSX.Element | null)[]) => (
+    <Box key={key} flexDirection="row" alignItems="center" gap="xs" flexShrink={0}>
       {children}
     </Box>
   )
@@ -424,7 +423,7 @@ async function desktopView(
         {kilo(tokens)}
       </Text>,
       ...(state.window > 0 ? [<Text key="window" size="footnote" tabular dimColor>/ {kilo(state.window)}</Text>] : []),
-    ], stepTone === null ? undefined : THEME_OF[stepTone]),
+    ]),
     ...(limit === null ? [] : [metric('limit', [
       label('5h limit'),
       bar('limit-bar', limit.percent, tone(limit.percent), `5-hour limit ${Math.round(limit.percent)}% used`),
@@ -432,11 +431,11 @@ async function desktopView(
         {`${Math.round(limit.percent)}%`}
       </Text>,
       ...(resetIn === null ? [] : [<Text key="reset" size="footnote" tabular dimColor>{`resets ${resetIn}`}</Text>]),
-    ], tone(limit.percent) === 'ok' ? undefined : THEME_OF[tone(limit.percent)])]),
+    ])]),
     ...(cache === null ? [] : [metric('cache', [
       <Text key="cache" size="footnote" tabular color={cacheTone} dimColor={cacheTone === undefined}>{cache.label}</Text>,
-    ], cacheTone)]),
-    ...(grouping ? [metric('streak', [<Text key="streak" size="footnote" color="warning">{`${state.streak} single-call turns`}</Text>], 'warning')] : []),
+    ])]),
+    ...(grouping ? [metric('streak', [<Text key="streak" size="footnote" color="warning">{`${state.streak} single-call turns`}</Text>])] : []),
     ...(rebuilding ? [metric('graph', [<Text key="graph" size="footnote" dimColor>graph rebuilding</Text>])] : []),
     metric('session', [
       <Text key="session" size="footnote" tabular dimColor>

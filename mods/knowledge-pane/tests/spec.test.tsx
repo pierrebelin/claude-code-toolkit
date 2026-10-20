@@ -444,6 +444,9 @@ const PANE = {
   props: { title: 'Knowledge', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
 
+// On Windows the engine hands the handlers a resolved native path (`/repo/x` arrives as `C:\repo\x`):
+// brought back to the `/` form the files are keyed by.
+const posix = (path: string) => path.replace(/\\/g, '/').replace(/^[A-Za-z]:(?=\/)/, '')
 const world = (on: On, files: Record<string, string>, answers: Record<string, string> = {}, opened = new Set<string>()) => {
   const clock = mock.clock(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
@@ -457,9 +460,9 @@ const world = (on: On, files: Record<string, string>, answers: Record<string, st
     return { value: undefined }
   })
   on('ui.panes', () => ({ value: [...opened].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }))
-  on('fs.read', ($, e) => (files[e.path] === undefined ? { deny: `ENOENT ${e.path}` } : { value: files[e.path] ?? '' }))
+  on('fs.read', ($, e) => (files[posix(e.path)] === undefined ? { deny: `ENOENT ${e.path}` } : { value: files[posix(e.path)] ?? '' }))
   on('fs.stat', ($, e) =>
-    files[e.path] === undefined ? { deny: `ENOENT ${e.path}` } : { value: { kind: 'file', size: 1, mtimeMs: (files[e.path] ?? '').length, isLink: false } },
+    files[posix(e.path)] === undefined ? { deny: `ENOENT ${e.path}` } : { value: { kind: 'file', size: 1, mtimeMs: (files[posix(e.path)] ?? '').length, isLink: false } },
   )
   on('tool.call', ($, e) =>
     e.tool === 'AskUserQuestion' ? { result: { questions: [], answers }, text: 'answered' } : { result: { type: 'text' }, text: 'ok' },

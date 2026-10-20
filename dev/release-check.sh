@@ -18,6 +18,8 @@
 #   TODO  a version committed but not tagged yet: `claude plugin tag --push <dir>`
 #   TODO  the kit's tag without its GitHub release (one per version, the mods
 #         share it): `gh release create cctoolkit--v<version>`; skipped without `gh`
+#   FAIL  that tag's commit red in CI (.github/workflows/ci.yml: hook evals and
+#         mod tests) — never released; TODO while its run is not finished
 #   OK    otherwise
 # A version is released at its tag `<name>--v<version>`, or, before tags existed,
 # at the commit that introduced it. Exit 1 on any FAIL.
@@ -45,6 +47,13 @@ bash dev/knowledge-pane-demo.sh --check || fail=1
 changed_since() { # <ref> <paths…> — committed, staged, unstaged and untracked
   local ref=$1; shift
   { git diff --name-only "$ref" -- "$@"; git ls-files --others --exclude-standard -- "$@"; } | sort -u
+}
+ci_state() { # <sha> — success when one CI run of the commit passed, else pending, failure or none
+  gh run list --workflow ci.yml --commit "$1" --json status,conclusion -L 20 2>/dev/null | jq -r '
+    if any(.[]; .conclusion == "success") then "success"
+    elif any(.[]; .status != "completed") then "pending"
+    elif length > 0 then "failure"
+    else "none" end'
 }
 release_ref() { # <name> <version> <manifest> — tag, else the commit introducing the version
   local tag="$1--v$2"
@@ -84,7 +93,12 @@ while IFS=$'\t' read -r name source; do
       echo "TODO  $name $ver: not tagged — claude plugin tag --push ${dir:-.}"
     elif [ -z "$dir" ] && command -v gh >/dev/null && gh auth status >/dev/null 2>&1 \
       && ! gh release view "$name--v$ver" >/dev/null 2>&1; then
-      echo "TODO  $name $ver: no GitHub release — gh release create $name--v$ver --verify-tag --title \"$name $ver\" (notes: its CHANGELOG section)"
+      sha=$(git rev-list -n 1 "$name--v$ver")
+      case $(ci_state "$sha") in
+        success) echo "TODO  $name $ver: no GitHub release — gh release create $name--v$ver --verify-tag --title \"$name $ver\" (notes: its CHANGELOG section)" ;;
+        failure) echo "FAIL  $name $ver: CI red on its tag (${sha:0:12}) — fix, bump and tag again, no release: gh run list --commit $sha"; fail=1 ;;
+        *) echo "TODO  $name $ver: CI not finished on its tag (${sha:0:12}) — wait for it before the GitHub release: gh run list --commit $sha" ;;
+      esac
     else
       echo "OK    $name $ver"
     fi

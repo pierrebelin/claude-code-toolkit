@@ -1,0 +1,57 @@
+# Every push, pull request and release tag replays the hook evals and runs the mods' tests:
+# a version is only released on a commit whose run is green (`dev/release-check.sh` checks it
+# before the GitHub release).
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['*--v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evals:
+    name: hook evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      # jq, python3, perl (the latency timer) and git ship with the runner. Some cases commit in
+      # a fixture repo: git needs an identity.
+      - name: git identity
+        run: |
+          git config --global user.name ci
+          git config --global user.email ci@localhost
+          git config --global init.defaultBranch main
+      - name: evals
+        run: bash evals/run.sh
+
+  mods:
+    name: mods
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # The CLI the mods' tests were last run with: `claude plugin test` gives them their engine.
+      CLAUDE_CODE_VERSION: 2.1.304
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: claude code
+        run: npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+      - name: validate and test every mod of the marketplace
+        run: |
+          status=0
+          for dir in $(jq -r '.plugins[].source | select(. != "." and . != "./")' .claude-plugin/marketplace.json); do
+            echo "::group::${dir#./}"
+            claude plugin validate "$dir" || status=1
+            claude plugin test "$dir" </dev/null || status=1
+            echo "::endgroup::"
+          done
+          exit $status

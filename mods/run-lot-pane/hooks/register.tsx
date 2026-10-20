@@ -1729,6 +1729,19 @@ export const shortHash = (text: string): string => {
 
 export const entryIdOf = (batch: string, step: string, text: string): string => `v-${shortHash(`${batch}|${step}|${text}`)}`
 
+// A reason longer than this opens folded on a desktop: the finding and what is proposed come first.
+const WHY_FOLD = 160
+
+// An entry's prose cut into its sentences, a code span never cut: one per line reads where a block does not.
+export const sentencesOf = (text: string): string[] =>
+  text
+    .split(/(`[^`]*`)/)
+    .map((part, index) => (index % 2 === 1 ? part : part.replace(/([.!?])\s+(?=[A-ZÀ-ÝÉ(`])/g, '$1\n')))
+    .join('')
+    .split('\n')
+    .map(one => one.trim())
+    .filter(one => one !== '')
+
 const sectionOf = (text: string, headings: string[]): string[] => {
   const lines = text.split(/\r?\n/)
   const start = lines.findIndex(line => headings.some(heading => line.trim().normalize('NFC').startsWith(heading)))
@@ -3251,8 +3264,10 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => desktopTree(e.surface, await (async (): Promise<JSX.Element> => {
-    const { Box, Button, Text } = $.ui.resolve(e)
-    const Svg = e.surface === 'desktop' ? $.ui.resolve(e).Svg : undefined
+    const elements = $.ui.resolve(e)
+    const { Box, Button, Text } = elements
+    const Svg = e.surface === 'desktop' ? elements.Svg : undefined
+    const Markdown = e.surface === 'desktop' && 'Markdown' in elements ? elements.Markdown : undefined
     const Input = e.surface === 'terminal' || e.surface === 'desktop' || e.surface === 'vscode' ? $.ui.resolve(e).Input : undefined
     // The desktop draws in a proportional face: a type scale, spacing steps, real buttons and drawn bars
     // there; the terminal keeps its text layout.
@@ -3323,21 +3338,24 @@ export const register: Register = on => {
     const lotInView = planRun !== null && where.lot !== null && planRun.lots.some(one => one.lot === where.lot) ? where.lot : null
     const current = planRun !== null && lotInView !== null ? lotRun(planRun, lotInView) : last
     const columns = e.props.bodyColumns
-    const spin = spinnerFrame(at)
+    // A desktop keeps a running row's glyph still: a spinner inside a button changes its content every tick, the
+    // button is redrawn and a click landing then is lost. The row's wash already tells it runs.
+    const spin = isDesktop ? '●' : spinnerFrame(at)
     // A desktop's proportional font draws the bar wider than its columns: kept shorter there.
     const barWidth = Math.max(8, Math.min(e.surface === 'desktop' ? 28 : 40, columns - 28))
     const go = (change: Partial<Navigation>) => () => void update($, nav, state => ({ ...state, prompted: null, ...change }))
     const close = isDesktop
       ? <Button key="close" label="Close" role="dismiss" onPress={() => closePane($)} />
       : <Button key="close" label="✕" plain dimColor onPress={() => closePane($)} />
-    // A desktop draws a Button natively, its children's colours dropped: there the row keeps
-    // its own colours and a trailing › opens it; the terminal presses the whole row.
+    // Both surfaces press the whole row: a lone trailing › was too small a target on a desktop. There the row ends
+    // on a dim › telling it opens, and a narrow row clips its text, never the button.
     const pressable = (key: string, onPress: () => void, content: JSX.Element | JSX.Element[], hotkey?: string) =>
       e.surface === 'desktop' ? (
-        <Box key={`${key}-row`} flexShrink={1} minWidth={0}>
-          {content}
-          <Text> </Text>
-          <Button key={key} label="›" hotkey={hotkey} plain dimColor onPress={onPress} />
+        <Box key={`${key}-row`} flexShrink={1} minWidth={0} overflow="hidden">
+          <Button key={key} hotkey={hotkey} plain onPress={onPress}>
+            {content}
+            <Text dimColor> ›</Text>
+          </Button>
         </Box>
       ) : (
         <Button key={key} hotkey={hotkey} plain onPress={onPress}>
@@ -3495,19 +3513,18 @@ export const register: Register = on => {
           go({ screen: 'agent', agentId: agent.id, back: from }),
           [
             <Text key="glyph" color={agentTone(agent)}>{agentGlyph(agent)} </Text>,
-            isDesktop
-              ? <Text key="label" color={agent.state === 'error' ? 'error' : agent.state === 'running' ? undefined : 'inactive'}>{agent.label}</Text>
-              : <Text key="label" bold={agent.state === 'running'} {...(agent.state === 'interrupted' ? { color: 'inactive', dimColor: true } : {})}>{agent.label}</Text>,
-            <Text key="meta" color="inactive">
-              {' '}
-              · {agentAge(agent)}
-              {activityOf(agent, at) === null ? '' : ` · ${activityOf(agent, at)}`}
-              {agent.state === 'running' && agent.lastTool !== null ? ` · ${agent.lastTool} (${agent.tools})` : ''}
-              {agent.tokens > 0 ? ` · ctx ${kilo(agent.context)} · ${kilo(agent.tokens)} tok` : ''}
-            </Text>,
+            <Text key="label" color={agent.state === 'error' ? 'error' : agent.state === 'running' ? undefined : 'inactive'}>{agent.label}</Text>,
             ...(mark !== '' ? [<Text key="mark" color="warning"> {mark}</Text>] : []),
           ],
         )}
+        {/* Outside the button: these figures move every tick, and a button whose content changes is redrawn under the click. */}
+        <Text key="meta" color="inactive" wrap="truncate-end">
+          {' '}
+          · {agentAge(agent)}
+          {activityOf(agent, at) === null ? '' : ` · ${activityOf(agent, at)}`}
+          {agent.state === 'running' && agent.lastTool !== null ? ` · ${agent.lastTool} (${agent.tools})` : ''}
+          {agent.tokens > 0 ? ` · ctx ${kilo(agent.context)} · ${kilo(agent.tokens)} tok` : ''}
+        </Text>
       </Box>
     )
 
@@ -3781,6 +3798,92 @@ export const register: Register = on => {
               ? { text: `✓ ${decided(given.decision)}${said} · applied`, color: 'success' }
               : { text: `● ${decided(given.decision)}${said} · answered, not applied yet`, color: 'warning' }
         const asked = where.prompted !== null && where.prompted !== undefined && where.prompted.target === entry.id && where.prompted.kind !== 'note' ? where.prompted.kind : null
+        // On a desktop an entry is a card: its batch and step as a caption that wraps, the finding in bold, what the
+        // run proposes (after ` → `) under `Proposed`, a sentence per line, the reason under `Why`, dimmed, folded
+        // when long; backticks drawn as code. The buttons say an answer is pending: the state shows once one is
+        // given, on a wash of its tone.
+        if (isDesktop) {
+          const buttons = (
+            <Box key={`entry-buttons-${entry.id}`} flexDirection="row" gap="xs" marginTop="xs">
+              <Button key={`keep-${entry.id}`} label="✓ keep" variant="primary" onPress={() => answer(entry, 'keep')} />
+              <Button key={`reject-${entry.id}`} label="✗ reject" onPress={ask({ kind: 'reject', target: entry.id })} />
+              <Button key={`amend-${entry.id}`} label="✎ amend" onPress={ask({ kind: 'amend', target: entry.id })} />
+            </Box>
+          )
+          const input = asked !== null && Input !== undefined && (
+            <Box key={`entry-input-${entry.id}`} height={1}>
+              <Input
+                key={`answer-${entry.id}`}
+                label={asked === 'reject' ? 'why reject: ' : 'amended to: '}
+                autoFocus
+                onSubmit={value => (value.trim() === '' ? undefined : answer(entry, asked, value.trim()))}
+              />
+            </Box>
+          )
+          const arrow = entry.text.indexOf(' → ')
+          const finding = arrow < 0 ? entry.text : entry.text.slice(0, arrow).trim()
+          const proposed = arrow < 0 ? null : entry.text.slice(arrow + 3).trim()
+          const prose = (key: string, text: string, style: 'finding' | 'plain' | 'dim') =>
+            Markdown !== undefined ? (
+              <Markdown key={key} text={style === 'finding' ? `**${text}**` : text} dimColor={style === 'dim'} />
+            ) : (
+              <Text key={key} wrap="wrap" {...(style === 'finding' ? { weight: 'semibold' as const } : style === 'dim' ? { color: 'inactive' } : {})}>
+                {text}
+              </Text>
+            )
+          const steps = proposed === null ? [] : sentencesOf(proposed)
+          const whyKey = `why-${entry.id}`
+          const isWhyOpen = entry.why !== null && (entry.why.length <= WHY_FOLD ? !where.toggled.includes(whyKey) : where.toggled.includes(whyKey))
+          const toggleWhy = () =>
+            void update($, nav, state => ({
+              ...state,
+              toggled: state.toggled.includes(whyKey) ? state.toggled.filter(one => one !== whyKey) : [...state.toggled, whyKey],
+            }))
+          return (
+            <Box
+              key={`entry-${entry.id}`}
+              flexDirection="column"
+              backgroundColor={(given !== undefined && given.applied === null ? washOf('warning') : undefined) ?? SURFACE}
+              paddingX={2}
+              paddingY="sm"
+              marginTop="sm"
+              gap="xs"
+            >
+              <Text key={`entry-head-${entry.id}`} wrap="wrap" {...heading}>
+                {entry.batch === '' ? 'run' : entry.batch} · {entry.step}
+              </Text>
+              {prose(`entry-text-${entry.id}`, finding, 'finding')}
+              {steps.length > 0 && (
+                <Box key={`entry-proposed-${entry.id}`} flexDirection="column" marginTop="xs">
+                  <Text key={`entry-proposed-label-${entry.id}`} {...heading}>
+                    Proposed
+                  </Text>
+                  {prose(`entry-steps-${entry.id}`, steps.length === 1 ? steps[0]! : steps.map(one => `- ${one}`).join('\n'), 'plain')}
+                </Box>
+              )}
+              {entry.why !== null && (
+                <Box key={`entry-why-${entry.id}`} flexDirection="column" marginTop="xs">
+                  <Button key={whyKey} plain onPress={toggleWhy}>
+                    <Text {...heading}>{isWhyOpen ? 'Why ⌄' : 'Why ›'}</Text>
+                  </Button>
+                  {isWhyOpen && prose(`entry-why-text-${entry.id}`, entry.why, 'dim')}
+                </Box>
+              )}
+              {given !== undefined && (
+                <Text key={`entry-state-${entry.id}`} color={state.color} wrap="wrap">
+                  {state.text}
+                </Text>
+              )}
+              {given?.applied?.relaunch != null && (
+                <Text key={`entry-relaunch-${entry.id}`} color="inactive" wrap="wrap">
+                  relaunch: {given.applied.relaunch}
+                </Text>
+              )}
+              {given?.applied == null && buttons}
+              {input}
+            </Box>
+          )
+        }
         return (
           <Box key={`entry-${entry.id}`} flexDirection="column" marginTop={1}>
             <Text key={`entry-head-${entry.id}`} wrap="truncate-end">
@@ -3788,50 +3891,27 @@ export const register: Register = on => {
               <Text bold>{entry.batch === '' ? 'run' : entry.batch}</Text>
               <Text color="inactive"> · {entry.step}</Text>
             </Text>
-            {isDesktop ? (
-              <Text key={`entry-text-${entry.id}`} wrap="wrap">
-                {'    '}
+            <Box key={`entry-text-${entry.id}`} paddingLeft={4}>
+              <Text wrap="wrap">
                 {entry.text}
-                {entry.why === null ? '' : ` (${entry.why})`}
+                {entry.why === null ? '' : <Text color="inactive">{` (${entry.why})`}</Text>}
               </Text>
-            ) : (
-              <Box key={`entry-text-${entry.id}`} paddingLeft={4}>
-                <Text wrap="wrap">
-                  {entry.text}
-                  {entry.why === null ? '' : <Text color="inactive">{` (${entry.why})`}</Text>}
-                </Text>
-              </Box>
-            )}
-            {isDesktop ? (
-              <Text key={`entry-state-${entry.id}`} color={state.color} wrap="wrap">
-                {'    '}
-                {state.text}
+            </Box>
+            <Box key={`entry-state-${entry.id}`} paddingLeft={4}>
+              <Text wrap="wrap">
+                <Text color={state.color}>{state.text.slice(0, 2)}</Text>
+                <Text color={given === undefined ? 'inactive' : undefined}>{state.text.slice(2)}</Text>
               </Text>
-            ) : (
-              <Box key={`entry-state-${entry.id}`} paddingLeft={4}>
-                <Text wrap="wrap">
-                  <Text color={state.color}>{state.text.slice(0, 2)}</Text>
-                  <Text color={given === undefined ? 'inactive' : undefined}>{state.text.slice(2)}</Text>
-                </Text>
-              </Box>
-            )}
+            </Box>
             {given?.applied?.relaunch != null && line(`entry-relaunch-${entry.id}`, `  relaunch: ${given.applied.relaunch}`, 'inactive', 'wrap')}
             {given?.applied == null && (
-              <Box key={`entry-actions-${entry.id}`} {...(isDesktop ? { marginTop: 'xs' as const } : { height: 1 })}>
-                {!isDesktop && <Text>{'    '}</Text>}
-                {isDesktop ? (
-                  <Box key={`entry-buttons-${entry.id}`} flexDirection="row" gap="xs">
-                    <Button key={`keep-${entry.id}`} label="✓ keep" variant="primary" onPress={() => answer(entry, 'keep')} />
-                    <Button key={`reject-${entry.id}`} label="✗ reject" onPress={ask({ kind: 'reject', target: entry.id })} />
-                    <Button key={`amend-${entry.id}`} label="✎ amend" onPress={ask({ kind: 'amend', target: entry.id })} />
-                  </Box>
-                ) : [
-                  <Button key={`keep-${entry.id}`} label="✓ keep" plain dimColor onPress={() => answer(entry, 'keep')} />,
-                  gap(`reject-gap-${entry.id}`),
-                  <Button key={`reject-${entry.id}`} label="✗ reject" plain dimColor onPress={ask({ kind: 'reject', target: entry.id })} />,
-                  gap(`amend-gap-${entry.id}`),
-                  <Button key={`amend-${entry.id}`} label="✎ amend" plain dimColor onPress={ask({ kind: 'amend', target: entry.id })} />,
-                ]}
+              <Box key={`entry-actions-${entry.id}`} height={1}>
+                <Text>{'    '}</Text>
+                <Button key={`keep-${entry.id}`} label="✓ keep" plain dimColor onPress={() => answer(entry, 'keep')} />
+                {gap(`reject-gap-${entry.id}`)}
+                <Button key={`reject-${entry.id}`} label="✗ reject" plain dimColor onPress={ask({ kind: 'reject', target: entry.id })} />
+                {gap(`amend-gap-${entry.id}`)}
+                <Button key={`amend-${entry.id}`} label="✎ amend" plain dimColor onPress={ask({ kind: 'amend', target: entry.id })} />
               </Box>
             )}
             {asked !== null && Input !== undefined && (

@@ -4,6 +4,12 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.3.1 — 2026-10-20
+
+- `run-lot-pane`: on the desktop, a phase, an agent or a batch opens again on a click anywhere on its row, not on a small trailing `›` that a narrow row could clip or cover. The running row's glyph holds still (`●`, its orange wash telling it runs) and an agent's moving figures sit outside its button: the spinner and the ticking time redrew the buttons every two seconds, so the buttons flickered and a click landing during the redraw was lost.
+- `run-lot-pane`: on the desktop, each entry to validate is a card: its batch and step as a caption that wraps instead of being cut, the finding in bold, the proposed action (after `→`) under `Proposed`, one sentence per line, the reason under `Why`, dimmed and folded when long, code in backticks drawn as code; `○ pending answer` is gone, the buttons say it, and an answer not yet applied tints its card.
+- `context-band`: on the desktop, a figure asking for attention (the context near the /clear step, the 5-hour limit, the cache, the single-call streak) keeps its colour on its text and bar only, no longer on a tinted box around it.
+
 ## 2.3.0 — 2026-10-19
 
 The panes look like the desktop app in its Code tab, not like a terminal pasted into it; in a terminal they read at a glance: colour for state only, done, running and to come told apart, blocks titled and ruled, figures in aligned columns.

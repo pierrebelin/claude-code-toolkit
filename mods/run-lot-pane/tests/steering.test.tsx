@@ -5,7 +5,7 @@ import type { PlanLot, WorkflowAgent, WorkflowRun } from '../types'
 import {
   answersOf, asidesOf, attemptLinesOf, auditRoundsOf, blankAgent, breakerOf, completeRun, contestLine, demoPlanRuns, entryIdOf, feedPathsOf, feedViewOf, feedWorkOf,
   graphNodesOf, graphTreeLines, isAttemptOf, keptSections, notesOf, openQuestionsOf, paneLinesOf, parsePlanLots, pendingQuestionsOf, planGraph, planGraphAlt,
-  questionBanner, retryOf, roundLine, svgHeight, svgWidth, toValidateOf, validateEntriesOf, withPaneLine, workLinesOf,
+  questionBanner, retryOf, roundLine, sentencesOf, svgHeight, svgWidth, toValidateOf, validateEntriesOf, withPaneLine, workLinesOf,
 } from '../hooks/register'
 import { BAND, paneAt, paneCommand, world, indented } from './world'
 
@@ -118,6 +118,15 @@ describe('run files', () => {
     ])
     expect(keptSections('# R\n\n## Plan stopped — common cause\n\ncause\n\n## To validate\n\n- F3 — x\n\n## Other\n\ny\n')).toBe('## To validate\n\n- F3 — x\n\n\n## Plan stopped — common cause\n\ncause\n')
     expect(keptSections('# R\n\n## To validate\n\n- a — b\n\n## Audit gaps\n\n- c\n')).toBe('## To validate\n\n- a — b\n')
+  })
+
+  test('to validate: an entry cut into its sentences, a code span never cut', () => {
+    expect(sentencesOf('Relancer le GREEN de C2. Le blocage vient de C4 (`Fixture.cs:77`). Ensuite, relancer `dotnet test --filter "A. B"`.')).toEqual([
+      'Relancer le GREEN de C2.',
+      'Le blocage vient de C4 (`Fixture.cs:77`).',
+      'Ensuite, relancer `dotnet test --filter "A. B"`.',
+    ])
+    expect(sentencesOf('one sentence, no cut: e.g. this')).toEqual(['one sentence, no cut: e.g. this'])
   })
 
   test('to validate: the French alias `## À valider` read like the English heading, kept, `Aucune.` empty', () => {
@@ -307,6 +316,13 @@ test('demo end: audit rounds under the Audit phase, to validate in each state, a
   const desktop = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...PANE })
   await desktop.press({ key: 'open-validate' })
   expect((await desktop.find({ key: `reject-${design.id}` }))?.props.label).toBe('✗ reject')
+  // A card per entry under its caption; the buttons alone tell an answer is pending.
+  expect(await desktop.find({ type: 'Text', text: /^F4 · Assumptions$/ })).toBeDefined()
+  expect(await desktop.findAll({ type: 'Text', text: /pending answer/ })).toEqual([])
+  // A short reason shows open under its `Why`, a press folds it.
+  expect((await desktop.find({ key: `entry-why-text-${entry.id}` }))?.props.text).toBe('tech lead')
+  await desktop.press({ key: `why-${entry.id}` })
+  expect(await desktop.find({ key: `entry-why-text-${entry.id}` })).toBeUndefined()
   await desktop.unmount()
 })
 

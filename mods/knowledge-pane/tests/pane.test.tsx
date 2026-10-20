@@ -242,12 +242,15 @@ const PANE = {
   props: { title: 'Knowledge', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} },
 } as const
 
+// On Windows the engine hands the handlers a resolved native path (`/repo/x` arrives as `C:\repo\x`):
+// brought back to the `/` form the files are keyed by.
+const posix = (path: string) => path.replace(/\\/g, '/').replace(/^[A-Za-z]:(?=\/)/, '')
 const isUnder = (path: string, dir: string) => path.startsWith(`${dir}/`)
 
 // `alias` maps a path the pane asks for onto a key of `files` (the demo, under the plugin's own folder).
 const world = (on: On, given: Record<string, string>, mtimes: Record<string, number> = {}, alias = (path: string) => path) => {
   const files = new Proxy(given, {
-    get: (target, path) => (typeof path === 'string' ? target[alias(path)] : undefined),
+    get: (target, path) => (typeof path === 'string' ? target[alias(posix(path))] : undefined),
     ownKeys: target => Reflect.ownKeys(target),
     getOwnPropertyDescriptor: (target, path) => Reflect.getOwnPropertyDescriptor(target, path),
   })
@@ -259,11 +262,11 @@ const world = (on: On, given: Record<string, string>, mtimes: Record<string, num
   on('ui.panes', () => ({ value: [] }))
   on('fs.read', ($, e) => (files[e.path] === undefined ? { deny: `ENOENT ${e.path}` } : { value: files[e.path] ?? '' }))
   on('fs.stat', ($, e) => {
-    if (files[e.path] !== undefined) return { value: { kind: 'file', size: (files[e.path] ?? '').length, mtimeMs: mtimes[e.path] ?? 1000, isLink: false } }
-    return Object.keys(files).some(path => isUnder(path, alias(e.path))) ? { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false } } : { deny: `ENOENT ${e.path}` }
+    if (files[e.path] !== undefined) return { value: { kind: 'file', size: (files[e.path] ?? '').length, mtimeMs: mtimes[posix(e.path)] ?? 1000, isLink: false } }
+    return Object.keys(files).some(path => isUnder(path, alias(posix(e.path)))) ? { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false } } : { deny: `ENOENT ${e.path}` }
   })
   on('fs.list', ($, e) => {
-    const dir = alias(e.path ?? '')
+    const dir = alias(posix(e.path ?? ''))
     const names = new Map<string, 'file' | 'dir'>()
     for (const path of Object.keys(files).filter(one => isUnder(one, dir))) {
       const [name, ...rest] = path.slice(dir.length + 1).split('/')

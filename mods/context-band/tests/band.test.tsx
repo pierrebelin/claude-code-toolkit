@@ -84,7 +84,9 @@ describe('pure figures', () => {
 
 const world = (on: On, tokens: number) => {
   const clock = mock.clock(on)
+  // On Windows the band asks TEMP for graphify's lock (its plugin root starts with a drive): no TEMP here.
   on('fs.exists', () => ({ value: false }))
+  on('env.get', () => ({ value: undefined }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.messages', () => ({ value: [] }))
   on('session.usage', () => ({ value: { startedAt: 1, context: { tokens, window: 1_000_000, percent: 7 }, rateLimits: [{ kind: 'five_hour', percentUsed: 49.6 }], cost: { usd: 4.126 } } }))
@@ -175,6 +177,7 @@ test('a tool call of the main thread lands in the top contributions', async ($, 
   let tokens = 100_000
   mock.clock(on)
   on('fs.exists', () => ({ value: false }))
+  on('env.get', () => ({ value: undefined }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.messages', () => ({ value: [] }))
   on('session.usage', () => ({ value: { startedAt: 1, context: { tokens, window: 1_000_000, percent: 10 }, rateLimits: [] } }))
@@ -201,6 +204,7 @@ test('top contributions show two above the engine hint, the toggle lists them al
   let tokens = 100_000
   mock.clock(on)
   on('fs.exists', () => ({ value: false }))
+  on('env.get', () => ({ value: undefined }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.messages', () => ({ value: [] }))
   on('session.usage', () => ({ value: { startedAt: 1, context: { tokens, window: 1_000_000, percent: 10 }, rateLimits: [] } }))
@@ -264,6 +268,7 @@ test('replay rebuilds turns, streak and contributions from the transcript', () =
 test('session start replays the transcript when the band is empty', async ($, on) => {
   mock.clock(on)
   on('fs.exists', () => ({ value: false }))
+  on('env.get', () => ({ value: undefined }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.usage', () => ({ value: { startedAt: 1, context: { tokens: 90_000, window: 1_000_000, percent: 9 }, rateLimits: [] } }))
   on('session.messages', () => ({ value: [
@@ -291,9 +296,9 @@ test('the desktop draws its meters as bars, no block glyph, and folds the detail
   const ui = await $.ui.mount({ plugin: 'context-band', surface: 'desktop', ...ABOVE })
   expect((await ui.findAll({ type: 'Svg' })).map(one => one.props.alt)).toEqual(['context 16% full', '5-hour limit 50% used'])
   expect(await ui.find({ type: 'Text', text: /[█░│]/ })).toBeUndefined()
-  // Past the 150k step the context figure sits on an amber wash; the session figure, asking nothing, on none.
-  expect((await ui.find({ key: 'context' }))?.props.backgroundColor).toBe('#d99a1e24')
-  expect((await ui.find({ key: 'session' }))?.props.backgroundColor).toBeUndefined()
+  // Past the 150k step the context figure takes the amber on its text alone: no box around it.
+  expect((await ui.find({ key: 'context' }))?.props.backgroundColor).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /^160/ }))?.props.color).toBe('warning')
   expect(await ui.find({ type: 'Text', text: /150k step/ })).toBeUndefined()
   await ui.press({ key: 'top-toggle' })
   expect(await ui.find({ type: 'Text', text: /150k step/ })).toBeDefined()

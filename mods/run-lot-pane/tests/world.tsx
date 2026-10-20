@@ -11,8 +11,15 @@ export type World = { now?: number; stamps?: Stamps; dirs?: Directory; reads?: s
 export const world = (on: On, files: Record<string, string> = {}, options: World = {}) => {
   const { stamps = {}, dirs = {}, reads = [], writes = [], toasts = [], closed = [], opened = new Set<string>() } = options
   const clock = options.now === undefined ? mock.clock(on) : mock.clock(on, { now: options.now })
-  const keyOf = (path: string, keys: string[]) => keys.find(key => key === path || (!key.startsWith('/') && path.endsWith(`/${key}`)))
-  const touch = (path: string, text: string) => {
+  // On Windows the engine hands the handlers a resolved native path (`/home/u/x` arrives as `C:\home\u\x`):
+  // brought back to the `/` form the files and directories are keyed by.
+  const posix = (path: string) => path.replace(/\\/g, '/').replace(/^[A-Za-z]:(?=\/)/, '')
+  const keyOf = (raw: string, keys: string[]) => {
+    const path = posix(raw)
+    return keys.find(key => key === path || (!key.startsWith('/') && path.endsWith(`/${key}`)))
+  }
+  const touch = (raw: string, text: string) => {
+    const path = posix(raw)
     files[path] = text
     stamps[path] = (stamps[path] ?? 1) + 1
   }
@@ -35,7 +42,7 @@ export const world = (on: On, files: Record<string, string> = {}, options: World
   on('ui.panes', () => ({ value: [...opened].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }))
   on('fs.read', ($, e) => {
     const key = keyOf(e.path, Object.keys(files))
-    reads.push(key ?? e.path)
+    reads.push(key ?? posix(e.path))
     return key === undefined ? { deny: `ENOENT ${e.path}` } : { value: files[key] ?? '' }
   })
   on('fs.stat', ($, e) => {
@@ -43,14 +50,14 @@ export const world = (on: On, files: Record<string, string> = {}, options: World
     return key === undefined ? { deny: `ENOENT ${e.path}` } : { value: { kind: 'file', size: 1, mtimeMs: stamps[key] ?? 1, isLink: false } }
   })
   on('fs.list', ($, e) => {
-    const entries = dirs[keyOf(e.path ?? '', Object.keys(dirs)) ?? e.path ?? '']
+    const entries = dirs[keyOf(e.path ?? '', Object.keys(dirs)) ?? posix(e.path ?? '')]
     return entries === undefined
       ? { deny: `ENOENT ${e.path}` }
       : { value: entries.map(entry => ({ name: entry.name, kind: entry.kind, size: 1, mtimeMs: entry.mtimeMs ?? 0, isLink: false })) }
   })
   on('fs.write', ($, e) => {
     touch(e.path, e.text)
-    writes.push(e.path)
+    writes.push(posix(e.path))
     return { value: undefined }
   })
   on('ui.render', ($, e) => {

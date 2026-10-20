@@ -562,7 +562,7 @@ const runWorld = (on: On, files: Record<string, string>, options: Options = {}) 
 
 type Finder = { find: (query: { key: string }) => Promise<{ children: unknown[] } | undefined> }
 
-// A desktop presses a row through its trailing ›: the row's text sits in a Box beside it.
+// A desktop presses the whole row: its Button sits in a Box that clips a narrow row.
 const pressType = (surface: 'terminal' | 'desktop') => (surface === 'desktop' ? 'Box' : 'Button')
 
 const colorOf = async (ui: Finder, key: string) =>
@@ -630,8 +630,8 @@ test('pane follows phases in columns, agents, sheet, slowness then the run outco
     expect(await ui.find({ type: 'Text', text: /^time$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^tokens$/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /✓ Design/ })).toBeDefined()
-    expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽] RED(?! 1)/ })).toBeDefined()
-    expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽] RED 1 créer/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽●] RED(?! 1)/ })).toBeDefined()
+    expect(await ui.find({ type: pressType(surface), text: /[✢✳✶✻✽●] RED 1 créer/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /○ GREEN/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /tdd-test-author/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /tdd-implementer, serial/ })).toBeDefined()
