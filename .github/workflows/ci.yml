@@ -30,14 +30,17 @@ jobs:
           git config --global init.defaultBranch main
       # The tools some cases drive for real: ast-grep (access-cost) and rtk (the Bash rewrite). Versions the evals
       # were last run with; rtk checked against its release's checksums.
+      # A Python of our own: what the runner image preinstalls (pipx, pip into the system) changes with its version.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: ast-grep and rtk
         env:
           AST_GREP_VERSION: 0.45.3
           RTK_VERSION: 0.50.0
         run: |
-          pipx install "ast-grep-cli==${AST_GREP_VERSION}"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/ast-grep" --version
+          python -m pip install "ast-grep-cli==${AST_GREP_VERSION}"
+          ast-grep --version
           cd "$RUNNER_TEMP"
           base="https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}"
           curl -fsSLO "$base/rtk-x86_64-unknown-linux-musl.tar.gz"
