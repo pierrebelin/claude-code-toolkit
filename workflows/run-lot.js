@@ -66,9 +66,9 @@ const CYCLE = obj({
 // read off the batch diff by `cctoolkit closing-level` once the suites are green.
 const FULL = 'full'
 const LIGHT = 'light'
-const CLOSING = obj({ level: { type: 'string', enum: [FULL, LIGHT] }, reasons: arr(str), production: int }, ['production'])
+const LEVEL = obj({ level: { type: 'string', enum: [FULL, LIGHT] }, reasons: arr(str), production: int }, ['production'])
 
-const INDEX = obj({ ok: bool, missing: bool, errors: arr(str), declaratives: arr(str), closing: CLOSING, cycles: arr(CYCLE) }, ['closing'])
+const INDEX = obj({ ok: bool, missing: bool, errors: arr(str), declaratives: arr(str), closing: LEVEL, cycles: arr(CYCLE) }, ['closing'])
 
 const DESIGN = obj({ blocked: bool, reason: str, review: arr(str) }, ['review'])
 

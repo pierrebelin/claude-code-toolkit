@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.4.1 — 2026-10-20
+
+Same content as 2.4.0, republished on a green CI: 2.4.0 was tagged on a commit whose workflow evals failed (`run-lot.js` declared one schema name twice, so the script did not load) and was never released. Its entries follow.
+
 ## 2.4.0 — 2026-10-20
 
 Faster batch closings, measured on a 5-cycle batch of 65 min, 45 of them spent closing (pre-audit, audit, fix, re-audit).
