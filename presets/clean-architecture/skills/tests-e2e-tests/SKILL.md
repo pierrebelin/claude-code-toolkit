@@ -59,7 +59,7 @@ public sealed class [Feature]LifecycleTests(ApiApplicationFixture fixture)
 
 ## Verification
 
-- [ ] `commands.test` with `{suite}` = `E2ETests`, narrowed to `*[Feature]LifecycleTests` (`skills/implement-tdd/references/test-scope.md` § Runner), green, or justified Skip
+- [ ] `commands.testFast` with `{suite}` = `E2ETests` (the test project built alone, then run), narrowed to `*[Feature]LifecycleTests` (`skills/implement-tdd/references/test-scope.md` § Runner), green, or justified Skip
 - [ ] Lifecycle selected, ≥2 operations, no cleanup step
 - [ ] Real SDK + Aspire; no mock, no database seeding, no secret, no isolated endpoint
 - [ ] Existing file extended, existing fixture reused

@@ -286,6 +286,22 @@
       "expect": {
         "stdout": "exit=0 bytes=0"
       }
+    },
+    {
+      "name": "config command testFast: unset, the solution build then the suite command; set, the preset's fast command expanded",
+      "cmd": "R={{FIX}}/kcf-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/tests/Acme.UnitTests && cd $R && printf '%s' '{\"product\": \"Acme\", \"commands\": {\"testFast\": \"\"}}' > .claude/kit.config.json && a=$(CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py command testFast UnitTests) && printf '%s' '{\"product\": \"Acme\"}' > .claude/kit.config.json && b=$(CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py command testFast UnitTests) && echo \"$a|$b\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "rtk dotnet build Acme.sln --no-restore && rtk dotnet test --project tests/Acme.UnitTests/Acme.UnitTests.csproj --no-build --no-restore|rtk dotnet build tests/Acme.UnitTests/Acme.UnitTests.csproj --no-restore && dotnet tests/Acme.UnitTests/bin/Debug/net*/Acme.UnitTests.dll"
+      }
+    },
+    {
+      "name": "validate: commands.testFast whose project is absent is a WARN; closing with a bad regex, change kind or scope is a FAIL each",
+      "cmd": "R={{FIX}}/kcf-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/tests/Acme.UnitTests && cd $R && printf '%s' '{\"product\": \"Acme\", \"commands\": {\"testFast\": \"dotnet build tests/{product}.{suite}/Missing.csproj && dotnet tests/x.dll\"}, \"closing\": {\"maxProductionFiles\": -1, \"full\": [{\"name\": \"x\", \"path\": \"(\", \"changes\": \"AX\", \"scope\": \"tests\"}]}}' > .claude/kit.config.json && python3 {{KIT}}/lib/kit_config.py validate $R | grep -E 'testFast|closing' | cut -f1,2 | tr '\t\n' ' |'",
+      "expect": {
+        "exit": 0,
+        "stdout": "WARN commands.testFast|FAIL closing.maxProductionFiles|FAIL closing.full[0].path|FAIL closing.full[0].changes|FAIL closing.full[0].scope|"
+      }
     }
   ]
 }

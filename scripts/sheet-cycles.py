@@ -2,7 +2,11 @@
 """The `## Cycles` block of a batch sheet (one fenced ```json block, fields in REQUIRED / OPTIONAL).
 
     cctoolkit sheet-cycles <sheet> --index [--root DIR]      validate, print the compact index as JSON
+                                                             (`closing`: the run-lot closing level the block plans,
+                                                             lib/closing_level.py; `files` per cycle: the code it writes)
     cctoolkit sheet-cycles <sheet> --cycle ID --red|--green  print the RED or GREEN contract of one cycle
+    cctoolkit sheet-cycles <sheet> --cycle ID --pending WORK files of its `ripple` and `toCreate` absent from the batch
+                                                             diff, one per line: an ALREADY_GREEN that leaves any is no GREEN
     cctoolkit sheet-cycles <sheet> --methods WORK            method names expected on disk, one per line
     cctoolkit sheet-cycles <sheet> --done WORK               every cycle reached its final state
     cctoolkit sheet-cycles <sheet> --summary WORK            one line per cycle: RED/GREEN exits (audit capture)
@@ -35,7 +39,10 @@ REQUIRED = {
     "toCreate": list, "production": list, "ripple": list, "boundedGreen": list,
     "elements": str, "appliedIds": str, "invariants": str, "expectedCost": str,
 }
-OPTIONAL = {"refactor": bool, "guard": bool, "snapshot": str, "decisions": str}
+OPTIONAL = {"refactor": bool, "guard": bool, "snapshot": str, "decisions": str, "models": list}
+# Beside `cycles`: `"closing": "full"` forces the full closing of run-lot, `"light"` lifts its
+# production cap and ripple, never its authorisation, migration or contract rules (lib/closing_level.py).
+CLOSING_FORCED = ("full", "light")
 INCOMPLETE_NAME = re.compile(r"…|\.\.\.|[<>{}*]|_$|_?When$")
 TO_CREATE = re.compile(r"to create|\bnew\b|à créer|a creer|nouveau|nouvelle", re.I)
 MAX_TEST_FILES = 4
@@ -145,6 +152,10 @@ def validate(data, layout):
             if not name or "." not in name or INCOMPLETE_NAME.search(name):
                 errors.append(f"{where}: incomplete method name `{m}` — final `Class.Method`, never an ellipsis, placeholder nor open `When`")
         created = {path_of(p) for p in c["toCreate"]}
+        for m in c.get("models", []) if isinstance(c.get("models"), list) else []:
+            p = path_of(m)
+            if layout.is_code(p) and not os.path.exists(os.path.join(layout.root, p)):
+                errors.append(f"{where}: `models` path absent: {p} — a model is an existing file to imitate")
         for key in ("full", "bounded", "production", "ripple", "boundedGreen"):
             for entry in c[key]:
                 p = path_of(entry)
@@ -179,18 +190,40 @@ def validate(data, layout):
                     errors.append(f"wave {wave}: {members[a][0]} and {members[b][0]} share {', '.join(sorted(shared))} — successive waves, or registry entries moved to `declaratives`")
     if "declaratives" in data and not isinstance(data["declaratives"], list):
         errors.append("`declaratives` must be a list")
+    if "closing" in data and data["closing"] not in CLOSING_FORCED:
+        errors.append("`closing` is \"full\", \"light\" or absent")
     return errors
 
 
-def index(data):
+def files_of(c, layout):
+    """Code paths a cycle writes: its RED's (`full`), its GREEN's (`production`, `toCreate`, `ripple`)."""
+    paths = (path_of(e) for k in ("full", "toCreate", "production", "ripple") for e in c.get(k, []))
+    return sorted({p for p in paths if p and layout.is_code(p)})
+
+
+def planned_closing(data, root):
+    """Closing level of run-lot read off the block: the files it plans, its ripples, its `closing`."""
+    try:
+        import closing_level
+        import kit_config
+        cfg = kit_config.load(root)
+    except Exception:
+        return {"level": "full", "reasons": ["kit.config.json unreadable"], "production": 0}
+    return closing_level.decide(cfg, closing_level.planned_files(cfg, data["cycles"], path_of), data["cycles"],
+                                data.get("closing", ""))
+
+
+def index(data, layout):
     return {
         "ok": True,
         "missing": False,
         "errors": [],
         "declaratives": data.get("declaratives", []),
+        "closing": planned_closing(data, layout.root),
         "cycles": [
-            {k: c.get(k, False if k in ("refactor", "guard") else "") for k in
-             ("id", "wave", "behaviour", "rmcu", "steps", "refactor", "guard", "methods", "decisions")}
+            {**{k: c.get(k, False if k in ("refactor", "guard") else "") for k in
+                ("id", "wave", "behaviour", "rmcu", "steps", "refactor", "guard", "methods", "decisions")},
+             "files": files_of(c, layout)}
             for c in sorted(data["cycles"], key=lambda c: (c["wave"], data["cycles"].index(c)))
         ],
     }
@@ -202,6 +235,8 @@ def listed(xs):
 
 def contract(c, phase):
     lines = [f"RM/CU: {c['rmcu']}", f"Behaviour: {c['behaviour']}"]
+    if c.get("models"):
+        lines.append(f"Model on (existing analogues — read first, copy their shape, never search for others): {' ; '.join(c['models'])}")
     if phase == "--red":
         lines += [
             f"Level / skill: {c['level']} / {c['skill']}",
@@ -253,9 +288,34 @@ def finished(c, state):
     if not state or not isinstance(state.get("red"), dict):
         return False
     red, green = state["red"], state.get("green")
-    if red.get("status") == "ALREADY_GREEN" or c.get("guard") or not red.get("table"):
+    if (red.get("status") == "ALREADY_GREEN" and not red.get("pendingRipple")) or c.get("guard") or not red.get("table"):
         return True
     return isinstance(green, dict) and green.get("status") == "GREEN" and green.get("exit") == 0
+
+
+def pending(c, root, work):
+    """Paths the cycle's GREEN must write (`ripple`, `toCreate`) the batch has not changed: dirty against HEAD,
+    and changed since the batch start when the file was already dirty then (`preexisting` line of WORK)."""
+    must = list(dict.fromkeys(path_of(e) for e in [*c["ripple"], *c["toCreate"]] if path_of(e)))
+    if not must:
+        return []
+    import kit_config
+    raw = subprocess.run(["git", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", *must],
+                         capture_output=True, cwd=root).stdout.decode("utf-8", errors="replace")
+    dirty = set(kit_config.porcelain_paths(raw))
+    before = work_file.preexisting(work_file.read(work), BATCH[0]) or {}
+
+    def moved(path):
+        if path not in dirty:
+            return False
+        if path not in before:
+            return True
+        full = os.path.join(root, path)
+        now = subprocess.run(["git", "hash-object", "--no-filters", path], capture_output=True, text=True,
+                             cwd=root).stdout.strip() if os.path.isfile(full) else ""
+        return now != before[path]
+
+    return [p for p in must if not moved(p)]
 
 
 def repo_root(sheet):
@@ -304,7 +364,7 @@ def main(argv):
         if errors:
             print(json.dumps({"ok": False, "missing": False, "errors": errors, "declaratives": [], "cycles": []}, ensure_ascii=False))
             return 1
-        print(json.dumps(index(data), ensure_ascii=False))
+        print(json.dumps(index(data, Layout(root)), ensure_ascii=False))
         return 0
     if mode == "--cycle":
         c = next((c for c in data["cycles"] if isinstance(c, dict) and c.get("id") == arg), None)
@@ -312,13 +372,20 @@ def main(argv):
             print(f"cycle {arg} absent from `## Cycles`", file=sys.stderr)
             return 1
         phase = argv[4] if len(argv) > 4 else "--red"
-        if phase not in ("--red", "--green"):
-            print("--cycle ID needs --red or --green", file=sys.stderr)
+        if phase not in ("--red", "--green", "--pending"):
+            print("--cycle ID needs --red, --green or --pending WORK", file=sys.stderr)
             return 1
         missing = [k for k in REQUIRED if k not in c]
         if missing:
             print(f"cycle {arg}: {', '.join(missing)} missing — run --index", file=sys.stderr)
             return 1
+        if phase == "--pending":
+            if len(argv) < 6:
+                print("--pending needs WORK", file=sys.stderr)
+                return 1
+            for path in pending(c, root, argv[5]):
+                print(path)
+            return 0
         print(contract(c, phase))
         return 0
     if mode in ("--methods", "--done", "--summary") and not arg:

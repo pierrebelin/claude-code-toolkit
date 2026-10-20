@@ -29,10 +29,13 @@ import unicodedata
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRESETS = os.path.join(KIT, "presets")
 DEFAULT_PRESET = "clean-architecture"
-TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd", "knowledge"}
+TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd", "knowledge", "closing"}
 # The knowledge base is stack-neutral: its defaults live here, not in a preset.
 KNOWLEDGE_DEFAULTS = {"root": "docs/business", "contexts": {}, "overviewBudget": 1500, "syncBudget": 12000, "askBudget": 1500}
 PREFIX_RE = re.compile(r"[A-Z][A-Z0-9]{1,5}")
+# What a preset or the repo leaves unset of `closing` (lib/closing_level.py): no rule, no cap.
+CLOSING_DEFAULTS = {"maxProductionFiles": 0, "full": []}
+CLOSING_CHANGES = re.compile(r"[AMD]+")
 CONTEXT_RE = re.compile(r"[A-Z][A-Za-z0-9]*")
 
 
@@ -197,6 +200,8 @@ class Config:
         self.interaction = self._list(t.get("interaction", []))
         self.aggregate = [self.expand(p) for p in layout.get("aggregate", [])]
         self.commands = data.get("commands", {})
+        cl = data.get("closing")
+        self.closing = merge(CLOSING_DEFAULTS, cl if isinstance(cl, dict) else {})
         self.test_tag = data.get("testTag", {})
         # Kept malformed for validate_knowledge(): a hook must not die over a key it does not read.
         k = data.get("knowledge")
@@ -322,6 +327,10 @@ class Config:
         return name if name in self.contexts.values() else None
 
     def command(self, name, suite=None):
+        if name == "testFast" and not self.commands.get("testFast"):
+            # Unset: the solution build then the suite command, the run it stands for.
+            parts = [self.command("build"), self.command("test", suite)]
+            return " && ".join(p for p in parts if p) if parts[1] else ""
         c = self.commands.get(name, "")
         if isinstance(c, dict):
             c = c.get("run", "")
@@ -386,7 +395,7 @@ def validate(root):
         out.append(("ok", "testTag", f"{a.name} — {a.example}"))
     except kit_testtag.TestTagError as e:
         out.append(("FAIL", "testTag", str(e)))
-    for name in ("build", "test"):
+    for name in ("build", "test", "testFast"):
         v = c.commands.get(name, "")
         if not isinstance(v, str):
             out.append(("FAIL", f"commands.{name}", "expects a string"))
@@ -398,6 +407,8 @@ def validate(root):
             re.compile(at["when"])
         except re.error as e:
             out.append(("FAIL", "commands.architectureTest.when", f"invalid regex: {e}"))
+    out += validate_test_fast(c)
+    out += validate_closing(c.data.get("closing"))
     tdd = c.data.get("tdd", {})
     if not isinstance(tdd, dict):
         out.append(("FAIL", "tdd", "expects {\"failedTest\": \"<regex>\", \"stubFailure\": \"<regex>\", \"stubLogic\": \"<regex>\"}"))
@@ -433,6 +444,56 @@ def validate(root):
     if not c.product:
         out.append(("ok", "product", "unset — {product} expands to * (one match expected)"))
     return out + validate_knowledge(c, cfg.get("knowledge"))
+
+
+def validate_test_fast(c):
+    """commands.testFast: its project and, once built, exactly one test assembly per glob."""
+    fast = c.commands.get("testFast", "")
+    if not isinstance(fast, str):
+        return []
+    if not fast:
+        return [("ok", "commands.testFast", "unset — RED and GREEN run commands.build then commands.test")]
+    if not c.dirs(c.test_roots):
+        return [("ok", "commands.testFast", "not checked — no test root yet")]
+    run = c.command("testFast", "UnitTests")
+    out = []
+    for token in shlex.split(run.replace("&&", " ")):
+        if not re.search(r"\.(csproj|dll|exe)$", token) or token.startswith("-"):
+            continue
+        found = glob.glob(os.path.join(c.root, token))
+        if token.endswith(".csproj") and not found:
+            out.append(("WARN", "commands.testFast", f"{token} absent — every RED and GREEN run fails on it: fix the path or unset testFast"))
+        elif not token.endswith(".csproj") and len(found) > 1:
+            out.append(("WARN", "commands.testFast", f"{token} matches {len(found)} files (several target frameworks or configurations) — narrow the glob"))
+    return out or [("ok", "commands.testFast", run)]
+
+
+def validate_closing(raw):
+    if raw is None:
+        return []
+    bad = ("FAIL", "closing", "expects {\"maxProductionFiles\": <n>, \"full\": [{\"name\": \"…\", \"path\": \"<regex>\", \"changes\": \"AMD\", \"scope\": \"sources|all\"}]}")
+    if not isinstance(raw, dict):
+        return [bad]
+    out = []
+    n = raw.get("maxProductionFiles", 0)
+    if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+        out.append(("FAIL", "closing.maxProductionFiles", "expects a count, 0 for no cap"))
+    rules = raw.get("full", [])
+    if not isinstance(rules, list):
+        return out + [bad]
+    for i, r in enumerate(rules):
+        if not (isinstance(r, dict) and isinstance(r.get("name"), str) and isinstance(r.get("path"), str)):
+            out.append(("FAIL", f"closing.full[{i}]", "expects {\"name\": \"…\", \"path\": \"<regex>\"}"))
+            continue
+        try:
+            re.compile(r["path"])
+        except re.error as e:
+            out.append(("FAIL", f"closing.full[{i}].path", f"invalid regex: {e}"))
+        if not CLOSING_CHANGES.fullmatch(str(r.get("changes", "AMD"))):
+            out.append(("FAIL", f"closing.full[{i}].changes", "expects letters among A (added), M (modified), D (deleted)"))
+        if r.get("scope", "sources") not in ("sources", "all"):
+            out.append(("FAIL", f"closing.full[{i}].scope", "expects sources (production files) or all"))
+    return out
 
 
 def validate_knowledge(c, raw):
@@ -532,6 +593,7 @@ def _cli(argv):
             "KIT_BUILD": c.command("build"),
             "KIT_ARCH_RUN": c.command("architectureTest"),
             "KIT_ARCH_WHEN": when,
+            "KIT_RULE_SHEET": c.rule_sheet,
         }
         for k, v in vals.items():
             print(f"{k}={shlex.quote(v)}")

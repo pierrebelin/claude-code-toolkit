@@ -113,6 +113,14 @@
       "when": ""
     }
   },
+  "closing": {
+    "maxProductionFiles": 12,
+    "full": [
+      {"name": "authorisation", "path": "(?i)(authori[sz]|permission|polic(y|ies)\b|securit|claims?\b|access(control|provider|rule|right)|grant)", "changes": "AMD"},
+      {"name": "migration", "path": "(?i)(^|/)migrations?/", "changes": "AMD"},
+      {"name": "public contract", "path": "(?i)(^|/)(api|contracts?|openapi)/", "changes": "MD"}
+    ]
+  },
   "tdd": {
     "failedTest": "^\\s*(?:failed|Failed|FAILED|FAIL|\\[FAIL\\]|✗|×)\\s+(\\S+)",
     "stubFailure": "NotImplemented(?:Exception|Error)|UnsupportedOperationException|[Nn]ot implemented",

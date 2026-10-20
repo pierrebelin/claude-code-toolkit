@@ -4,12 +4,12 @@ export const meta = {
   whenToUse: 'Implement a plan batch without human intervention. Argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`; plan, batch and run folder are derived from it.',
   phases: [
     { title: 'Design', detail: 'cycle index of the sheet; design writes the `## Cycles` block only when absent or invalid; declaratives' },
-    { title: 'RED', detail: 'tdd-test-author, waves in sequence, cycles of a wave in parallel' },
+    { title: 'RED', detail: 'tdd-test-author, waves in sequence, cycles of a wave in parallel; light closing: tdd-cycle writes a cycle\'s RED then its GREEN past a checkpoint the hook checks' },
     { title: 'GREEN', detail: 'tdd-implementer, serial, writes the cycle state and the handler CLAUDE.md' },
-    { title: 'Global green', detail: 'whole or filtered suites per test-scope.md, beside the pre-audit gate' },
+    { title: 'Global green', detail: 'whole or filtered suites per test-scope.md, beside the pre-audit gate; closing level full or light read off the batch diff' },
     { title: 'Closing', detail: 'cctoolkit pre-audit and what it lists, beside global green' },
-    { title: 'Audit', detail: 'cctoolkit audit-capture, ddd-tdd-auditor, each Blocking or Major on Correctness, Reuse or Placement checked once by a fresh agent, two retries at most' },
-    { title: 'Review', detail: 'adversarial-reviewer on the next sheet, beside the audit' },
+    { title: 'Audit', detail: 'full: cctoolkit audit-capture, ddd-tdd-auditor, each Blocking or Major on Correctness, Reuse or Placement checked once by a fresh agent, two retries at most; light: one review of the diff on Correctness and Scope, a second only after a Blocking' },
+    { title: 'Review', detail: 'adversarial-reviewer on the next sheet, beside the audit; light: only when the next sheet names a type the batch changed' },
     { title: 'Arbiter', detail: 'a stop is settled by the arbiter and listed for review after the run; a question only when no decision is defensible' },
     { title: 'Question', detail: 'human-only stop: question line in run/.work.jsonl, wait for the answer appended from the session, same run' },
     { title: 'Report', detail: 'run/batches/FX.md, written even on stop; DONE: batch committed, its lines reduced to the cycle states' },
@@ -59,9 +59,16 @@ const CYCLE = obj({
   guard: bool,
   methods: arr(str),
   decisions: str,
-})
+  files: arr(str),
+}, ['files'])
 
-const INDEX = obj({ ok: bool, missing: bool, errors: arr(str), declaratives: arr(str), cycles: arr(CYCLE) })
+// The closing level, `full` or `light` (lib/closing_level.py): planned by `sheet-cycles --index`,
+// read off the batch diff by `cctoolkit closing-level` once the suites are green.
+const FULL = 'full'
+const LIGHT = 'light'
+const CLOSING = obj({ level: { type: 'string', enum: [FULL, LIGHT] }, reasons: arr(str), production: int }, ['production'])
+
+const INDEX = obj({ ok: bool, missing: bool, errors: arr(str), declaratives: arr(str), closing: CLOSING, cycles: arr(CYCLE) }, ['closing'])
 
 const DESIGN = obj({ blocked: bool, reason: str, review: arr(str) }, ['review'])
 
@@ -76,8 +83,9 @@ const RED = obj({
   table: arr(obj({ test: str, case: str })),
   removed: arr(str),
   unreachable: arr(obj({ method: str, site: str, why: str })),
+  pendingRipple: arr(str),
   diagnostic: str,
-}, ['diagnostic', 'unreachable'])
+}, ['diagnostic', 'unreachable', 'pendingRipple'])
 
 const GREEN = obj({
   status: { type: 'string', enum: ['GREEN', 'BLOCKED'] },
@@ -99,7 +107,10 @@ const SUITES = obj({
   suites: arr(obj({ name: str, exit: int, scope: str, count: int })),
   fixes: arr(str),
   diagnostic: str,
-}, ['diagnostic'])
+  closing: str,
+}, ['diagnostic', 'closing'])
+
+const CYCLE_RESULT = obj({ red: RED, green: GREEN }, ['green'])
 
 const CLOSING = obj({ ok: bool, files: arr(str), preauditGreen: bool, failures: arr(str), diagnostic: str }, ['diagnostic'])
 
@@ -151,7 +162,7 @@ const retryHead = (step, n, reason) => `\n\nBefore anything else, one call: \`${
 const fileName = line => line.replace(/`/g, '').trim().replace(/^[ MADRCU?!]{1,2}\s+/, '').split(/\s+/)[0] || ''
 const short = (text, n = 40) => (text.length > n ? text.slice(0, n - 1) + '…' : text)
 
-const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], contests: [], rounds: [], review: null, audit: null, toReview: [], checked: [], refuted: [] }
+const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], contests: [], rounds: [], review: null, audit: null, toReview: [], checked: [], refuted: [], closing: null }
 const toReview = (step, text, why = '') => history.toReview.push({ step, text, why })
 let reviewing = null
 const USER = 'user decision'
@@ -304,7 +315,7 @@ function redContract(c, declaratives) {
       'A red guard = the code already breaks it: ## BLOCKED with the violations listed.',
     ] : []),
     'An existing assertion on a literal or contract this behaviour changes is listed in `Rewritten by you`: rewrite it to the new expected value, never into a negative assertion (does-not-contain, not-equal) that would pass whatever the code does.',
-    'Behaviour already in place on disk → `status: ALREADY_GREEN`, `table` = the methods run, `stubs` and `productionDiff` empty.',
+    `Behaviour already in place on disk → \`status: ALREADY_GREEN\`, \`table\` = the methods run, \`stubs\` and \`productionDiff\` empty, \`pendingRipple\` = the lines of \`cctoolkit sheet-cycles ${sheet} --cycle ${c.id} --pending ${workFile}\` (files of the ripple and creations the batch has not changed; a hook checks the list): the GREEN still runs on them.`,
     ...(declaratives.length ? [
       `Declarative artefacts already written by the orchestrator (common-rules §4.5, neither yours nor stubs): ${declaratives.join(' ; ')}`,
     ] : []),
@@ -316,6 +327,14 @@ function redContract(c, declaratives) {
     `Last step before the structured output, except on ## BLOCKED: one call, \`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` then the line \`{"kind": "cycle", "batch": "${batch}", "slug": "${slug(c.behaviour)}", "state": {"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": <your report>}}\` then \`CYCLE_STATE\`, \`<your report>\` = the object you return, same fields and values.`,
   ].filter(l => l !== '').join('\n')
 }
+
+// An ALREADY_GREEN whose ripple or creations are absent from the batch diff (sheet-cycles --pending):
+// the tests cover none of them, so only this GREEN lands them.
+const rippleOnly = files => (files.length
+  ? `
+
+The red test above already passes: no test covers the files below, which the batch diff does not hold yet. Your work is them, per the \`Signature ripple\` and \`To create\` lines of your contract: ${list(files)}. The filtered test stays green.`
+  : '')
 
 function greenContract(c, r) {
   const redTests = r.table.map(l => `\`${l.test}\``).join(', ')
@@ -400,12 +419,14 @@ function escalation(reasons, earlier, grants) {
   ].filter(l => l !== '').join('\n')
 }
 
-async function withRetry(step, launch, check, standing = '') {
+// `first`: the result of an attempt already made elsewhere (a tdd-cycle agent's RED or GREEN), checked
+// as the first attempt; its rejection opens the same retries, arbiter and escalation.
+async function withRetry(step, launch, check, standing = '', first = undefined) {
   const grants = grantsFrom(standing)
   let tries = 1
   const attempt = (suffix, options = {}) => launch(suffix, options).catch(() => null)
   const again = (suffix, options = {}) => { tries += 1; return attempt(retryHead(step, tries, reasons[reasons.length - 1] || '') + suffix, options) }
-  let result = await attempt(grants.tests.size || grants.cost ? decided(standing, grants) : '')
+  let result = first !== undefined ? first : await attempt(grants.tests.size || grants.cost ? decided(standing, grants) : '')
   let reason = check(result, grants)
   const reasons = reason ? [reason] : []
   if (reason && !reason.startsWith('BLOCKED')) {
@@ -443,12 +464,13 @@ async function withRetry(step, launch, check, standing = '') {
 const redLabel = (c, model) => `RED ${c.id} w${c.wave} ${short(c.behaviour)}${model ? ` ${model}` : ''}`
 const greenLabel = (c, model) => `GREEN ${c.id} ${short(c.behaviour)}${model ? ` ${model}` : ''}`
 
-function launchRed(c) {
+function launchRed(c, first = undefined) {
   const live = () => withRetry(
     `RED ${short(c.behaviour, 60)}`,
     (suffix, options) => agent(redContract(c, lotIndex.declaratives) + suffix, { agentType: 'cctoolkit:tdd-test-author', schema: RED, phase: 'RED', label: redLabel(c, options.model), ...options }),
     r => checkRed(c, r),
     c.decisions || '',
+    first,
   )
   if (c.resume) {
     const state = savedOf(c)
@@ -522,6 +544,7 @@ function renderReport(status, reason, verdict) {
     '',
     `Verdict: ${finalVerdict}`,
     '',
+    ...(history.closing ? [`Closing: ${history.closing.level} — ${cell(history.closing.reasons.join('; ') || 'no file on authorisation, migration or public contract, no ripple, few production files')}`, ''] : []),
     `## Closing summary — batch ${batch}`,
     '',
     `${cycles.length} TDD cycle(s)${cycles.some(c => c.resumed) ? `, ${cycles.filter(c => c.resumed).length} resumed from an earlier run` : ''}.`,
@@ -545,7 +568,7 @@ function renderReport(status, reason, verdict) {
     '### Audit',
     '',
     ...(history.verdicts.length
-      ? history.verdicts.map((v, i) => `- ${i ? `Resume ${i}` : 'Initial'}: ${v.verdict}${gapsOf(v).length ? ` (${gapsOf(v).map(g => g.severity).join(', ')})` : ''}`)
+      ? history.verdicts.map((v, i) => `- ${i ? `Resume ${i}` : history.closing && history.closing.level === LIGHT ? 'Light review (Correctness, Scope)' : 'Initial'}: ${v.verdict}${gapsOf(v).length ? ` (${gapsOf(v).map(g => g.severity).join(', ')})` : ''}`)
       : ['No audit.']),
     ...history.refuted.map(g => `- Refuted by verification: ${g.severity} — ${g.axis} — ${cell(g.gap)} → ${cell(g.why)}`),
     ...history.rounds.map(x => `- Round ${x.round}: findings ${x.open} → ${x.after}, files ${x.files.length}${x.diverged ? ' — diverging, rounds stopped' : ''}`),
@@ -698,7 +721,8 @@ if (!lotIndex || !lotIndex.ok) {
   lotIndex = result.index
 }
 
-const finishedAtStart = (c, s) => !!(s && s.red && (s.red.status === 'ALREADY_GREEN' || c.guard || !s.red.table.length ||
+const settledGreen = r => r.status === 'ALREADY_GREEN' && !(r.pendingRipple || []).length
+const finishedAtStart = (c, s) => !!(s && s.red && (settledGreen(s.red) || c.guard || !s.red.table.length ||
   (s.green && s.green.status === 'GREEN' && s.green.exit === 0)))
 const pending = []
 for (const c of lotIndex.cycles) {
@@ -730,8 +754,113 @@ if (lotIndex.declaratives.length) {
   if (reason) return await finish(BLOCKED, `declaratives — ${reason}`)
 }
 
-let pendingReds = waves.length ? launchWave(waves[0], 0) : null
-for (let n = 0; n < waves.length; n++) {
+// What follows an accepted RED, on both paths: the trace, the cases without GREEN, then the GREEN —
+// `first` the GREEN a tdd-cycle agent already wrote, checked as its first attempt. The stop reason, or null.
+async function afterRed(cycle, red, first = undefined) {
+  const trace = { behaviour: cycle.behaviour, rmcu: cycle.rmcu, red, green: null, ...(cycle.resume ? { resumed: true } : {}) }
+  history.cycles.push(trace)
+  for (const u of red.unreachable || []) toReview(`RED ${cycle.behaviour}`, `unreachable guard, test not written, removal proposed: \`${u.method}\` — ${u.site}`, u.why)
+  if (!red.table.length) {
+    log(`${cycle.behaviour}: no test written (already covered or unreachable) — no GREEN`)
+    trace.green = { ...noGreen(''), removed: (red.unreachable || []).length ? 'unreachable sites' : 'tests already covered' }
+    return null
+  }
+  const ripple = red.status === 'ALREADY_GREEN' ? red.pendingRipple || [] : []
+  if (ripple.length) {
+    log(`${cycle.behaviour}: tests already green, ripple not in the batch diff — GREEN runs on ${ripple.length} file(s)`)
+    toReview(`RED ${cycle.behaviour}`, `ALREADY_GREEN refused, ripple not in the batch diff: GREEN run on ${ripple.join(', ')}`)
+  } else if (red.status === 'ALREADY_GREEN') {
+    log(`${cycle.behaviour}: already in place on disk — GREEN observed, no GREEN`)
+    trace.green = noGreen('GREEN observed: behaviour already in place on disk at RED')
+    toReview(`RED ${cycle.behaviour}`, 'behaviour already in place on disk at RED: GREEN observed without a RED observed in this run', red.table.map(l => l.test).join(', '))
+    return null
+  }
+  if (cycle.guard) {
+    log(`${cycle.behaviour}: guard green at once — no GREEN`)
+    trace.green = noGreen('guard green at once, no GREEN')
+    return null
+  }
+  const { result: green, reason } = await withRetry(
+    `GREEN ${short(cycle.behaviour, 60)}`,
+    (suffix, options) => agent(greenContract(cycle, red) + rippleOnly(ripple) + suffix, { agentType: 'cctoolkit:tdd-implementer', schema: GREEN, phase: 'GREEN', label: greenLabel(cycle, options.model), ...options }),
+    checkGreen,
+    cycle.decisions || '',
+    first,
+  )
+  trace.green = green
+  return reason ? `GREEN ${cycle.behaviour} — ${reason}` : null
+}
+
+// Light closing: one tdd-cycle agent writes a cycle's RED, passes the checkpoint the TDD scope hook
+// checks on the tree (agents/tdd-cycle.md), then writes its GREEN. Its RED and GREEN go through the
+// same checks as two agents' would; a rejected one goes on as the first attempt of the usual path.
+// A resumed, refactor or guard cycle keeps the usual path.
+const combinable = c => !c.resume && !c.refactor && !c.guard
+
+function cycleContract(c) {
+  const red = redContract(c, lotIndex.declaratives).split('\n').filter(l => !l.startsWith('Last step before the structured output'))
+  const at = red.findIndex(l => l.startsWith('RED phase, cycle'))
+  return [
+    ...red.slice(0, at),
+    `Cycle ${c.id}, light batch: you write its RED, then its GREEN, in this one agent (agents/tdd-cycle.md). The RED part:`,
+    ...red.slice(at),
+    '',
+    `RED checkpoint, before any production beyond the stubs: \`cctoolkit tdd-scope red <<'RED_JSON'\` then your RED report as one JSON line, then \`RED_JSON\`. Refused → fix what it names and run it again; passed → one call, \`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` then the line \`{"kind": "cycle", "batch": "${batch}", "slug": "${slug(c.behaviour)}", "state": {"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": <the RED report>}}\` then \`CYCLE_STATE\`.`,
+    '',
+    `The GREEN part, once the checkpoint passed: your contract is \`${contractCommand(c, '--green')}\` (out of scope, to create, production you may fill, signature ripple, read bounded, elements, applied ids, invariants, expected cost). The red tests are those of your RED report; \`Cost\` line from \`cctoolkit access-cost --base ${workFile} ${batch} <production files>\`. No GREEN for an \`ALREADY_GREEN\` with an empty \`pendingRipple\` or a RED that wrote no test.`,
+    '',
+    'Structured output: `red` = the report the checkpoint accepted, unchanged; `green` = your `## GREEN` report (`production`, `command`, `exit`, `testsDiff`, `cost`, `independentOf`, `removed`, `flagged`; `BLOCKED` = `status: BLOCKED` + `diagnostic`).',
+    `Last step before the structured output, after a GREEN: one call, the same \`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` with \`"red"\` and \`"green": <your GREEN report>\` in \`state\`.`,
+  ].join('\n')
+}
+
+const cycleLabel = (c, model) => `${redLabel(c, model)} +GREEN`
+
+async function runCycle(c) {
+  if (!combinable(c)) {
+    const { result: red, reason, deferred } = await launchRed(c)
+    if (deferred && (c.guard || c.refactor)) {
+      log(`${c.behaviour}: left out, settled after the plan`)
+      return null
+    }
+    return reason ? `RED ${c.behaviour} — ${reason}` : afterRed(c, red)
+  }
+  const both = await agent(cycleContract(c), { agentType: 'cctoolkit:tdd-cycle', schema: CYCLE_RESULT, phase: 'RED', label: cycleLabel(c) }).catch(() => null)
+  const red = both ? both.red : null
+  if (checkRed(c, red)) {
+    log(`${c.behaviour}: cycle agent's RED rejected — ${short(checkRed(c, red), 60)}; RED retried alone`)
+    const { result, reason } = await launchRed(c, red)
+    return reason ? `RED ${c.behaviour} — ${reason}` : afterRed(c, result)
+  }
+  return afterRed(c, red, both.green || null)
+}
+
+// Cycles whose code files (tests, production, ripple) do not meet run side by side; the others wait.
+function disjoint(wave) {
+  const groups = []
+  for (const c of wave) {
+    const files = new Set(c.files || [])
+    const g = groups.find(x => (c.files || []).length && x.every(o => (o.files || []).length && !o.files.some(f => files.has(f))))
+    g ? g.push(c) : groups.push([c])
+  }
+  return groups
+}
+
+const planned = lotIndex.closing && lotIndex.closing.level === LIGHT ? LIGHT : FULL
+log(`closing planned ${planned}${lotIndex.closing && lotIndex.closing.reasons.length ? ` — ${short(lotIndex.closing.reasons.join(' ; '), 100)}` : ''}`)
+
+if (planned === LIGHT) {
+  for (const wave of waves) {
+    for (const group of disjoint(wave)) {
+      const stops = await parallel(group.map(c => () => runCycle(c)))
+      const stop = stops.find(Boolean)
+      if (stop) return await finish(BLOCKED, stop)
+    }
+  }
+}
+
+let pendingReds = planned === FULL && waves.length ? launchWave(waves[0], 0) : null
+for (let n = 0; planned === FULL && n < waves.length; n++) {
   const reds = await pendingReds
   pendingReds = null
   const deferrable = x => x && x.deferred && (x.cycle.guard || x.cycle.refactor)
@@ -746,35 +875,10 @@ for (let n = 0; n < waves.length; n++) {
   for (let i = 0; i < reds.length; i++) {
     if (deferrable(reds[i])) continue
     const { cycle, result: red } = reds[i]
-    const trace = { behaviour: cycle.behaviour, rmcu: cycle.rmcu, red, green: null, ...(cycle.resume ? { resumed: true } : {}) }
-    history.cycles.push(trace)
-    for (const u of red.unreachable || []) toReview(`RED ${cycle.behaviour}`, `unreachable guard, test not written, removal proposed: \`${u.method}\` — ${u.site}`, u.why)
-    if (!red.table.length) {
-      log(`${cycle.behaviour}: no test written (already covered or unreachable) — no GREEN`)
-      trace.green = { ...noGreen(''), removed: (red.unreachable || []).length ? 'unreachable sites' : 'tests already covered' }
-      continue
-    }
-    if (red.status === 'ALREADY_GREEN') {
-      log(`${cycle.behaviour}: already in place on disk — GREEN observed, no GREEN`)
-      trace.green = noGreen('GREEN observed: behaviour already in place on disk at RED')
-      toReview(`RED ${cycle.behaviour}`, 'behaviour already in place on disk at RED: GREEN observed without a RED observed in this run', red.table.map(l => l.test).join(', '))
-      continue
-    }
-    if (cycle.guard) {
-      log(`${cycle.behaviour}: guard green at once — no GREEN`)
-      trace.green = noGreen('guard green at once, no GREEN')
-      continue
-    }
-    const { result: green, reason } = await withRetry(
-      `GREEN ${short(cycle.behaviour, 60)}`,
-      (suffix, options) => agent(greenContract(cycle, red) + suffix, { agentType: 'cctoolkit:tdd-implementer', schema: GREEN, phase: 'GREEN', label: greenLabel(cycle, options.model), ...options }),
-      checkGreen,
-      cycle.decisions || '',
-    )
-    trace.green = green
-    if (reason) {
+    const stop = await afterRed(cycle, red)
+    if (stop) {
       if (pendingReds) await pendingReds
-      return await finish(BLOCKED, `GREEN ${cycle.behaviour} — ${reason}`)
+      return await finish(BLOCKED, stop)
     }
   }
 }
@@ -788,6 +892,7 @@ const runSuites = (suffix = '') => agent(
     `Pick the suites the diff requires (\`cctoolkit batch-baseline diff ${workFile} ${batch} --name-only\`), run them once, output to a file in \`<tmp>\`, independent suites in a single message. ${TMP}.`,
     'Red → fix production code until fully green; never weaken nor remove a test to pass.',
     'Return each suite with its exit, its scope (filter or "whole suite") and its test count.',
+    `Once green, last call: \`cctoolkit closing-level ${sheet} ${workFile} --record${nextSheet ? ` --next ${nextSheet}` : ''}\`; \`closing\` = the JSON line it printed, verbatim.`,
   ].join('\n') + suffix,
   { schema: SUITES, phase: 'Global green', label: 'suites' },
 ).catch(() => null)
@@ -813,6 +918,18 @@ const [{ result: suites }, { result: gated }] = await Promise.all([
 history.suites = suites
 history.gate = gated
 if (!suites || !suites.green) return await finish(BLOCKED, `global green not reached — ${suites ? suites.diagnostic || '' : 'agent without result'}`)
+
+// The level the diff earns decides the closing, whatever the plan said; unread, the closing is full.
+function closingOf(text) {
+  try {
+    const c = JSON.parse(String(text || '').trim())
+    if (c && (c.level === FULL || c.level === LIGHT) && Array.isArray(c.reasons)) return { review: true, reviewWhy: '', ...c }
+  } catch (e) { /* unread */ }
+  return null
+}
+history.closing = closingOf(suites.closing) || { level: FULL, reasons: ['closing level unread — full by default'], review: true, reviewWhy: '' }
+const light = history.closing.level === LIGHT
+log(`closing ${history.closing.level}${history.closing.reasons.length ? ` — ${short(history.closing.reasons.join(' ; '), 100)}` : ''}`)
 if (!gated || !gated.ok) toReview('Closing', `pre-audit not run, the audit judges it: ${gated ? gated.diagnostic || '' : 'agent without result'}`)
 else if (!gated.preauditGreen) toReview('Closing', `pre-audit RED, the audit judges it: ${gated.failures.join(' ; ')}`)
 
@@ -949,11 +1066,22 @@ function amendNext(questions, gaps) {
   ).catch(() => null)
 }
 
-if (nextSheet) {
+if (nextSheet && (!light || history.closing.review)) {
   reviewing = reviewNext('next batch review')
+} else if (nextSheet) {
+  log(`next batch review skipped — ${history.closing.reviewWhy || 'light closing'}`)
 }
 
-function fixGaps(verdict, round, answered = []) {
+// One line per cycle for the fix brief: its id, its behaviour, the files its RED and GREEN reported.
+function cycleFiles() {
+  return (lotIndex?.cycles ?? []).map(c => {
+    const t = history.cycles.find(x => x.behaviour === c.behaviour)
+    const files = [...new Set([...(t?.red?.tests ?? []), ...(t?.red?.stubs ?? []), ...(t?.green?.production ?? []), ...(t?.red?.pendingRipple ?? [])].map(relative).filter(Boolean))]
+    return `- ${c.id} — ${short(c.behaviour, 60)} — ${list(files)}`
+  })
+}
+
+function fixGaps(verdict, round, answered = [], lightRound = null) {
   return agent(
     [
       FRAME,
@@ -965,8 +1093,13 @@ function fixGaps(verdict, round, answered = []) {
       answered.length ? `Answers of the audit to the earlier contests — Counter and Refute are fixed this round: ${answered.map(a => `${a.gap} → ${a.answer}: ${a.text}`).join(' ; ')}` : '',
       history.refuted.length ? `Refuted by verification, leave untouched even where the verdict below still lists them: ${history.refuted.map(g => g.gap).join(' ; ')}` : '',
       'A fix that adds a rule or a branch goes through a red test first.',
-      `The batch diff is already gathered in \`${capture}\` (${TMP}): read the hunks a gap cites there, open only the files its \`Evidence\` names, never \`git diff\` the batch again.`,
-      'Run only the filtered tests of the classes you touch (filtered command of `<kit>/skills/implement-tdd/references/test-scope.md`), never a whole suite: the audit that follows reruns the suites. Return them with exit and scope.',
+      `The batch diff is already gathered in \`${lightRound ? lightRound.diff : capture}\` (${TMP}): read the hunks a gap cites there, open only the files its \`Evidence\` names, never \`git diff\` the batch again.`,
+      `The sheet already holds the analysis of each cycle: for the cycle owning a file a gap cites, \`cctoolkit sheet-cycles ${sheet} --cycle <id> --green\` prints its production, signature ripple (each file with the call it needs), elements and invariants — read that, never re-derive it from the handlers. Cycles and the files each wrote:`,
+      ...cycleFiles(),
+      'Change code with Edit and Write only: never a script that rewrites files through Bash (python, sed, a heredoc), never a `/tmp` path. Bash builds, runs tests and reads.',
+      lightRound && !lightRound.reaudit
+      ? `No audit follows this round: once fixed, run in one message the suites the global green ran, same scope (\`<kit>/skills/implement-tdd/references/test-scope.md\`): ${history.suites.suites.map(x => `${x.name} (${x.scope})`).join(', ')}. Red → fix production, never a test. Return them with exit and scope.`
+      : 'Run only the filtered tests of the classes you touch (filtered command of `<kit>/skills/implement-tdd/references/test-scope.md`), never a whole suite: the audit that follows reruns the suites. Return them with exit and scope.',
       '',
       verdict.block,
     ].filter(l => l !== '').join('\n'),
@@ -1079,9 +1212,89 @@ const scopeGap = f => ({ severity: 'Major', axis: 'Scope', gap: `Audit fix chang
 const openCount = v => v.gaps.filter(g => g.severity !== 'Minor').length
 const rebuttals = x => (x ? x.contested.map(c => ({ gap: c.gap, ...(answerOf(x.responses, c) || { answer: '', text: '' }) })).filter(a => a.answer === 'Counter' || a.answer === 'Refute') : [])
 
+// Light closing: one review of the batch diff on the Correctness and Scope axes, no capture, no
+// verification of the findings; a second one only after a Blocking, on the fix's change set.
+const lightDiff = `<tmp>/light-${batch}.diff`
+
+function lightReview(retry, again = false) {
+  const notes = notesOf(retry ? `light-resume-${retry.round}` : 'light')
+  return agent(
+    [
+      FRAME,
+      '',
+      `Light review of batch ${batch} (closing level light: ${history.closing.reasons.length ? history.closing.reasons.join(' ; ') : 'no file on authorisation, migration or public contract, no ripple, few production files'}). Two axes only, Correctness and Scope.`,
+      `Read in \`<kit>/skills/verify-ddd-tdd/SKILL.md\`, by range: the Correctness and Scope rows of the §2 table, the bug-class paragraph under it, § Severities and § Verdict. Nothing else of the skill: no coverage table, no other axis, no validation run — the suites are green (${history.suites.suites.map(x => `${x.name} exit ${x.exit}, ${x.scope}`).join('; ')}).`,
+      retry
+        ? `Mode resume: the Blocking gaps below were fixed. Read only the fix's change set — ${retry.changeSet ? `${list(retry.changeSet.files)}, diff in \`${retry.changeSet.diff}\`` : `the files it declared: ${list(retry.fix.files)}`} — and judge each gap closed or not, plus Scope on the change set. Gaps:\n${retry.verdict.gaps.filter(g => g.severity !== 'Minor').map(e => `| ${e.severity} | ${e.axis} | ${e.gap} | ${e.evidence} | ${e.closure} | ${e.fix} |`).join('\n')}`
+        : `The diff: ${again ? `already in \`${lightDiff}\`, never rerun it` : `one call, \`mkdir -p "$(${tmpCommand})" && cctoolkit batch-baseline diff ${workFile} ${batch} --code > "$(${tmpCommand})/light-${batch}.diff"\`, then read \`${lightDiff}\``} (${TMP}). Walk it hunk by hunk: tie each to a cycle's behaviour or a step of \`${sheet}\`, judge Correctness on the production hunks. A cycle's contract: \`cctoolkit sheet-cycles ${sheet} --cycle <id> --green\`. Cycles and the files each wrote:`,
+      ...(retry ? [] : cycleFiles()),
+      again ? `A previous attempt ended without structured output: read \`${notes}\` first, never re-establish what it settled.` : `Notes: \`${notes}\`. Empty it first (\`: > <path>\`), then append each finding the moment you settle it, one line \`severity | axis | gap | evidence | closure | fix\`.`,
+      'Search with `git grep -n -e <pattern> -- <paths>`, never a recursive grep; every command in the foreground.',
+      history.toReview.length ? `Decisions the run took without the user, listed for the user review — never a gap for being absent from the sheet: ${history.toReview.map(x => `${x.step}: ${x.text}`).join(' ; ')}` : '',
+      '',
+      'Structured output: `block` = the markdown verdict block (fixed format of the skill), `gaps` = its Blocking/Major rows, `minors` = its minors, `validations` = empty, `hypotheses` = the Hn.',
+    ].filter(l => l !== '').join('\n'),
+    { agentType: 'cctoolkit:ddd-tdd-auditor', schema: VERDICT, phase: 'Audit', label: `review light${retry ? ` retry ${retry.round}` : ''}${again ? ' again' : ''}` },
+  ).catch(() => null)
+}
+
+async function reviewedLight(retry) {
+  const verdict = await lightReview(retry)
+  if (verdict) return verdict
+  log('light review without result — one more attempt')
+  return lightReview(retry, true)
+}
+
+const hasBlocking = v => v.gaps.some(g => g.severity === 'Blocking')
+
+async function closeLight() {
+  let verdict = await reviewedLight(null)
+  if (!verdict) {
+    auditPending()
+    return null
+  }
+  history.verdicts.push(verdict)
+  if (verdict.verdict !== GAPS) return verdict
+  const reaudit = hasBlocking(verdict)
+  const before = openCount(verdict)
+  const opened = reaudit ? await openRound(1) : null
+  const fix = await fixGaps(verdict, 1, [], { diff: lightDiff, reaudit })
+  if (!fix) return verdict
+  const { contested, objections } = contestsOf(fix)
+  history.fixes.push({ ...fix, objections })
+  for (const c of contested) toReview('Audit', `light closing, contest left to the user: ${c.gap} — harm: ${c.harm}`)
+  if (!reaudit) {
+    history.audit = GAPS_CARRIED
+    for (const g of verdict.gaps.filter(g => g.severity !== 'Minor' && !contested.some(c => sameGap(c.gap, g.gap)))) {
+      toReview('Audit', `light closing: ${g.severity} — ${g.axis} — ${g.gap} fixed without a second review`, `${g.evidence} ; fix: ${fix.fixed.join('; ')}`)
+    }
+    history.unreviewed = true
+    return verdict
+  }
+  const closed = opened && opened.ok ? await closeRound(1, before, contested) : null
+  const changeSet = closed && closed.ok ? { files: closed.files, diff: closed.diff } : null
+  const next = await reviewedLight({ verdict, fix, round: 1, changeSet })
+  if (!next) {
+    auditPending()
+    return verdict
+  }
+  verdict = next
+  history.verdicts.push(verdict)
+  history.rounds.push({ round: 1, open: before, files: changeSet ? changeSet.files : fix.files, contested, responses: [], after: openCount(verdict) })
+  return verdict
+}
+
 phase('Audit')
-let verdict = await firstAudit()
-if (!verdict) auditPending()
+let verdict = light ? await closeLight() : await firstAudit()
+if (light) {
+  if (verdict && verdict.verdict === GAPS) {
+    if (wrongProduction(verdict)) {
+      return await finish(GAPS, 'Blocking on the Correctness axis after the fix: production is wrong', verdict)
+    }
+    history.audit = history.audit || GAPS_CARRIED
+    if (!history.unreviewed) for (const g of verdict.gaps.filter(g => g.severity !== 'Minor')) toReview('Audit', `${g.severity} — ${g.axis} — ${g.gap}`, `${g.evidence} ; proposed fix: ${g.fix}`)
+  }
+} else if (!verdict) auditPending()
 else {
   verdict = await verified(verdict)
   history.verdicts.push(verdict)

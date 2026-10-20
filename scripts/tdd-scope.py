@@ -6,6 +6,10 @@
         else removed); a path the agent did not change is left as is.
     cctoolkit tdd-scope evidence [--since EPOCH]
         prints the evidence the auditor judges, one `stub-logic <file>: <lines>` line each.
+    cctoolkit tdd-scope red   (RED report as JSON on stdin)
+        the RED checkpoint of a `tdd-cycle` agent: the RED checks run on the tree; passed, the
+        agent is at GREEN, test files read-only. Exit 0 passed, 1 refused (the reason printed).
+        The TDD scope hook adds `--agent <id> --transcript <path>`: typed by hand, it is refused.
 """
 import json
 import os
@@ -27,6 +31,24 @@ def main(argv):
             print(f"kit.config.json: {e}", file=sys.stderr)
             return 3
         return tdd_scope.restore(cfg, argv[2], argv[3:])
+    if argv[1] == "red":
+        opt = {k: argv[argv.index(k) + 1] for k in ("--agent", "--transcript") if k in argv and argv.index(k) + 1 < len(argv)}
+        if not opt.get("--agent"):
+            print("tdd-scope red: no agent id — run it from a tdd-cycle agent, the TDD scope hook adds it", file=sys.stderr)
+            return 2
+        try:
+            report = json.loads(sys.stdin.read() or "null")
+        except ValueError as e:
+            print(f"RED checkpoint refused: the report is no JSON ({e})")
+            return 1
+        try:
+            cfg = kit_config.load()
+        except kit_config.KitConfigError as e:
+            print(f"kit.config.json: {e}", file=sys.stderr)
+            return 3
+        passed, message = tdd_scope.checkpoint(cfg, opt["--agent"], opt.get("--transcript", "-"), report)
+        print(message if passed else f"RED checkpoint refused: {message}")
+        return 0 if passed else 1
     if argv[1] == "evidence":
         since = float(argv[argv.index("--since") + 1]) if "--since" in argv else 0.0
         try:

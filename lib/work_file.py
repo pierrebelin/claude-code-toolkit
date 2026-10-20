@@ -60,7 +60,7 @@ else:
         fcntl.flock(f, fcntl.LOCK_UN)
 
 NAME = ".work.jsonl"
-KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker", "ack")
+KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker", "ack", "closing")
 
 
 def tmp_dir(name: str) -> Path:

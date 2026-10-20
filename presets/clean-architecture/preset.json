@@ -34,10 +34,20 @@
   "commands": {
     "build": "rtk dotnet build {product}.sln --no-restore",
     "test": "rtk dotnet test --project tests/{product}.{suite}/{product}.{suite}.csproj --no-build --no-restore",
+    "testFast": "rtk dotnet build tests/{product}.{suite}/{product}.{suite}.csproj --no-restore && dotnet tests/{product}.{suite}/bin/Debug/net*/{product}.{suite}.dll",
     "architectureTest": {
       "run": "rtk dotnet test --project tests/{product}.ArchitectureTests/{product}.ArchitectureTests.csproj --no-build --no-restore",
       "when": "^src/.*(Handler|Endpoints/|Repositories/|Extensions/|DbContext)"
     }
+  },
+  "closing": {
+    "maxProductionFiles": 12,
+    "full": [
+      {"name": "authorisation", "path": "(?i)(authori[sz]|permission|polic(y|ies)\\b|securit|claims?\\b|access(control|provider|rule|right)|grant)", "changes": "AMD"},
+      {"name": "migration", "path": "(?i)(^|/)migrations?/", "changes": "AMD"},
+      {"name": "public contract", "path": "^src/[^/]*\\.Abstractions[^/]*/", "changes": "MD"},
+      {"name": "approved snapshot", "path": "\\.verified\\.[^/]+$", "changes": "MD", "scope": "all"}
+    ]
   },
   "tdd": {
     "failedTest": "^\\s*(?:failed|Failed|FAILED|\\[FAIL\\]|✗|×)\\s+(\\S+)",

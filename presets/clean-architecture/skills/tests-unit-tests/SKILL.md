@@ -127,6 +127,6 @@ public sealed class Mock[Entity]Repository : I[Entity]Repository
 
 ## Verification
 
-- [ ] `commands.test` with `{suite}` = `UnitTests`, narrowed to `*[Handler]Tests` (`skills/implement-tdd/references/test-scope.md` § Runner), green
+- [ ] `commands.testFast` with `{suite}` = `UnitTests` (the test project built alone, then run), narrowed to `*[Handler]Tests` (`skills/implement-tdd/references/test-scope.md` § Runner), green
 - [ ] Real handler under test; Infrastructure mocks only
 - [ ] Query by result, command by `SavedEvents`

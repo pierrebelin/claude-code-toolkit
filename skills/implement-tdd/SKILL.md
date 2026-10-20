@@ -6,7 +6,7 @@ argument-hint: "[batch FX <global plan path> | <global plan path> | batch FX —
 
 # Strict TDD — launch the chain
 
-The TDD chain is the `run-lot` workflow (`workflows/run-lot.js`, shipped by the plugin): cycles read from the sheet's `## Cycles` block (design only when absent), RED (`tdd-test-author`), GREEN + REFACTOR + COST + handler `CLAUDE.md` (`tdd-implementer`), global green beside the pre-audit gate, audit (`ddd-tdd-auditor`), next-sheet review (`adversarial-reviewer`) beside the audit. The script holds the sequence; agent definitions, `.claude/rules/*.md` and `references/` hold the method. Never run the chain by hand, never commit by hand: the workflow commits each `DONE` batch itself (`cctoolkit batch-baseline commit`).
+The TDD chain is the `run-lot` workflow (`workflows/run-lot.js`, shipped by the plugin): cycles read from the sheet's `## Cycles` block (design only when absent), RED (`tdd-test-author`), GREEN + REFACTOR + COST + handler `CLAUDE.md` (`tdd-implementer`), global green beside the pre-audit gate, audit (`ddd-tdd-auditor`), next-sheet review (`adversarial-reviewer`) beside the audit. A batch whose files touch no authorisation, migration nor public contract, with few production files and no ripple, closes `light` (`cctoolkit closing-level`): one `tdd-cycle` agent per cycle for RED then GREEN, one review of the diff on Correctness and Scope, the next sheet reviewed only when it names a type the batch changed; the report's `Closing:` line says which and why. The script holds the sequence; agent definitions, `.claude/rules/*.md` and `references/` hold the method. Never run the chain by hand, never commit by hand: the workflow commits each `DONE` batch itself (`cctoolkit batch-baseline commit`).
 
 $ARGUMENTS
 

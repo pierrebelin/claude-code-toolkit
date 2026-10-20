@@ -20,7 +20,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
 | `docs/` | context cost, the frozen literals registry, the README screenshots |
-| `dev/` | maintainer tools: `bump.sh`, `release-check.sh`, `turn-batching-check.py` (batching and context fill measured from the transcripts), `knowledge-pane-demo.sh` (the mod's demo copy of `examples/docs/business/`) |
+| `dev/` | maintainer tools: `bump.sh`, `release-check.sh`, `turn-batching-check.py` (batching and context fill measured from the transcripts), `workflow-timing.py` (duration per phase and per agent of a workflow run, reads and greps per agent), `knowledge-pane-demo.sh` (the mod's demo copy of `examples/docs/business/`) |
 
 ## Anonymisation — do not break it
 

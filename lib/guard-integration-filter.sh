@@ -1,14 +1,15 @@
 #!/bin/bash
 # bash-dispatch module — the IntegrationTests suite never runs whole.
-# Passes another project, or a run carrying `--filter-class` / `--filter-method`.
+# Passes another project, a build, or a run carrying `--filter-class` / `--filter-method`.
 # Reads $HOOK_CMD, prints the hook JSON when it decides.
 set -u
 
 cmd="${HOOK_CMD:-}"
 [ -n "$cmd" ] || exit 0
 
-# Fast bail-out: two substrings, no subprocess.
-case "$cmd" in *"dotnet test"*) ;; *) exit 0 ;; esac
+# Fast bail-out: two substrings, no subprocess. A test assembly run directly (`commands.testFast`)
+# is a test run too.
+case "$cmd" in *"dotnet test"*|*IntegrationTests.dll*|*IntegrationTests.exe*) ;; *) exit 0 ;; esac
 case "$cmd" in *IntegrationTests*) ;; *) exit 0 ;; esac
 
 case "$cmd" in

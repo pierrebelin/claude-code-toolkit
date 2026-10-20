@@ -114,10 +114,19 @@ TOUCHED_CLASSES="$(python3 "$KIT_PY" diff-test-classes "$ROOT" <"$DIFF_FILE")"
 TOUCHED_TRAITS="$(python3 "$KIT_PY" diff-tags "$ROOT" <"$DIFF_FILE")"
 UNTESTED="$(python3 "$SCRIPTS"/rules-coverage.py --untested 2>&1)"
 STALE=""
+OLD_UNBOUND=""
 while IFS= read -r l; do
     case "$l" in
         *"DEAD REFERENCE"*|*"RÉFÉRENCE MORTE"*) needles="$TOUCHED_TRAITS" ;;
-        *"UNBOUND TEST"*|*"TEST NON RATTACHÉ"*) needles="$TOUCHED_CLASSES" ;;
+        *"UNBOUND TEST"*|*"TEST NON RATTACHÉ"*)
+            # A method the diff does not add predates the batch: its class gained a traited test, not it.
+            m="${l##*.}"; m="${m%% *}"
+            for n in $TOUCHED_CLASSES; do
+                [[ "$l" == *"$n"* ]] || continue
+                if [[ -n "$m" ]] && grep -qE "^\+.*\b${m}\b" "$DIFF_FILE"; then STALE+="$l"$'\n'; else OLD_UNBOUND+="$l"$'\n'; fi
+                break
+            done
+            continue ;;
         *" with no test — "*|*" sans test — "*)
             h="${l%%:*}"; h="${h##*/}"
             grep -qF -- "/$h/" <<<"$CHANGED" && STALE+="$l"$'\n'
@@ -128,7 +137,19 @@ while IFS= read -r l; do
         if [[ "$l" == *"$n"* ]]; then STALE+="$l"$'\n'; break; fi
     done
 done <<<"$UNTESTED"
-if [[ -z "$STALE" ]]; then
+if [[ -n "$OLD_UNBOUND" ]]; then
+    printf '  · %s\n' "unbound tests older than the batch, in classes it touches — reported, never failed"
+    while IFS= read -r l; do [[ -n "$l" ]] && note "$l"; done <<<"$OLD_UNBOUND"
+fi
+# Rule sheets the repo keeps out of Git exist in no fresh checkout: the gate cannot judge them.
+if git check-ignore -q -- "${SOURCE_DIRS[0]:-src}/.kit-probe/$KIT_RULE_SHEET" 2>/dev/null; then
+    if [[ -n "$STALE" ]]; then
+        printf '  · %s\n' "RM traits against the handler tables: $KIT_RULE_SHEET is git-ignored in this repo — reported, never failed; never recreate a rule sheet to turn this gate green"
+        while IFS= read -r l; do [[ -n "$l" ]] && note "$l"; done <<<"$STALE"
+    else
+        ok "RM traits: no dead reference, no unbound test, no rule touched without a test"
+    fi
+elif [[ -z "$STALE" ]]; then
     ok "RM traits: no dead reference, no unbound test, no rule touched without a test"
 else
     ko "RM traits inconsistent with the handler rules tables (\`kit:rules\`) — update the handler CLAUDE.md or write the rule's test before the audit"

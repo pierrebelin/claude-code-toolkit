@@ -118,7 +118,7 @@ public class [MethodName]Tests : IAsyncLifetime
 
 ## Final verification
 
-- [ ] Target test green: the suite's test-mode variable, then `commands.test` with `{suite}` = `IntegrationTests`, narrowed to `*[MethodName]Tests` (`skills/implement-tdd/references/test-scope.md` § Runner, § 3)
+- [ ] Target test green: the suite's test-mode variable, then `commands.testFast` with `{suite}` = `IntegrationTests` (the test project built alone, then run), narrowed to `*[MethodName]Tests` (`skills/implement-tdd/references/test-scope.md` § Runner, § 3)
 - [ ] Direct `DbContext` seeding, `BaseTestFixture` / `DatabaseContainerPool` fixture
 - [ ] Persisted state verified after detaching or re-reading where needed
 - [ ] This test really covers persistence, not business rules

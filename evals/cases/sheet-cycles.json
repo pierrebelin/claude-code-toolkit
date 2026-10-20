@@ -94,6 +94,26 @@
       "path": "sc/registry.md",
       "kind": "text",
       "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Cas 1\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenCase1\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C2\", \"wave\": 2, \"behaviour\": \"Cas 2\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenCase2\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C3\", \"wave\": 3, \"behaviour\": \"Cas 3\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenCase3\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C4\", \"wave\": 4, \"behaviour\": \"Cas 4\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenCase4\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/pend/X-PLAN-F1.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [\"src/P/R.cs — call Check()\"], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/forced.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [\"src/P/H.cs — call Check()\"], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\", \"models\": [\"src/P/H.cs — same handler shape\"]}], \"closing\": \"full\"}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/badclosing.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\", \"models\": [\"src/P/Gone.cs\"]}], \"closing\": \"quick\"}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/asklight.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [\"src/P/H.cs — call Check()\"], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\", \"models\": [\"src/P/H.cs — same handler shape\"]}], \"closing\": \"light\"}\n```\n\n## Assumptions\n"
     }
   ],
   "cases": [
@@ -262,6 +282,46 @@
       "expect": {
         "exit": 1,
         "stdout": "in the `production` of 4 cycles (C1, C2, C3, C4), at most 3"
+      }
+    },
+    {
+      "name": "--pending lists the ripple and creations the batch has not changed: untouched, changed, dirty before the batch and unchanged since, all written",
+      "cmd": "R={{FIX}}/pend-{{SID}}; rm -rf $R && mkdir -p $R/src/P && cp {{FIX}}/sc/pend/X-PLAN-F1.md $R/ && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class R {}\\n' > src/P/R.cs && printf 'class H {}\\n' > src/P/H.cs && git add -A && git commit -qm init && : > w.jsonl && P(){ python3 {{KIT}}/scripts/sheet-cycles.py X-PLAN-F1.md --cycle C1 --pending w.jsonl --root $R | tr '\\n' ','; } && a=$(P) && printf 'class R { void Check() {} }\\n' > src/P/R.cs && b=$(P) && printf '{\"kind\": \"preexisting\", \"batch\": \"F1\", \"files\": {\"src/P/R.cs\": \"%s\"}}\\n' $(git hash-object --no-filters src/P/R.cs) > w.jsonl && c=$(P) && printf 'class New {}\\n' > src/P/New.cs && printf 'class R { void Check() { } }\\n' > src/P/R.cs && e=$(P) && echo \"$a|$b|$c|$e\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "src/P/R.cs,src/P/New.cs,|src/P/New.cs,|src/P/R.cs,src/P/New.cs,|"
+      }
+    },
+    {
+      "name": "--index plans the closing level: light on a small block with no rule matched, its cycles' code files listed",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --index --root {{FIX}}/sc | jq -c '[.closing.level, .closing.reasons, .cycles[0].files]'",
+      "expect": {
+        "exit": 0,
+        "stdout": "[\"light\",[],[\"src/P/H.cs\",\"src/P/New.cs\",\"tests/Shop.UnitTests/A/ATests.cs\"]]"
+      }
+    },
+    {
+      "name": "--index plans a full closing when the block forces it and a cycle carries a ripple; the contract prints the cycle's models first",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/forced.md --index --root {{FIX}}/sc | jq -r '.closing.level, (.closing.reasons | join(\" ; \"))' | tr '\n' '|' && python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/forced.md --cycle C1 --red --root {{FIX}}/sc | sed -n 3p",
+      "expect": {
+        "exit": 0,
+        "stdout": "full|sheet: `closing` set to full ; signature ripple in C1|Model on (existing analogues — read first, copy their shape, never search for others): src/P/H.cs — same handler shape"
+      }
+    },
+    {
+      "name": "--index refuses a `closing` other than full or light and a model path that does not exist",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/badclosing.md --index --root {{FIX}}/sc | jq -r '.errors | join(\" ; \")'",
+      "expect": {
+        "exit": 0,
+        "stdout": "cycle C1: `models` path absent: src/P/Gone.cs — a model is an existing file to imitate ; `closing` is \"full\", \"light\" or absent"
+      }
+    },
+    {
+      "name": "--index plans a light closing when the block asks for it: its ripple and production cap lifted",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/asklight.md --index --root {{FIX}}/sc | jq -r '.closing.level, (.closing.reasons | join(\" ; \"))' | tr '\n' '|'",
+      "expect": {
+        "exit": 0,
+        "stdout": "light|sheet: `closing` set to light (production cap and ripple lifted)|"
       }
     }
   ]

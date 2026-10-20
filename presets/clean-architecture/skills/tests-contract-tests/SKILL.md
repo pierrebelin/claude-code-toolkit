@@ -48,7 +48,7 @@ public sealed class Create[Entity]Tests : BaseEndpointTests
 
 ## Verification
 
-- [ ] `commands.test` with `{suite}` = `ContractTests`, narrowed to `*[Endpoint]Tests` (`skills/implement-tdd/references/test-scope.md` § Runner), green
+- [ ] `commands.testFast` with `{suite}` = `ContractTests` (the test project built alone, then run), narrowed to `*[Endpoint]Tests` (`skills/implement-tdd/references/test-scope.md` § Runner), green
 - [ ] Single route, happy path, plus error only when its HTTP contract changes; snapshot re-read
 - [ ] No duplicated business rule; contractual error mapping centralised
 - [ ] Infrastructure mocks only, stable IDs

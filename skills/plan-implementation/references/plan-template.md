@@ -186,6 +186,7 @@ TDD contract of the batch, read by `run-lot` through `cctoolkit sheet-cycles <sh
    "toCreate": ["src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs"],
    "production": ["src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs", "src/{{PRODUCT}}.Domain/[...]/Aggregates/[Aggregate].cs", "src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/CLAUDE.md"],
    "ripple": [], "boundedGreen": [],
+   "models": ["src/{{PRODUCT}}.Application/[Context]/[Feature]/[SiblingAction]/[SiblingHandler].cs — same command shape", "tests/{{PRODUCT}}.UnitTests/[Context]/[Feature]/[SiblingAction]/[SiblingAction]Tests.cs"],
    "elements": "[Aggregate].Create(...); [Command](props) → [EntityId]",
    "appliedIds": "DDD-01, DDD-02, APP-01", "invariants": "[RM-XX] — removes [defensive branch]",
    "expectedCost": "1 read + 1 write to Infrastructure, independent of [input]"

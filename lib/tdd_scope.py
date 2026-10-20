@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """What the RED and GREEN agents may write, checked on the tree, never on their word.
 
-Scope: `agent_type` ending in `tdd-implementer` or `tdd-test-author`; every other caller passes.
+Scope: `agent_type` ending in `tdd-implementer`, `tdd-test-author` or `tdd-cycle`; every other caller
+passes. A `tdd-cycle` agent writes a cycle's RED then its GREEN: an author until its RED checkpoint
+(`cctoolkit tdd-scope red`, the author's final checks run on the tree, then a new snapshot), an
+implementer after it; its structured output carries the checkpointed `red` and its `green`.
 
     start    SubagentStart          snapshot (hash and copy) of every dirty file under the roots
     edit     PreToolUse Edit|Write  implementer under a test root: denied unless granted or
                                     `.verified.txt`; every write logged
-    bash     bash-dispatch module   a Bash write under a root denied; the test command logged
+    bash     bash-dispatch module   a Bash write under a root denied; the test command logged; a
+                                    cycle's `tdd-scope red` rewritten to carry its agent id
     final    PreToolUse StructuredOutput
                                     the tree since the snapshot, minus other agents' writes:
                                     implementer, an ungranted test file; author, a source file
@@ -35,6 +39,7 @@ import work_file  # noqa: E402
 
 IMPLEMENTER = "tdd-implementer"
 AUTHOR = "tdd-test-author"
+CYCLE = "tdd-cycle"
 # Frozen literals (docs/FROZEN-LITERALS.md): run-lot.js writes the first, parses the three after it.
 GRANTED = "Test files you may modify, granted: "
 TESTS_AT_GREEN = "tests modified at GREEN: "
@@ -50,7 +55,14 @@ DEFAULT_FAILED = r"^\s*(?:failed|Failed|FAILED|\[FAIL\]|✗|×)\s+(\S+)"
 
 def role(agent_type):
     t = (agent_type or "").split(":")[-1]
-    return t if t in (IMPLEMENTER, AUTHOR) else None
+    return t if t in (IMPLEMENTER, AUTHOR, CYCLE) else None
+
+
+def acting(kind, record):
+    """The role a cycle agent holds now: author until its RED checkpoint, implementer after."""
+    if kind != CYCLE:
+        return kind
+    return IMPLEMENTER if (record or {}).get("phase") == "green" else AUTHOR
 
 
 def state_dir():
@@ -168,11 +180,22 @@ def text_before(cfg, snap, copies, path):
     return _git(cfg, "show", f"HEAD:{path}").decode("utf-8", "replace")
 
 
+def copies_of(agent_id, record):
+    return (record or {}).get("copies") or os.path.join(state_dir(), agent_id)
+
+
+def save_record(agent_id, record):
+    with open(_record_path(agent_id), "w", encoding="utf-8") as fh:
+        json.dump(record, fh)
+
+
 def start(cfg, agent_id, agent_type):
     sweep()
     snap = snapshot(cfg, os.path.join(state_dir(), agent_id))
-    with open(_record_path(agent_id), "w", encoding="utf-8") as fh:
-        json.dump({"type": agent_type, "start": time.time(), "snapshot": snap}, fh)
+    record = {"type": agent_type, "start": time.time(), "snapshot": snap}
+    if role(agent_type) == CYCLE:
+        record["phase"] = "red"
+    save_record(agent_id, record)
 
 
 # --- grants ---------------------------------------------------------------------------
@@ -258,23 +281,47 @@ def _under_root(cfg, token):
         return False
 
 
-def without_heredocs(cmd):
-    kept, end = [], None
+# A write in the code an interpreter reads from a heredoc (`python - <<'E'`). Narrower than
+# WRITE_CALL: that body is whole code, where `>` is a comparison and `.replace(` a string method.
+CODE_WRITE = re.compile(r"\bopen\([^)]*,\s*(?:mode\s*=\s*)?['\"][rbt]*[wax+]|write_text|write_bytes|writeFile|appendFile"
+                        r"|os\.(?:remove|unlink|rename|replace)\b|shutil\.(?:copy|move|rmtree)|\.unlink\(|fs\.(?:rm|rename)")
+
+
+def heredocs(cmd):
+    """(command lines, [(program reading the heredoc, body)]): the heredoc bodies taken out of the command."""
+    kept, bodies, end, prog, body = [], [], None, "", []
     for line in cmd.split("\n"):
         if end is not None:
             if line.strip() == end:
-                end = None
+                bodies.append((prog, "\n".join(body)))
+                end, body = None, []
+            else:
+                body.append(line)
             continue
         kept.append(line)
         m = re.search(r"<<-?\s*['\"]?(\w+)['\"]?", line)
         if m:
             end = m.group(1)
-    return "\n".join(kept)
+            toks = _tokens((_segments(line[:m.start()]) or [""])[-1])
+            prog = os.path.basename(toks[0]) if toks else ""
+    return "\n".join(kept), bodies
+
+
+def without_heredocs(cmd):
+    return heredocs(cmd)[0]
 
 
 def bash_write(cfg, cmd):
-    """The path under a root a command would write, or None. A heredoc body is data: only its command line counts."""
-    cmd = without_heredocs(cmd)
+    """The path under a root a command would write, or None. A heredoc body is data, save when an interpreter
+    reads it as code: a write call there is refused wherever it points — after a `cd`, its paths are relative."""
+    cmd, bodies = heredocs(cmd)
+    for prog, body in bodies:
+        if prog in ("bash", "sh", "zsh"):
+            hit = bash_write(cfg, body)
+            if hit:
+                return hit
+        elif prog in INTERPRETERS and CODE_WRITE.search(body):
+            return f"{prog} heredoc code"
     for m in re.finditer(r"(?<![0-9&])>{1,2}\s*([^\s;&|]+)", cmd):
         if _under_root(cfg, m.group(1)):
             return m.group(1)
@@ -302,19 +349,49 @@ def bash_write(cfg, cmd):
     return None
 
 
-def _test_verb(cfg):
-    words = [w for w in cfg.command("test").split() if w != "rtk" and w != "proxy"]
+def _verb(command):
+    words = [w for w in command.split() if w != "rtk" and w != "proxy"]
     return " ".join(words[:2])
 
 
+def _test_verbs(cfg):
+    """What marks a test run: `dotnet test` of commands.test; for commands.testFast, its last step cut at the
+    first placeholder or wildcard (`dotnet tests/`), the build before it being no test run."""
+    verbs = [_verb(cfg.command("test"))]
+    fast = cfg.commands.get("testFast")
+    if isinstance(fast, str) and fast:
+        last = re.split(r"&&|;", cfg.expand(fast))[-1]
+        verbs.append(re.split(r"[{*]", _verb(last))[0])
+    return [v for v in verbs if v.strip()]
+
+
+# The checkpoint closing a cycle agent's RED (agents/tdd-cycle.md, docs/FROZEN-LITERALS.md).
+CHECKPOINT = re.compile(r"(^|[\s;&|(])((?:\S*/)?cctoolkit\s+tdd-scope|\S*tdd-scope\.py)\s+red(?![\w-])((?:\s+--(?:agent|transcript)\s+\S+)*)")
+
+
+def checkpoint_command(cmd, d):
+    """The checkpoint command carrying this agent's id and transcript, whatever the agent wrote there."""
+    m = CHECKPOINT.search(cmd)
+    if not m:
+        return None
+    ids = f" --agent {shlex.quote(d.get('agent_id', ''))} --transcript {shlex.quote(d.get('transcript_path', '') or '-')}"
+    return cmd[:m.start(3)] + ids + cmd[m.end(3):]
+
+
 def bash(cfg, d, kind, cmd):
+    if kind == CYCLE:
+        fixed = checkpoint_command(cmd, d)
+        if fixed is not None:
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
+                                                     "permissionDecisionReason": "RED checkpoint: agent id added",
+                                                     "updatedInput": {"command": fixed}}}, ensure_ascii=False))
+            return
     target = bash_write(cfg, cmd)
     if target:
         deny(f"Write through Bash refused for the TDD agents ({target}): every file goes through Edit or Write, "
              f"so the orchestrator's check sees what you wrote. Read with Read, write with Edit/Write.")
         return
-    verb = _test_verb(cfg)
-    if verb and verb in cmd:
+    if any(v in cmd for v in _test_verbs(cfg)):
         _append(d.get("agent_id", ""), "commands", cmd)
 
 
@@ -338,9 +415,72 @@ def added(cfg, agent_id, record, path):
             after = fh.read().splitlines()
     except OSError:
         return []
-    before = text_before(cfg, record.get("snapshot", {}), os.path.join(state_dir(), agent_id), path).splitlines()
+    before = text_before(cfg, record.get("snapshot", {}), copies_of(agent_id, record), path).splitlines()
     return [l[1:] for l in difflib.unified_diff(before, after, lineterm="", n=0)
             if l.startswith("+") and not l.startswith("+++")]
+
+
+# The RED contract call and the frame of run-lot.js (docs/FROZEN-LITERALS.md), read off the agent's prompt.
+RED_CONTRACT = re.compile(r"cctoolkit sheet-cycles (\S+) --cycle (\S+) --red")
+WORK_FILE = re.compile(r"Run work file: (\S+?)\.?$", re.M)
+
+
+def pending_ripple(cfg, prompt):
+    """Sorted `sheet-cycles --pending` lines of the cycle the prompt names, or None when it names none."""
+    contract, work = RED_CONTRACT.search(prompt or ""), WORK_FILE.search(prompt or "")
+    if not contract or not work:
+        return None
+    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "sheet-cycles.py")
+    try:
+        p = subprocess.run([sys.executable, script, contract.group(1).strip("`"), "--cycle", contract.group(2).strip("`"),
+                            "--pending", work.group(1).strip("`")], cwd=cfg.root, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if p.returncode != 0:
+        return None
+    return sorted({_norm(cfg, l) for l in p.stdout.splitlines() if l.strip()})
+
+
+METHODS_LINE = re.compile(r"^Methods: (.*)$", re.M)
+
+
+def contract_methods(cfg, prompt):
+    """The `Methods` of the cycle the prompt's RED contract call names, or None."""
+    m = RED_CONTRACT.search(prompt or "")
+    if not m:
+        return None
+    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "sheet-cycles.py")
+    try:
+        p = subprocess.run([sys.executable, script, m.group(1).strip("`"), "--cycle", m.group(2).strip("`"), "--red"],
+                           cwd=cfg.root, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    line = METHODS_LINE.search(p.stdout or "") if p.returncode == 0 else None
+    return re.findall(r"`([^`]+)`", line.group(1)) if line else None
+
+
+def contract_refusal(cfg, prompt, report):
+    """What run-lot's RED check (checkRed) would refuse, run before a cycle agent goes on to its GREEN:
+    a RED that passes at once, a contract method neither in the table, removed nor unreachable."""
+    methods = contract_methods(cfg, prompt)
+    if methods is None or str(report.get("status", "")) != "RED":
+        return None
+    if report.get("exit") == 0:
+        return ("RED not observed: the filtered command exits 0. Behaviour already on disk → report `ALREADY_GREEN`; "
+                "otherwise the assertion does not observe the rule — strengthen it until red.")
+    name = lambda t: str(t or "").replace("`", "").strip().split()[0] if str(t or "").strip() else ""
+    same = lambda a, b: a == b or a.endswith(f".{b}") or b.endswith(f".{a}")
+    table = [name(r.get("test")) for r in report.get("table") or [] if isinstance(r, dict)]
+    gone = [str(x) for x in report.get("removed") or []]
+    unreachable = [name(u.get("method")) for u in report.get("unreachable") or [] if isinstance(u, dict)]
+    if not table and (gone or unreachable):
+        return None
+    missing = [m for m in methods if not any(same(t, name(m)) for t in table)
+               and not any(name(m) in g for g in gone) and not any(same(u, name(m)) for u in unreachable)]
+    if missing:
+        return (f"contract methods missing from the table: {', '.join(missing)} — write each, or list it in `removed` "
+                f"(already covered) or `unreachable` (site never reached), then run the checkpoint again.")
+    return None
 
 
 def evidence(entry):
@@ -359,8 +499,8 @@ def rerun(cfg, agent_id):
     cmds = _lines(agent_id, "commands")
     if not cmds:
         return None
-    verb = _test_verb(cfg)
-    seg = next((s for s in reversed(_segments(cmds[-1])) if verb in s), "")
+    verbs = _test_verbs(cfg)
+    seg = next((s for s in reversed(_segments(cmds[-1])) if any(v in s for v in verbs)), "")
     seg = re.sub(r"^\s*rtk\s+(proxy\s+)?", "", seg)
     seg = re.sub(r"\s+[0-9]?>\s*\S+|\s+2>&1", "", seg).strip()
     if not seg:
@@ -400,42 +540,42 @@ def failures_on_stub(cfg, output):
     return failed, on_stub
 
 
-def final(cfg, d, kind):
-    agent_id = d.get("agent_id", "")
-    record = load_record(agent_id)
-    if record is None:
-        return
-    ti = d.get("tool_input") or {}
-    status = str(ti.get("status", ""))
-    diagnostic = str(ti.get("diagnostic", "") or "")
+def green_refusal(cfg, agent_id, record, transcript_path, status, diagnostic):
+    """Why the tree refuses a GREEN report: a test file changed since its start and not granted — or None."""
     files = changed(cfg, agent_id, record)
+    allowed = {_norm(cfg, g) for g in grants(prompt_of(transcript_path, agent_id))}
+    tests = [f for f in files if cfg.under(f, cfg.test_roots) and not f.endswith(".verified.txt") and f not in allowed]
+    if not tests:
+        return None
+    reason = f"{TESTS_AT_GREEN}{', '.join(tests)}{GRANTED_SEP}{', '.join(sorted(allowed)) or 'none'}"
+    if status == "BLOCKED" and diagnostic.startswith(TESTS_AT_GREEN):
+        return None
+    return (f"The tree shows test files changed since this GREEN started: {', '.join(tests)}. Test files are read-only "
+            f"at GREEN (agents/tdd-implementer.md § Scope); {_restore_hint(agent_id, tests)}. Then make production "
+            f"pass and return the report again. If the test cannot pass untouched, return `status: BLOCKED` with "
+            f"`diagnostic` starting with exactly: {reason}")
 
-    if kind == IMPLEMENTER:
-        allowed = {_norm(cfg, g) for g in grants(prompt_of(d.get("transcript_path", ""), agent_id))}
-        tests = [f for f in files if cfg.under(f, cfg.test_roots) and not f.endswith(".verified.txt") and f not in allowed]
-        if not tests:
-            return
-        reason = f"{TESTS_AT_GREEN}{', '.join(tests)}{GRANTED_SEP}{', '.join(sorted(allowed)) or 'none'}"
-        if status == "BLOCKED" and diagnostic.startswith(TESTS_AT_GREEN):
-            return
-        deny(f"The tree shows test files changed since this GREEN started: {', '.join(tests)}. Test files are read-only "
-             f"at GREEN (agents/tdd-implementer.md § Scope); {_restore_hint(agent_id, tests)}. Then make production "
-             f"pass and return the report again. If the test cannot pass untouched, return `status: BLOCKED` with "
-             f"`diagnostic` starting with exactly: {reason}")
-        return
 
+def red_refusal(cfg, agent_id, record, transcript_path, ti):
+    """Why the tree refuses a RED report that is not BLOCKED — or None: a source file beyond `stubs`, an
+    ALREADY_GREEN's `pendingRipple`, an exit the rerun contradicts, a method failing on the stub."""
+    status = str(ti.get("status", ""))
+    files = changed(cfg, agent_id, record)
     sources = [f for f in files if cfg.under(f, cfg.source_roots)]
     stubs = {_norm(cfg, s) for s in (ti.get("stubs") or [])}
-    if status == "BLOCKED":
-        return
-    beyond = [f for f in sources if f not in stubs]
-    if status == "ALREADY_GREEN":
-        beyond = sources
+    beyond = sources if status == "ALREADY_GREEN" else [f for f in sources if f not in stubs]
     if beyond:
-        deny(f"The tree shows source files changed since this RED started and absent from `stubs`: {', '.join(beyond)}. "
-             f"A RED writes signature stubs only (common-rules.md §4.1): list each stub you wrote in `stubs`, or put back "
-             f"a file you should not have touched — {_restore_hint(agent_id, beyond)}.")
-        return
+        return (f"The tree shows source files changed since this RED started and absent from `stubs`: {', '.join(beyond)}. "
+                f"A RED writes signature stubs only (common-rules.md §4.1): list each stub you wrote in `stubs`, or put back "
+                f"a file you should not have touched — {_restore_hint(agent_id, beyond)}.")
+    if status == "ALREADY_GREEN":
+        expected = pending_ripple(cfg, prompt_of(transcript_path, agent_id))
+        reported = sorted({_norm(cfg, p) for p in (ti.get("pendingRipple") or []) if _norm(cfg, p)})
+        if expected is not None and reported != expected:
+            return (f"ALREADY_GREEN: `pendingRipple` lists exactly the files of the cycle's ripple and creations the batch "
+                    f"has not changed (`cctoolkit sheet-cycles <sheet> --cycle <id> --pending <work file>`): "
+                    f"{', '.join(expected) or 'none, an empty list'}. Return the report again with that list.")
+        return None
     logic_rx = (cfg.data.get("tdd", {}) or {}).get("stubLogic")
     if logic_rx:
         for f in sources:
@@ -443,25 +583,88 @@ def final(cfg, d, kind):
             if lines:
                 evidence({"kind": "stub-logic", "agent": agent_id, "file": f, "lines": lines[:5]})
     if status != "RED" or not (cfg.data.get("tdd", {}) or {}).get("stubFailure"):
-        return
+        return None
     ran = rerun(cfg, agent_id)
     if ran is None:
-        return
+        return None
     seg, code, output = ran
     reported = ti.get("exit")
     if isinstance(reported, int) and (reported == 0) != (code == 0):
-        deny(f"{EXIT_MISMATCH}{code} on `{seg}`, the report says exit {reported}. Report the exit the command gives.")
-        return
+        return f"{EXIT_MISMATCH}{code} on `{seg}`, the report says exit {reported}. Report the exit the command gives."
     if code == 0:
-        return
+        return None
     failed, on_stub = failures_on_stub(cfg, output)
-    if on_stub:
-        marker = cfg.data["tdd"]["stubFailure"]
-        reason = f"{RED_ON_STUB}{marker} in {', '.join(on_stub)}"
-        deny(f"Rerun of `{seg}`: {', '.join(on_stub)} fail on the stub, not on an assertion ({marker}). common-rules.md §4.1: "
-             f"a RED fails on its assertion — the stub is too thin (return a default value, still no logic) or the "
-             f"assertion comes too late. Fix that and run the command again. If it cannot be done, return `status: BLOCKED` "
-             f"with `diagnostic` starting with exactly: {reason}")
+    if not on_stub:
+        return None
+    marker = cfg.data["tdd"]["stubFailure"]
+    reason = f"{RED_ON_STUB}{marker} in {', '.join(on_stub)}"
+    return (f"Rerun of `{seg}`: {', '.join(on_stub)} fail on the stub, not on an assertion ({marker}). common-rules.md §4.1: "
+            f"a RED fails on its assertion — the stub is too thin (return a default value, still no logic) or the "
+            f"assertion comes too late. Fix that and run the command again. If it cannot be done, return `status: BLOCKED` "
+            f"with `diagnostic` starting with exactly: {reason}")
+
+
+def _canon(report):
+    return json.dumps(report or {}, sort_keys=True, ensure_ascii=False)
+
+
+def _nested(why, field):
+    """A refusal worded for a flat report, pointed at the `red` or `green` field of a cycle agent's output."""
+    return why.replace("`status: BLOCKED`", f"`{field}.status: BLOCKED`").replace("`diagnostic` starting", f"`{field}.diagnostic` starting")
+
+
+def final(cfg, d, kind):
+    agent_id = d.get("agent_id", "")
+    record = load_record(agent_id)
+    if record is None:
+        return
+    ti = d.get("tool_input") or {}
+    transcript = d.get("transcript_path", "")
+    if kind == CYCLE:
+        red, green = ti.get("red") or {}, ti.get("green") or {}
+        if record.get("phase") != "green":
+            if str(red.get("status", "")) != "BLOCKED":
+                deny("No RED checkpoint yet: run `cctoolkit tdd-scope red` with your RED report as its heredoc body "
+                     "(agents/tdd-cycle.md), then the GREEN, then this output. A RED you cannot complete goes out as "
+                     "`red` with `status: BLOCKED`.")
+            return
+        if _canon(red) != _canon(record.get("red")):
+            deny("`red` differs from the report the RED checkpoint accepted: return that report unchanged, field for field.")
+            return
+        why = green_refusal(cfg, agent_id, record, transcript, str(green.get("status", "")), str(green.get("diagnostic", "") or ""))
+        if why:
+            deny(_nested(why, "green"))
+        return
+    status = str(ti.get("status", ""))
+    diagnostic = str(ti.get("diagnostic", "") or "")
+    if kind == IMPLEMENTER:
+        why = green_refusal(cfg, agent_id, record, transcript, status, diagnostic)
+    else:
+        why = None if status == "BLOCKED" else red_refusal(cfg, agent_id, record, transcript, ti)
+    if why:
+        deny(why)
+
+
+# --- checkpoint (cctoolkit tdd-scope red) -----------------------------------------------
+def checkpoint(cfg, agent_id, transcript_path, report):
+    """(accepted, message). The author's final checks on the RED report; accepted, the agent turns implementer:
+    a new snapshot from now on, test files read-only."""
+    record = load_record(agent_id)
+    if record is None or role(record.get("type")) != CYCLE:
+        return False, f"no `{CYCLE}` agent `{agent_id}` known to the TDD scope hook: the checkpoint closes a cycle agent's RED"
+    if record.get("phase") == "green":
+        return False, "RED checkpoint already passed: you are at GREEN, test files read-only"
+    if not isinstance(report, dict) or str(report.get("status", "")) not in ("RED", "ALREADY_GREEN"):
+        return False, "the checkpoint takes a RED report of status RED or ALREADY_GREEN; a BLOCKED RED goes out as `red` of your structured output"
+    transcript = "" if transcript_path == "-" else transcript_path
+    why = red_refusal(cfg, agent_id, record, transcript, report) or contract_refusal(cfg, prompt_of(transcript, agent_id), report)
+    if why:
+        return False, _nested(why, "red")
+    copies = os.path.join(state_dir(), f"{agent_id}.green")
+    record.update({"phase": "green", "red": report, "start": time.time(), "snapshot": snapshot(cfg, copies), "copies": copies})
+    save_record(agent_id, record)
+    return True, ("RED checkpoint passed. GREEN phase from now on: test files are read-only, the tree is compared to "
+                  "its state at this point; your structured output carries this exact report as `red`.")
 
 
 # --- restore (cctoolkit tdd-scope restore) ----------------------------------------------
@@ -478,7 +681,7 @@ def restore(cfg, agent_id, paths):
             continue
         dst = os.path.join(cfg.root, rel)
         if rel in record.get("snapshot", {}):
-            copy = os.path.join(state_dir(), agent_id, rel)
+            copy = os.path.join(copies_of(agent_id, record), rel)
             if os.path.isfile(copy):
                 shutil.copyfile(copy, dst)
             elif os.path.exists(dst):
@@ -508,7 +711,7 @@ def hook(event):
     if event == "start":
         start(cfg, d["agent_id"], d.get("agent_type", ""))
     elif event == "edit":
-        edit(cfg, d, kind)
+        edit(cfg, d, acting(kind, load_record(d["agent_id"])))
     elif event == "final":
         final(cfg, d, kind)
     elif event == "bash":

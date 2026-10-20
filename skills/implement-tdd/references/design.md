@@ -7,6 +7,7 @@ Read by the `run-lot` design agent, with `test-scope.md` and `parallelism.md`, w
 - Global plan by section: `grep -n "^## \|^### "`, then read the summary, the batch index and `### Batch FX` by range. Batch sheet whole.
 - Applied DDD/APP/PERF ids of the sheet: their lines only, in `/plan-implementation`'s `references/ddd-rules.md` and `architecture-rules.md`.
 - **Invariants → what they remove.** For each invariant of the sheet, name what it takes out of the code (loop, `GroupBy`, dictionary, defensive branch, second read): it goes into `invariants`.
+- Each cycle names its `models`: the existing sibling the sheet or the inventory points to (same layer, same pattern). One read of it at RED replaces the agent's search.
 - Exploration bounded to what the sheet names: those files by range, never `git show` nor `git log`. A relation → `graphify explain|path|query`. A repo-wide search only for a ripple the sheet does not list: `grep -rln` on the member name, paths only. A `DESIGN.md` chapter a behaviour needs → name that file in the cycle's `bounded`. A cost you cannot state → `conventions.md` § "Data access".
 - Existing tests asserting a literal or contract the batch changes (message, error code, route, response field): `grep -rln` the current literal under the test roots, paths only; each file goes into `full` of the cycle that changes it and its methods into `methods` — the RED rewrites them to the new value, never into a negative assertion; the GREEN never may. One method per changed fact: a test asserting only the type stays as is.
 
@@ -40,6 +41,9 @@ One `## Cycles` section before `## Assumptions`, holding one ```json fence: `{"d
 | `appliedIds`, `invariants`, `expectedCost` | DDD/APP ids; invariants and what they remove; `n reads + n writes to Infrastructure, independent of [input]`, consistent with the sheet's access cost |
 | `snapshot` (optional) | approval-testing suites: approved-file path + the literal seeded values expected (`test-scope.md` §6) |
 | `decisions` (optional) | a `user decision` overriding this contract |
+| `models` (optional) | `path — what to copy` for one or two existing files the cycle imitates (a sibling handler, its test class): printed first in both contracts, read before writing, so the agent copies a shape instead of searching for one. Only files that exist — `--index` refuses another |
+
+Beside `cycles`, `"closing"` (optional): `"full"` forces the full closing of `run-lot` — an audit of every axis, findings verified, the next sheet reviewed — on a batch its files would leave light, a sensitive change the paths do not show; `"light"` lifts the cap on production files and the `ripple` criterion, for a batch the user knows to be simple. It never lifts a `closing.full` rule: a batch touching authorisation, a migration or a public contract closes full, the refused request named among the reasons. Without it, `sheet-cycles --index` plans the level (`closing` of `kit.config.json`: authorisation, migration and public-contract paths, a cap on production files, any `ripple`) and `cctoolkit closing-level` settles it on the diff once the suites are green.
 
 Paths are repo-relative and exact, copied from the sheet or the code — `sheet-cycles --index` refuses a path under the source or test roots that neither exists nor is created, a second test project in one cycle, more than 4 test files or 8 production files, and two cycles of one wave sharing a file. Never write what the agent definitions already bind, never a body.
 

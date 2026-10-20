@@ -7,6 +7,18 @@
       "expect": {"decision": "deny", "reason": "Whole IntegrationTests suite refused"}
     },
     {
+      "name": "IntegrationTests assembly run directly (commands.testFast) without a filter is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "rtk dotnet build tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-restore && APP_TEST_MODE=true dotnet tests/{{PRODUCT}}.IntegrationTests/bin/Debug/net10.0/{{PRODUCT}}.IntegrationTests.dll"}},
+      "expect": {"decision": "deny", "reason": "Whole IntegrationTests suite refused"}
+    },
+    {
+      "name": "IntegrationTests assembly run directly with --filter-class passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "rtk dotnet build tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-restore && APP_TEST_MODE=true dotnet tests/{{PRODUCT}}.IntegrationTests/bin/Debug/net10.0/{{PRODUCT}}.IntegrationTests.dll --filter-class \"*.Studio.Templates.Save.*\""}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
       "name": "IntegrationTests redirected to a file, still whole, still denied",
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "tool_input": {"command": "export SCRATCH=/tmp/x; APP_TEST_MODE=true dotnet test --project tests/{{PRODUCT}}.IntegrationTests/{{PRODUCT}}.IntegrationTests.csproj --no-build --no-restore > \"$SCRATCH/test-IntegrationTests.txt\" 2>&1; echo \"exit=$?\"; tail -15 \"$SCRATCH/test-IntegrationTests.txt\""}},

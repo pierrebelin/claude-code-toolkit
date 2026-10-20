@@ -13,6 +13,12 @@ cctoolkit config command test UnitTests
 
 Never `eval "$(…)"` it: the guards and the `rtk` rewrite read the command text. Nothing printed = the key is unset: no run, report `Not run: [suite] — commands.test unset`.
 
+**RED and GREEN run `commands.testFast`, never the solution build.** It builds the suite's test project alone (with what it references) and runs its tests directly — `clean-architecture` preset: `dotnet build tests/<P>/<P>.csproj --no-restore`, then the xUnit v3 test assembly `tests/<P>/bin/Debug/<tfm>/<P>.dll`, which takes the same filters. Unset in the repo, it prints `commands.build && commands.test`: same command line, slower. `cctoolkit doctor` checks its project path and that its assembly glob matches one file. The solution build and whole suites stay with the global green and the audit.
+
+```bash
+cctoolkit config command testFast UnitTests
+```
+
 Narrowing to a class or a method appends the runner's own filter. Illustration, `clean-architecture` preset — Microsoft.Testing.Platform (xUnit v3): `--project <csproj>` mandatory, always `--no-build --no-restore`; filters `--filter-class` / `--filter-method`, `*` wildcards, **repeatable** — values unioned; VSTest syntax `--filter "FullyQualifiedName~..."` doesn't exist there.
 
 ```bash
