@@ -17,7 +17,8 @@
 #         skills and "Skills changed" (both copied into repos by kit-init)
 #   TODO  a version committed but not tagged yet: `claude plugin tag --push <dir>`
 #   TODO  the kit's tag without its GitHub release (one per version, the mods
-#         share it): `gh release create cctoolkit--v<version>`; skipped without `gh`
+#         share it): `gh release create cctoolkit--v<version>`; without `gh`, read from
+#         GitHub's public API
 #   FAIL  that tag's commit red in CI (.github/workflows/ci.yml: hook evals and
 #         mod tests) — never released; TODO while its run is not finished
 #   OK    otherwise
@@ -48,12 +49,26 @@ changed_since() { # <ref> <paths…> — committed, staged, unstaged and untrack
   local ref=$1; shift
   { git diff --name-only "$ref" -- "$@"; git ls-files --others --exclude-standard -- "$@"; } | sort -u
 }
+# Without an authenticated gh, GitHub's public API answers for the origin's repository.
+has_gh() { command -v gh >/dev/null && gh auth status >/dev/null 2>&1; }
+repo_slug() { git remote get-url origin 2>/dev/null | sed -E 's#^.*github\.com[:/]##; s#\.git$##'; }
+has_release() { # <tag> — a GitHub release exists; unknown (no network) counts as present
+  if has_gh; then gh release view "$1" >/dev/null 2>&1; return; fi
+  [ "$(curl -s -o /dev/null -w '%{http_code}' "https://api.github.com/repos/$(repo_slug)/releases/tags/$1")" != 404 ]
+}
 ci_state() { # <sha> — success when one CI run of the commit passed, else pending, failure or none
-  gh run list --workflow ci.yml --commit "$1" --json status,conclusion -L 20 2>/dev/null | jq -r '
+  local runs
+  if has_gh; then
+    runs=$(gh run list --workflow ci.yml --commit "$1" --json status,conclusion -L 20 2>/dev/null)
+  else
+    runs=$(curl -fsS "https://api.github.com/repos/$(repo_slug)/actions/runs?head_sha=$1&per_page=20" 2>/dev/null \
+      | jq '[.workflow_runs[]? | select(.path == ".github/workflows/ci.yml") | {status, conclusion}]')
+  fi
+  jq -r '
     if any(.[]; .conclusion == "success") then "success"
     elif any(.[]; .status != "completed") then "pending"
     elif length > 0 then "failure"
-    else "none" end'
+    else "none" end' <<<"${runs:-[]}"
 }
 release_ref() { # <name> <version> <manifest> — tag, else the commit introducing the version
   local tag="$1--v$2"
@@ -91,13 +106,12 @@ while IFS=$'\t' read -r name source; do
       fail=1
     elif ! git rev-parse -q --verify "refs/tags/$name--v$ver" >/dev/null; then
       echo "TODO  $name $ver: not tagged — claude plugin tag --push ${dir:-.}"
-    elif [ -z "$dir" ] && command -v gh >/dev/null && gh auth status >/dev/null 2>&1 \
-      && ! gh release view "$name--v$ver" >/dev/null 2>&1; then
+    elif [ -z "$dir" ] && ! has_release "$name--v$ver"; then
       sha=$(git rev-list -n 1 "$name--v$ver")
       case $(ci_state "$sha") in
         success) echo "TODO  $name $ver: no GitHub release — gh release create $name--v$ver --verify-tag --title \"$name $ver\" (notes: its CHANGELOG section)" ;;
-        failure) echo "FAIL  $name $ver: CI red on its tag (${sha:0:12}) — fix, bump and tag again, no release: gh run list --commit $sha"; fail=1 ;;
-        *) echo "TODO  $name $ver: CI not finished on its tag (${sha:0:12}) — wait for it before the GitHub release: gh run list --commit $sha" ;;
+        failure) echo "FAIL  $name $ver: CI red on its tag (${sha:0:12}) — fix, bump and tag again, no release"; fail=1 ;;
+        *) echo "TODO  $name $ver: CI not finished on its tag (${sha:0:12}) — wait for it before the GitHub release" ;;
       esac
     else
       echo "OK    $name $ver"

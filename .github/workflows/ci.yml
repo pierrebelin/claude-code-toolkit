@@ -28,8 +28,16 @@ jobs:
           git config --global user.name ci
           git config --global user.email ci@localhost
           git config --global init.defaultBranch main
+      # The failed cases also go into one annotation, one per line: readable without signing in, unlike the log,
+      # and whole (a step keeps at most 10 annotations).
       - name: evals
-        run: bash evals/run.sh
+        run: |
+          set +e
+          bash evals/run.sh 2>&1 | tee evals.log
+          status=${PIPESTATUS[0]}
+          failed=$(grep -E '^  FAIL  ' evals.log | sed 's/^  FAIL  //; s/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          [ -z "$failed" ] || echo "::error title=$(grep -cE '^  FAIL  ' evals.log) evals failed::${failed}"
+          exit $status
 
   mods:
     name: mods
