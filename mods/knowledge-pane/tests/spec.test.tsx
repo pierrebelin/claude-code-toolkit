@@ -481,6 +481,11 @@ const call = (input: Record<string, unknown>) => input as never
 test('pane follows decisions then the written spec, full content on click', async ($, on) => {
   const files: Record<string, string> = {}
   world(on, files, { 'Livrer moins ?': 'Tout', 'Quelle autorité ?': 'Catalog' })
+  const copies: { text: string; surface?: string }[] = []
+  on('ui.copy', ($, e) => {
+    copies.push({ text: e.text, surface: e.surface })
+    return { value: { isCopied: true } }
+  })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
 
   expect((await $.command.run({ command: 'spec-pane', args: '' } as never)).text).toBe('Spec pane opened.')
@@ -533,8 +538,15 @@ test('pane follows decisions then the written spec, full content on click', asyn
     expect(await shown(/✓ Catalog ★/)).toBeDefined()
     expect(await shown(/fold all \(3 open\)/i)).toBeDefined()
 
+    await ui.press({ key: 'copy-openQuestion-Q1' })
+    expect(copies.at(-1)?.surface).toBe(surface)
+    expect(copies.at(-1)?.text).toMatch(/^Q1 — Héritage des groupes \?\n[\s\S]*Impact: Disparition d'un coup/)
+    await ui.press({ key: 'copy-decision-q1-1' })
+    expect(copies.at(-1)?.text).toMatch(/^Quelle autorité \?\n[\s\S]*- Catalog \(recommended\)/)
+
     await ui.press({ key: 'open-openQuestion-Q1' })
     expect(await shown(/^Disparition d'un coup$/)).toBeUndefined()
+    expect(await ui.find({ type: 'Button', key: 'copy-openQuestion-Q1' })).toBeUndefined()
     expect(await shown(/fold all \(2 open\)/i)).toBeDefined()
 
     await ui.press({ key: 'fold-all' })

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type {
   Base,
@@ -1893,10 +1893,35 @@ export const register: Register = on => {
       if (!spec.isArmed && doc === null) return []
       const slot = (kind: SpecKind, id: string) => `${kind}:${id}`
       const isUnfolded = (kind: SpecKind, id: string) => where.expanded.includes(slot(kind, id))
+      // A pane's text cannot be selected on every surface, a row being a Button: an unfolded
+      // question carries its own copy, its whole text on the clipboard of the surface pressed.
+      const copyOf = (key: string, text: string) => {
+        const onPress = async (press: { surface: RenderSurface }) => {
+          const copied = await $.ui.copy({ text, surface: press.surface })
+          $.ui.toast(copied.isCopied ? 'Copied' : `Not copied: ${copied.reason}`)
+        }
+        return isDesktop ? (
+          <Box key={`${key}-copy`}>
+            <Button key={`copy-${key}`} label="Copy" onPress={onPress} />
+          </Box>
+        ) : (
+          <Box key={`${key}-copy`} marginTop={1}>
+            <Button key={`copy-${key}`} plain dimColor onPress={onPress}>
+              copy
+            </Button>
+          </Box>
+        )
+      }
       const detail = (kind: SpecKind, id: string): JSX.Element[] | null => {
         if (kind === 'decision') {
           const decision = asked.find(one => one.id === id)
           if (decision === undefined) return null
+          const copied = [
+            decision.question,
+            ...decision.options.map(option => `- ${option}${option === decision.recommended ? ' (recommended)' : ''}`),
+            ...(decision.answer === null ? [] : [`Answer: ${decision.answer}`]),
+            ...(decision.note === null ? [] : [`Note: ${decision.note}`]),
+          ].join('\n')
           return [
             <Text key="d-question" bold wrap="wrap">
               {decision.question}
@@ -1917,6 +1942,7 @@ export const register: Register = on => {
               </Text>
             </Box>,
             ...(decision.note === null ? [] : [<Text key="d-note" color="inactive" wrap="wrap">{`Note: ${decision.note}`}</Text>]),
+            copyOf(`decision-${id}`, copied),
           ]
         }
         if (doc === null) return null
@@ -1935,6 +1961,15 @@ export const register: Register = on => {
               <Text bold>Options</Text>
             </Box>,
             ...paragraph('q-options', question.options),
+            copyOf(
+              `openQuestion-${id}`,
+              [
+                `${question.id} — ${plain(question.question)}`,
+                ...(question.severity === '' ? [] : [`Severity: ${plain(question.severity)}`]),
+                ...(question.impact === '' ? [] : [`Impact: ${plain(question.impact)}`]),
+                ...(question.options === '' ? [] : [`Options: ${plain(question.options)}`]),
+              ].join('\n'),
+            ),
           ]
         }
         if (kind === 'section') {
