@@ -25,6 +25,8 @@
 # A version is released at its tag `<name>--v<version>`, or, before tags existed,
 # at the commit that introduced it. Exit 1 on any FAIL.
 set -u
+# Native Windows (Git Bash outside Claude Code): `jq -b` writes no CRLF, `python3` is a real Python.
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)" || exit 2
 command -v jq >/dev/null || { echo "FAIL  jq missing"; exit 2; }
 

@@ -8,6 +8,8 @@
 #   bash dev/knowledge-pane-demo.sh --check   writes nothing: exit 1 and a FAIL line when the
 #                                             copy or its index lags; run by dev/release-check.sh
 set -u
+# Native Windows (Git Bash outside Claude Code): `jq -b` writes no CRLF, `python3` is a real Python.
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)" || exit 2
 src=examples/docs/business
 demo=mods/knowledge-pane/demo
