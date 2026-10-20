@@ -206,9 +206,10 @@ def sync_marks(c, ctx):
 
 
 def markdown_files(top):
+    # Sorted: os.walk follows the file system's order, alphabetical on NTFS, arbitrary on ext4.
     for base, dirs, files in os.walk(top):
-        dirs[:] = [d for d in dirs if not d.startswith(".")]
-        for f in files:
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        for f in sorted(files):
             if f.endswith(".md"):
                 yield os.path.join(base, f)
 

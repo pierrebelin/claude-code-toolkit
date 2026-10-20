@@ -69,7 +69,17 @@ def plural(n, word):
 
 
 def ast_grep():
-    return shutil.which("ast-grep") or shutil.which("sg")
+    # `sg` is also Linux's switch-group command (/usr/bin/sg): taken only when it says it is ast-grep.
+    if shutil.which("ast-grep"):
+        return shutil.which("ast-grep")
+    sg = shutil.which("sg")
+    if sg is None:
+        return None
+    try:
+        out = subprocess.run([sg, "--version"], capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return sg if "ast-grep" in out.stdout + out.stderr else None
 
 
 def added_lines(path):

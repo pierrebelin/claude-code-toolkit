@@ -279,7 +279,7 @@ def prepare(f, partial):
             if norm(bo.title) == norm(title):
                 return "merged"
             nf = next_free(oid)
-            collisions.append(f"collision: {oid} — base: \"{bo.title}\" ({rel}) — {where}: \"{title}\" — next free {nf}: "
+            collisions.append(f"collision: {oid} — base: \"{bo.title}\" ({rel.replace(os.sep, '/')}) — {where}: \"{title}\" — next free {nf}: "
                               f"cctoolkit knowledge-merge renumber {C.rel(f.plan)} {oid} {nf}")
             return None
         if change == "modified" and oid not in base_def:

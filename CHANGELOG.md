@@ -4,6 +4,11 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.3.2 — 2026-10-20
+
+- `cctoolkit`: `cctoolkit access-cost` no longer takes Linux's `/usr/bin/sg` (the switch-group command) for ast-grep: `sg` is used only when it answers as ast-grep, so a Linux machine without ast-grep gets `ast-grep missing — … state it by hand` instead of a broken cost check.
+- `cctoolkit`: `cctoolkit knowledge-merge renumber` names the same file on every machine when it refuses an id already used (the knowledge base and `todo/` are read in sorted order, not in the file system's), and a `collision:` line writes its base path with `/` on Windows.
+
 ## 2.3.1 — 2026-10-20
 
 - `run-lot-pane`: on the desktop, a phase, an agent or a batch opens again on a click anywhere on its row, not on a small trailing `›` that a narrow row could clip or cover. The running row's glyph holds still (`●`, its orange wash telling it runs) and an agent's moving figures sit outside its button: the spinner and the ticking time redrew the buttons every two seconds, so the buttons flickered and a click landing during the redraw was lost.
