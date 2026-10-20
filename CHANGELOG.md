@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.3.3 — 2026-10-20
+
+Same content as 2.3.1 and 2.3.2, republished on a green CI: both were tagged on a commit whose CI was red (the runner image lost `pipx`) and were never released. Their entries follow.
+
 ## 2.3.2 — 2026-10-20
 
 - `cctoolkit`: `cctoolkit access-cost` no longer takes Linux's `/usr/bin/sg` (the switch-group command) for ast-grep: `sg` is used only when it answers as ast-grep, so a Linux machine without ast-grep gets `ast-grep missing — … state it by hand` instead of a broken cost check.
