@@ -32,7 +32,8 @@ sys.path.insert(0, os.environ["KIT_LIB"])
 try:
     import kit_config, kit_testtag
     from rule_sheet import SHAPE, rule_rows, shape_issues
-    C = kit_config.load()
+    # A file of a linked worktree (a batch run beside another) is judged against that worktree.
+    C = kit_config.load(kit_config.root_of(raw))
     AD = kit_testtag.adapter(C)
 except Exception:
     sys.exit(0)

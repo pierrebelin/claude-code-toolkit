@@ -39,6 +39,36 @@
       "path": "W-PLAN-F3.md",
       "kind": "text",
       "content": "# W-PLAN-F3\n"
+    },
+    {
+      "path": "P-PLAN.md",
+      "kind": "text",
+      "content": "# P-PLAN\n\n### Batch execution\n\n| Batch | Intent | Depends on | Repo |\n|---|---|---|---|\n| F1 | x | — | . |\n| F2 | x | — | . |\n| F3 | x | — | . |\n| F4 | x | — | . |\n| F5 | x | F1 | . |\n\n### Batch F1 — x — ⬜\n"
+    },
+    {
+      "path": "P-PLAN-F1.md",
+      "kind": "text",
+      "content": "# P-PLAN-F1\n\n## Cycles\n\n```json\n{\"cycles\": [{\"id\": \"C1\", \"production\": [\"src/A/A.cs — x\"], \"full\": [\"tests/A/ATests.cs (to create)\"]}]}\n```\n"
+    },
+    {
+      "path": "P-PLAN-F2.md",
+      "kind": "text",
+      "content": "# P-PLAN-F2\n\n## Cycles\n\n```json\n{\"cycles\": [{\"id\": \"C1\", \"production\": [\"src/B/B.cs — x\"], \"full\": [\"tests/a/atests.cs (to create)\"]}]}\n```\n"
+    },
+    {
+      "path": "P-PLAN-F3.md",
+      "kind": "text",
+      "content": "# P-PLAN-F3\n\n## Cycles\n\n```json\n{\"cycles\": [{\"id\": \"C1\", \"production\": [\"src/C/C.cs — x\"], \"full\": [\"tests/C/CTests.cs (to create)\"]}]}\n```\n"
+    },
+    {
+      "path": "P-PLAN-F4.md",
+      "kind": "text",
+      "content": "# P-PLAN-F4\n\nNo cycles block.\n"
+    },
+    {
+      "path": "P-PLAN-F5.md",
+      "kind": "text",
+      "content": "# P-PLAN-F5\n\n## Cycles\n\n```json\n{\"cycles\": [{\"id\": \"C1\", \"production\": [\"src/D/D.cs — x\"], \"full\": [\"tests/D/DTests.cs (to create)\"]}]}\n```\n"
     }
   ],
   "cases": [
@@ -144,6 +174,30 @@
       "expect": {
         "exit": 0,
         "stdout": "END F2:skipped F3:F2"
+      }
+    },
+    {
+      "name": "--parallel 2: the first runnable batch, then the next one whose `## Cycles` paths are disjoint; a shared path (case folded) or a sheet without a block keeps a batch apart; a batch whose dependency is not done is never listed",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/p; cp {{FIX}}/P-PLAN*.md $d/todo/p/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/p/P-PLAN.md --parallel 2 | python3 -c \"import json,sys; g=json.load(sys.stdin); print(g['cap'], ','.join(b['batch'] for b in g['batches']), '; '.join(a['batch'] + ' ' + a['reason'] for a in g['apart']))\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "2 F1,F3 F2 shares tests/a/atests.cs with F1; F4 cap 2 reached"
+      }
+    },
+    {
+      "name": "--parallel without N is 2; 5 is capped at 2, 1 is the single next batch",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/p; cp {{FIX}}/P-PLAN*.md $d/todo/p/; git -C $d init -q; cd $d && a=$(python3 {{KIT}}/scripts/plan-next-batch.py todo/p/P-PLAN.md --parallel | python3 -c \"import json,sys; g=json.load(sys.stdin); print(g['cap'], ','.join(b['batch'] for b in g['batches']))\"); c=$(python3 {{KIT}}/scripts/plan-next-batch.py todo/p/P-PLAN.md --parallel 1 | python3 -c \"import json,sys; g=json.load(sys.stdin); print(g['cap'], ','.join(b['batch'] for b in g['batches']))\"); b=$(python3 {{KIT}}/scripts/plan-next-batch.py todo/p/P-PLAN.md --parallel 5 | python3 -c \"import json,sys; g=json.load(sys.stdin); print(g['cap'], ','.join(b['batch'] for b in g['batches']))\"); echo \"$a|$b|$c\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "2 F1,F3|2 F1,F3|1 F1"
+      }
+    },
+    {
+      "name": "--parallel with --skip: the batch set aside and its dependents are never paired; a sheet without `## Cycles` block stays apart",
+      "cmd": "d=$(mktemp -d); mkdir -p $d/todo/p; cp {{FIX}}/P-PLAN*.md $d/todo/p/; git -C $d init -q; cd $d && python3 {{KIT}}/scripts/plan-next-batch.py todo/p/P-PLAN.md --parallel 2 --skip F1,F3 | python3 -c \"import json,sys; g=json.load(sys.stdin); print(','.join(b['batch'] for b in g['batches']), '; '.join(a['batch'] + ' ' + a['reason'] for a in g['apart']))\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "F2 F4 F4: no readable `## Cycles` block, its files are unknown"
       }
     }
   ]

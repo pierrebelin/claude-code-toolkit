@@ -21,13 +21,14 @@ ctx=$(tail -n 200 "$transcript" 2>/dev/null \
 case "$ctx" in ''|*[!0-9]*) exit 0 ;; esac
 
 step=$(( ctx / STEP ))
-[ "$step" -ge 1 ] || exit 0
 
 marker="/tmp/claude-clearnudge-${session}"
 last=0
 [ -f "$marker" ] && read -r last < "$marker" 2>/dev/null
 case "$last" in ''|*[!0-9]*) last=0 ;; esac
-[ "$step" -gt "$last" ] || exit 0
+# A /compact keeps the session id: a context back under a step re-arms it.
+[ "$step" -lt "$last" ] && printf '%s' "$step" > "$marker"
+[ "$step" -ge 1 ] && [ "$step" -gt "$last" ] || exit 0
 printf '%s' "$step" > "$marker"
 
 k=$(( ctx / 1000 ))

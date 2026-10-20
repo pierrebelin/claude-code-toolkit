@@ -26,6 +26,22 @@
       }
     },
     {
+      "name": "audit-capture writes `## Mechanical audit`: a clean diff, a passing build and the suites given green are `ok`, an ArchitectureTests not triggered, a sheet without `## Cycles` and the layer rules are `not checked`",
+      "cmd": "R={{FIX}}/capture-{{SID}}; O=$R.out/audit.txt; rm -rf $R $R.out; mkdir -p $R/src $R/tests $R/.claude && cd $R && git init -q && printf '%s\\n' '{\"commands\": {\"build\": \"true\", \"architectureTest\": {\"run\": \"true\", \"when\": \"^$\"}}}' > .claude/kit.config.json && printf '# S\\n' > sheet.md && printf 'v0\\n' > src/Seed.cs && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && printf 'batch\\n' > src/Batch.cs && bash {{KIT}}/scripts/audit-capture.sh F1 sheet.md $O --suites-green UnitTests >/dev/null && echo \"$(grep -c '^=== Mechanical audit — F1 ===$' $O)|$(grep -c '^| Scope | `git diff --check` | ok | ' $O)|$(grep -c '^| Validations | build | ok | ' $O)|$(grep -c '^| Validations | ArchitectureTests | not checked | ' $O)|$(grep -c '^| Validations | suites green[^|]* | ok | ' $O)|$(grep -c '^| Layer rules | [^|]* | not checked | ' $O)|$(grep -c '^| TDD | every cycle[^|]* | not checked | ' $O)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "1|1|1|1|1|1|1"
+      }
+    },
+    {
+      "name": "audit-capture `## Mechanical audit`: trailing whitespace, a file outside the batch and absent from the sheet, a red build and a red ArchitectureTests are `gap`, no --suites-green is `not checked`",
+      "cmd": "R={{FIX}}/capture-{{SID}}; O=$R.out/audit.txt; rm -rf $R $R.out; mkdir -p $R/src $R/tests $R/.claude && cd $R && git init -q && printf '%s\\n' '{\"commands\": {\"build\": \"false\", \"architectureTest\": {\"run\": \"false\", \"when\": \"src\"}}}' > .claude/kit.config.json && printf '# S\\n' > sheet.md && printf 'v0\\n' > src/Seed.cs && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && printf 'v1 \\n' > src/Seed.cs && printf 'z\\n' > stray.txt && bash {{KIT}}/scripts/audit-capture.sh F1 sheet.md $O >/dev/null && echo \"$(grep -c '^| Scope | `git diff --check` | gap | ' $O)|$(grep -c '^| Scope | every modified file[^|]* | gap | ' $O)|$(grep -c '^| Validations | build | gap | ' $O)|$(grep -c '^| Validations | ArchitectureTests | gap | ' $O)|$(grep -c '^| Validations | suites green[^|]* | not checked | ' $O)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "1|1|1|1|1"
+      }
+    },
+    {
       "name": "audit-capture with a dangling --base exits 2 with the usage",
       "cmd": "bash {{KIT}}/scripts/audit-capture.sh F1 sheet.md {{FIX}}/capture-out-{{SID}}.txt --base",
       "expect": {

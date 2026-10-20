@@ -192,6 +192,19 @@
       "env": {"CLAUDE_PROJECT_DIR": "{{FIX}}/kb"},
       "input": {"tool_name": "Bash", "agent_id": "a1", "tool_input": {"command": "cat {{FIX}}/kb/docs/business/Catalog/rules.md"}, "agent_type": "cctoolkit:knowledge-extractor"},
       "expect": {"decision": "not_deny"}
-    }
+    },
+    {"name": "cat with stderr merged (2>&1) still dumps the file and is denied", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "cat {{FIX}}/big.cs 2>&1"}}, "expect": {"decision": "deny", "reason": "Unbounded cat on"}},
+    {"name": "cat with stderr discarded (2>/dev/null) still dumps the file and is denied", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "cat {{FIX}}/big.cs 2>/dev/null"}}, "expect": {"decision": "deny", "reason": "Unbounded cat on"}},
+    {"name": "cat sending both streams to a file (&>) never reaches the context and passes", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "cat {{FIX}}/big.cs &> /tmp/claude-evalout-{{SID}}"}}, "expect": {"decision": "not_deny"}},
+    {"name": "sed -n '1,9999p' is a dump in disguise and is denied, naming sed", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "sed -n '1,9999p' {{FIX}}/big.cs"}}, "expect": {"decision": "deny", "reason": "Unbounded sed on"}},
+    {"name": "sed -n '1,$p' is the whole file and is denied", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "sed -n '1,$p' {{FIX}}/big.cs"}}, "expect": {"decision": "deny"}},
+    {"name": "sed -n '250,$p' of a 300-line file is 51 lines and passes", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "sed -n '250,$p' {{FIX}}/big.cs"}}, "expect": {"decision": "not_deny"}},
+    {"name": "sed without -n prints the whole file and is denied", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "sed 's/C1/D1/' {{FIX}}/big.cs"}}, "expect": {"decision": "deny", "reason": "Unbounded sed on"}},
+    {"name": "sed 20q is a head of 20 lines and passes", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "sed 20q {{FIX}}/big.cs"}}, "expect": {"decision": "not_deny"}},
+    {"name": "sed -i edits in place, prints nothing, and passes", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "sed -i 's/C1/D1/' {{FIX}}/big.cs"}}, "expect": {"decision": "not_deny"}},
+    {"name": "sed -n with a pattern filters and passes", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "sed -n '/C1/p' {{FIX}}/big.cs"}}, "expect": {"decision": "not_deny"}},
+    {"name": "awk 1 is a cat and is denied", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "awk 1 {{FIX}}/big.cs"}}, "expect": {"decision": "deny", "reason": "Unbounded awk on"}},
+    {"name": "awk '{print $0}' is a cat and is denied", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "awk '{print $0}' {{FIX}}/big.cs"}}, "expect": {"decision": "deny"}},
+    {"name": "awk with a condition filters and passes", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "awk '/C1/' {{FIX}}/big.cs"}}, "expect": {"decision": "not_deny"}}
   ]
 }

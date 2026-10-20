@@ -8,14 +8,16 @@
 #
 # Case file shape:
 #   { "fixtures": [ {"path": "big.cs", "lines": 300, "kind": "sparse|flat|md|transcript|text", "ctx": N, "content": "..." } ],
+#     "requires": ["rtk"],                         # commands the file's cases need
 #     "cases": [ { "name": "...",
+#                  "requires": ["ast-grep"],       # the same, for one case
 #                  "hook": "hooks/x.sh"  |  "cmd": "bash {{KIT}}/tools/x ...",
 #                  "pre": [payload, ...],          # replayed first, output ignored
 #                  "input": payload,               # hook payload on stdin; session_id
 #                                                  # ({{SID}}), agent_id and transcript_path ("")
 #                                                  # default when absent
 #                  "env": {"VAR": "value"},
-#                  "expect": { "decision": "deny|allow|ask|none|not_deny",
+#                  "expect": { "decision": "deny|allow|ask|block|none|not_deny",
 #                              "reason": "substring", "command": "substring",
 #                              "command_absent": "substring", "prompt": "substring",
 #                              "prompt_absent": "substring",
@@ -27,6 +29,11 @@
 # to a session id unique to the case — so escape hatches keyed on the session
 # never leak between cases. Hooks run with the project root as cwd, as Claude Code
 # runs them. Everything the run leaves in /tmp carries the run id and is removed.
+#
+# A case whose `requires` names a command absent from the PATH is skipped and counted
+# apart; CCTOOLKIT_EVALS_STRICT=1 fails the run on any skip (CI). A `hook` that does not
+# exist fails its case. `decision` reads a PreToolUse `permissionDecision` or, from a
+# Stop-style answer, its top-level `decision` (`reason` the same).
 set -u
 
 # Claude Code exports the session's effort to Bash: a run launched from a session
@@ -44,8 +51,10 @@ KIT_DIR="$ROOT"
 # A fixture repo is its own project: an inherited CLAUDE_PROJECT_DIR would point
 # every hook and script at the repo the runner was launched from.
 unset CLAUDE_PROJECT_DIR
-FIX="$HERE/.fixtures"
 RUN="eval-$$-$(date +%s)"
+# One fixtures folder per run: two runs at once (two sessions, a run left behind) never
+# delete each other's files.
+FIX="$HERE/.fixtures/$RUN"
 ERRF="/tmp/claude-evalerr-$RUN"
 LATF="/tmp/claude-evallat-$RUN"
 # Median latency budget per hook, in ms: about twice the measure, so a regression that
@@ -72,9 +81,11 @@ done
 
 PASSED=0
 FAILED=0
+SKIPPED=0
 
 cleanup() {
   rm -rf "$FIX"
+  rmdir "$HERE/.fixtures" 2>/dev/null
   rm -f /tmp/claude-*"$RUN"* 2>/dev/null
 }
 trap cleanup EXIT
@@ -125,8 +136,8 @@ check() {
   local c="$1" out="$2" err="$3" rc="$4" fails=""
   local decision reason command prompt context want k v
   if [ -n "$out" ] && printf '%s' "$out" | jq -e 'type == "object"' >/dev/null 2>&1; then
-    decision=$(jf "$out" '.hookSpecificOutput.permissionDecision // "none"')
-    reason=$(jf "$out" '.hookSpecificOutput.permissionDecisionReason // ""')
+    decision=$(jf "$out" '.hookSpecificOutput.permissionDecision // .decision // "none"')
+    reason=$(jf "$out" '.hookSpecificOutput.permissionDecisionReason // .reason // ""')
     command=$(jf "$out" '.hookSpecificOutput.updatedInput.command // ""')
     prompt=$(jf "$out" '.hookSpecificOutput.updatedInput.prompt // ""')
     context=$(jf "$out" '.hookSpecificOutput.additionalContext // ""')
@@ -179,6 +190,7 @@ for f in "${files[@]}"; do
     i=$((i + 1))
   done
 
+  file_requires=$(jq -r '.requires // [] | join(" ")' "$f")
   ncase=$(jq '.cases | length' "$f")
   i=0
   while [ "$i" -lt "$ncase" ]; do
@@ -188,6 +200,17 @@ for f in "${files[@]}"; do
     hook=$(jf "$c" '.hook // empty')
     cmd=$(jf "$c" '.cmd // empty')
 
+    missing=""
+    for r in $file_requires $(jf "$c" '.requires // [] | join(" ")'); do
+      command -v "$r" >/dev/null 2>&1 || missing="$missing $r"
+    done
+    if [ -n "$missing" ]; then
+      SKIPPED=$((SKIPPED + 1))
+      printf '  SKIP  %s — missing:%s\n' "$name" "$missing"
+      i=$((i + 1))
+      continue
+    fi
+
     ENVARGS=()
     while IFS= read -r kv; do
       [ -n "$kv" ] && ENVARGS+=("$(expand "$kv" "$sid")")
@@ -196,7 +219,11 @@ $(jf "$c" '.env // {} | to_entries[] | "\(.key)=\(.value)"')
 EOF
 
     : > "$ERRF"
-    if [ -n "$hook" ]; then
+    nohook=""
+    if [ -n "$hook" ] && [ ! -f "$KIT_DIR/$hook" ]; then
+      # A hook that does not exist answers nothing, which `none` or `not_deny` would pass.
+      out=""; rc=127; nohook=" hook-missing"
+    elif [ -n "$hook" ]; then
       npre=$(jf "$c" '.pre // [] | length')
       p=0
       while [ "$p" -lt "$npre" ]; do
@@ -212,7 +239,7 @@ EOF
     fi
     err=$(cat "$ERRF" 2>/dev/null)
 
-    fails=$(check "$c" "$out" "$err" "$rc")
+    fails=$(check "$c" "$out" "$err" "$rc")$nohook
     if [ -z "$fails" ]; then
       PASSED=$((PASSED + 1))
       printf '  PASS  %s\n' "$name"
@@ -229,7 +256,13 @@ EOF
   done
 done
 
-printf '\n%d passed, %d failed\n' "$PASSED" "$FAILED"
+printf '\n%d passed, %d failed' "$PASSED" "$FAILED"
+[ "$SKIPPED" -eq 0 ] || printf ', %d skipped' "$SKIPPED"
+printf '\n'
+if [ "$SKIPPED" -gt 0 ] && [ "${CCTOOLKIT_EVALS_STRICT:-0}" = 1 ]; then
+  printf 'CCTOOLKIT_EVALS_STRICT=1: a skipped case fails the run\n'
+  FAILED=$((FAILED + SKIPPED))
+fi
 
 if [ -s "$LATF" ]; then
   printf '\nlatency (ms)                         cases  median    max\n'

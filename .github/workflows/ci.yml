@@ -54,7 +54,7 @@ jobs:
       - name: evals
         run: |
           set +e
-          bash evals/run.sh 2>&1 | tee evals.log
+          CCTOOLKIT_EVALS_STRICT=1 bash evals/run.sh 2>&1 | tee evals.log
           status=${PIPESTATUS[0]}
           failed=$(grep -E '^  FAIL  ' evals.log | sed 's/^  FAIL  //; s/%/%25/g' | awk '{printf "%s%%0A", $0}')
           [ -z "$failed" ] || echo "::error title=$(grep -cE '^  FAIL  ' evals.log) evals failed::${failed}"

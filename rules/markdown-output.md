@@ -34,6 +34,7 @@ Hooks, scripts, workflows and mods parse these by exact match: copy them charact
 - **Tags and ids** — the rule tag `{HandlerFolder}/{RM|RL-xx}` in its test carrier; knowledge-base ids `<PREFIX>-CU-nn`, `<PREFIX>-RM-nnn`, `<PREFIX>-D-nnn`, `ADR-nnn`, provisional `<PREFIX>-CU-?n` (`~` for `?` in a file name); the trailer `Kit-Batch: <plan folder>/FX`.
 - **Files** — `todo/<code>/<CODE>-PLAN.md`, `<CODE>-PLAN-F<n>.md`, `SPEC-<slug>.md`, everything under `<plan folder>/run/`, `docs/metrics/quality-report-YYYY-MM-DD.{md,json}`, the knowledge base's layout and its `INDEX.md`.
 - **Tool output** — a `cctoolkit` command's output lines and JSON fields are read as printed: quote them, never paraphrase what another step parses.
+- **Worktree prefix** — a batch run in a worktree of its own hands its agents `cd '<worktree>' && export CLAUDE_PROJECT_DIR='<worktree>' &&`: every Bash call opens with it, verbatim — the TDD scope hook reads the agent's tree from it.
 
 Identifier prefixes are language-neutral: `RM-xx` (business rule), `RL-xx` (rule local to a handler), `CU-xx` (use case), `D-xx` (business decision), `Tn` (technical point of a spec), `Hn` (assumption of a batch sheet), `DDD-nn`, `APP-nn`, `PERF-nn`, and the knowledge base's global ids (`CAT-RM-012`, `ADR-007`).
 

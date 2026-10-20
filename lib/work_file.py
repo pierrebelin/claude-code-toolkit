@@ -63,10 +63,11 @@ NAME = ".work.jsonl"
 KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker", "ack", "closing")
 
 
-def tmp_dir(name: str) -> Path:
-    """`$TMPDIR/cctoolkit-run/<repo>-<hash>/<name>`: the run's scratch folder, stable per repo, outside it."""
+def tmp_dir(name: str, root=None) -> Path:
+    """`$TMPDIR/cctoolkit-run/<repo>-<hash>/<name>`: the run's scratch folder, stable per repo, outside it.
+    `root` defaults to `kit_config.project_root()`."""
     import kit_config
-    root = Path(kit_config.project_root()).resolve()
+    root = Path(root or kit_config.project_root()).resolve()
     repo = f"{root.name}-{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
     return Path(tempfile.gettempdir()) / "cctoolkit-run" / repo / name
 

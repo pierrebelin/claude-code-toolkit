@@ -25,4 +25,6 @@ Observe, never fix. No write tool: deviation goes in verdict. Fixing belongs to 
 
 Caller's capture (`cctoolkit audit-capture`) already holds status, diff, RM/CU and DDD/APP/PERF coverage, access cost per modified file (`cctoolkit access-cost --diff`), build, `ArchitectureTests`. Open once, bounded. Re-establishing any = turn paid for nothing.
 
+Its `## Mechanical audit — F<n>` section (table `Axis | Check | Result | Evidence`) is the gate's own result, read by name first: `ok` row = established, never re-checked nor re-derived; `gap` row = a finding of the verdict, at the severity of its axis; `not checked` row = yours to judge. Layer rules always `not checked`: the judged pass.
+
 Workflow, verdict format, log budget → `/verify-ddd-tdd` skill.

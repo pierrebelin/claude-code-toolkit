@@ -1,4 +1,8 @@
 {
+  "requires": ["rtk"],
+  "fixtures": [
+    {"path": "wt/.git", "kind": "text", "content": "gitdir: /nowhere/.git/worktrees/wt"}
+  ],
   "cases": [
     {
       "name": "dotnet test is prefixed with rtk (upstream declines it, the module does it)",
@@ -10,7 +14,7 @@
         }
       },
       "expect": {
-        "decision": "allow",
+        "decision": "none",
         "command": "rtk dotnet test --project"
       }
     },
@@ -24,7 +28,7 @@
         }
       },
       "expect": {
-        "decision": "allow",
+        "decision": "none",
         "command": "APP_TEST_MODE=true rtk dotnet test"
       }
     },
@@ -119,7 +123,7 @@
         }
       },
       "expect": {
-        "decision": "allow",
+        "decision": "none",
         "command_absent": "5m"
       },
       "env": {
@@ -136,7 +140,7 @@
         }
       },
       "expect": {
-        "decision": "allow",
+        "decision": "none",
         "command": "rtk dotnet test --timeout 5m --project"
       },
       "env": {
@@ -153,7 +157,7 @@
         }
       },
       "expect": {
-        "decision": "allow",
+        "decision": "none",
         "command": "rtk dotnet test --timeout 5m --project tests/X/X.csproj 2>&1 | tail -5"
       },
       "env": {
@@ -170,7 +174,7 @@
         }
       },
       "expect": {
-        "decision": "allow",
+        "decision": "none",
         "command": "&& rtk dotnet test --timeout 5m --project"
       },
       "env": {
@@ -235,7 +239,7 @@
         }
       },
       "expect": {
-        "decision": "allow",
+        "decision": "none",
         "command_absent": "--timeout"
       }
     },
@@ -252,9 +256,13 @@
         }
       },
       "expect": {
-        "decision": "allow",
+        "decision": "none",
         "command_absent": "--timeout"
       }
-    }
+    },
+    {"name": "a rewrite of the module carries no decision: a compound command is never approved past the user's rules", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "dotnet test --project x; rm -rf /tmp/claude-evalrm-{{SID}}"}}, "expect": {"decision": "none", "command": "rtk dotnet test --project x; rm -rf"}},
+    {"name": "/usr/bin/grep as an argument is not stripped", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "ls -l /usr/bin/grep"}}, "expect": {"command_absent": "-l grep"}},
+    {"name": "/usr/bin/grep inside a heredoc body is text and stays untouched", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "cat <<'EOF' > /tmp/claude-evalhd-{{SID}}\n/usr/bin/grep -rn x src\nEOF"}}, "expect": {"command_absent": "\ngrep -rn"}},
+    {"name": "git in a linked worktree is left as written: the isolation check refuses rtk git", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "git status"}, "cwd": "{{FIX}}/wt/src"}, "expect": {"decision": "none", "command_absent": "rtk git"}}
   ]
 }

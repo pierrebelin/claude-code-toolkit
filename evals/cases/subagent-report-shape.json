@@ -10,19 +10,19 @@
       "name": "a ## RED without its table is sent back",
       "hook": "hooks/subagent-report-shape.sh",
       "input": {"last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Command: `rtk dotnet test ...` — exit 1\n- Production diff: `git diff --stat -- src/` — empty\n- Expected failure: the rule is not carried yet\n"},
-      "expect": {"exit": 0, "stdout": "Case covered"}
+      "expect": {"exit": 0, "decision": "block", "stdout": "Case covered"}
     },
     {
       "name": "a ## RED missing a required line names it",
       "hook": "hooks/subagent-report-shape.sh",
       "input": {"last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Command: `rtk dotnet test ...` — exit 1\n- Expected failure: the rule is not carried yet\n\n| Test | Case covered |\n|---|---|\n| `BTests.Refuses` | refusal |\n"},
-      "expect": {"exit": 0, "stdout": "Production diff"}
+      "expect": {"exit": 0, "decision": "block", "stdout": "Production diff"}
     },
     {
       "name": "a ## Command line without an observed exit code is sent back",
       "hook": "hooks/subagent-report-shape.sh",
       "input": {"last_assistant_message": "## RED\n- Tests: `tests/A/BTests.cs`\n- Command: `rtk dotnet test ...`\n- Production diff: `git diff --stat -- src/` — empty\n- Expected failure: nothing carries the rule\n\n| Test | Case covered |\n|---|---|\n| `BTests.Refuses` | refusal |\n"},
-      "expect": {"exit": 0, "stdout": "observed exit code"}
+      "expect": {"exit": 0, "decision": "block", "stdout": "observed exit code"}
     },
     {
       "name": "a complete ## GREEN passes",
@@ -34,13 +34,13 @@
       "name": "a ## GREEN without its cost line is sent back",
       "hook": "hooks/subagent-report-shape.sh",
       "input": {"last_assistant_message": "## GREEN\n- Production: `src/A/B.cs`\n- Command: `rtk dotnet test ...` — exit 0\n- Tests diff: `git diff --stat -- tests/` — empty\n- Deleted at REFACTOR: nothing\n- Reported without fixing: nothing\n"},
-      "expect": {"exit": 0, "stdout": "Cost"}
+      "expect": {"exit": 0, "decision": "block", "stdout": "Cost"}
     },
     {
       "name": "the block asks for a re-emission, never for a new run",
       "hook": "hooks/subagent-report-shape.sh",
       "input": {"last_assistant_message": "## GREEN\n- Production: `src/A/B.cs`\n- Command: `rtk dotnet test ...` — exit 0\n"},
-      "expect": {"exit": 0, "stdout": "without re-running a test or touching code"}
+      "expect": {"exit": 0, "decision": "block", "stdout": "without re-running a test or touching code"}
     },
     {
       "name": "a ## BLOCKED is never policed",

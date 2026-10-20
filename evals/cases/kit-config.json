@@ -302,6 +302,14 @@
         "exit": 0,
         "stdout": "WARN commands.testFast|FAIL closing.maxProductionFiles|FAIL closing.full[0].path|FAIL closing.full[0].changes|FAIL closing.full[0].scope|"
       }
+    },
+    {
+      "name": "run.parallelBatches: 0 is a FAIL, 3 a WARN (capped at 2), 2 or 1 say nothing; `parallel-batches` prints the capped value, 1 when unset; commands.worktreeSetup is the preset's restore",
+      "cmd": "R={{FIX}}/kcr-{{SID}}; rm -rf $R; mkdir -p $R/.claude && cd $R && for n in 0 3 2 1; do printf '{\"run\": {\"parallelBatches\": %s}}' $n > .claude/kit.config.json; printf '%s:%s:' $n \"$(CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py parallel-batches)\"; python3 {{KIT}}/lib/kit_config.py validate $R | grep -E '^[A-Za-z]+\trun' | cut -f1,2 | tr '\t\n' ' ,'; printf '|'; done; rm .claude/kit.config.json; printf '%s|' \"$(CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py parallel-batches)\"; printf '{\"product\": \"Shop\"}' > .claude/kit.config.json; CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py command worktreeSetup",
+      "expect": {
+        "exit": 0,
+        "stdout": "0:1:FAIL run.parallelBatches,|3:2:WARN run.parallelBatches,|2:2:|1:1:|1|rtk dotnet restore Shop.sln"
+      }
     }
   ]
 }

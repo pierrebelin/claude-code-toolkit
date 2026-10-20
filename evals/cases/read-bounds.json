@@ -168,6 +168,14 @@
       "env": {"CLAUDE_PROJECT_DIR": "{{FIX}}/kb"},
       "input": {"tool_name": "Read", "tool_input": {"file_path": "{{FIX}}/kb/notes/rules.md"}},
       "expect": {"decision": "none"}
+    },
+    {
+      "name": "knowledge base: a whole Read of a rules.md in a linked worktree of the project (a batch run beside another) is judged against that worktree's base and denied",
+      "cmd": "F=$(cygpath -m {{FIX}} 2>/dev/null || echo {{FIX}}); R=$F/rbw-{{SID}}; rm -rf $R; mkdir -p $R && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && git commit -q --allow-empty -m init && git worktree add -q --detach .claude/worktrees/wt && W=$R/.claude/worktrees/wt && mkdir -p $W/docs/business/Catalog && printf '# Catalog rules\\n' > $W/docs/business/Catalog/rules.md && cd {{ROOT}} && printf '{\"tool_name\":\"Read\",\"session_id\":\"{{SID}}\",\"tool_input\":{\"file_path\":\"%s\"}}' $W/docs/business/Catalog/rules.md | CLAUDE_PROJECT_DIR=$R bash {{KIT}}/hooks/read-bounds.sh | jq -r '.hookSpecificOutput.permissionDecision // \"pass\"'",
+      "expect": {
+        "exit": 0,
+        "stdout": "deny"
+      }
     }
   ]
 }

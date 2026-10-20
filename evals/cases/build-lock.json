@@ -1,0 +1,39 @@
+{
+  "fixtures": [],
+  "cases": [
+    {
+      "name": "build-lock runs the command, keeps its exit and leaves no lock behind",
+      "cmd": "R={{FIX}}/bl-run-{{SID}}; rm -rf $R; mkdir -p $R && cd $R && git init -q && bash {{KIT}}/scripts/build-lock.sh 'echo built; exit 3'; echo \"exit=$?|$(test -e .git/cctoolkit-build.lock && echo held || echo free)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "built\nexit=3|free"
+      }
+    },
+    {
+      "name": "build-lock in a worktree takes the lock of the git common dir: a lock held there makes it wait, then exit 75 without running the command",
+      "cmd": "R={{FIX}}/bl-wt-{{SID}}; rm -rf $R $R-wt; mkdir -p $R && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && git commit -q --allow-empty -m init && git worktree add -q $R-wt && mkdir .git/cctoolkit-build.lock && date +%s > .git/cctoolkit-build.lock/since && cd $R-wt && bash {{KIT}}/scripts/build-lock.sh --wait 1 'echo ran'; e=$?; cd $R && git worktree remove --force $R-wt; echo \"exit=$e\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "exit=75",
+        "stderr": "build-lock: timeout"
+      }
+    },
+    {
+      "name": "build-lock takes over a lock older than --stale",
+      "cmd": "R={{FIX}}/bl-stale-{{SID}}; rm -rf $R; mkdir -p $R && cd $R && git init -q && mkdir .git/cctoolkit-build.lock && echo 1 > .git/cctoolkit-build.lock/since && bash {{KIT}}/scripts/build-lock.sh --stale 60 'echo ran'",
+      "expect": {
+        "exit": 0,
+        "stdout": "ran",
+        "stderr": "stale lock taken over"
+      }
+    },
+    {
+      "name": "build-lock with a --wait that is not seconds is a usage error",
+      "cmd": "bash {{KIT}}/scripts/build-lock.sh --wait x 'true'",
+      "expect": {
+        "exit": 2,
+        "stderr": "take seconds"
+      }
+    }
+  ]
+}

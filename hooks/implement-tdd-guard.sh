@@ -68,6 +68,10 @@ esac
 echo "$launch" | grep -qiE 'correction' && exit 0
 
 transcript=$(echo "$input" | jq -r '.transcript_path // ""')
+# Inside a subagent the payload's transcript is the main chain's: the agent's own
+# sits beside it, <dir>/<session>/subagents/agent-<id>.jsonl. Absent, nothing is judged.
+agent=$(echo "$input" | jq -r '.agent_id // ""')
+[[ -n "$agent" && -n "$transcript" ]] && transcript="${transcript%.jsonl}/subagents/agent-${agent}.jsonl"
 [[ -n "$transcript" && -f "$transcript" ]] || exit 0
 
 # Cheap prefilter before paying jq on a large JSONL.

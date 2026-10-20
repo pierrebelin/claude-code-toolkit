@@ -14,7 +14,14 @@
 // Majors fixed without a second review (the suites rerun instead), no next-batch review the next sheet does not need.
 // lightblock: the light review finds a Blocking — round relays, a second light review on the change set; the next
 // sheet names a changed type, so it is reviewed. lightred: the cycle agent's RED is rejected — RED alone, then GREEN.
-// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|contest|refute|scope|diverge|verify|ripple|light|lightblock|lightred
+// overlap: two waves rewrite one test file — wave 2's RED starts only after wave 1's GREEN.
+// root: the batch runs in a worktree of its own beside another — every agent is handed it and the prefix of its Bash
+// calls, the work file stays in the session's run folder, the suites run under the build lock, the next sheet (the
+// batch running beside) is not reviewed.
+// Global green: a green first pass is one haiku agent; snapshot: a red suite → repair (default model), its promoted
+// snapshot read off the tree, declared, listed for review and handed to the audit; undeclared: a write under the test
+// roots without a `testEdits` entry is rejected, the retry declares it; blocked: a `test-code` write is a BLOCKED.
+// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|contest|refute|scope|diverge|verify|ripple|light|lightblock|lightred|overlap|snapshot|undeclared|blocked|root
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
 const variant = process.argv[3] || 'block'
@@ -25,22 +32,51 @@ const isLight = variant.startsWith('light')
 const GAPV = { verdict: 'GAPS', gaps: [{ severity: 'Major', axis: 'Reuse', gap: 'Second type of the same shape', evidence: 'src/X.cs:3', closure: 'one type left', fix: 'rename' }, { severity: 'Major', axis: 'Scope', gap: 'Hunk outside the batch', evidence: 'src/Y.cs:1', closure: 'hunk gone', fix: 'revert' }], minors: [], validations: [], hypotheses: [], block: '## Verdict — GAPS' }
 const cyc = (id, wave, b) => ({ id, wave, behaviour: b, rmcu: 'RM-01', steps: ['1. Step'], refactor: false, guard: false, methods: ['A.ShouldX_WhenY', 'A.ShouldDead_WhenZ'], decisions: '' })
 const idx = { ok: true, missing: false, errors: [], declaratives: variant === 'block' ? ['src/X.cs — mirrors Y'] : [], cycles: variant === 'split' ? Array.from({ length: 13 }, (_, i) => cyc(`C${i + 1}`, 1, `B${i + 1}`)) : [cyc('C1', 1, 'One'), cyc('C2', 2, 'Two')] }
+if (variant === 'overlap') idx.cycles = idx.cycles.map(c => ({ ...c, tests: ['tests/A/ATests.cs'] }))
 if (isLight) Object.assign(idx, { closing: { level: 'light', reasons: [], production: 3 }, cycles: idx.cycles.map((c, i) => ({ ...c, files: [`src/C${i}.cs`, `tests/C${i}Tests.cs`] })) })
 const REDOK = { status: 'RED', exit: 1, command: 'x', tests: ['t.cs'], stubs: [], productionDiff: [], table: [{ test: 'A.ShouldX_WhenY', case: '' }], removed: [], unreachable: [{ method: 'A.ShouldDead_WhenZ', site: 'src/X.cs:3', why: 'never reached' }], expectedFailure: '' }
 const GREENOK = { status: 'GREEN', exit: 0, command: 'x', production: ['src/X.cs'], testsDiff: [], cost: 'Cost: 0 read + 0 write outside loop; Infrastructure in loop or in-memory filter: none', independentOf: 'x', removed: '', flagged: '' }
 const VALIDV = { verdict: 'VALID', gaps: [], minors: [], validations: [], hypotheses: [], block: '## Verdict — VALID' }
+const RUNOK = { build: { exit: 0, output: '/tmp/build.txt' }, suites: [{ name: 'UnitTests', exit: 0, scope: 'whole suite', count: 1, run: 'x', output: '/tmp/test-UnitTests.txt', failed: [] }], unresolved: [], notRun: [], closing: '' }
+const GREENTRAP = ['snapshot', 'undeclared', 'blocked']
+const SNAP = 'tests/C/BTests.Get.verified.txt'
+const green = []
+let repairs = 0
 const agent = async (prompt, o) => {
   labels.push(o.label)
   const l = o.label
+  if (variant === 'root' && !(prompt.includes('Batch worktree: `/w/F3`') && prompt.includes("`cd '/w/F3' && export CLAUDE_PROJECT_DIR='/w/F3' &&`"))) console.log('WARN agent without its worktree:', l)
+  if (variant === 'root' && prompt.includes('Run work file:') && !prompt.includes('Run work file: /m/todo/x/run/.work.jsonl.')) console.log('WARN work file outside the session run folder:', l)
+  if (variant === 'root' && l === 'suites run' && !prompt.includes('cctoolkit suites-plan /m/todo/x/run/.work.jsonl F3 --lock')) console.log('WARN suites run without the build lock')
   if (isLight && l.endsWith('+GREEN')) {
     const own = l.startsWith('RED C1') ? 'C1' : 'C2'
     if (o.agentType !== 'cctoolkit:tdd-cycle' || !prompt.includes("cctoolkit tdd-scope red <<'RED_JSON'") || !prompt.includes(`--cycle ${own} --red`) || !prompt.includes(`--cycle ${own} --green`)) console.log('WARN cycle agent without its type, checkpoint or two contracts')
     return variant === 'lightred' && own === 'C1' ? { red: { ...REDOK, exit: 0 } } : { red: REDOK, green: GREENOK }
   }
-  if (isLight && l === 'suites') {
+  if (o.phase === 'Global green') green.push(`${l} ${o.model || 'default'}`)
+  if (isLight && l === 'suites run') {
     if (!prompt.includes('cctoolkit closing-level todo/x/X-PLAN-F3.md todo/x/run/.work.jsonl --record --next todo/x/X-PLAN-F4.md')) console.log('WARN suites without the closing level')
-    return { green: true, suites: [{ name: 'UnitTests', exit: 0, scope: 'whole suite', count: 1 }], fixes: [], closing: JSON.stringify({ level: 'light', reasons: [], production: 3, review: variant === 'lightblock', reviewWhy: variant === 'lightblock' ? 'the next sheet names types this batch changed: X' : 'the next sheet names no type this batch changed' }) }
+    return { ...RUNOK, closing: JSON.stringify({ level: 'light', reasons: [], production: 3, review: variant === 'lightblock', reviewWhy: variant === 'lightblock' ? 'the next sheet names types this batch changed: X' : 'the next sheet names no type this batch changed' }) }
   }
+  if (l === 'suites run') {
+    if (!prompt.includes('cctoolkit suites-plan todo/x/run/.work.jsonl F3') || prompt.includes('test-scope.md')) console.log('WARN suites run not handed the plan, or left to read test-scope.md')
+    return GREENTRAP.includes(variant) ? { ...RUNOK, suites: [RUNOK.suites[0], { name: 'ContractTests', exit: 1, scope: 'whole suite', count: 40, run: 'x', output: '/tmp/test-ContractTests.txt', failed: ['BTests.Get'] }] } : RUNOK
+  }
+  if (l === 'suites repair') {
+    repairs += 1
+    if (!prompt.includes('/tmp/test-ContractTests.txt') || !prompt.includes('BTests.Get') || prompt.includes('closing-level todo')) console.log('WARN repair without the first pass failures, or told to record the closing')
+    if (variant === 'undeclared' && repairs === 2 && !prompt.includes('without a `testEdits` entry: `tests/Core/MockX.cs`')) console.log('WARN undeclared write not handed to the retry')
+    const edits = variant === 'snapshot' ? [{ path: SNAP, kind: 'snapshot-promoted', why: 'F3 sheet, Decisions line 2: Get answers 201' }]
+      : variant === 'undeclared' && repairs === 2 ? [{ path: 'tests/Core/MockX.cs', kind: 'test-double', why: 'permission Products.Archive the batch adds' }]
+      : variant === 'blocked' ? [{ path: 'tests/U/ATests.cs', kind: 'test-code', why: 'expectation updated' }]
+      : []
+    return { green: true, suites: [{ name: 'UnitTests', exit: 0, scope: 'whole suite', count: 1 }, { name: 'ContractTests', exit: 0, scope: 'whole suite', count: 40 }], fixes: ['src/X.cs: status 201'], testEdits: edits }
+  }
+  if (l === 'suites tests') {
+    const changed = variant === 'snapshot' ? [{ path: SNAP, shared: false }] : variant === 'undeclared' ? [{ path: 'tests/Core/MockX.cs', shared: true }] : [{ path: 'tests/U/ATests.cs', shared: false }]
+    return { read: true, changed, closing: '' }
+  }
+  if (l.startsWith('arbiter') || l.startsWith('question')) return null
   if (isLight && l.startsWith('review light')) {
     reviews += 1
     if (!prompt.includes('Correctness and Scope')) console.log('WARN light review beyond its two axes')
@@ -86,17 +122,16 @@ const agent = async (prompt, o) => {
   if (variant === 'ripple' && l.startsWith('GREEN') && !(prompt.includes('Your work is them') && prompt.includes('`src/R.cs`'))) console.log('WARN GREEN without its ripple')
   if (l.startsWith('RED')) return { status: 'RED', exit: 1, command: 'x', tests: ['t.cs'], stubs: [], productionDiff: [], table: [{ test: 'A.ShouldX_WhenY', case: '' }], removed: [], unreachable: [{ method: 'A.ShouldDead_WhenZ', site: 'src/X.cs:3', why: 'never reached' }], expectedFailure: '' }
   if (l.startsWith('GREEN')) return { status: 'GREEN', exit: 0, command: 'x', production: ['src/X.cs'], testsDiff: [], cost: 'Cost: 0 read + 0 write outside loop; Infrastructure in loop or in-memory filter: none', independentOf: 'x', removed: '', flagged: '' }
-  if (l === 'suites') return { green: true, suites: [{ name: 'UnitTests', exit: 0, scope: 'whole suite', count: 1 }], fixes: [] }
   if (l === 'pre-audit') return { ok: true, files: [], preauditGreen: true, failures: [] }
   if (l === 'capture') { if (!prompt.includes('--base todo/x/run/.work.jsonl --suites-green UnitTests')) console.log('WARN capture without base or green suites'); return { ok: true } }
   if (l.startsWith('audit ')) { if (prompt.includes('First run')) console.log('WARN split auditor reruns the capture'); if (!prompt.includes('Decisions the run took')) console.log('WARN audit without decisions'); return { verdict: 'VALID', gaps: [], minors: [`minor of ${l}`], validations: [], hypotheses: [], block: `## Verdict — ${l}` } }
-  if (l.startsWith('audit')) { if (!prompt.includes('--base todo/x/run/.work.jsonl --suites-green UnitTests')) console.log('WARN audit capture without base or green suites'); if (!prompt.includes('Decisions the run took')) console.log('WARN audit without decisions'); return { verdict: 'VALID', gaps: [], minors: [], validations: [], hypotheses: [], block: '## Verdict — VALID' } }
+  if (l.startsWith('audit')) { if (variant === 'snapshot' && !(prompt.includes('Test files the global green repair wrote, each a point to verify') && prompt.includes(SNAP))) console.log('WARN audit not handed the test edits'); if (!prompt.includes('--base todo/x/run/.work.jsonl --suites-green UnitTests')) console.log('WARN audit capture without base or green suites'); if (!prompt.includes('Decisions the run took')) console.log('WARN audit without decisions'); return { verdict: 'VALID', gaps: [], minors: [], validations: [], hypotheses: [], block: '## Verdict — VALID' } }
   if (l === 'next batch review') return { result: 'GAPS', questions: [{ severity: 'Major', question: 'q', evidence: 'e', decidedBy: 'x', answer: 'a', options: [] }] }
   if (l === 'next sheet') return { ok: true }
-  if (l === 'report') { if (!prompt.includes('## To validate')) console.log('WARN report without To validate'); if (!prompt.includes('cctoolkit batch-baseline commit todo/x/run/.work.jsonl F3 --sheet todo/x/X-PLAN-F3.md') || !prompt.includes('--kind preexisting,question,answer')) console.log('WARN batch not committed nor its lines reduced'); if (!prompt.includes('run/batches/F3.md')) console.log('WARN report not under run/batches'); return { path: 'todo/x/run/batches/F3.md' } }
+  if (l === 'report') { if (!prompt.includes('## To validate')) console.log('WARN report without To validate'); if (prompt.includes('## STATUS — DONE') && !prompt.includes('cctoolkit batch-baseline commit todo/x/run/.work.jsonl F3 --sheet todo/x/X-PLAN-F3.md') || !prompt.includes('--kind preexisting,question,answer')) console.log('WARN batch not committed nor its lines reduced'); if (!prompt.includes('run/batches/F3.md')) console.log('WARN report not under run/batches'); return { path: 'todo/x/run/batches/F3.md' } }
   console.log('UNHANDLED', l); return null
 }
 const fn = new (Object.getPrototypeOf(async function () {}).constructor)('args', 'agent', 'log', 'phase', 'parallel', 'workflow', src)
-fn('todo/x/X-PLAN-F3.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), async () => null)
-  .then(r => { console.log('STATUS', r.status, '| toReview', r.toReview.length, r.toReview.map(x => x.step).join(',') + (audits ? ` | audits ${audits}` : '') + (reviews ? ` | light reviews ${reviews}` : '')); if (['contest', 'refute', 'scope', 'diverge', 'verify'].includes(variant)) console.log('REVIEW', r.toReview.filter(x => x.step === 'Audit').map(x => x.text.slice(0, 40)).join(' ; ')); console.log('AGENTS', labels.join(' | ')) })
+fn(variant === 'root' ? { sheet: 'todo/x/X-PLAN-F3.md', root: '/w/F3/', run: '/m/todo/x/run', partner: '/m/todo/x/X-PLAN-F4.md', lock: true } : 'todo/x/X-PLAN-F3.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), async () => null)
+  .then(r => { console.log('STATUS', r.status, '| toReview', r.toReview.length, r.toReview.map(x => x.step).join(',') + (audits ? ` | audits ${audits}` : '') + (reviews ? ` | light reviews ${reviews}` : '')); if (['contest', 'refute', 'scope', 'diverge', 'verify'].includes(variant)) console.log('REVIEW', r.toReview.filter(x => x.step === 'Audit').map(x => x.text.slice(0, 40)).join(' ; ')); console.log('AGENTS', labels.join(' | ')); console.log('GLOBAL GREEN', green.join(' | ')); if (GREENTRAP.includes(variant)) console.log('REASON', r.reason, '| TO VALIDATE', r.toReview.filter(x => x.step === 'Global green').map(x => x.text).join(' ; ')) })
   .catch(e => { console.log('ERR', e.stack); process.exitCode = 1 })

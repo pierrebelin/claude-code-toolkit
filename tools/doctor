@@ -248,9 +248,10 @@ fi
 # --- evals on demand -----------------------------------------------------------
 if [ "$EVALS" -eq 1 ] && [ -f "$KIT/evals/run.sh" ]; then
   # The summary line, not the last one: the latency table follows it.
-  summary=$(bash "$KIT/evals/run.sh" 2>&1 | grep -E '^[0-9]+ passed, [0-9]+ failed$' | tail -1)
+  summary=$(bash "$KIT/evals/run.sh" 2>&1 | grep -E '^[0-9]+ passed, [0-9]+ failed(, [0-9]+ skipped)?$' | tail -1)
   case "$summary" in
     *", 0 failed") report ok "hook evals" "$summary" ;;
+    *", 0 failed, "*) report WARN "hook evals" "$summary — a tool a case requires is missing" ;;
     *) report FAIL "hook evals" "$summary — cctoolkit evals for the detail" ;;
   esac
 fi

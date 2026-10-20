@@ -222,6 +222,14 @@
       "expect": {
         "exit": 0
       }
+    },
+    {
+      "name": "a file of a linked worktree of the project (a batch run beside another) is judged against that worktree, its sheet and its tests, not against the session's checkout",
+      "cmd": "F=$(cygpath -m {{FIX}} 2>/dev/null || echo {{FIX}}); R=$F/hcw-{{SID}}; rm -rf $R\nmkdir -p $R/.claude/hooks && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'readme\\n' > README.md && git add README.md && git commit -qm init && git worktree add -q --detach .claude/worktrees/wt && cd {{ROOT}}\nW=$R/.claude/worktrees/wt\nA=$W/src/Acme.Application/Catalog/CreateProduct\nT=$W/tests/Acme.UnitTests/Catalog\nmkdir -p $A $T\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\nmkdir -p $R/.claude/lib && cp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py {{KIT}}/lib/rule_sheet.py $R/.claude/lib/ && cp -R {{KIT}}/presets $R/.claude/\ncat > $A/CreateProductCommandHandler.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandler { }\nCSEOF\ncat > $A/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $T/CreateProductCommandHandlerTests.cs <<'CSEOF'\npublic sealed class CreateProductCommandHandlerTests\n{\n    [Fact]\n    [Trait(\"RM\", \"CreateProduct/RM-01\")]\n    public async Task Rejects_a_name_already_used()\n    {\n    }\n}\nCSEOF\nprintf '%s' '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$T/CreateProductCommandHandlerTests.cs'\"}}' | bash $R/.claude/hooks/handler-claude-md-check.sh\n",
+      "expect": {
+        "context": "rules with no test: RM-02",
+        "exit": 0
+      }
     }
   ]
 }

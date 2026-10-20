@@ -18,8 +18,13 @@ implementer after it; its structured output carries the checkpointed `red` and i
                                     once the test command is rerun
 
 Grants: `Test files you may modify, granted: <paths>.` read from the agent's transcript.
-State: `work_file.tmp_dir("tdd-scope")`, swept of agents older than two days at start;
-`evidence.jsonl` there is printed by `cctoolkit tdd-scope evidence`.
+State: `work_file.tmp_dir("tdd-scope")` of the main worktree, shared by its linked worktrees; swept of
+agents older than two days at start; `evidence.jsonl` there is printed by `cctoolkit tdd-scope evidence`.
+
+Tree: the session's checkout, unless the agent works in a linked worktree of it (a batch run beside
+another, run-lot's `root`): its first Edit or Write of a file there, or its first Bash call opening with
+`cd <worktree> &&`, moves its record to that worktree — snapshot taken again there, before any write —
+and every later check reads that tree.
 """
 import difflib
 import glob
@@ -66,7 +71,8 @@ def acting(kind, record):
 
 
 def state_dir():
-    d = work_file.tmp_dir("tdd-scope")
+    # Keyed on the main worktree: the CLI, run from a linked worktree, finds the records the hook wrote.
+    d = work_file.tmp_dir("tdd-scope", kit_config.main_worktree(kit_config.project_root()))
     d.mkdir(parents=True, exist_ok=True)
     return str(d)
 
@@ -187,6 +193,52 @@ def copies_of(agent_id, record):
 def save_record(agent_id, record):
     with open(_record_path(agent_id), "w", encoding="utf-8") as fh:
         json.dump(record, fh)
+
+
+# --- tree -----------------------------------------------------------------------------
+# The prefix run-lot.js puts before every Bash call of an agent working in a worktree.
+CD = re.compile(r"""^\s*cd\s+('[^']+'|"[^"]+"|[^\s;&|]+)\s*&&""")
+
+
+def worktree_named(d, event):
+    """The project's linked worktree this event points at — the file an Edit or Write targets, the folder a
+    Bash call opens with `cd <folder> &&` — or None."""
+    if event == "edit":
+        ti = d.get("tool_input") or {}
+        return kit_config.worktree_of(ti.get("file_path") or ti.get("notebook_path") or "")
+    if event == "bash":
+        m = CD.match(os.environ.get("HOOK_CMD", ""))
+        return kit_config.worktree_of(m.group(1).strip("'\"")) if m else None
+    return None
+
+
+def tree_config(cfg, record):
+    """The Config of the tree the record follows: its linked worktree, else `cfg`."""
+    if not (record or {}).get("root"):
+        return cfg
+    try:
+        return kit_config.load(record["root"])
+    except kit_config.KitConfigError:
+        return cfg
+
+
+def follow(cfg, d, event, record):
+    """`cfg`, or the Config of the linked worktree the agent turns out to work in: on its first event pointing
+    there, the record moves to it — snapshot taken again in that tree, before the write the event announces."""
+    if record is None or record.get("root"):
+        return tree_config(cfg, record)
+    top = worktree_named(d, event)
+    if not top:
+        return cfg
+    try:
+        tree_cfg = kit_config.load(top)
+    except kit_config.KitConfigError:
+        return cfg
+    agent_id = d["agent_id"]
+    copies = os.path.join(state_dir(), f"{agent_id}.tree")
+    record.update({"root": top, "start": time.time(), "snapshot": snapshot(tree_cfg, copies), "copies": copies})
+    save_record(agent_id, record)
+    return tree_cfg
 
 
 def start(cfg, agent_id, agent_type):
@@ -403,6 +455,9 @@ def changed(cfg, agent_id, record):
     others = set()
     for f in glob.glob(os.path.join(state_dir(), "*.writes")):
         if os.path.basename(f) == f"{agent_id}.writes" or os.path.getmtime(f) < since:
+            continue
+        # An agent of the other tree (checkout or batch worktree) writes the same relative paths elsewhere.
+        if (load_record(os.path.basename(f)[:-len(".writes")]) or {}).get("root") != record.get("root"):
             continue
         with open(f, encoding="utf-8") as fh:
             others.update(l.strip() for l in fh if l.strip())
@@ -652,6 +707,7 @@ def checkpoint(cfg, agent_id, transcript_path, report):
     record = load_record(agent_id)
     if record is None or role(record.get("type")) != CYCLE:
         return False, f"no `{CYCLE}` agent `{agent_id}` known to the TDD scope hook: the checkpoint closes a cycle agent's RED"
+    cfg = tree_config(cfg, record)
     if record.get("phase") == "green":
         return False, "RED checkpoint already passed: you are at GREEN, test files read-only"
     if not isinstance(report, dict) or str(report.get("status", "")) not in ("RED", "ALREADY_GREEN"):
@@ -673,6 +729,7 @@ def restore(cfg, agent_id, paths):
     if record is None:
         print(f"no snapshot for agent {agent_id}", file=sys.stderr)
         return 2
+    cfg = tree_config(cfg, record)
     allowed = set(changed(cfg, agent_id, record))
     for path in paths:
         rel = cfg.rel(path)
@@ -710,8 +767,11 @@ def hook(event):
         return 0
     if event == "start":
         start(cfg, d["agent_id"], d.get("agent_type", ""))
-    elif event == "edit":
-        edit(cfg, d, acting(kind, load_record(d["agent_id"])))
+        return 0
+    record = load_record(d["agent_id"])
+    cfg = follow(cfg, d, event, record)
+    if event == "edit":
+        edit(cfg, d, acting(kind, record))
     elif event == "final":
         final(cfg, d, kind)
     elif event == "bash":

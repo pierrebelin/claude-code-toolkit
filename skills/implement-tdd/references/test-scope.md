@@ -28,7 +28,9 @@ Narrowing to a class or a method appends the runner's own filter. Illustration, 
 
 RTK compacts logs, never replaces an exit code. No suite green without exit `0`. Distinguish a test not run, skipped, failed.
 
-**Suite run from the main agent writes its output to a file, never to context.** The global green agent of `run-lot` and any audit re-run — whole suites once per batch, independent suites in one message:
+**The global green of `run-lot` is resolved, not chosen.** `cctoolkit suites-plan <work> FX` reads §2 off `commands.suites` of `kit.config.json` and the batch diff, and prints the build line and one line per suite — `env` prefix, `commands.test`, the §3 filter, output file. A haiku agent runs them as printed. A repair agent opens only when a suite is red or a scope unresolved, the first pass's failures and output files in hand: it reruns the red suites filtered once, then every suite once. Its writes under the test roots are read off the tree (`suites-plan --tests-changed`) and checked against its `testEdits` (§6).
+
+**Suite run from the main agent writes its output to a file, never to context.** The global green agents of `run-lot` and any audit re-run — whole suites once per batch, independent suites in one message:
 
 ```bash
 <commands.test, {suite}=<Suite>> > "$SCRATCH/test-<Suite>.txt" 2>&1; echo "exit=$?"; tail -15 "$SCRATCH/test-<Suite>.txt"
@@ -115,3 +117,12 @@ A test asserting through an approval library (Verify, ApprovalTests, …) writes
 - GREEN contract hands the agent the approved-file path and the **literal** expected values, taken from the seed fixture. Not "the expected representation of the resource" — the values themselves. Anything less makes acceptance a judgement call the agent can't make.
 - Agent reads the received file, compares, then promotes it to the approved file. Any mismatch — a wrong status code, a validation problem, a field that shouldn't be there — is `## BLOCKED`, never an accepted snapshot.
 - **Only** write allowed under `tests/` during GREEN. Not a test modification.
+
+The global green repair writes under the test roots in two cases only, each declared in its `testEdits` (`path`, `kind`, `why`):
+
+| `kind` | Allowed when | `why` |
+|---|---|---|
+| `snapshot-promoted` | the received file differs from the approved one as a decision of the sheet dictates | quotes that sheet line |
+| `test-double` | a double under `layout.tests.shared` needs a value the batch adds (a constant, a permission) | names that value |
+
+Anything else — a test, a fixture, a double outside the shared roots, a snapshot no sheet line decides — is `BLOCKED`, declared `test-code` when already written. A write the tree shows without a `testEdits` entry is rejected and the repair retried. Every entry goes to the run report's `## To validate` and to the audit as a point to verify: a reason that does not hold is a `Test` gap.

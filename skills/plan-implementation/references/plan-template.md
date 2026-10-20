@@ -73,7 +73,7 @@ Structure expected by the `run-plan` / `run-lot` workflows. Two levels:
 
 ## Batch sheet (`[CODE]-PLAN-F1.md`)
 
-Section order is fixed: why (`Intent`, `Design`, `Decisions`), then how it is verified (`Test policy and scopes`), then the reference (`Code elements`), then the TDD contract (`Cycles`, read by `run-lot` through `cctoolkit sheet-cycles`), then `Assumptions`. About 20 KB at most.
+Section order is fixed: why (`Intent`, `Design`, `Decisions`), then how it is verified (`Test policy and scopes`), then the reference (`Code elements`), then the TDD contract (`Cycles`, read by `run-lot` through `cctoolkit sheet-cycles`), then `Assumptions`. About 20 KB at most: the block names tests and paths, it never repeats `## Code elements` nor `## Design` — `sheet-cycles --cycle` prints them to the GREEN.
 
 ````markdown
 # [CODE]-PLAN-F1 — [Batch name]
@@ -166,7 +166,7 @@ Signature and pseudo-code detail of every artefact `## Cycles` cites. Reference 
 
 ## Cycles
 
-TDD contract of the batch, read by `run-lot` through `cctoolkit sheet-cycles <sheet> --index` (exit 0 required). Fields: `/implement-tdd` `references/design.md` § "The `## Cycles` block"; waves and caps: `parallelism.md`. One cycle = one homogeneous pattern, one test project, at most 4 test files and 8 production files. Order inside a cycle: success first (it fixes the signatures), refusals next. No anchor comment needed on this heading.
+TDD contract of the batch, read by `run-lot` through `cctoolkit sheet-cycles <sheet> --index` (exit 0 required). Fields: `/implement-tdd` `references/design.md` § "The `## Cycles` block"; waves and caps: `parallelism.md`. One cycle = one homogeneous pattern, one test project, at most 4 test files and 8 production files. A step split past a cap never shares a test method between its cycles: a data-driven theory becomes one theory per cycle (`parallelism.md` of `implement-tdd`). Order inside a cycle: success first (it fixes the signatures), refusals next. No anchor comment needed on this heading.
 
 ```json
 {
@@ -181,15 +181,12 @@ TDD contract of the batch, read by `run-lot` through `cctoolkit sheet-cycles <sh
    "methods": ["[Action][Entity]Tests.ShouldCreate[Entity]_WhenCommandIsValid", "[Action][Entity]Tests.ShouldThrowEmptyNameException_When[Prop]IsEmpty"],
    "full": ["tests/{{PRODUCT}}.UnitTests/[Context]/[Feature]/[Action][Entity]/[Action][Entity]Tests.cs (to create)"],
    "bounded": ["tests/{{PRODUCT}}.CoreTests/DataBuilder/[Feature]/[Aggregate]Builder.cs"],
-   "scenarios": "valid command; empty name", "observation": "SavedEvents holds [Event] with [fields]; EmptyNameException",
+   "observation": "SavedEvents holds [Event] with [fields]; EmptyNameException",
    "outOfScope": "[guard of the next cycle]",
    "toCreate": ["src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs"],
    "production": ["src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/[Handler].cs", "src/{{PRODUCT}}.Domain/[...]/Aggregates/[Aggregate].cs", "src/{{PRODUCT}}.Application/[Context]/[Feature]/[Action]/CLAUDE.md"],
    "ripple": [], "boundedGreen": [],
-   "models": ["src/{{PRODUCT}}.Application/[Context]/[Feature]/[SiblingAction]/[SiblingHandler].cs — same command shape", "tests/{{PRODUCT}}.UnitTests/[Context]/[Feature]/[SiblingAction]/[SiblingAction]Tests.cs"],
-   "elements": "[Aggregate].Create(...); [Command](props) → [EntityId]",
-   "appliedIds": "DDD-01, DDD-02, APP-01", "invariants": "[RM-XX] — removes [defensive branch]",
-   "expectedCost": "1 read + 1 write to Infrastructure, independent of [input]"
+   "models": ["src/{{PRODUCT}}.Application/[Context]/[Feature]/[SiblingAction]/[SiblingHandler].cs — same command shape", "tests/{{PRODUCT}}.UnitTests/[Context]/[Feature]/[SiblingAction]/[SiblingAction]Tests.cs"]
   }
  ]
 }

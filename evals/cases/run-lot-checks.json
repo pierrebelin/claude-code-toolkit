@@ -38,7 +38,47 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js block | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two;AGENTS resume state | declaratives | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two;AGENTS resume state | declaratives | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a global green reached at the first pass is one suites agent on haiku, no repair (2026-10-20: one agent on the session model took 9 min 53 s, 4 min 50 s of it the repair)",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js block | grep -E 'GLOBAL GREEN|ERR|WARN|UNHANDLED' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "GLOBAL GREEN suites run haiku;"
+      }
+    },
+    {
+      "name": "run-lot flow: a red suite at the first pass opens the repair on the default model with the failures and their output files; its promoted snapshot, read off the tree and declared, goes to To validate and to the audit as a point to verify",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js snapshot | grep -E 'STATUS|AGENTS|GLOBAL|REASON|ERR|WARN|UNHANDLED' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Global green;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | suites repair | suites tests | next batch review | audit | next sheet | report;GLOBAL GREEN suites run haiku | suites repair default | suites tests haiku;REASON — | TO VALIDATE test file written to reach green, snapshot-promoted: tests/C/BTests.Get.verified.txt;"
+      }
+    },
+    {
+      "name": "run-lot flow: a write under the test roots without a testEdits entry is rejected, only the repair is retried, the retry declares it (2026-10-20: a shared double edited and two snapshots promoted to reach green, none in the report)",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js undeclared | grep -E 'STATUS|GLOBAL|REASON|ERR|WARN|UNHANDLED' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Global green;GLOBAL GREEN suites run haiku | suites repair default | suites tests haiku | suites repair default | suites tests haiku;REASON — | TO VALIDATE test file written to reach green, test-double: tests/Core/MockX.cs;"
+      }
+    },
+    {
+      "name": "run-lot flow: a test write outside the two global green exceptions is a BLOCKED settled by the arbiter, never retried as is; the batch stops with the write listed",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js blocked | grep -E 'STATUS|AGENTS|REASON|ERR|WARN|UNHANDLED' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | toReview 3 RED One,RED Two,Global green;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | suites repair | suites tests | arbiter Global green | question F3-1 | report;REASON global green not reached — BLOCKED — test writes outside the two global green exceptions (test-scope.md §6): tests/U/ATests.cs (test-code) | TO VALIDATE test file written to reach green, test-code: tests/U/ATests.cs;"
+      }
+    },
+    {
+      "name": "run-lot checks: test writes of the global green repair — a declared snapshot quoting the sheet and a shared double pass, an undeclared write or a snapshot without its sheet line is rejected, a test-code write or a double outside the shared roots is a BLOCKED",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -cE '^ok +(declared snapshot|declared path matched|snapshot promoted without|undeclared write|shared double declared|double outside|test-code write|test tree unread)' | sed 's/^/ok=/'",
+      "expect": {
+        "exit": 0,
+        "stdout": "ok=8"
       }
     },
     {
@@ -58,11 +98,27 @@
       }
     },
     {
+      "name": "run-lot flow: a batch in a worktree of its own beside another (`root`, `run`, `partner`, `lock`) hands every agent that worktree and the prefix of its Bash calls; the work file stays in the session's run folder, the suites run under the build lock, the sheet of the batch running beside is not reviewed",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js root | grep -E 'STATUS|ERR|WARN (agent without|work file outside|suites run without)|UNHANDLED|log: next|AGENTS' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "log: next batch review skipped — todo/x/X-PLAN-F4.md runs beside this batch;STATUS DONE | toReview 2 RED One,RED Two;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | audit | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a wave rewriting a test file of the wave before starts its REDs after that wave's GREENs (2026-10-20: RED(n+1) beside GREEN(n) on one theory kept every GREEN red)",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js overlap | grep -E 'log: wave|AGENTS|ERR|WARN|UNHANDLED' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "log: wave 2 rewrites tests/A/ATests.cs of wave 1: its REDs wait for that wave's GREENs;AGENTS resume state | RED C1 w1 One | GREEN C1 One | RED C2 w2 Two | GREEN C2 Two | suites run"
+      }
+    },
+    {
       "name": "run-lot flow: an ALREADY_GREEN whose ripple is absent from the batch diff still runs its GREEN on those files, one without pending files runs none (2026-10-20: a resumed C2 skipped the GREEN carrying 9 handlers, caught only by the audit)",
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js ripple | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | suites | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | suites run | pre-audit | next batch review | audit | next sheet | report;"
       }
     },
     {
@@ -70,7 +126,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js light | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 4 RED One,RED Two,Audit,Audit | light reviews 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites | pre-audit | review light | fix 1 | report;"
+        "stdout": "STATUS DONE | toReview 4 RED One,RED Two,Audit,Audit | light reviews 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | review light | fix 1 | report;"
       }
     },
     {
@@ -78,7 +134,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js lightblock | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | light reviews 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites | pre-audit | next batch review | review light | round 1 open | fix 1 | round 1 close | review light retry 1 | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | light reviews 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | review light | round 1 open | fix 1 | round 1 close | review light retry 1 | next sheet | report;"
       }
     },
     {
@@ -86,7 +142,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js lightred | grep -E 'AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One | GREEN C1 One | RED C2 w2 Two +GREEN | suites"
+        "stdout": "AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One | GREEN C1 One | RED C2 w2 Two +GREEN | suites run"
       }
     },
     {
@@ -94,7 +150,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js split | grep -E 'AGENTS|ERR|WARN|UNHANDLED' | sed 's/.*GREEN C13 B13 | //' | tr '\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "suites | pre-audit | next batch review | capture | audit code | audit plan | next sheet | report;"
+        "stdout": "suites run | pre-audit | next batch review | capture | audit code | audit plan | next sheet | report;"
       }
     },
     {
@@ -110,7 +166,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js refute | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 3;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites | pre-audit | next batch review | audit | verify Second type of the same shape | round 1 open | fix 1 | round 1 close | audit retry 1 | round 2 open | fix 2 | round 2 close | audit retry 2 | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 3;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | next batch review | audit | verify Second type of the same shape | round 1 open | fix 1 | round 1 close | audit retry 1 | round 2 open | fix 2 | round 2 close | audit retry 2 | next sheet | report;"
       }
     },
     {
@@ -175,6 +231,46 @@
       "expect": {
         "exit": 0,
         "stdout": "STATUS BLOCKED | batches set aside: F1, F2;AGENTS preflight | next batch | run-lot F1 | aside F1 | next batch | run-lot F2 | aside F2 | breaker 2 | breaker line | next batch | run-lot F3 | gate F3 | commit F3 | next batch | final check | security | report;"
+      }
+    },
+    {
+      "name": "run-plan parallel flow: run.parallelBatches 2 — F1 in the checkout beside F2 in its worktree (partner, build lock, root, run); F1 gated and committed as alone, F2 gated and committed in its worktree, landed, its build checked once landed, the worktree removed; F3 alone after; the report told who ran with whom",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-parallel-flow.js {{KIT}}/workflows/run-plan.js together | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | — | F1 DONE with F2, F2 DONE with F1, F3 DONE;AGENTS preflight | next batch | pair | worktree F2 | journal | run-lot F1 | run-lot F2 wt | gate F1 | commit F1 | gate F2 | commit F2 | land F2 | gate F2 landed | remove F2 | next batch | pair | run-lot F3 | gate F3 | commit F3 | next batch | final check | security | merge prepare | report;"
+      }
+    },
+    {
+      "name": "run-plan parallel flow: the worktree's batch does not land (a conflict) — discarded, its lines dropped, run again alone in the checkout, never paired again",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-parallel-flow.js {{KIT}}/workflows/run-plan.js conflict | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | — | F1 DONE with F2, F2 DISCARDED with F1, F2 DONE, F3 DONE;AGENTS preflight | next batch | pair | worktree F2 | journal | run-lot F1 | run-lot F2 wt | gate F1 | commit F1 | gate F2 | commit F2 | land F2 | discard F2 | remove F2 | next batch | run-lot F2 | gate F2 | commit F2 | next batch | pair | run-lot F3 | gate F3 | commit F3 | next batch | final check | security | merge prepare | report;"
+      }
+    },
+    {
+      "name": "run-plan parallel flow: a build red once the worktree's batch landed — the checkout put back (batch-worktree undo), the batch run again alone",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-parallel-flow.js {{KIT}}/workflows/run-plan.js landedred | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | — | F1 DONE with F2, F2 DISCARDED with F1, F2 DONE, F3 DONE;AGENTS preflight | next batch | pair | worktree F2 | journal | run-lot F1 | run-lot F2 wt | gate F1 | commit F1 | gate F2 | commit F2 | land F2 | gate F2 landed | discard F2 | remove F2 | next batch | run-lot F2 | gate F2 | commit F2 | next batch | pair | run-lot F3 | gate F3 | commit F3 | next batch | final check | security | merge prepare | report;"
+      }
+    },
+    {
+      "name": "run-plan parallel flow: a batch blocked in its worktree is set aside there, its patch in the run folder; the checkout's batch is committed and the plan goes on",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-parallel-flow.js {{KIT}}/workflows/run-plan.js aside | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | batches set aside: F2 | F1 DONE with F2, F2 BLOCKED with F1, F3 DONE;AGENTS preflight | next batch | pair | worktree F2 | journal | run-lot F1 | run-lot F2 wt | gate F1 | commit F1 | aside F2 | remove F2 | next batch | pair | run-lot F3 | gate F3 | commit F3 | next batch | final check | security | report;"
+      }
+    },
+    {
+      "name": "run-plan parallel flow: run.parallelBatches 1 — no pairing agent, no parallel argument to run-lot, the report says nothing of worktrees",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-parallel-flow.js {{KIT}}/workflows/run-plan.js serial | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | — | F1 DONE, F2 DONE, F3 DONE;AGENTS preflight | next batch | run-lot F1 | gate F1 | commit F1 | next batch | run-lot F2 | gate F2 | commit F2 | next batch | run-lot F3 | gate F3 | commit F3 | next batch | final check | security | merge prepare | report;"
       }
     }
   ]

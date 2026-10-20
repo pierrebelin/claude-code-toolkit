@@ -26,6 +26,18 @@ fi
 
 . "$(dirname "${BASH_SOURCE[0]}")/project-root.sh"
 root="$(cd "$PROJECT_ROOT" 2>/dev/null && pwd -P)" || exit 0
+# An auditor of a batch run in a linked worktree (run-lot's `root`) opens each call with `cd <worktree> &&`:
+# its marker and its tree are that worktree's, when its `.git` file points into this repository.
+if [[ "$cmd" =~ ^[[:space:]]*cd[[:space:]]+[\'\"]?([^\'\"\;\&\|]+)[\'\"]?[[:space:]]*\&\& ]]; then
+  wt="${BASH_REMATCH[1]%"${BASH_REMATCH[1]##*[![:space:]]}"}"
+  kit_path wt
+  if [ -f "$wt/.git" ] && gitdir="$(sed -n 's/^gitdir: //p' "$wt/.git" 2>/dev/null | head -1)" && [ -n "$gitdir" ]; then
+    main="$root"
+    kit_path gitdir
+    kit_path main
+    case "$gitdir" in "$main"/.git/worktrees/*) root="$(cd "$wt" 2>/dev/null && pwd -P)" || exit 0 ;; esac
+  fi
+fi
 # HOOK_SUITES_MARKER: the evals point at a fixture marker.
 marker="${HOOK_SUITES_MARKER:-}"
 if [ -z "$marker" ]; then

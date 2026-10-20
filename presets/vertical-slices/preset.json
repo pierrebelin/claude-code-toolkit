@@ -108,6 +108,7 @@
   "commands": {
     "build": "",
     "test": "",
+    "worktreeSetup": "",
     "architectureTest": {
       "run": "",
       "when": ""

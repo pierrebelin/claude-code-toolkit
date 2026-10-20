@@ -19,6 +19,7 @@
   "cases": [
     {
       "name": "flat handler: two reads, one write, exit 0",
+      "requires": ["ast-grep"],
       "cmd": "python3 {{KIT}}/scripts/access-cost.py {{FIX}}/cost/FlatHandler.cs",
       "expect": {
         "exit": 0,
@@ -27,6 +28,7 @@
     },
     {
       "name": "receiver the heuristic does not know is listed to classify, not counted",
+      "requires": ["ast-grep"],
       "cmd": "python3 {{KIT}}/scripts/access-cost.py {{FIX}}/cost/FlatHandler.cs",
       "expect": {
         "exit": 0,
@@ -35,6 +37,7 @@
     },
     {
       "name": "repository await inside foreach is flagged, exit 2",
+      "requires": ["ast-grep"],
       "cmd": "python3 {{KIT}}/scripts/access-cost.py {{FIX}}/cost/LoopHandler.cs",
       "expect": {
         "exit": 2,
@@ -43,6 +46,7 @@
     },
     {
       "name": "flagged file ends with a Cost line naming the defect",
+      "requires": ["ast-grep"],
       "cmd": "python3 {{KIT}}/scripts/access-cost.py {{FIX}}/cost/LoopHandler.cs",
       "expect": {
         "stdout": "Cost: 0 read + 1 write outside loop; Infrastructure in loop or in-memory filter: 1 — design to revisit"
@@ -50,6 +54,7 @@
     },
     {
       "name": "in-memory Where on an awaited result is flagged, exit 2",
+      "requires": ["ast-grep"],
       "cmd": "python3 {{KIT}}/scripts/access-cost.py {{FIX}}/cost/FilterHandler.cs",
       "expect": {
         "exit": 2,
@@ -58,6 +63,7 @@
     },
     {
       "name": "several files: one Cost line for the whole set",
+      "requires": ["ast-grep"],
       "cmd": "python3 {{KIT}}/scripts/access-cost.py {{FIX}}/cost/FlatHandler.cs {{FIX}}/cost/LoopHandler.cs",
       "expect": {
         "exit": 2,
@@ -90,6 +96,7 @@
     },
     {
       "name": "--base: nothing modified since the batch started, no .cs file to read, exit 0",
+      "requires": ["ast-grep"],
       "cmd": "R={{FIX}}/costbase-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src && cp {{FIX}}/cost/LoopHandler.cs $R/src/ && cd $R && git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 >/dev/null && python3 {{KIT}}/scripts/access-cost.py --base $W F1",
       "expect": {
         "exit": 0,
@@ -98,6 +105,7 @@
     },
     {
       "name": "--base: a loop an earlier batch committed is listed pre-existing and does not block",
+      "requires": ["ast-grep"],
       "cmd": "R={{FIX}}/costbase-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src && cp {{FIX}}/cost/LoopHandler.cs $R/src/ && cd $R && git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 >/dev/null && printf 'public sealed class Extra { }\\n' >> src/LoopHandler.cs && python3 {{KIT}}/scripts/access-cost.py --base $W F1",
       "expect": {
         "exit": 0,
@@ -106,6 +114,7 @@
     },
     {
       "name": "--base: a loop the current batch adds is flagged, exit 2, the earlier one stays pre-existing",
+      "requires": ["ast-grep"],
       "cmd": "R={{FIX}}/costbase-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src && cp {{FIX}}/cost/LoopHandler.cs $R/src/ && cd $R && git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -qm init && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 >/dev/null && printf '\\npublic sealed class Second\\n{\\n    public async Task Run(List<int> ids, CancellationToken ct)\\n    {\\n        foreach (var id in ids)\\n        {\\n            await otherRepository.Get(id, ct);\\n        }\\n    }\\n}\\n' >> src/LoopHandler.cs && python3 {{KIT}}/scripts/access-cost.py --base $W F1 src/LoopHandler.cs",
       "expect": {
         "exit": 2,

@@ -3,7 +3,8 @@
 
     cctoolkit sheet-cycles <sheet> --index [--root DIR]      validate, print the compact index as JSON
                                                              (`closing`: the run-lot closing level the block plans,
-                                                             lib/closing_level.py; `files` per cycle: the code it writes)
+                                                             lib/closing_level.py; `files` per cycle: the code it writes,
+                                                             `tests`: the test files its RED rewrites, shared ones left out)
     cctoolkit sheet-cycles <sheet> --cycle ID --red|--green  print the RED or GREEN contract of one cycle
     cctoolkit sheet-cycles <sheet> --cycle ID --pending WORK files of its `ripple` and `toCreate` absent from the batch
                                                              diff, one per line: an ALREADY_GREEN that leaves any is no GREEN
@@ -35,11 +36,14 @@ BATCH = [""]
 REQUIRED = {
     "id": str, "wave": int, "behaviour": str, "rmcu": str, "steps": list, "level": str,
     "skill": str, "testClass": str, "fixture": str, "methods": list, "full": list,
-    "bounded": list, "scenarios": str, "observation": str, "outOfScope": str,
+    "bounded": list, "observation": str, "outOfScope": str,
     "toCreate": list, "production": list, "ripple": list, "boundedGreen": list,
-    "elements": str, "appliedIds": str, "invariants": str, "expectedCost": str,
 }
-OPTIONAL = {"refactor": bool, "guard": bool, "snapshot": str, "decisions": str, "models": list}
+# `scenarios` absent: the method names state them. `elements`, `appliedIds`, `invariants`, `expectedCost`
+# absent: the GREEN contract prints the sheet's own (`kit:code-elements` entries of the cycle's files, `kit:design`).
+OPTIONAL = {"refactor": bool, "guard": bool, "snapshot": str, "decisions": str, "models": list,
+            "scenarios": str, "elements": str, "appliedIds": str, "invariants": str, "expectedCost": str}
+FROM_DESIGN = ("appliedIds", "invariants", "expectedCost")
 # Beside `cycles`: `"closing": "full"` forces the full closing of run-lot, `"light"` lifts its
 # production cap and ripple, never its authorisation, migration or contract rules (lib/closing_level.py).
 CLOSING_FORCED = ("full", "light")
@@ -121,7 +125,7 @@ def load(sheet):
 def validate(data, layout):
     errors = []
     seen_ids, seen_behaviours = set(), set()
-    by_wave = {}
+    by_wave, methods = {}, []
     for i, c in enumerate(data["cycles"]):
         if not isinstance(c, dict):
             errors.append(f"cycle {i + 1}: not an object")
@@ -174,6 +178,7 @@ def validate(data, layout):
         if len(production) > MAX_PRODUCTION_FILES:
             errors.append(f"{where}: {len(production)} production files, at most {MAX_PRODUCTION_FILES} — split the cycle")
         by_wave.setdefault(c["wave"], []).append((c["id"], set(tests), production))
+        methods.append((c["id"], [str(m).strip() for m in c["methods"]]))
     per_file = {}
     for members in by_wave.values():
         for cid, _, production in members:
@@ -188,11 +193,41 @@ def validate(data, layout):
                 shared = (members[a][1] & members[b][1]) | (members[a][2] & members[b][2])
                 if shared:
                     errors.append(f"wave {wave}: {members[a][0]} and {members[b][0]} share {', '.join(sorted(shared))} — successive waves, or registry entries moved to `declaratives`")
+    # A method in two cycles (a data-driven theory, one row per cycle) never goes GREEN alone: the runner
+    # filters a class or a method, never a theory row, so the other cycle's rows keep it red.
+    shared_methods = {}
+    for a in range(len(methods)):
+        for b in range(a + 1, len(methods)):
+            for x in methods[a][1]:
+                for y in methods[b][1]:
+                    if same_method(x, y):
+                        ids = shared_methods.setdefault(max(x, y, key=len), [])
+                        ids += [i for i in (methods[a][0], methods[b][0]) if i not in ids]
+    for m, ids in shared_methods.items():
+        errors.append(f"`{m}`: in the `methods` of {', '.join(ids)} — split the theory into one method per cycle (e.g. one per route family), or group the cycles")
+    # Wave n+1's REDs run beside wave n's GREENs (run-lot): a test file both rewrite keeps those GREENs red.
+    waves = sorted(by_wave)
+    for w, nxt in zip(waves, waves[1:]):
+        for a in by_wave[w]:
+            for b in by_wave[nxt]:
+                shared = a[1] & b[1]
+                if shared:
+                    errors.append(f"waves {w} and {nxt}: {a[0]} and {b[0]} share {', '.join(sorted(shared))} — successive waves overlap RED(n+1) with GREEN(n): move {b[0]} one wave later or split the test file")
     if "declaratives" in data and not isinstance(data["declaratives"], list):
         errors.append("`declaratives` must be a list")
     if "closing" in data and data["closing"] not in CLOSING_FORCED:
         errors.append("`closing` is \"full\", \"light\" or absent")
     return errors
+
+
+def same_method(a, b):
+    """`sameMethod` of run-lot: equal, or one is the other qualified (`Class.Method` against `Method`)."""
+    return a == b or a.endswith(f".{b}") or b.endswith(f".{a}")
+
+
+def tests_of(c, layout):
+    """Test files a cycle's RED rewrites (`full`), those under `layout.tests.shared` left out."""
+    return sorted({p for p in (path_of(e) for e in c.get("full", [])) if layout.is_test(p)})
 
 
 def files_of(c, layout):
@@ -223,7 +258,7 @@ def index(data, layout):
         "cycles": [
             {**{k: c.get(k, False if k in ("refactor", "guard") else "") for k in
                 ("id", "wave", "behaviour", "rmcu", "steps", "refactor", "guard", "methods", "decisions")},
-             "files": files_of(c, layout)}
+             "files": files_of(c, layout), "tests": tests_of(c, layout)}
             for c in sorted(data["cycles"], key=lambda c: (c["wave"], data["cycles"].index(c)))
         ],
     }
@@ -233,7 +268,42 @@ def listed(xs):
     return ", ".join(f"`{x}`" for x in xs) if xs else "none"
 
 
-def contract(c, phase):
+def section(text, anchor):
+    """Body of the `## ` section whose heading carries `<!-- kit:<anchor> -->`, '' when absent."""
+    m = re.search(rf"^## [^\n]*<!--\s*kit:{anchor}\s*-->[^\n]*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    return m.group(1).strip() if m else ""
+
+
+def elements_of(c, text):
+    """`## Code elements` entries (`**`Name`**` and the lines under it) whose name is the stem of a file the
+    cycle writes; the whole section when none matches, `none in the sheet` without one."""
+    body = section(text, "code-elements")
+    if not body:
+        return ["none in the sheet"]
+    stems = {os.path.splitext(os.path.basename(path_of(e)))[0]
+             for k in ("full", "toCreate", "production", "ripple") for e in c[k]}
+    entries, current = [], None
+    for line in body.splitlines():
+        head = re.match(r"\*\*`([A-Za-z_]\w*)", line)
+        if head:
+            current = [head.group(1), line]
+            entries.append(current)
+        elif not line.strip() or line.startswith("#"):
+            current = None
+        elif current is not None:
+            current.append(line)
+    kept = [line for e in entries if e[0] in stems for line in e[1:]]
+    return kept or [line for line in body.splitlines() if line.strip()]
+
+
+def design_of(text):
+    """Rows of the sheet's `## Design` table, header and anchors left out."""
+    rows = [re.sub(r"\s*<!--.*?-->", "", line) for line in section(text, "design").splitlines()
+            if line.startswith("|")]
+    return rows[2:] or ["none in the sheet"]
+
+
+def contract(c, phase, text=""):
     lines = [f"RM/CU: {c['rmcu']}", f"Behaviour: {c['behaviour']}"]
     if c.get("models"):
         lines.append(f"Model on (existing analogues — read first, copy their shape, never search for others): {' ; '.join(c['models'])}")
@@ -244,7 +314,7 @@ def contract(c, phase):
             f"Methods: {listed(c['methods'])}",
             f"Rewritten by you (read in full): {listed(c['full'])}",
             f"Read bounded (context only): {listed(c['bounded'])}",
-            f"Scenarios: {c['scenarios']}",
+            f"Scenarios: {c.get('scenarios') or 'one per method, as its name states'}",
             f"Expected observation: {c['observation']}",
         ]
     else:
@@ -254,11 +324,18 @@ def contract(c, phase):
             f"Production you may fill (with the RED stubs, nothing else under the source roots): {listed(c['production'])}",
             f"Signature ripple — also touched (read in full): {' ; '.join(c['ripple']) if c['ripple'] else 'none'}",
             f"Read bounded (context only): {listed(c['boundedGreen'])}",
-            f"Elements: {c['elements']}",
-            f"Applied DDD/APP ids: {c['appliedIds']}",
-            f"Exploitable invariants — what they remove: {c['invariants']}",
-            f"Expected access cost: {c['expectedCost']}",
         ]
+        if c.get("elements"):
+            lines.append(f"Elements: {c['elements']}")
+        else:
+            lines += ["Elements (the sheet's `## Code elements`, entries of the files you write):", *elements_of(c, text)]
+        for k, label in (("appliedIds", "Applied DDD/APP ids"), ("invariants", "Exploitable invariants — what they remove"),
+                         ("expectedCost", "Expected access cost")):
+            if c.get(k):
+                lines.append(f"{label}: {c[k]}")
+        if not all(c.get(k) for k in FROM_DESIGN):
+            lines += ["Design of the batch (the sheet's `## Design`: applied ids, invariants and what they remove, access cost):",
+                      *design_of(text)]
         if c.get("snapshot"):
             lines.append(f"Snapshot (contract tests only): {c['snapshot']}")
     if c.get("decisions"):
@@ -386,7 +463,7 @@ def main(argv):
             for path in pending(c, root, argv[5]):
                 print(path)
             return 0
-        print(contract(c, phase))
+        print(contract(c, phase, open(sheet, encoding="utf-8").read()))
         return 0
     if mode in ("--methods", "--done", "--summary") and not arg:
         print(f"{mode} needs WORK", file=sys.stderr)

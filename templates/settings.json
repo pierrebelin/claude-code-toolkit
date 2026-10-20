@@ -1,7 +1,8 @@
 {
   "includeCoAuthoredBy": false,
   "env": {
-    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "900000"
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "900000",
+    "CLAUDE_CODE_RETRY_WATCHDOG": "1"
   },
   "permissions": {
     "allow": [

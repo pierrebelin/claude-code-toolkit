@@ -6,7 +6,7 @@ export const meta = {
     { title: 'Design', detail: 'cycle index of the sheet; design writes the `## Cycles` block only when absent or invalid; declaratives' },
     { title: 'RED', detail: 'tdd-test-author, waves in sequence, cycles of a wave in parallel; light closing: tdd-cycle writes a cycle\'s RED then its GREEN past a checkpoint the hook checks' },
     { title: 'GREEN', detail: 'tdd-implementer, serial, writes the cycle state and the handler CLAUDE.md' },
-    { title: 'Global green', detail: 'whole or filtered suites per test-scope.md, beside the pre-audit gate; closing level full or light read off the batch diff' },
+    { title: 'Global green', detail: 'beside the pre-audit gate: suites run on haiku as cctoolkit suites-plan resolves them; red → suites repair, its writes under the test roots checked against testEdits; closing level full or light read off the batch diff' },
     { title: 'Closing', detail: 'cctoolkit pre-audit and what it lists, beside global green' },
     { title: 'Audit', detail: 'full: cctoolkit audit-capture, ddd-tdd-auditor, each Blocking or Major on Correctness, Reuse or Placement checked once by a fresh agent, two retries at most; light: one review of the diff on Correctness and Scope, a second only after a Blocking' },
     { title: 'Review', detail: 'adversarial-reviewer on the next sheet, beside the audit; light: only when the next sheet names a type the batch changed' },
@@ -25,10 +25,19 @@ const naming = /^(.*)-(F\d+)\.md$/.exec(sheet)
 if (!naming) throw new Error('expected argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`')
 const plan = `${naming[1]}.md`
 const batch = naming[2]
-const runRoot = `${sheet.slice(0, sheet.lastIndexOf('/') + 1) || './'}run`
+// A batch run in a git worktree of its own, beside another batch (run-plan, `run.parallelBatches`):
+// `root` = that worktree, absolute — sheet, plan, source and test paths resolve under it; `run` = the run
+// folder of the session's checkout, absolute — work file, questions and report stay where the session reads them.
+const opts = args && typeof args === 'object' ? args : {}
+const root = slashed(opts.root || '').trim().replace(/\/+$/, '')
+const runRoot = opts.run ? slashed(opts.run).trim().replace(/\/+$/, '') : `${sheet.slice(0, sheet.lastIndexOf('/') + 1) || './'}run`
 const workFile = `${runRoot}/.work.jsonl`
 const reportPath = `${runRoot}/batches/${batch}.md`
 const commitAtEnd = !(args && typeof args === 'object' && args.commit === false)
+// Beside another batch: `partner` = the sheet of the batch running at the same time — never reviewed nor
+// amended by this one, it is already running; `lock` = solution builds and whole suites under `cctoolkit build-lock`.
+const partner = slashed(opts.partner || '').trim()
+const lock = opts.lock === true
 const tmpCommand = `cctoolkit run-work tmp ${batch}`
 const TMP = `\`<tmp>\` = the folder \`${tmpCommand}\` prints (system temp, never under run/)`
 
@@ -60,7 +69,8 @@ const CYCLE = obj({
   methods: arr(str),
   decisions: str,
   files: arr(str),
-}, ['files'])
+  tests: arr(str),
+}, ['files', 'tests'])
 
 // The closing level, `full` or `light` (lib/closing_level.py): planned by `sheet-cycles --index`,
 // read off the batch diff by `cctoolkit closing-level` once the suites are green.
@@ -102,13 +112,32 @@ const GREEN = obj({
 
 const OK = obj({ ok: bool, detail: str }, ['detail'])
 
+// A file the global green repair wrote under the test roots: the only two it may write are an
+// approved snapshot a sheet decision changes and a shared double a value of the batch requires.
+const SNAPSHOT_PROMOTED = 'snapshot-promoted'
+const TEST_DOUBLE = 'test-double'
+const TEST_CODE = 'test-code'
+const TEST_EDIT = obj({ path: str, kind: { type: 'string', enum: [SNAPSHOT_PROMOTED, TEST_DOUBLE, TEST_CODE] }, why: str })
+
 const SUITES = obj({
   green: bool,
   suites: arr(obj({ name: str, exit: int, scope: str, count: int })),
   fixes: arr(str),
+  testEdits: arr(TEST_EDIT),
   diagnostic: str,
   closing: str,
 }, ['diagnostic', 'closing'])
+
+// The first pass of the global green, run as `cctoolkit suites-plan` resolves it, nothing fixed.
+const SUITES_RUN = obj({
+  build: obj({ exit: int, output: str }),
+  suites: arr(obj({ name: str, exit: int, scope: str, count: int, run: str, output: str, failed: arr(str) })),
+  unresolved: arr(obj({ name: str, why: str })),
+  notRun: arr(obj({ name: str, why: str })),
+  closing: str,
+}, ['closing'])
+
+const TESTS_CHANGED = obj({ read: bool, changed: arr(obj({ path: str, shared: bool })), closing: str }, ['closing'])
 
 const CYCLE_RESULT = obj({ red: RED, green: GREEN }, ['green'])
 
@@ -148,11 +177,19 @@ const LOADED = obj({
   nextSheet: str,
 })
 
+// An agent's shell starts in the session's checkout and goes back there after each call: in a worktree, every
+// call opens with this prefix, so relative paths and `cctoolkit` (kit_config.project_root()) resolve there —
+// and the TDD scope hook (lib/tdd_scope.py) takes the agent's tree from it.
+const AT_ROOT = root ? `cd '${root}' && export CLAUDE_PROJECT_DIR='${root}' &&` : ''
+const ROOT_LINE = root
+  ? `Batch worktree: \`${root}\`, a git worktree of the repo, not the session's checkout. Every Bash call opens with \`${AT_ROOT}\` (the shell goes back to the session's checkout after each call): the relative paths below resolve in that worktree. Read, Edit and Write take absolute paths, \`${root}/<path>\` for a sheet, plan, source or test path; no file of the session's checkout is yours, save under the run folder \`${runRoot}\`.`
+  : ''
 const FRAME = [
   `Workflow run-lot, batch ${batch}. Global plan: ${plan}. Batch sheet: ${sheet}. Run work file: ${workFile}.`,
   'Autonomous mode: nobody answers. Never AskUserQuestion, never a Git command that writes: the batch commit is `cctoolkit batch-baseline commit`, run only where a step gives it.',
   'Return the result through the structured output; prose written into repo files follows `language.docs` of `kit.config.json`.',
   '`<kit>` below = the cctoolkit plugin directory, printed by `cctoolkit root`; kit scripts run as `cctoolkit <script>`.',
+  ...(root ? [ROOT_LINE] : []),
 ].join('\n')
 
 const list = xs => (xs && xs.length ? xs.map(x => `\`${x}\``).join(', ') : 'none')
@@ -161,6 +198,23 @@ const attemptLine = (step, n, reason) => `cctoolkit run-work append ${workFile} 
 const retryHead = (step, n, reason) => `\n\nBefore anything else, one call: \`${attemptLine(step, n, reason)}\`.`
 const fileName = line => line.replace(/`/g, '').trim().replace(/^[ MADRCU?!]{1,2}\s+/, '').split(/\s+/)[0] || ''
 const short = (text, n = 40) => (text.length > n ? text.slice(0, n - 1) + '…' : text)
+
+// Files the global green repair wrote under the test roots, read off the tree by `suites-plan
+// --tests-changed`, against its `testEdits`: an undeclared write is rejected, a declared one outside
+// the two exceptions of test-scope.md §6 is a BLOCKED. Tree unread: nothing to check here.
+function testWrites(tree, declared) {
+  if (!tree || !tree.read) return null
+  const key = p => relative(p) || slashed(p)
+  const edits = new Map(declared.map(e => [key(e.path), e]))
+  const undeclared = tree.changed.filter(f => !edits.has(key(f.path))).map(f => f.path)
+  if (undeclared.length) return `files written under the test roots without a \`testEdits\` entry: ${list(undeclared)} — put each back as it was, or declare it`
+  const written = new Map(tree.changed.map(f => [key(f.path), f.shared]))
+  const unquoted = declared.filter(e => e.kind === SNAPSHOT_PROMOTED && written.has(key(e.path)) && !e.why.trim())
+  if (unquoted.length) return `snapshot promoted without the sheet line it follows from: ${list(unquoted.map(e => e.path))} — quote it in \`why\`, or put the snapshot back`
+  const outside = declared.filter(e => written.has(key(e.path)) && (e.kind === TEST_CODE || (e.kind === TEST_DOUBLE && !written.get(key(e.path)))))
+  if (outside.length) return `BLOCKED — test writes outside the two global green exceptions (test-scope.md §6): ${outside.map(e => `${e.path} (${e.kind === TEST_DOUBLE ? 'double outside layout.tests.shared' : e.kind})`).join(', ')}`
+  return null
+}
 
 const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], contests: [], rounds: [], review: null, audit: null, toReview: [], checked: [], refuted: [], closing: null }
 const toReview = (step, text, why = '') => history.toReview.push({ step, text, why })
@@ -248,6 +302,7 @@ function arbitrate(step, reason, touched, earlier) {
       '- Ambiguity of the sheet or the design: pick the option the spec, the rules, the handler `CLAUDE.md` or an earlier `Hn` favour, else the smallest one that keeps every RM/CU; text = the decision, stated so the next agent applies it.',
       '- Contract methods missing from a RED table because no caller reaches their throw site: text tells the RED to list each in `unreachable` (method, site `path:line`, why), never to write it.',
       '- Suites red, pre-audit red, agent without result: text = the concrete instruction for the retry (what to fix, what to read first).',
+      '- Test files the global green repair wrote outside its two exceptions (test-scope.md §6): never grant them; text tells the repair to put each back and fix production. `ask` when the test itself contradicts the sheet.',
       '`defer` when the stop holds back no later batch and can be settled after the plan: a guard red on code that predates the batch, a refactor whose safety net is red, a documentation or pre-audit failure. The step is left out, the run goes on; `text` = what to settle later. Never for red suites, a GREEN or a design: later batches build on them.',
       '`ask` only when no decision is defensible: options of comparable weight on behaviour a customer sees, data loss, security, the contract of an external system, or every option already tried above. Then `text` = your recommendation.',
       '`text` in the docs language of `kit.config.json`, one paragraph; `rationale` = why, one sentence, citing the evidence `path:line`.',
@@ -746,6 +801,7 @@ if (lotIndex.declaratives.length) {
         'Write the declarative artefacts below before any RED, per `<kit>/skills/implement-tdd/references/common-rules.md` §4 point 5, that paragraph only: each mirrors the existing file it names, a registry entry goes after the neighbour entry it names; one already on disk with that content stays as is. No test, no signature stub, no logic.',
         ...lotIndex.declaratives.map(d => `- ${d}`),
         'Then the solution build of `<kit>/skills/implement-tdd/references/test-scope.md` once: exit 0 → `ok: true`; otherwise fix what you wrote, at most twice, then `ok: false`, `detail` = the first error line.',
+        ...(lock ? ["Another batch builds beside this one: run each solution build as `cctoolkit build-lock '<build command>'`, it waits for the other's build to end and keeps the exit."] : []),
       ].join('\n') + suffix,
       { schema: OK, phase: 'Design', label: 'declaratives', model: 'sonnet', effort: 'low' },
     ),
@@ -859,6 +915,12 @@ if (planned === LIGHT) {
   }
 }
 
+// Wave n+1's REDs start beside wave n's GREENs unless they rewrite one of its test files: a GREEN runs its
+// filtered class, and rows the next RED adds to a shared theory would keep it red (a block validated before
+// `--index` refused it, or waves made adjacent by the cycles a resume skips).
+const testsOf = wave => new Set(wave.flatMap(c => c.tests || []))
+const overlap = (a, b) => { const t = testsOf(a); return [...testsOf(b)].filter(f => t.has(f)) }
+
 let pendingReds = planned === FULL && waves.length ? launchWave(waves[0], 0) : null
 for (let n = 0; planned === FULL && n < waves.length; n++) {
   const reds = await pendingReds
@@ -871,7 +933,9 @@ for (let n = 0; planned === FULL && n < waves.length; n++) {
     return await finish(BLOCKED, rejected ? `RED ${rejected.cycle.behaviour} — ${rejected.reason}` : `RED ${waves[n][iRejected].behaviour} — agent without result`)
   }
 
-  if (n + 1 < waves.length) pendingReds = launchWave(waves[n + 1], n + 1)
+  const shared = n + 1 < waves.length ? overlap(waves[n], waves[n + 1]) : []
+  if (shared.length) log(`wave ${waves[n + 1][0].wave} rewrites ${short(shared.join(', '), 80)} of wave ${waves[n][0].wave}: its REDs wait for that wave's GREENs`)
+  else if (n + 1 < waves.length) pendingReds = launchWave(waves[n + 1], n + 1)
   for (let i = 0; i < reds.length; i++) {
     if (deferrable(reds[i])) continue
     const { cycle, result: red } = reds[i]
@@ -881,21 +945,83 @@ for (let n = 0; planned === FULL && n < waves.length; n++) {
       return await finish(BLOCKED, stop)
     }
   }
+  if (shared.length) pendingReds = launchWave(waves[n + 1], n + 1)
 }
 
 phase('Global green')
+// Two agents (2026-10-20: one agent on the session model took 9 min 53 s, 4 min 50 s of it the repair;
+// resolving, building, running and reading exits is mechanical): `suites run` on haiku runs what
+// `cctoolkit suites-plan` resolves, `suites repair` only when a suite is red or a scope unresolved.
+const closingCommand = `cctoolkit closing-level ${sheet} ${workFile} --record${nextSheet ? ` --next ${nextSheet}` : ''}`
+const planCommand = `cctoolkit suites-plan ${workFile} ${batch}${lock ? ' --lock' : ''}`
+
 const runSuites = (suffix = '') => agent(
   [
     FRAME,
     '',
-    'Global green loop of the batch: suites and scope per `<kit>/skills/implement-tdd/references/test-scope.md` (Runner, §2-4).',
-    `Pick the suites the diff requires (\`cctoolkit batch-baseline diff ${workFile} ${batch} --name-only\`), run them once, output to a file in \`<tmp>\`, independent suites in a single message. ${TMP}.`,
-    'Red → fix production code until fully green; never weaken nor remove a test to pass.',
-    'Return each suite with its exit, its scope (filter or "whole suite") and its test count.',
-    `Once green, last call: \`cctoolkit closing-level ${sheet} ${workFile} --record${nextSheet ? ` --next ${nextSheet}` : ''}\`; \`closing\` = the JSON line it printed, verbatim.`,
+    'Global green, first pass: you run commands and report their exits. Never edit a file, never diagnose, never fix, never read a test or production file.',
+    `First call: \`${planCommand}\`. It prints one JSON object: \`build\`, \`suites\` (each with its \`run\` line, \`scope\` and \`output\`), \`unresolved\`, \`notRun\`. Copy each line literally, never rebuild nor \`eval\` one.`,
+    'Then `build.run` alone (skip it when empty, `build.exit` 0). Exit not 0 → stop there: `build` = its exit and output, `suites` empty.',
+    'Then every `suites[].run` line in a single message, one Bash call each.',
+    'Each suite: `exit` read off its `exit=` line, `count` = the total the tail prints (0 when none), `name`, `scope`, `run` and `output` from the plan. `failed` = for a suite whose exit is not 0, the lines `cctoolkit suites-plan --failed <output>` prints, those calls in one message; empty on exit 0.',
+    '`unresolved` and `notRun` = the plan\'s, verbatim.',
+    `Build exit 0, every suite exit 0 and \`unresolved\` empty → last call: \`${closingCommand}\`; \`closing\` = the JSON line it printed, verbatim. Otherwise no closing call, \`closing\` empty.`,
   ].join('\n') + suffix,
-  { schema: SUITES, phase: 'Global green', label: 'suites' },
+  { schema: SUITES_RUN, phase: 'Global green', label: 'suites run', model: 'haiku', effort: 'low' },
 ).catch(() => null)
+
+const ranGreen = r => !!r && r.build.exit === 0 && r.suites.length > 0 && r.suites.every(s => s.exit === 0) && !r.unresolved.length
+const asSuites = r => ({ green: true, suites: r.suites.map(({ name, exit, scope, count }) => ({ name, exit, scope, count })), fixes: [], testEdits: [], closing: r.closing || '' })
+
+function repairPrompt(ran) {
+  const red = ran ? ran.suites.filter(s => s.exit !== 0) : []
+  return [
+    FRAME,
+    '',
+    ran
+      ? 'Global green repair of the batch. A first pass ran the suites below: start from their output files, never rerun a suite before you have fixed something.'
+      : `Global green repair of the batch. No first pass reached a result: first call \`${planCommand}\` and run its \`build.run\` line, then every \`suites[].run\` line in one message, each copied literally.`,
+    ran && ran.build.exit !== 0 ? `Build: exit ${ran.build.exit}, output \`${ran.build.output}\`. No suite ran.` : '',
+    ...red.map(s => `- ${s.name} — exit ${s.exit}, scope ${s.scope}, output \`${s.output}\`${s.failed.length ? `, failed: ${s.failed.join(', ')}` : ''}`),
+    ran && ran.unresolved.length ? `Scope left to you, per \`<kit>/skills/implement-tdd/references/test-scope.md\` §2-3 (Runner for the command and filter): ${ran.unresolved.map(u => `${u.name} — ${u.why}`).join(' ; ')}.` : '',
+    'Red → fix production code until green; never weaken nor remove a test to pass.',
+    `Never write under the test roots (\`layout.tests.roots\`), save two cases, each listed in \`testEdits\` (test-scope.md §6): \`${SNAPSHOT_PROMOTED}\` — an approved snapshot promoted from its received file only when the difference follows directly from a decision of the sheet, \`why\` quoting that sheet line; \`${TEST_DOUBLE}\` — a shared double under \`layout.tests.shared\` only when a value the batch adds requires it (a constant, a permission), \`why\` naming that value. Any other test write — a test, a fixture, a double outside the shared roots, a snapshot no sheet line decides — is not yours: \`green\` false, \`diagnostic\` \`BLOCKED — <test> — <why>\`. A test file an earlier attempt wrote outside these two is listed \`${TEST_CODE}\`.`,
+    'Once fixed: rerun each red suite once, filtered to its failing classes (the runner filter of test-scope.md Runner), in one message; then once, in one message, every suite of the first pass with its `run` line verbatim, and the unresolved ones with the scope you chose. Return each suite of that last run with its exit, scope and test count; `green` = all exit 0.',
+    '`fixes` = one line per production change, `testEdits` = every file you wrote under the test roots, empty when none.',
+    'Never call `cctoolkit closing-level`: the run records it once it has read the test tree.',
+  ].filter(l => l !== '').join('\n')
+}
+
+// Reads the test tree the repair left and records the closing level: never the repair's own report.
+const readTests = () => agent(
+  [
+    FRAME,
+    '',
+    `Two calls in a single message, nothing else: \`${planCommand} --tests-changed\` and \`${closingCommand}\`.`,
+    '`read` = the first exited 0, `changed` = the `changed` array it printed, verbatim (empty when it failed); `closing` = the JSON line the second printed, verbatim.',
+  ].join('\n'),
+  { schema: TESTS_CHANGED, phase: 'Global green', label: 'suites tests', model: 'haiku', effort: 'low' },
+).catch(() => null)
+
+async function globalGreen() {
+  let ran = await runSuites()
+  if (!ran) ran = await runSuites('\n\nA previous attempt ended without structured output: run the plan again, then return the report at once.')
+  if (ranGreen(ran)) return { result: asSuites(ran), reason: null }
+  log(`global green: ${ran ? `${ran.build.exit ? 'build red' : ran.suites.filter(s => s.exit).map(s => s.name).concat(ran.unresolved.map(u => `${u.name} unresolved`)).join(', ') || 'no suite run'}` : 'first pass without result'} — repair`)
+  const declared = []
+  const repair = async (suffix, options) => {
+    const r = await agent(repairPrompt(ran) + suffix, { schema: SUITES, phase: 'Global green', label: 'suites repair', ...options })
+    for (const e of (r && r.testEdits) || []) if (!declared.some(d => d.path === e.path)) declared.push(e)
+    if (!r || !r.green) return r
+    const tree = await readTests()
+    return { ...r, testEdits: [...declared], closing: tree ? tree.closing || '' : '', tree }
+  }
+  return withRetry('Global green', repair, x => (
+    !x ? 'suites agent without result'
+      : !x.green ? (/^BLOCKED/.test(x.diagnostic || '') ? x.diagnostic : `global green not reached — ${x.diagnostic || ''}`)
+      : testWrites(x.tree, x.testEdits)
+  ))
+}
 
 const runGate = (suffix = '') => agent(
   [
@@ -911,13 +1037,19 @@ const runGate = (suffix = '') => agent(
   { schema: CLOSING, phase: 'Closing', label: 'pre-audit', model: 'sonnet', effort: 'low' },
 ).catch(() => null)
 
-const [{ result: suites }, { result: gated }] = await Promise.all([
-  withRetry('Global green', runSuites, x => (!x ? 'suites agent without result' : !x.green ? `global green not reached — ${x.diagnostic || ''}` : null)),
+const [{ result: suites, reason: greenStop }, { result: gated }] = await Promise.all([
+  globalGreen(),
   withRetry('Closing', runGate, x => (!x ? 'pre-audit agent without result' : !x.ok ? `pre-audit not run — ${x.diagnostic || ''}` : !x.preauditGreen ? `pre-audit RED — ${x.failures.join(' ; ')}` : null)),
 ])
 history.suites = suites
 history.gate = gated
-if (!suites || !suites.green) return await finish(BLOCKED, `global green not reached — ${suites ? suites.diagnostic || '' : 'agent without result'}`)
+// Every test file the repair wrote goes to the user's review and to the audit, as a point to check.
+for (const e of (suites && suites.testEdits) || []) toReview('Global green', `test file written to reach green, ${e.kind}: ${e.path}`, e.why)
+const testEditsToCheck = () => (history.suites && history.suites.testEdits && history.suites.testEdits.length
+  ? `Test files the global green repair wrote, each a point to verify: a promoted snapshot against the sheet line its \`why\` quotes, a shared double against the value of the batch it names; anything else, or a reason that does not hold, is a Test gap (test-scope.md §6): ${history.suites.testEdits.map(e => `\`${e.path}\` (${e.kind}) — ${e.why}`).join(' ; ')}.`
+  : '')
+if (suites && suites.green && 'tree' in suites && !(suites.tree && suites.tree.read)) toReview('Global green', 'test tree not read after the repair: its writes under the test roots are unchecked')
+if (!suites || !suites.green || greenStop) return await finish(BLOCKED, greenStop && greenStop.startsWith('global green') ? greenStop : `global green not reached — ${greenStop || (suites ? suites.diagnostic || '' : 'agent without result')}`)
 
 // The level the diff earns decides the closing, whatever the plan said; unread, the closing is full.
 function closingOf(text) {
@@ -993,6 +1125,7 @@ function audit(retry, again = false, part = null, captured = false) {
       'Search with `git grep -n -e <pattern> -- <paths>`, never a recursive grep; every command in the foreground.',
       alreadyRun,
       history.toReview.length ? `Decisions the run took without the user, each listed for the user review after the plan — never a \`Plan\` gap for being absent from the sheet: ${history.toReview.map(x => `${x.step}: ${x.text}`).join(' ; ')}` : '',
+      part && part.key === 'code' ? '' : testEditsToCheck(),
       previous,
       '',
       'Structured output: `block` = the markdown verdict block verbatim (fixed format of the skill), `gaps` = its Blocking/Major rows,',
@@ -1043,7 +1176,7 @@ function auditPending() {
 
 function reviewNext(label) {
   return agent(
-    `mode: next-batch ${nextSheet} ${sheet}\n\nReturn your questions through the structured output: \`result\` CLEAR or GAPS, each question with its severity, its evidence, \`decidedBy\` (the \`Settled by\` column, empty when none), \`answer\` (the answer the source dictates; without source, your recommendation and why), \`options\` (without source: 2 to 4 short mutually exclusive answers, recommended first; empty otherwise) and \`humanOnly\` (your \`Human only\` rule; the run applies every other answer and the user reviews it afterwards).`,
+    `${root ? `${ROOT_LINE}\n\n` : ''}mode: next-batch ${nextSheet} ${sheet}\n\nReturn your questions through the structured output: \`result\` CLEAR or GAPS, each question with its severity, its evidence, \`decidedBy\` (the \`Settled by\` column, empty when none), \`answer\` (the answer the source dictates; without source, your recommendation and why), \`options\` (without source: 2 to 4 short mutually exclusive answers, recommended first; empty otherwise) and \`humanOnly\` (your \`Human only\` rule; the run applies every other answer and the user reviews it afterwards).`,
     { agentType: 'cctoolkit:adversarial-reviewer', schema: REVIEW, phase: 'Review', label },
   ).catch(() => null)
 }
@@ -1066,7 +1199,10 @@ function amendNext(questions, gaps) {
   ).catch(() => null)
 }
 
-if (nextSheet && (!light || history.closing.review)) {
+const nextIsPartner = !!partner && !!nextSheet && partner.split('/').pop() === nextSheet.split('/').pop()
+if (nextIsPartner) {
+  log(`next batch review skipped — ${nextSheet} runs beside this batch`)
+} else if (nextSheet && (!light || history.closing.review)) {
   reviewing = reviewNext('next batch review')
 } else if (nextSheet) {
   log(`next batch review skipped — ${history.closing.reviewWhy || 'light closing'}`)
@@ -1231,6 +1367,7 @@ function lightReview(retry, again = false) {
       again ? `A previous attempt ended without structured output: read \`${notes}\` first, never re-establish what it settled.` : `Notes: \`${notes}\`. Empty it first (\`: > <path>\`), then append each finding the moment you settle it, one line \`severity | axis | gap | evidence | closure | fix\`.`,
       'Search with `git grep -n -e <pattern> -- <paths>`, never a recursive grep; every command in the foreground.',
       history.toReview.length ? `Decisions the run took without the user, listed for the user review — never a gap for being absent from the sheet: ${history.toReview.map(x => `${x.step}: ${x.text}`).join(' ; ')}` : '',
+      testEditsToCheck(),
       '',
       'Structured output: `block` = the markdown verdict block (fixed format of the skill), `gaps` = its Blocking/Major rows, `minors` = its minors, `validations` = empty, `hypotheses` = the Hn.',
     ].filter(l => l !== '').join('\n'),

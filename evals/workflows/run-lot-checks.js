@@ -33,6 +33,16 @@ assert(checkRed(two, red('RED', 1, { unreachable: [{ method: 'A.Dead', site: 'sr
 assert(checkRed(two, red('RED', 1, { table: [], unreachable: [{ method: 'A.B', site: 's', why: 'w' }, { method: 'A.Dead', site: 's', why: 'w' }] })) === null, 'every method unreachable: no test, no GREEN')
 assert(contractCommand({ id: 'X1' }, '--red') === 'cctoolkit sheet-cycles todo/x/X-PLAN-F3.md --cycle X1 --red', 'RED reads its contract from the sheet block')
 assert(workFile === 'todo/x/run/.work.jsonl' && reportPath === 'todo/x/run/batches/F3.md' && commitAtEnd, 'one work file run/.work.jsonl, report in run/batches/FX.md, standalone batch commits itself')
+const tree = changed => ({ read: true, changed })
+const snap = { path: 'tests/C/B.verified.txt', kind: 'snapshot-promoted', why: 'F3, Decisions line 2' }
+assert(testWrites(tree([{ path: 'tests/C/B.verified.txt', shared: false }]), [snap]) === null, 'declared snapshot promotion quoting the sheet accepted')
+assert(testWrites(tree([{ path: 'tests/C/B.verified.txt', shared: false }]), [{ ...snap, path: '/Users/x/repo/tests/C/B.verified.txt' }]) === null, 'declared path matched once absolute path normalised')
+assert(testWrites(tree([{ path: 'tests/C/B.verified.txt', shared: false }]), [{ ...snap, why: ' ' }]).startsWith('snapshot promoted without the sheet line'), 'snapshot promoted without its sheet line rejected')
+assert(testWrites(tree([{ path: 'tests/Core/MockX.cs', shared: true }]), []).startsWith('files written under the test roots without a `testEdits` entry'), 'undeclared write under the test roots rejected')
+assert(testWrites(tree([{ path: 'tests/Core/MockX.cs', shared: true }]), [{ path: 'tests/Core/MockX.cs', kind: 'test-double', why: 'permission X' }]) === null, 'shared double declared accepted')
+assert(testWrites(tree([{ path: 'tests/U/Mock.cs', shared: false }]), [{ path: 'tests/U/Mock.cs', kind: 'test-double', why: 'x' }]).startsWith('BLOCKED'), 'double outside layout.tests.shared is a BLOCKED')
+assert(testWrites(tree([{ path: 'tests/U/ATests.cs', shared: false }]), [{ path: 'tests/U/ATests.cs', kind: 'test-code', why: 'x' }]).startsWith('BLOCKED'), 'test-code write is a BLOCKED')
+assert(testWrites({ read: false, changed: [] }, []) === null && testWrites(null, []) === null, 'test tree unread: nothing checked here')
 const loading = null
 const run = async () => {
   let waits = 0

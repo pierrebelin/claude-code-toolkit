@@ -279,6 +279,6 @@ if __name__ == "__main__":
     if len(sys.argv) != 3 or sys.argv[1] != "guarded":
         sys.exit("usage: python3 lib/knowledge.py guarded <path>")
     try:
-        sys.exit(0 if guarded(kit_config.load(), sys.argv[2]) else 1)
+        sys.exit(0 if guarded(kit_config.load(kit_config.root_of(sys.argv[2])), sys.argv[2]) else 1)
     except kit_config.KitConfigError:
         sys.exit(1)

@@ -114,6 +114,31 @@
       "path": "sc/asklight.md",
       "kind": "text",
       "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [\"src/P/H.cs — call Check()\"], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\", \"models\": [\"src/P/H.cs — same handler shape\"]}], \"closing\": \"light\"}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/theory.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"BC1\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRequirePermission_WhenRoute\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C2\", \"wave\": 2, \"behaviour\": \"BC2\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ShouldRequirePermission_WhenRoute\"], \"full\": [\"tests/Shop.UnitTests/B/BTests.cs (to create)\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C3\", \"wave\": 3, \"behaviour\": \"BC3\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRequirePermission_WhenRoute\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/adjacent.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"BC1\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C2\", \"wave\": 2, \"behaviour\": \"BC2\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldC_WhenD\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/apart.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"BC1\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C2\", \"wave\": 2, \"behaviour\": \"BC2\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"BTests.ShouldC_WhenD\"], \"full\": [\"tests/Shop.UnitTests/B/BTests.cs (to create)\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C3\", \"wave\": 3, \"behaviour\": \"BC3\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldE_WhenF\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/sharedwaves.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"BC1\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\", \"tests/Shop.CoreTests/Builders/ABuilder.cs (to create)\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}, {\"id\": \"C2\", \"wave\": 2, \"behaviour\": \"BC2\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"BTests.ShouldC_WhenD\"], \"full\": [\"tests/Shop.UnitTests/B/BTests.cs (to create)\", \"tests/Shop.CoreTests/Builders/ABuilder.cs (to create)\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
+      "path": "sc/lean.md",
+      "kind": "text",
+      "content": "# S\n\n## Design <!-- kit:design -->\n\n| Point | Decision |\n|---|---|\n| Applied rules <!-- kit:applied-rules --> | DDD-01 |\n| Invariants | RM-01; removes the null check |\n| Access cost | 1 read |\n\n## Code elements <!-- kit:code-elements -->\n\n### Application\n\n**`H`** — handler\n- reads once\n\n**`Other`** — not written by C1\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"A lean cycle\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [], \"boundedGreen\": []}]}\n```\n\n## Assumptions <!-- kit:assumptions -->\n"
     }
   ],
   "cases": [
@@ -171,6 +196,38 @@
       "expect": {
         "exit": 1,
         "stdout": "successive waves"
+      }
+    },
+    {
+      "name": "a method in two cycles of different waves refused, qualified or not (2026-10-20: one data-driven theory in C2, C3 and C4 kept every GREEN red)",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/theory.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "`ATests.ShouldRequirePermission_WhenRoute`: in the `methods` of C1, C2, C3 — split the theory into one method per cycle (e.g. one per route family), or group the cycles"
+      }
+    },
+    {
+      "name": "a test file shared by waves 1 and 2 refused: RED(2) runs beside GREEN(1)",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/adjacent.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 1,
+        "stdout": "waves 1 and 2: C1 and C2 share tests/Shop.UnitTests/A/ATests.cs — successive waves overlap RED(n+1) with GREEN(n): move C2 one wave later or split the test file"
+      }
+    },
+    {
+      "name": "a test file shared by waves 1 and 3 accepted, the index lists each cycle's test files",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/apart.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "\"tests\": [\"tests/Shop.UnitTests/A/ATests.cs\"]"
+      }
+    },
+    {
+      "name": "a shared test file (layout.tests.shared) in successive waves accepted",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/sharedwaves.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "\"ok\": true"
       }
     },
     {
@@ -322,6 +379,30 @@
       "expect": {
         "exit": 0,
         "stdout": "light|sheet: `closing` set to light (production cap and ripple lifted)|"
+      }
+    },
+    {
+      "name": "a block without `scenarios`, `elements`, `appliedIds`, `invariants`, `expectedCost` is valid: the sheet's own sections carry them",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/lean.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "\"ok\": true"
+      }
+    },
+    {
+      "name": "its GREEN contract prints the `## Code elements` entries of the cycle's files, none other, and the `## Design` rows",
+      "cmd": "out=$(python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/lean.md --cycle C1 --green --root {{FIX}}/sc); echo \"$out\" | grep -q Other || echo \"$out\" | tr '\n' '|'",
+      "expect": {
+        "exit": 0,
+        "stdout": "Elements (the sheet's `## Code elements`, entries of the files you write):|**`H`** — handler|- reads once|Design of the batch (the sheet's `## Design`: applied ids, invariants and what they remove, access cost):|| Applied rules | DDD-01 ||| Invariants | RM-01; removes the null check ||| Access cost | 1 read ||"
+      }
+    },
+    {
+      "name": "its RED contract states one scenario per method",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/lean.md --cycle C1 --red --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "Scenarios: one per method, as its name states"
       }
     }
   ]

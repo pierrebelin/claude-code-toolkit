@@ -30,8 +30,18 @@ At most one batch per repository: two batches of one repo share a working tree.
 --context FX  design context of FX for run-lot: earlier batches' audit gaps, the sheets'
               `user decision`/GAPS lines, FX's stopped report and saved cycles, the sheet's
               source and test paths that do not exist
+--parallel [N]
+              batches of the current repo that may run at once, N at most (default and cap 2:
+              two batches per checkout, their long builds one at a time under
+              `cctoolkit build-lock`), one JSON line:
+              `cap`, `batches` (`batch`, `repo`, `sheet`; the first is the one --next launches),
+              `apart` (`batch`, `reason`). Two batches go together only when neither depends on
+              the other, even transitively, and the paths their `## Cycles` blocks name
+              (`full`, `bounded`, `toCreate`, `production`, `ripple`, `boundedGreen`,
+              `declaratives`) are disjoint; a sheet without a readable block never goes beside another
 """
 import argparse
+import importlib.util
 import json
 import re
 import subprocess
@@ -53,6 +63,10 @@ COLUMN_REPO = {"repo", "depot"}
 AUDIT_GAPS = {"## audit gaps", "## ecarts d'audit"}
 DECISION_MARKS = re.compile(r"user decision|décision user|décision utilisateur|GAPS|ECARTS")
 REPORTS = ("batches/{b}.md",)
+# Two batches of one checkout at most run at once.
+MAX_PARALLEL = 2
+# `## Cycles` fields naming a path a batch writes or bounds; `models` is read only.
+WRITTEN = ("full", "bounded", "toCreate", "production", "ripple", "boundedGreen")
 
 
 fold = kit_config.fold
@@ -253,6 +267,61 @@ def next_batches(batches, done, in_scope, excluded, skipped, repo_dir, sheet):
     return "WAITING", "WAITING " + " ".join(waiting), [], held
 
 
+def written_paths(sheet_path):
+    """{folded path: path} of every path the sheet's `## Cycles` block names, or None when unreadable."""
+    spec = importlib.util.spec_from_file_location("sheet_cycles", HERE / "scripts" / "sheet-cycles.py")
+    cycles = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cycles)
+    if not sheet_path.is_file():
+        return None
+    data, _ = cycles.load(str(sheet_path))
+    if data is None:
+        return None
+    entries = [e for c in data["cycles"] if isinstance(c, dict) for k in WRITTEN for e in (c.get(k) or [])]
+    entries += data.get("declaratives") or []
+    paths = (cycles.path_of(e).replace("\\", "/") for e in entries)
+    # Folded: two spellings of one file on a case-insensitive disk are one file.
+    return {p.casefold(): p for p in paths if p}
+
+
+def parallel_group(batches, done, in_scope, excluded, skipped, repo_dir, sheet, here, cap):
+    skipped = set(re.findall(r"F\d+", skipped))
+    done = done - skipped
+    held = dependents(set(re.findall(r"F\d+", excluded)) | skipped, batches)
+    by_id = {b["id"]: b for b in batches}
+    runnable = [b for b in batches if b["id"] in in_scope and b["id"] not in done and b["id"] not in held
+                and set(b["deps"]) <= done and repo_dir(b) == here]
+    group, apart, files = [], [], {}
+    for b in runnable:
+        lot = b["id"]
+        if not group:
+            group.append(b)
+            continue
+        if len(group) >= cap:
+            apart.append({"batch": lot, "reason": f"cap {cap} reached"})
+            continue
+        reason = next((f"depends on {g['id']}" if g["id"] in closure(lot, by_id) else f"{g['id']} depends on it"
+                       for g in group if g["id"] in closure(lot, by_id) or lot in closure(g["id"], by_id)), None)
+        for x in [b] + group if not reason else []:
+            if x["id"] not in files:
+                files[x["id"]] = written_paths(sheet(x["id"]))
+            if files[x["id"]] is None:
+                reason = f"{x['id']}: no readable `## Cycles` block, its files are unknown"
+                break
+        if not reason:
+            for g in group:
+                shared = sorted(files[lot].keys() & files[g["id"]].keys())
+                if shared:
+                    reason = f"shares {', '.join(files[lot][p] for p in shared[:3])} with {g['id']}"
+                    break
+        if reason:
+            apart.append({"batch": lot, "reason": reason})
+        else:
+            group.append(b)
+    launched = [{"batch": b["id"], "repo": repo_dir(b).as_posix(), "sheet": sheet(b["id"]).as_posix()} for b in group]
+    return {"cap": cap, "batches": launched, "apart": apart}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("plan")
@@ -266,6 +335,7 @@ def main():
     parser.add_argument("--next", dest="journal")
     parser.add_argument("--run", default="")
     parser.add_argument("--context")
+    parser.add_argument("--parallel", type=int, nargs="?", const=MAX_PARALLEL)
     args = parser.parse_args()
 
     plan = Path(args.plan).resolve()
@@ -315,6 +385,13 @@ def main():
         if errors:
             fail("\n".join(errors))
         print(f"OK {len(batches)} batches, {len(done & set(by_id))} DONE")
+        return
+
+    if args.parallel is not None:
+        here = current_repo()
+        cap = max(1, min(args.parallel, MAX_PARALLEL))
+        group = parallel_group(batches, done, in_scope, args.excluded, args.skip, repo_dir, sheet, here, cap)
+        print(json.dumps(group, ensure_ascii=False))
         return
 
     kind, line, launched, held = next_batches(batches, done, in_scope, args.excluded, args.skip, repo_dir, sheet)

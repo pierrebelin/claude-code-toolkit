@@ -3,7 +3,9 @@
 
 `<repo>/.claude/presets/<name>/` wins over the kit's preset of the same name; `<repo>` is
 `project_root()`: `$CLAUDE_PROJECT_DIR`, else the parent of the kit when it sits in a repo's
-`.claude/`, else the git top level, else the working directory. `load()` raises `KitConfigError`:
+`.claude/`, else the git top level, else the working directory. A hook judging a file path loads
+`root_of(path)` instead: the linked worktree of the project holding it, when it lies in one (a batch
+run beside another, `cctoolkit batch-worktree`). `load()` raises `KitConfigError`:
 a hook exits 0 on it, a script prints it and stops.
 
 CLI (hooks, shell scripts, and the skills through `cctoolkit root`):
@@ -11,6 +13,7 @@ CLI (hooks, shell scripts, and the skills through `cctoolkit root`):
     kit_config.py validate                 # one `LEVEL name detail` line per finding (tools/doctor)
     kit_config.py shell <root>             # shell assignments for scripts/pre-audit.sh, audit-capture.sh
     kit_config.py command <name> [<suite>] # commands.<name>, {product} and {suite} expanded; empty = unset
+    kit_config.py parallel-batches         # run.parallelBatches, 1 to 2 (1 when unset or malformed)
     kit_config.py diff-comments <root>     # added comment lines under the source roots (diff on stdin)
     kit_config.py diff-interaction <root>  # added lines of the interaction suites (diff on stdin)
     kit_config.py diff-tags <root>         # tag values on added lines (diff on stdin)
@@ -29,13 +32,17 @@ import unicodedata
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRESETS = os.path.join(KIT, "presets")
 DEFAULT_PRESET = "clean-architecture"
-TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd", "knowledge", "closing"}
+TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd", "knowledge", "closing", "run"}
 # The knowledge base is stack-neutral: its defaults live here, not in a preset.
 KNOWLEDGE_DEFAULTS = {"root": "docs/business", "contexts": {}, "overviewBudget": 1500, "syncBudget": 12000, "askBudget": 1500}
 PREFIX_RE = re.compile(r"[A-Z][A-Z0-9]{1,5}")
 # What a preset or the repo leaves unset of `closing` (lib/closing_level.py): no rule, no cap.
 CLOSING_DEFAULTS = {"maxProductionFiles": 0, "full": []}
 CLOSING_CHANGES = re.compile(r"[AMD]+")
+# `run` is stack-neutral: its defaults live here. One batch at a time; two at most share a checkout, the
+# second in a worktree of its own (`cctoolkit batch-worktree`), their long builds one at a time (`build-lock`).
+RUN_DEFAULTS = {"parallelBatches": 1}
+MAX_PARALLEL_BATCHES = 2
 CONTEXT_RE = re.compile(r"[A-Z][A-Za-z0-9]*")
 
 
@@ -75,6 +82,60 @@ def project_root():
     except OSError:
         top = ""
     return top or os.getcwd()
+
+
+def _native(path):
+    """A Git Bash path `/c/x` as Python reads it on Windows, `C:/x`; unchanged elsewhere."""
+    return re.sub(r"^/([A-Za-z])(?=/|$)", lambda m: m.group(1).upper() + ":", path) if os.name == "nt" else path
+
+
+def _same(a, b):
+    return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
+
+
+def main_worktree(root):
+    """The main worktree of the repository `root` belongs to: `root` itself, unless `root` is a linked
+    worktree — its `.git` a file `gitdir: <common dir>/worktrees/<name>`. Read off the files, no git call."""
+    dot = os.path.join(root, ".git")
+    if not os.path.isfile(dot):
+        return root
+    try:
+        with open(dot, encoding="utf-8") as fh:
+            line = fh.readline().strip()
+    except OSError:
+        return root
+    if not line.startswith("gitdir:"):
+        return root
+    gitdir = os.path.normpath(os.path.join(root, _native(line[len("gitdir:"):].strip())))
+    try:
+        with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as fh:
+            common = os.path.normpath(os.path.join(gitdir, _native(fh.readline().strip())))
+    except OSError:
+        common = os.path.dirname(os.path.dirname(gitdir))
+    return os.path.dirname(common).replace(os.sep, "/")
+
+
+def worktree_of(path, project=None):
+    """The top level of the linked worktree of the project's repository that holds `path`, `/`-separated — a
+    batch run beside another one works there (`run.parallelBatches`) —, or None: a path of the project's own
+    checkout, of another repository or of none gives None, and the hooks judge it as before."""
+    if not path:
+        return None
+    project = project or project_root()
+    p = os.path.abspath(_native(str(path)))
+    while not os.path.exists(os.path.join(p, ".git")):
+        parent = os.path.dirname(p)
+        if parent == p:
+            return None
+        p = parent
+    if not os.path.isfile(os.path.join(p, ".git")) or _same(p, project):
+        return None
+    return p.replace(os.sep, "/") if _same(main_worktree(p), main_worktree(project)) else None
+
+
+def root_of(path):
+    """The repo a hook judges `path` in: the project's linked worktree holding it, else project_root()."""
+    return worktree_of(path) or project_root()
 
 
 def fold(s):
@@ -202,6 +263,8 @@ class Config:
         self.commands = data.get("commands", {})
         cl = data.get("closing")
         self.closing = merge(CLOSING_DEFAULTS, cl if isinstance(cl, dict) else {})
+        r = data.get("run")
+        self.run = merge(RUN_DEFAULTS, r if isinstance(r, dict) else {})
         self.test_tag = data.get("testTag", {})
         # Kept malformed for validate_knowledge(): a hook must not die over a key it does not read.
         k = data.get("knowledge")
@@ -326,6 +389,12 @@ class Config:
             return self.contexts[name]
         return name if name in self.contexts.values() else None
 
+    @property
+    def parallel_batches(self):
+        """`run.parallelBatches` within 1..MAX_PARALLEL_BATCHES; 1 when malformed."""
+        n = self.run.get("parallelBatches", 1)
+        return min(max(n, 1), MAX_PARALLEL_BATCHES) if isinstance(n, int) and not isinstance(n, bool) else 1
+
     def command(self, name, suite=None):
         if name == "testFast" and not self.commands.get("testFast"):
             # Unset: the solution build then the suite command, the run it stands for.
@@ -395,7 +464,7 @@ def validate(root):
         out.append(("ok", "testTag", f"{a.name} — {a.example}"))
     except kit_testtag.TestTagError as e:
         out.append(("FAIL", "testTag", str(e)))
-    for name in ("build", "test", "testFast"):
+    for name in ("build", "test", "testFast", "worktreeSetup"):
         v = c.commands.get(name, "")
         if not isinstance(v, str):
             out.append(("FAIL", f"commands.{name}", "expects a string"))
@@ -407,8 +476,20 @@ def validate(root):
             re.compile(at["when"])
         except re.error as e:
             out.append(("FAIL", "commands.architectureTest.when", f"invalid regex: {e}"))
+    suites = c.commands.get("suites", [])
+    if not isinstance(suites, list) or not all(isinstance(s, dict) and isinstance(s.get("name"), str) and s["name"] for s in suites):
+        out.append(("FAIL", "commands.suites", "expects [{\"name\": \"<suite>\", \"when\": \"<path regex>\", \"filter\": \"…{namespace}…\", \"project\": \"<test project>\", \"env\": \"VAR=value\"}]"))
+    else:
+        for s in suites:
+            try:
+                re.compile(c.expand(s.get("when") or ""))
+            except re.error as e:
+                out.append(("FAIL", f"commands.suites.{s['name']}.when", f"invalid regex: {e}"))
+            if s.get("filter") and not s.get("project"):
+                out.append(("FAIL", f"commands.suites.{s['name']}", "a filtered suite needs `project`, the test project its namespaces are read from"))
     out += validate_test_fast(c)
     out += validate_closing(c.data.get("closing"))
+    out += validate_run(c.data.get("run"))
     tdd = c.data.get("tdd", {})
     if not isinstance(tdd, dict):
         out.append(("FAIL", "tdd", "expects {\"failedTest\": \"<regex>\", \"stubFailure\": \"<regex>\", \"stubLogic\": \"<regex>\"}"))
@@ -466,6 +547,19 @@ def validate_test_fast(c):
         elif not token.endswith(".csproj") and len(found) > 1:
             out.append(("WARN", "commands.testFast", f"{token} matches {len(found)} files (several target frameworks or configurations) — narrow the glob"))
     return out or [("ok", "commands.testFast", run)]
+
+
+def validate_run(raw):
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        return [("FAIL", "run", "expects {\"parallelBatches\": <n>}")]
+    n = raw.get("parallelBatches", 1)
+    if not isinstance(n, int) or isinstance(n, bool) or n < 1:
+        return [("FAIL", "run.parallelBatches", "expects a count, 1 for one batch at a time")]
+    if n > MAX_PARALLEL_BATCHES:
+        return [("WARN", "run.parallelBatches", f"{n} capped at {MAX_PARALLEL_BATCHES}: two batches per checkout at most")]
+    return []
 
 
 def validate_closing(raw):
@@ -561,6 +655,12 @@ def _cli(argv):
     cmd = argv[1]
     if cmd == "root":
         print(project_root())
+        return 0
+    if cmd == "parallel-batches":
+        try:
+            print(load().parallel_batches)
+        except KitConfigError:
+            print(1)
         return 0
     if cmd == "validate":
         root = argv[2] if len(argv) > 2 else None

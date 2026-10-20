@@ -364,7 +364,9 @@
         "exit": 2,
         "stderr": "/effort medium"
       }
-    }
+    },
+    {"name": "a subagent is judged on its own transcript: the batch the main chain closed does not refuse it", "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R/t/subagents; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t.jsonl; printf '' > $R/t/subagents/agent-a1.jsonl; printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"implement-tdd\",\"args\":\"batch F2\"},\"session_id\":\"{{SID}}\",\"agent_id\":\"a1\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh", "env": {"TMPDIR": "{{FIX}}/tmp-{{SID}}"}, "expect": {"decision": "none", "exit": 0}},
+    {"name": "a subagent that closed a batch itself is refused the next one", "cmd": "mkdir -p {{FIX}}/tmp-{{SID}}; R={{FIX}}/tdd-{{SID}}; mkdir -p $R/t/subagents; printf '' > $R/t.jsonl; printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Batch F1 complete — manual validation required\"}]}}' > $R/t/subagents/agent-a1.jsonl; printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"implement-tdd\",\"args\":\"batch F2\"},\"session_id\":\"{{SID}}\",\"agent_id\":\"a1\",\"transcript_path\":\"'$R'/t.jsonl\"}' | bash {{KIT}}/hooks/implement-tdd-guard.sh", "env": {"TMPDIR": "{{FIX}}/tmp-{{SID}}"}, "expect": {"decision": "deny", "reason": "already closed in this session"}}
   ],
   "fixtures": [
     {

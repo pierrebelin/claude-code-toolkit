@@ -35,10 +35,17 @@
     "build": "rtk dotnet build {product}.sln --no-restore",
     "test": "rtk dotnet test --project tests/{product}.{suite}/{product}.{suite}.csproj --no-build --no-restore",
     "testFast": "rtk dotnet build tests/{product}.{suite}/{product}.{suite}.csproj --no-restore && dotnet tests/{product}.{suite}/bin/Debug/net*/{product}.{suite}.dll",
+    "worktreeSetup": "rtk dotnet restore {product}.sln",
     "architectureTest": {
       "run": "rtk dotnet test --project tests/{product}.ArchitectureTests/{product}.ArchitectureTests.csproj --no-build --no-restore",
       "when": "^src/.*(Handler|Endpoints/|Repositories/|Extensions/|DbContext)"
-    }
+    },
+    "suites": [
+      {"name": "UnitTests"},
+      {"name": "ArchitectureTests", "when": "^src/.*(Handler|Endpoints/|Repositories/|Extensions/|DbContext)"},
+      {"name": "ContractTests", "when": "^src/[^/]*\\.(Api|Abstractions)[^/]*/|Endpoints/"},
+      {"name": "IntegrationTests", "when": "^src/[^/]*\\.Infrastructure/", "filter": "--filter-class \"*.{namespace}.*\"", "project": "tests/{product}.IntegrationTests"}
+    ]
   },
   "closing": {
     "maxProductionFiles": 12,

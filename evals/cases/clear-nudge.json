@@ -49,6 +49,7 @@
       "hook": "hooks/clear-nudge.sh",
       "input": {"transcript_path": "{{FIX}}/nope.jsonl", "prompt": "next"},
       "expect": {"no_context": true}
-    }
+    },
+    {"name": "a context back under a step (a /compact) re-arms it", "hook": "hooks/clear-nudge.sh", "pre": [{"transcript_path": "{{FIX}}/t320.jsonl", "prompt": "next"}, {"transcript_path": "{{FIX}}/t170.jsonl", "prompt": "next"}], "input": {"transcript_path": "{{FIX}}/t320.jsonl", "prompt": "next"}, "expect": {"context": "321k tokens"}}
   ]
 }

@@ -29,6 +29,8 @@ model=$(echo "$input" | jq -r '.tool_input.model // ""')
 
 case "$subagent" in
   Explore|general-purpose|Plan) ;;
+  # A fork runs on the caller's model whatever the parameter, and carries its context.
+  fork) exit 0 ;;
   *)
     # A custom agent pinning `model:` in its frontmatter needs no parameter.
     # Plugin agents arrive namespaced (`cctoolkit:x` → agents/x.md of the kit).

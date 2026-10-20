@@ -1,0 +1,37 @@
+{
+  "fixtures": [],
+  "cases": [
+    {
+      "name": "batch-worktree create: refused while the sheet differs from HEAD (the worktree would miss it); then the worktree under .claude/worktrees/, git-ignored, the untracked kit.config.json copied, commands.worktreeSetup run there",
+      "cmd": "R={{FIX}}/bwc-{{SID}}; rm -rf $R; mkdir -p $R/todo/p $R/.claude $R/src && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && mkdir -p .claude && printf '{\"commands\": {\"worktreeSetup\": \"\"}}' > .claude/kit.config.json && printf '# P\\n' > todo/p/P-PLAN.md && printf '# S\\n' > todo/p/P-PLAN-F2.md && printf 'a\\n' > src/a.cs && printf '{\"commands\": {\"worktreeSetup\": \"echo restored > restored.txt\"}}' > .claude/kit.config.json && git add todo src && git commit -qm init && export CLAUDE_PROJECT_DIR=$R && B(){ python3 {{KIT}}/scripts/batch-worktree.py \"$@\"; } && printf 'x\\n' >> todo/p/P-PLAN-F2.md && a=$(B create F2 --plan todo/p/P-PLAN.md --sheet todo/p/P-PLAN-F2.md | grep -o 'not committed in the checkout[^:]*: [^\"]*'; echo \"exit=${PIPESTATUS[0]}\") && git checkout -q -- todo && b=$(B create F2 --plan todo/p/P-PLAN.md --sheet todo/p/P-PLAN-F2.md | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['path'].endswith('/.claude/worktrees/cctoolkit-batch-F2'), ','.join(d['copied']), d['setup']['exit'])\") && W=.claude/worktrees/cctoolkit-batch-F2 && echo \"$a|$b|$(cat $W/restored.txt)|$(git status --porcelain -uall | grep -c worktrees)\" | tr '\\n' ' '",
+      "expect": {
+        "exit": 0,
+        "stdout": "not committed in the checkout, the worktree would miss them: todo/p/P-PLAN-F2.md exit=1|True .claude/kit.config.json 0|restored|0"
+      }
+    },
+    {
+      "name": "batch-worktree land: the worktree's batch commit rebased onto the checkout's newer HEAD, the checkout fast-forwarded to it; undo puts HEAD back (the file the batch changed back to its earlier content), local changes kept",
+      "cmd": "R={{FIX}}/bwl-{{SID}}; rm -rf $R; mkdir -p $R/todo/p $R/src && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && mkdir -p .claude && printf '{\"commands\": {\"worktreeSetup\": \"\"}}' > .claude/kit.config.json && printf '# P\\n' > todo/p/P-PLAN.md && printf '# S\\n' > todo/p/P-PLAN-F2.md && printf 'a\\n' > src/a.cs && printf 'b\\n' > src/b.cs && git add -A && git commit -qm init && export CLAUDE_PROJECT_DIR=$R && B(){ python3 {{KIT}}/scripts/batch-worktree.py \"$@\"; } && B create F2 --plan todo/p/P-PLAN.md --sheet todo/p/P-PLAN-F2.md >/dev/null && W=$R/.claude/worktrees/cctoolkit-batch-F2 && (cd $W && printf 'b2\\n' > src/b.cs && git commit -qam 'feat(p): batch F2 — x' -m 'Kit-Batch: p/F2') && printf 'a2\\n' > src/a.cs && git commit -qam 'feat(p): batch F1 — y' -m 'Kit-Batch: p/F1' && before=$(git rev-parse HEAD) && l=$(B land F2 | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['landed'], d['from'] == sys.argv[1])\" $before) && s=$(git log --format=%s | tr '\\n' ';') && printf 'local\\n' > notes.txt && u=$(B undo F2 --to $before | cut -c1-12) && echo \"$l|$s|$(cat src/a.cs src/b.cs | tr -d '\\r' | tr '\\n' ' ')|$u|$(test \"$(git rev-parse HEAD)\" = $before && echo back)|$(cat notes.txt)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "True True|feat(p): batch F2 — x;feat(p): batch F1 — y;init;|a2 b |undone: HEAD|back|local"
+      }
+    },
+    {
+      "name": "batch-worktree land: a conflict with the checkout aborts the rebase — landed false, the conflicting path, exit 1, both trees as they were; undo refuses a HEAD that is not the batch's",
+      "cmd": "R={{FIX}}/bwx-{{SID}}; rm -rf $R; mkdir -p $R/todo/p $R/src && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && mkdir -p .claude && printf '{\"commands\": {\"worktreeSetup\": \"\"}}' > .claude/kit.config.json && printf '# P\\n' > todo/p/P-PLAN.md && printf '# S\\n' > todo/p/P-PLAN-F2.md && printf 'a\\n' > src/a.cs && git add -A && git commit -qm init && export CLAUDE_PROJECT_DIR=$R && B(){ python3 {{KIT}}/scripts/batch-worktree.py \"$@\"; } && B create F2 --plan todo/p/P-PLAN.md --sheet todo/p/P-PLAN-F2.md >/dev/null && W=$R/.claude/worktrees/cctoolkit-batch-F2 && (cd $W && printf 'w\\n' > src/a.cs && git commit -qam 'feat(p): batch F2 — x' -m 'Kit-Batch: p/F2') && printf 'm\\n' > src/a.cs && git commit -qam 'feat(p): batch F1 — y' -m 'Kit-Batch: p/F1' && l=$(B land F2; echo \"exit=$?\") && u=$(B undo F2 --to HEAD~1 2>&1; echo \"exit=$?\") && echo \"$l|$(git -C $W log -1 --format=%s)|$(git log -1 --format=%s)|$(cat src/a.cs)|$u\" | tr '\\n' ' '",
+      "expect": {
+        "exit": 0,
+        "stdout": "{\"landed\": false, \"conflict\": [\"src/a.cs\"]} exit=1|feat(p): batch F2 — x|feat(p): batch F1 — y|m|refused: HEAD is not the batch commit of F2 exit=1"
+      }
+    },
+    {
+      "name": "batch-worktree prune removes every batch worktree of the repo, remove one; a usage error exits 2",
+      "cmd": "R={{FIX}}/bwp-{{SID}}; rm -rf $R; mkdir -p $R/todo/p && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && mkdir -p .claude && printf '{\"commands\": {\"worktreeSetup\": \"\"}}' > .claude/kit.config.json && printf '# P\\n' > todo/p/P-PLAN.md && printf '# S\\n' > todo/p/P-PLAN-F2.md && printf '# S\\n' > todo/p/P-PLAN-F3.md && git add -A && git commit -qm init && export CLAUDE_PROJECT_DIR=$R && B(){ python3 {{KIT}}/scripts/batch-worktree.py \"$@\"; } && for f in F2 F3; do B create $f --plan todo/p/P-PLAN.md --sheet todo/p/P-PLAN-$f.md >/dev/null; done && n=$(git worktree list | wc -l | tr -d ' ') && p=$(B prune | head -1) && B land 2>/dev/null; e=$? && echo \"$n|$p|$(git worktree list | wc -l | tr -d ' ')|$(ls .claude/worktrees | wc -l | tr -d ' ')|usage=$e\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "3|removed: 2|1|0|usage=2"
+      }
+    }
+  ]
+}

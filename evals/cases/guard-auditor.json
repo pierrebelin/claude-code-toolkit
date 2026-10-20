@@ -52,6 +52,14 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "tool_input": {"command": "ls", "run_in_background": true}},
       "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "auditor of a batch in a linked worktree (its calls open with `cd <worktree> &&`): the suites-green marker of that worktree denies the rerun; the same command without the prefix reads the checkout's, absent",
+      "cmd": "R={{FIX}}/gaw-{{SID}}; T=$R.tmp; rm -rf $R $T; mkdir -p $R $T && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && git commit -q --allow-empty -m init && git worktree add -q --detach .claude/worktrees/wt && W=$(cd .claude/worktrees/wt && pwd -P) && b=\"$T/cctoolkit-run/$(basename \"$W\")-$(printf '%s' \"$W\" | { shasum 2>/dev/null || sha1sum; } | cut -c1-8)/F1\" && mkdir -p \"$b\" && printf 'verb: dotnet test\\nroots: src tests\\nsuite: UnitTests\\n' > \"$b/suites-green\" && export CLAUDE_PROJECT_DIR=$R TMPDIR=$T && d(){ jq -cn --arg c \"$1\" '{tool_name:\"Bash\",session_id:\"s\",agent_id:\"a1\",agent_type:\"cctoolkit:ddd-tdd-auditor\",transcript_path:\"\",tool_input:{command:$c}}' | bash {{KIT}}/hooks/bash-dispatch.sh | jq -r '.hookSpecificOutput.permissionDecision // \"pass\"'; } && echo \"$(d \"cd '$W' && dotnet test --project tests/X.UnitTests/X.UnitTests.csproj\")|$(d 'dotnet test --project tests/X.UnitTests/X.UnitTests.csproj')\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "deny|pass"
+      }
     }
   ]
 }

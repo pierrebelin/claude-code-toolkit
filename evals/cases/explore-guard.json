@@ -270,6 +270,7 @@
         "prompt": "Size: the one stated above",
         "prompt_absent": "Hard cap: 20 lines"
       }
-    }
+    },
+    {"name": "a fork runs on the caller's model and passes without one, untouched", "hook": "hooks/explore-guard.sh", "input": {"tool_name": "Agent", "tool_input": {"subagent_type": "fork", "description": "fix the parser", "prompt": "fix it"}}, "expect": {"decision": "none", "prompt_absent": "Report contract"}}
   ]
 }
