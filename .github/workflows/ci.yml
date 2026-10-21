@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      # jq, python3, perl (the latency timer) and git ship with the runner. Some cases commit in
+      # jq, python3, node and git ship with the runner. Some cases commit in
       # a fixture repo: git needs an identity.
       - name: git identity
         run: |
@@ -54,7 +54,8 @@ jobs:
       - name: evals
         run: |
           set +e
-          CCTOOLKIT_EVALS_STRICT=1 bash evals/run.sh 2>&1 | tee evals.log
+          # -j 1: one file at a time, so the hook latency budget is enforced (a parallel run only shows it).
+          CCTOOLKIT_EVALS_STRICT=1 bash evals/run.sh -j 1 2>&1 | tee evals.log
           status=${PIPESTATUS[0]}
           failed=$(grep -E '^  FAIL  ' evals.log | sed 's/^  FAIL  //; s/%/%25/g' | awk '{printf "%s%%0A", $0}')
           [ -z "$failed" ] || echo "::error title=$(grep -cE '^  FAIL  ' evals.log) evals failed::${failed}"

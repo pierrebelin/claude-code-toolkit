@@ -4,13 +4,16 @@
 # Shared body with lib/guard-cat-bounds.sh: lib/bounds-common.sh.
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
+input=$(cat)
+# Already bounded: a numeric offset or limit leaves before lib/platform.sh and jq. Anything else
+# (null, a string) goes through jq as before.
+[[ $input =~ \"(offset|limit)\"[[:space:]]*:[[:space:]]*-?[0-9] ]] && exit 0
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
-LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
+LIB="${BASH_SOURCE[0]%/*}/../lib"
 # shellcheck source=../lib/bounds-common.sh
 . "$LIB/bounds-common.sh"
 
-input=$(cat)
 # US (\x1f) separator, not a tab: bash collapses IFS-whitespace runs, so an empty field would shift the rest.
 PARSED=$(printf '%s' "$input" | jq -j '[(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.tool_input.file_path // ""), ((.tool_input.offset // "") | tostring), ((.tool_input.limit // "") | tostring), (.agent_type // "")] | join("\u001f")')
 IFS=$'\x1f' read -r tool_name session_id agent_id file_path has_offset has_limit agent_type <<<"$PARSED"
@@ -55,8 +58,8 @@ if bounds_knowledge_guarded "$file_path" "$agent_type"; then
   deny "$(bounds_knowledge_reason Read "$file_path" "Read with offset/limit" "Re-issue this exact Read to force the full read.")"
 fi
 
-lines=$(wc -l < "$file_path" 2>/dev/null | tr -d ' ')
-bytes=$(wc -c < "$file_path" 2>/dev/null | tr -d ' ')
+# One wc for both counts (lines then bytes, whatever the option order).
+read -r lines bytes <<<"$(wc -lc < "$file_path" 2>/dev/null)"
 [ -n "$lines" ] || pass
 # Lines and bytes, as in lib/guard-cat-bounds.sh; a subagent gets the higher bar.
 max_lines=$BOUNDS_THRESHOLD max_bytes=$BOUNDS_BYTES

@@ -1,0 +1,14 @@
+{
+  "hooks": ["hooks/run-notes.sh", "hooks/knowledge-reminder.sh", "hooks/handler-claude-md-check.sh", "hooks/tdd-scope-guard.sh"],
+  "agents": {
+    "main": {},
+    "subagent": {"agent_id": "a3", "agent_type": "cctoolkit:knowledge-merger"}
+  },
+  "payloads": {
+    "readme": {"file_path": "{{ROOT}}/README.md"},
+    "source": {"file_path": "{{ROOT}}/src/Acme.Application/Catalog/CreateProduct/CreateProductCommandHandler.cs"},
+    "test": {"file_path": "{{ROOT}}/tests/Acme.UnitTests/Catalog/CreateProductCommandHandlerTests.cs"},
+    "rule-sheet": {"file_path": "{{ROOT}}/src/Acme.Application/Catalog/CreateProduct/CLAUDE.md"}
+  },
+  "shape": {"hook_event_name": "PostToolUse", "tool_name": "Edit", "cwd": "{{ROOT}}", "transcript_path": "{{ROOT}}/.transcript.jsonl"}
+}

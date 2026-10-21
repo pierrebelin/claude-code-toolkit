@@ -1,0 +1,13 @@
+{
+  "hooks": ["hooks/read-bounds.sh"],
+  "agents": {
+    "main": {},
+    "subagent": {"agent_id": "a4", "agent_type": "cctoolkit:ddd-tdd-auditor"}
+  },
+  "payloads": {
+    "small": {"file_path": "{{ROOT}}/README.md"},
+    "large": {"file_path": "{{ROOT}}/src/Big.cs"},
+    "limit": {"file_path": "{{ROOT}}/src/Big.cs", "limit": 40}
+  },
+  "shape": {"hook_event_name": "PreToolUse", "tool_name": "Read", "cwd": "{{ROOT}}", "transcript_path": "{{ROOT}}/.transcript.jsonl"}
+}

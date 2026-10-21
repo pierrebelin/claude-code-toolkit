@@ -1,4 +1,7 @@
 {
+  "requires": [
+    "node"
+  ],
   "fixtures": [],
   "cases": [
     {

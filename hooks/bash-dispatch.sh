@@ -8,7 +8,7 @@ set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
-LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
+LIB="${BASH_SOURCE[0]%/*}/../lib"
 
 HOOK_INPUT=$(cat)
 
@@ -25,8 +25,12 @@ HOOK_CMD="${PARSED#*$'\x1e'}"
 
 export HOOK_INPUT HOOK_CMD HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH HOOK_AGENT_TYPE HOOK_BACKGROUND
 
-# Advisory, outside the chain: merged into whatever the chain answers.
-NUDGE=$(. "$LIB/batching-nudge.sh" 2>/dev/null || true)
+# Advisory, outside the chain: merged into whatever the chain answers. Main chain with a
+# transcript only — the module's own first two exits, tested here so a subagent pays no fork.
+NUDGE=""
+if [ -z "$HOOK_AGENT_ID" ] && [ -n "$HOOK_TRANSCRIPT_PATH" ]; then
+  NUDGE=$(. "$LIB/batching-nudge.sh" 2>/dev/null || true)
+fi
 
 emit() {
   # $1 = the module's JSON, or empty when no module decided.
@@ -48,22 +52,30 @@ emit() {
   printf '%s\n' "${merged:-$1}"
 }
 
+# Each entry: the module, then the filter it needs to run — `cmd=<ERE>` on the command,
+# `agent=<ERE>` on agent_type, `-` always. A module whose filter fails is never forked (a
+# subshell costs ~20 ms on Windows). The filter is the module's own bail-out, written once
+# here; the module keeps its own copy for a run alone (an eval).
 MODULES=(
-  "guard-git.sh"
-  "guard-tdd-scope.sh"
-  "guard-cat-bounds.sh"
-  "guard-diff-bounds.sh"
-  "guard-integration-filter.sh"
-  "guard-auditor.sh"
-  "rewrite-piped-filter.sh graphify-query"
-  "rewrite-piped-filter.sh git-grep"
-  "rewrite-rtk.sh"
+  "guard-git.sh                 cmd=git"
+  "guard-tdd-scope.sh           agent=(tdd-implementer|tdd-test-author|tdd-cycle)$"
+  "guard-cat-bounds.sh          cmd=cat|head|tail|sed|awk"
+  "guard-diff-bounds.sh         cmd=git"
+  "guard-integration-filter.sh  cmd=dotnet test|IntegrationTests[.](dll|exe)"
+  "guard-auditor.sh             agent=ddd-tdd-auditor$"
+  "rewrite-piped-filter.sh      cmd=graphify|git.*grep"
+  "rewrite-rtk.sh               -"
 )
 
-# An entry may carry an argument: the unquoted expansion below is deliberate.
-for module in "${MODULES[@]}"; do
-  # shellcheck disable=SC2086
-  out=$(set -- $module; f=$1; shift; . "$LIB/$f" "$@")
+for entry in "${MODULES[@]}"; do
+  module=${entry%% *}
+  filter=${entry#"$module"}
+  filter=${filter#"${filter%%[! ]*}"}
+  case "$filter" in
+    cmd=*) [[ $HOOK_CMD =~ ${filter#cmd=} ]] || continue ;;
+    agent=*) [[ $HOOK_AGENT_TYPE =~ ${filter#agent=} ]] || continue ;;
+  esac
+  out=$(. "$LIB/$module")
   if [ -n "$out" ]; then
     emit "$out"
     exit 0

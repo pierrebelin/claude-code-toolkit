@@ -230,6 +230,38 @@
         "context": "rules with no test: RM-02",
         "exit": 0
       }
+    },
+    {
+      "name": "scope cache: Python writes it on its first run; a file outside the roots then leaves in bash, a handler folder is still reported",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\nedit() { printf '%s' '{\"session_id\":\"sc-{{SID}}\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$1'\"}}' | bash {{KIT}}/hooks/handler-claude-md-check.sh | jq -r '.hookSpecificOutput.additionalContext // empty' | head -c 33; }\na=$(edit $A/CreateProductCommandHandler.cs); C=$(ls /tmp/cctoolkit-scope-*sc-{{SID}} 2>/dev/null | wc -l | tr -d ' '); b=$(edit $R/README.md); c=$(edit $A/CreateProductCommandHandler.cs)\necho \"a=[$a] cache=$C b=[$b] c=[$c]\"; rm -f /tmp/cctoolkit-scope-*sc-{{SID}}",
+      "expect": {
+        "exit": 0,
+        "stdout": "a=[Reminder: no CLAUDE.md in Catalog] cache=1 b=[] c=[Reminder: no CLAUDE.md in Catalog]"
+      }
+    },
+    {
+      "name": "scope cache: a fresh cache decides (one naming other roots silences a handler folder); once kit.config.json is newer, Python judges again",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\nedit() { printf '%s' '{\"session_id\":\"sc-{{SID}}\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$1'\"}}' | bash {{KIT}}/hooks/handler-claude-md-check.sh | jq -r '.hookSpecificOutput.additionalContext // empty' | head -c 33; }\nC=$(bash {{KIT}}/bin/cctoolkit config scope-cache); grep -v '^uc' \"$C\" > \"$C.x\"; printf 'uc\\telsewhere\\n' >> \"$C.x\"; mv \"$C.x\" \"$C\"\na=$(edit $A/CreateProductCommandHandler.cs); touch .claude/kit.config.json; b=$(edit $A/CreateProductCommandHandler.cs)\necho \"a=[$a] b=[$b]\"; rm -f \"$C\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "a=[] b=[Reminder: no CLAUDE.md in Catalog]"
+      }
+    },
+    {
+      "name": "scope cache: a file of a linked worktree (a `.git` file below the root) is judged by Python, whatever the cache says",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\nedit() { printf '%s' '{\"session_id\":\"sc-{{SID}}\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$1'\"}}' | bash {{KIT}}/hooks/handler-claude-md-check.sh | jq -r '.hookSpecificOutput.additionalContext // empty' | head -c 33; }\nC=$(bash {{KIT}}/bin/cctoolkit config scope-cache); grep -v '^uc' \"$C\" > \"$C.x\"; printf 'uc\\telsewhere\\n' >> \"$C.x\"; mv \"$C.x\" \"$C\"\nW=$R/.claude/worktrees/w1; mkdir -p $W/src/Acme.Application/Catalog/CreateProduct && printf 'gitdir: %s/.git/worktrees/w1\\n' \"$R\" > $W/.git\ncp $A/CreateProductCommandHandler.cs $W/src/Acme.Application/Catalog/CreateProduct/\n. {{KIT}}/lib/platform.sh; . {{KIT}}/lib/scope-cache.sh; F=$W/src/Acme.Application/Catalog/CreateProduct/CreateProductCommandHandler.cs; kit_path F; CLAUDE_PROJECT_DIR=$R; kit_path CLAUDE_PROJECT_DIR\nscope_outside \"$F\" uc test; echo \"worktree=$?\"; G=$R/README.md; kit_path G; scope_outside \"$G\" uc test; echo \"readme=$?\"; rm -f \"$C\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "worktree=1\nreadme=0"
+      }
+    },
+    {
+      "name": "scope cache: without CLAUDE_PROJECT_DIR, or a cache another kit wrote, bash never decides",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\nC=$(bash {{KIT}}/bin/cctoolkit config scope-cache); grep -v '^uc' \"$C\" > \"$C.x\"; printf 'uc\\telsewhere\\n' >> \"$C.x\"; mv \"$C.x\" \"$C\"\n. {{KIT}}/lib/platform.sh; . {{KIT}}/lib/scope-cache.sh; G=$R/README.md; kit_path G; CLAUDE_PROJECT_DIR=$R; kit_path CLAUDE_PROJECT_DIR\n(CLAUDE_PROJECT_DIR=; scope_outside \"$G\" uc test; echo \"noroot=$?\")\nsed 's#^kit\t.*#kit\t/another/kit#' \"$C\" > \"$C.x\" && mv \"$C.x\" \"$C\"; scope_outside \"$G\" uc test; echo \"otherkit=$?\"; rm -f \"$C\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "noroot=1\notherkit=1"
+      }
     }
   ]
 }

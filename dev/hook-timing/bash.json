@@ -1,0 +1,17 @@
+{
+  "hooks": ["hooks/bash-dispatch.sh"],
+  "agents": {
+    "main": {},
+    "implementer": {"agent_id": "a1", "agent_type": "cctoolkit:tdd-implementer"},
+    "auditor": {"agent_id": "a2", "agent_type": "cctoolkit:ddd-tdd-auditor"}
+  },
+  "payloads": {
+    "ls-src": {"command": "ls src"},
+    "git-status": {"command": "git status"},
+    "cat-readme": {"command": "cat README.md"},
+    "dotnet-test": {"command": "dotnet test x.csproj"},
+    "graphify-query": {"command": "graphify query \"x\""},
+    "git-grep": {"command": "git grep -n foo"}
+  },
+  "shape": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": "{{ROOT}}", "transcript_path": "{{ROOT}}/.transcript.jsonl"}
+}

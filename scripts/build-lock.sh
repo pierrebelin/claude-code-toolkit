@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # build-lock — run a long build or a whole suite under one lock per checkout.
 #
-#   cctoolkit build-lock [--wait SECONDS] [--stale SECONDS] '<command>'
+#   cctoolkit build-lock [--wait SECONDS] [--stale SECONDS] -- <command> [<arg>…]
 #
 # Two batches of one checkout, each in its own worktree, overlap their agent phases; their
 # solution builds and whole suites pass one at a time (measured downstream: four concurrent warm
 # builds took 39-45 min each against 4-13 min alone). The lock is a directory in the git common
 # dir, shared by every worktree of the checkout: `mkdir` is atomic on every disk, Git Bash
-# included, where `flock` is absent. The command runs through `eval` in this shell and keeps its
-# exit; the lock goes on any exit, a signal included.
+# included, where `flock` is absent. The command comes as words, never as one quoted string run
+# through `eval`: the Bash guards and the `rtk` rewrite read it in the call's text. Redirections
+# stay outside the call; an `env VAR=value` prefix carries a variable. It keeps its exit; the lock
+# goes on any exit, a signal included.
 #
 # --wait   give up after that many seconds (default 3600): exit 75, `build-lock: timeout` on stderr
 # --stale  a lock older than that is taken over (default 10800): its holder died without exit
@@ -25,11 +27,11 @@ while [ $# -gt 0 ]; do
     --stale) stale="${2:-}"; shift 2 ;;
     --) shift; break ;;
     -*) echo "build-lock: unknown option $1" >&2; exit 2 ;;
-    *) break ;;
+    *) echo "build-lock: the command follows \`--\`, as words: cctoolkit build-lock -- <command> [<arg>…]" >&2; exit 2 ;;
   esac
 done
 case "$wait_max$stale" in *[!0-9]*|'') echo "build-lock: --wait and --stale take seconds" >&2; exit 2 ;; esac
-[ $# -eq 1 ] && [ -n "$1" ] || { echo "usage: cctoolkit build-lock [--wait S] [--stale S] '<command>'" >&2; exit 2; }
+[ $# -ge 1 ] && [ -n "$1" ] || { echo "usage: cctoolkit build-lock [--wait S] [--stale S] -- <command> [<arg>…]" >&2; exit 2; }
 
 common="$(git rev-parse --git-common-dir 2>/dev/null)" && common="$(cd "$common" && pwd)" || common="${TMPDIR:-/tmp}"
 lock="$common/cctoolkit-build.lock"
@@ -65,4 +67,4 @@ echo "$$ $(pwd)" > "$lock/owner"
 waited=$(( $(date +%s) - start ))
 [ "$looped" = 1 ] && echo "build-lock: waited $waited s" >&2
 
-eval "$1"
+"$@"

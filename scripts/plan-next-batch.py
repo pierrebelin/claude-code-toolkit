@@ -64,7 +64,7 @@ AUDIT_GAPS = {"## audit gaps", "## ecarts d'audit"}
 DECISION_MARKS = re.compile(r"user decision|décision user|décision utilisateur|GAPS|ECARTS")
 REPORTS = ("batches/{b}.md",)
 # Two batches of one checkout at most run at once.
-MAX_PARALLEL = 2
+MAX_PARALLEL = kit_config.MAX_PARALLEL_BATCHES
 # `## Cycles` fields naming a path a batch writes or bounds; `models` is read only.
 WRITTEN = ("full", "bounded", "toCreate", "production", "ripple", "boundedGreen")
 

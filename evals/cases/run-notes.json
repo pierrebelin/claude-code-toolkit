@@ -1,0 +1,30 @@
+{
+  "cases": [
+    {
+      "name": "main thread (no agent_id): silent, exit 0, no state written",
+      "cmd": "printf '%s' '{\"session_id\":\"rn-{{SID}}\",\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Read\"}' | bash {{KIT}}/hooks/run-notes.sh; echo \"rc=$? state=$(ls /tmp/claude-runnotes-rn-{{SID}}-* 2>/dev/null | wc -l | tr -d ' ')\"",
+      "expect": {"exit": 0, "stdout": "rc=0 state=0"}
+    },
+    {
+      "name": "subagent outside a run, no state yet: python reads its prompt and caches `-` under the session and agent ids the bash regex read",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/rn-{{SID}}; kit_path R; mkdir -p $R/s/subagents && printf '%s\\n' '{\"type\":\"user\",\"message\":{\"content\":\"Explore the repo.\"}}' > $R/s/subagents/agent-a3.jsonl && printf '%s' '{\"session_id\":\"rn-{{SID}}\",\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Read\",\"transcript_path\":\"'$R/s.jsonl'\",\"agent_id\":\"a3\"}' | bash {{KIT}}/hooks/run-notes.sh; echo \"rc=$? [$(cat /tmp/claude-runnotes-rn-{{SID}}-a3 2>/dev/null)]\"",
+      "expect": {"exit": 0, "stdout": "rc=0 [-\t]"}
+    },
+    {
+      "name": "subagent whose cached state is `-`: silent, the state left as is",
+      "cmd": "printf -- '-\\t\\n' > /tmp/claude-runnotes-rn-{{SID}}-a4 && printf '%s' '{\"session_id\":\"rn-{{SID}}\",\"tool_name\":\"Read\",\"agent_id\":\"a4\"}' | bash {{KIT}}/hooks/run-notes.sh; echo \"rc=$? [$(cat /tmp/claude-runnotes-rn-{{SID}}-a4)]\"",
+      "expect": {"exit": 0, "stdout": "rc=0 [-\t]"}
+    },
+    {
+      "name": "agent_id held twice (a nested object): jq reads the top-level ids, the state is keyed on them",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/rn2-{{SID}}; kit_path R; mkdir -p $R/s/subagents && printf '%s\\n' '{\"type\":\"user\",\"message\":{\"content\":\"Explore the repo.\"}}' > $R/s/subagents/agent-a5.jsonl && printf '%s' '{\"tool_response\":{\"agent_id\":\"nested\"},\"session_id\":\"rn-{{SID}}\",\"tool_name\":\"Agent\",\"transcript_path\":\"'$R/s.jsonl'\",\"agent_id\":\"a5\"}' | bash {{KIT}}/hooks/run-notes.sh; echo \"rc=$? top=$(ls /tmp/claude-runnotes-rn-{{SID}}-a5 2>/dev/null | wc -l | tr -d ' ') nested=$(ls /tmp/claude-runnotes-rn-{{SID}}-nested 2>/dev/null | wc -l | tr -d ' ')\"",
+      "expect": {"exit": 0, "stdout": "rc=0 top=1 nested=0"}
+    },
+    {
+      "name": "empty input: silent, exit 0",
+      "hook": "hooks/run-notes.sh",
+      "input": {},
+      "expect": {"decision": "none", "exit": 0}
+    }
+  ]
+}

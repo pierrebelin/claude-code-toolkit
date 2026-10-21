@@ -4,7 +4,7 @@ export const meta = {
   whenToUse: 'Implement every batch of a global plan without human intervention. Argument: path of the global plan `todo/<code>/<CODE>-PLAN.md`, optionally followed by `--until FX` or `--only FX`.',
   phases: [
     { title: 'Preflight', detail: 'plan check, doctor, docker, build green, kit root, run stamp, old runs and orphan scratch folders removed' },
-    { title: 'Batch', detail: 'next batch, out-of-batch check and journal in one call, run-lot (its questions wait for the answer in the same run); run.parallelBatches 2: an independent batch beside it, in a worktree of its own, long builds under build-lock' },
+    { title: 'Batch', detail: 'next batch, out-of-batch check and journal in one call, run-lot; run.parallelBatches 2: an independent batch beside it, in a worktree of its own, long builds under build-lock' },
     { title: 'Gate', detail: 'report status, plan heading, build green, one repair, batch commit, journal; a worktree batch committed there, landed on the checkout, its build checked once landed — a conflict or a red build reruns it alone' },
     { title: 'Aside', detail: 'blocked batch: partial work saved as a patch, tree restored to the batch start, dependents skipped; from the second, an arbiter looks for a cause common to the batches set aside — one stops the plan' },
     { title: 'Final check', detail: 'every test suite run whole once, integration included, after the last batch: reported, never blocking' },
@@ -107,7 +107,8 @@ const pre = await agent(
     `Plan argument: \`${words[0]}\`.`,
     '1. `plan` = absolute path of the plan (`realpath`; under Git Bash on Windows `cygpath -m "$(realpath <p>)"`, a `C:/…` path the Write tool reads), `root` = `git rev-parse --show-toplevel`, `kit` = `cctoolkit root`.',
     '2. First, one call: `command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && case "$(uname)" in Darwin) open -a Docker ;; MINGW*|MSYS*) (\"/c/Program Files/Docker/Docker/Docker Desktop.exe\" >/dev/null 2>&1 &) ;; esac; true` (Docker Desktop boots during the build, no wait loop).',
-    '   Then in one message, from `root`: `cctoolkit plan-next-batch <plan> --check`, `cctoolkit doctor --quiet`, `cctoolkit config parallel-batches` (→ `parallel`, 1 when it fails), and the build configured by kit-init (`commands.build`, empty for a stack without one): `b=$(cctoolkit config command build); if [ -z "$b" ]; then echo build=none; else out=$(eval "$b" 2>&1); echo "build=$?"; printf \'%s\\n\' "$out" | grep -m1 -iE \'(^|[^a-z])error([^a-z]|$)\'; fi; command -v docker >/dev/null && { docker info >/dev/null 2>&1; echo "docker=$?"; } || echo docker=absent` (timeout 600000).',
+    '   Then in one message, from `root`: `cctoolkit plan-next-batch <plan> --check`, `cctoolkit doctor --quiet`, `cctoolkit config parallel-batches` (→ `parallel`, 1 when it fails) and `cctoolkit config command build`, the build configured by kit-init (`commands.build`, empty for a stack without one).',
+    '   Then one call, from `root` (timeout 600000): the printed build command run literally, never through `eval` (the Bash guards read the command text) — `f=$(mktemp); <printed command> > "$f" 2>&1; echo "build=$?"; grep -m1 -iE \'(^|[^a-z])error([^a-z]|$)\' "$f"; rm -f "$f"`, nothing printed → `echo build=none` in its place —, followed by `; command -v docker >/dev/null && { docker info >/dev/null 2>&1; echo "docker=$?"; } || echo docker=absent`.',
     '3. `--check` exit ≠ 0, a doctor `FAIL` line, `docker` neither 0 nor `absent`, or `build` neither 0 nor `none` → `ok: false`, `failure` = the failing line verbatim (for the build: `build=<code>` followed by the first error line, the working tree must compile before any batch starts), `runRoot` and `stamp` empty, stop. No test suite runs here: each batch runs the tests its diff reaches, in its own global green.',
     `4. Otherwise \`stamp\` = \`$(date +%Y-%m-%d-%H%M)\`, \`runRoot\` = \`<plan folder>/run\` (absolute). One call: \`cctoolkit run-work purge <runRoot> <stamp> && cctoolkit run-validate apply <runRoot>/.work.jsonl && cctoolkit run-work journal <runRoot>/.work.jsonl <stamp> "start $(date '+%Y-%m-%d %H:%M') — plan <plan> — scope ${scope || 'whole plan'}"\` (purge: older layouts migrated, lines no run needs dropped, the 3 most recent runs kept; run-validate: the answers given in the run-lot-pane mod written into the sheets). \`ok: true\`, \`failure\` empty.`,
   ].join('\n'),
@@ -183,9 +184,9 @@ function gate(b, result, round, at = null) {
       `Gate of batch ${b.batch}, every check read from disk, never from a previous agent's words.`,
       `1. First line of \`${result.report}\` → \`statusLine\`; \`grep -m1 -E '^Verdict ?:'\` of it → \`verdictLine\`.`,
       `2. \`grep -nE "^### (Batch|Lot) ${b.batch}\\b" ${inTree(pre.plan, at)}\` → \`planDone\` = the heading carries \`✅ DONE\`.`,
-      `3. Read \`${pre.kit}/skills/implement-tdd/references/test-scope.md\`: run its solution build once, \`> ${tmpOf(`gate-${b.batch}`)}/build.txt 2>&1; echo "build=$?"\` → \`build\` (no build configured → 0). No test suite: run-lot's global green already ran the tests the batch diff reaches.`,
+      `3. \`cctoolkit config command build\` prints the solution build: run it once, literally (never \`eval\`), \`<printed command> > ${tmpOf(`gate-${b.batch}`)}/build.txt 2>&1; echo "build=$?"\` → \`build\`; nothing printed → \`build\` = 0. No test suite: run-lot's global green already ran the tests the batch diff reaches.`,
     ].join('\n'),
-    { schema: GATE, phase: 'Gate', label: `gate ${b.batch}${round === 'landed' ? ' landed' : round ? ' again' : ''}`, model: 'haiku' },
+    { schema: GATE, phase: 'Gate', label: `gate ${b.batch}${round === 'landed' ? ' landed' : round ? ' again' : ''}`, ...SHELL },
   )
 }
 
@@ -240,7 +241,8 @@ function setAside(b, reason, at = null) {
 // after the other: the checkout's batch gated and committed as when it runs alone; the worktree's gated and
 // committed there, landed on the checkout (rebased, fast-forwarded), its build checked once landed. A conflict
 // or a red build once landed discards that result: it runs again alone in the checkout. 1: one batch at a time.
-const PARALLEL = Math.min(Math.max(Number(pre.parallel) || 1, 1), 2)
+// `cctoolkit config parallel-batches` caps the setting (lib/kit_config.py); two is the shape of `runPair`.
+const PARALLEL = Number(pre.parallel) > 1 ? 2 : 1
 const serialOnly = new Set()
 let paired = false
 

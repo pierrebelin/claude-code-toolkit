@@ -138,7 +138,7 @@ const agent = async (prompt, o) => {
   }
   if (l.startsWith('index')) return variant === 'shortindex2' ? { ...idx, count: 2, cycles: idx.cycles.slice(1) } : variant === 'shortindex' ? { ...idx, count: 2 } : idx
   if (l === 'design') return { blocked: false, reason: '', review: ['choice x'] }
-  if (l === 'declaratives') return { ok: true }
+  if (l === 'declaratives') { if (!prompt.includes('`cctoolkit config command build` prints it') || prompt.includes('test-scope.md')) console.log('WARN declaratives without the build command, or sent to test-scope.md'); return { ok: true } }
   if (l === 'pre-audit') return variant === 'gatered' ? { ok: true, files: [], preauditGreen: false, failures: ['DEAD REFERENCE RM-09'] } : { ok: true, files: [], preauditGreen: true, failures: [] }
   if (l === 'capture') { if (!prompt.includes('--base todo/x/run/.work.jsonl --suites-green UnitTests')) console.log('WARN capture without base or green suites'); return { ok: true } }
   if (/^audit (code|plan)/.test(l)) { if (prompt.includes('First run')) console.log('WARN split auditor reruns the capture'); if (!prompt.includes('Decisions the run took')) console.log('WARN audit without decisions'); return { verdict: 'VALID', gaps: [], minors: [`minor of ${l}`], validations: [], hypotheses: [], block: `## Verdict — ${l}` } }

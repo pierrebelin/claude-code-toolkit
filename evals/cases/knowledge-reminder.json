@@ -134,6 +134,22 @@
         "no_context": true,
         "exit": 0
       }
+    },
+    {
+      "name": "scope cache: no knowledge base — the main chain's edit of a handler leaves in bash, no reminder; the base created, the handler is reminded",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\nedit() { printf '%s' '{\"session_id\":\"sc-{{SID}}\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$1'\"}}' | bash {{KIT}}/hooks/knowledge-reminder.sh | jq -r '.hookSpecificOutput.additionalContext // empty' | head -c 40; }\nbash {{KIT}}/bin/cctoolkit config scope-cache >/dev/null; a=$(edit $A/CreateProductCommandHandler.cs)\nmkdir -p docs/business/Catalog; b=$(edit $A/CreateProductCommandHandler.cs)\necho \"a=[$a] b=[$b]\"; rm -f /tmp/cctoolkit-scope-*sc-{{SID}}",
+      "expect": {
+        "exit": 0,
+        "stdout": "a=[] b=[knowledge base possibly behind: new use ]"
+      }
+    },
+    {
+      "name": "scope cache: a fresh cache naming other roots silences a handler edit (bash decided); a subagent leaves before platform.sh",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\nedit() { printf '%s' '{\"session_id\":\"sc-{{SID}}\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$1'\"}}' | bash {{KIT}}/hooks/knowledge-reminder.sh | jq -r '.hookSpecificOutput.additionalContext // empty' | head -c 40; }\nC=$(bash {{KIT}}/bin/cctoolkit config scope-cache); grep -v '^uc' \"$C\" > \"$C.x\"; printf 'uc\\telsewhere\\n' >> \"$C.x\"; mv \"$C.x\" \"$C\"\nmkdir -p docs/business/Catalog; a=$(edit $A/CreateProductCommandHandler.cs)\nb=$(printf '%s' '{\"session_id\":\"sc2-{{SID}}\",\"agent_id\":\"x1\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"'$A/CreateProductCommandHandler.cs'\"}}' | bash {{KIT}}/hooks/knowledge-reminder.sh)\necho \"a=[$a] b=[$b]\"; rm -f \"$C\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "a=[] b=[]"
+      }
     }
   ]
 }

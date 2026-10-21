@@ -7,6 +7,7 @@
     {"path": "heavy.md", "lines": 119, "kind": "md"},
     {"path": "rules/big-rule.md", "lines": 300, "kind": "md"},
     {"path": "img.png", "lines": 300},
+    {"path": "big.PNG", "lines": 300},
     {"path": "kb/.claude/kit.config.json", "kind": "text", "content": "{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}"},
     {"path": "kb/docs/business/Catalog/rules.md", "kind": "text", "content": "# Catalog — cross-cutting rules\n\n### CAT-RM-001 — A product is visible only to its organisation\n"},
     {"path": "kb/docs/business/Catalog/HISTORY.md", "kind": "text", "content": "# Catalog — history\n"},
@@ -175,6 +176,47 @@
       "expect": {
         "exit": 0,
         "stdout": "deny"
+      }
+    },
+    {
+      "name": "a numeric limit alone leaves before platform.sh and jq: passes on a large file",
+      "hook": "hooks/read-bounds.sh",
+      "input": {
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "{{FIX}}/big.cs",
+          "limit": 40
+        }
+      },
+      "expect": {
+        "decision": "none"
+      }
+    },
+    {
+      "name": "a null limit is no bound: jq reads it, the large file is denied",
+      "hook": "hooks/read-bounds.sh",
+      "input": {
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "{{FIX}}/big.cs",
+          "limit": null
+        }
+      },
+      "expect": {
+        "decision": "deny"
+      }
+    },
+    {
+      "name": "an upper-case binary extension is skipped as the lower-case one (no tr fork)",
+      "hook": "hooks/read-bounds.sh",
+      "input": {
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "{{FIX}}/big.PNG"
+        }
+      },
+      "expect": {
+        "decision": "none"
       }
     }
   ]

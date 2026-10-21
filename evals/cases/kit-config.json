@@ -310,6 +310,30 @@
         "exit": 0,
         "stdout": "0:1:FAIL run.parallelBatches,|3:2:WARN run.parallelBatches,|2:2:|1:1:|1|rtk dotnet restore Shop.sln"
       }
+    },
+    {
+      "name": "scope-cache: writes the roots, the aggregate globs, the knowledge base and the watched files, its mtime 1 s past the newest of them",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\nC=$(bash {{KIT}}/bin/cctoolkit config scope-cache); cut -f1 \"$C\" | tr '\\n' ' '; grep -c '^watch' \"$C\"; grep '^uc' \"$C\"; [ \"$C\" -nt .claude/kit.config.json ] && echo newer; rm -f \"$C\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "root kit watch watch watch uc test agg agg kb 3\nuc\tsrc/Acme.Application\nnewer"
+      }
+    },
+    {
+      "name": "scope-cache: a config changed less than 2 s ago writes nothing (its mtime and the cache's could share a second)",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\ntouch .claude/kit.config.json; C=$(bash {{KIT}}/bin/cctoolkit config scope-cache); echo \"[$C]\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "[]"
+      }
+    },
+    {
+      "name": "scope-cache: a root pattern bash would not match as fnmatch does (a backslash) writes nothing",
+      "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\nprintf '%s' '{\"preset\": \"clean-architecture\", \"layout\": {\"tests\": {\"roots\": [\"te\\\\\\\\sts\"]}}}' > .claude/kit.config.json; perl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nC=$(bash {{KIT}}/bin/cctoolkit config scope-cache); echo \"[$C]\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "[]"
+      }
     }
   ]
 }

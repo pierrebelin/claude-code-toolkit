@@ -14,6 +14,7 @@ CLI (hooks, shell scripts, and the skills through `cctoolkit root`):
     kit_config.py shell <root>             # shell assignments for scripts/pre-audit.sh, audit-capture.sh
     kit_config.py command <name> [<suite>] # commands.<name>, {product} and {suite} expanded; empty = unset
     kit_config.py parallel-batches         # run.parallelBatches, 1 to 2 (1 when unset or malformed)
+    kit_config.py scope-cache [<root>]     # writes the scope cache lib/scope-cache.sh reads, prints its path
     kit_config.py diff-comments <root>     # added comment lines under the source roots (diff on stdin)
     kit_config.py diff-interaction <root>  # added lines of the interaction suites (diff on stdin)
     kit_config.py diff-tags <root>         # tag values on added lines (diff on stdin)
@@ -27,6 +28,8 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
+import time
 import unicodedata
 
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -626,6 +629,55 @@ def validate_knowledge(c, raw):
     return out
 
 
+# --- scope cache (lib/scope-cache.sh) ------------------------------------------------
+# What the Edit|Write hooks need to tell, in bash, a file outside every root from one Python must judge.
+SCOPE_SAFE = re.compile(r"[A-Za-z0-9._*?\[\]!/ -]+")
+
+
+def _slashed(path):
+    """Absolute, `/`-separated, the drive letter upper-cased: how lib/platform.sh's kit_path writes it."""
+    p = os.path.abspath(_native(str(path))).replace(os.sep, "/")
+    return p[0].upper() + p[1:] if re.match(r"[a-z]:/", p) else p
+
+
+def scope_cache_path(root):
+    """`<temp dir>/cctoolkit-scope-<root, each character outside [A-Za-z0-9._-] as _>`: the temp dir is
+    bash's `/tmp` on Windows (gettempdir), `${TMPDIR:-/tmp}` elsewhere."""
+    tmp = tempfile.gettempdir() if os.name == "nt" else (os.environ.get("TMPDIR") or "/tmp")
+    key = _slashed(root).rstrip("/") or "/"
+    return os.path.join(tmp, "cctoolkit-scope-" + re.sub(r"[^A-Za-z0-9._-]", "_", key))
+
+
+def write_scope_cache(c):
+    """Writes the scope cache of `c.root`, or nothing: a pattern bash would not match as fnmatch does, or a
+    watched file changed less than 2 s ago (its mtime and the cache's would share a second). The cache's
+    mtime is set 1 s past the newest watched file: any later change is newer, at any clock granularity."""
+    name = c.data.get("preset") or DEFAULT_PRESET
+    watched = [config_path(c.root), os.path.join(c.root, ".claude", "presets", name, "preset.json"),
+               os.path.join(PRESETS, name, "preset.json")]
+    patterns = c.use_case_roots + c.test_roots + c.aggregate
+    if not all(isinstance(x, str) and SCOPE_SAFE.fullmatch(x) for x in patterns):
+        return None
+    mtimes = [os.path.getmtime(w) for w in watched if os.path.isfile(w)]
+    newest = max(mtimes, default=0)
+    if time.time() - newest < 2:
+        return None
+    lines = [f"root\t{_slashed(c.root).rstrip('/') or '/'}", f"kit\t{_slashed(KIT)}"]
+    lines += [f"watch\t{_slashed(w)}\t{1 if os.path.isfile(w) else 0}" for w in watched]
+    lines += [f"uc\t{x}" for x in c.use_case_roots] + [f"test\t{x}" for x in c.test_roots]
+    lines += [f"agg\t{x}" for x in c.aggregate]
+    if isinstance(c.knowledge_root, str) and "\t" not in c.knowledge_root and "\n" not in c.knowledge_root:
+        lines.append(f"kb\t{_slashed(os.path.join(c.root, c.knowledge_root))}")
+    path = scope_cache_path(c.root)
+    tmp = f"{path}.{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n".join(lines) + "\n")
+    t = int(newest) + 1
+    os.utime(tmp, (t, t))
+    os.replace(tmp, path)
+    return path
+
+
 # --- unified diff helpers ------------------------------------------------------------
 def added_lines(diff):
     """(file, line number, text) of every added line; the file resets on `+++ b/` only."""
@@ -661,6 +713,14 @@ def _cli(argv):
             print(load().parallel_batches)
         except KitConfigError:
             print(1)
+        return 0
+    if cmd == "scope-cache":
+        try:
+            path = write_scope_cache(load(argv[2] if len(argv) > 2 else None))
+        except (KitConfigError, OSError):
+            path = None
+        if path:
+            print(path.replace(os.sep, "/"))
         return 0
     if cmd == "validate":
         root = argv[2] if len(argv) > 2 else None

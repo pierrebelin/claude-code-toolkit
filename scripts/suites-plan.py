@@ -28,7 +28,6 @@ import hashlib
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 
@@ -71,11 +70,14 @@ def namespaces(c, entry, paths):
     return sorted(found), missing
 
 
+ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
+
+
 def line(cmd, out, lock=False):
-    run = f'{cmd} > "{out}" 2>&1'
     if lock:
-        run = f"cctoolkit build-lock {shlex.quote(run)}"
-    return f'{run}; echo "exit=$?"; tail -15 "{out}"'
+        # The command as words after `--`, never one quoted string: the Bash guards read it.
+        cmd = f"cctoolkit build-lock -- {'env ' if ASSIGNMENT.match(cmd) else ''}{cmd}"
+    return f'{cmd} > "{out}" 2>&1; echo "exit=$?"; tail -15 "{out}"'
 
 
 def plan(c, root, work, batch, lock=False):

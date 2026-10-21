@@ -26,6 +26,7 @@ const agent = async (prompt, o) => {
     return variant === 'common' ? { commonCause: true, cause: 'archive date source ambiguous in the spec', batches: ['F1', 'F2'], fixBeforeRelaunch: 'state the archive date source' } : { commonCause: false, cause: 'unrelated', batches: [], fixBeforeRelaunch: '' }
   }
   if (l === 'journal') return { ok: true }
+  if (l.startsWith('gate') && (!prompt.includes('`cctoolkit config command build` prints the solution build') || prompt.includes('test-scope.md'))) console.log('WARN gate without the build command, or sent to test-scope.md')
   if (l.startsWith('gate')) return { statusLine: '## STATUS — DONE', verdictLine: 'Verdict: VALID', planDone: true, build: 0 }
   if (l.startsWith('commit')) return { ok: true, commit: `committed abc12${labels.length % 10}f: 3 file(s)` }
   if (l === 'final check') return { suites: [] }

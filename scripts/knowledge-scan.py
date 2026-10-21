@@ -563,6 +563,11 @@ def main(argv):
         return 3
     if remind:
         try:
+            # The hook's bash fast path (lib/scope-cache.sh) reads what this writes.
+            kit_config.write_scope_cache(C)
+        except Exception:
+            pass
+        try:
             return reminder(paths, staged)
         except Exception:
             return 0

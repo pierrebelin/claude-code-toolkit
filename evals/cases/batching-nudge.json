@@ -1,0 +1,56 @@
+{
+  "fixtures": [
+    {"path": "mono.jsonl", "kind": "text", "content": "{\"type\":\"assistant\",\"message\":{\"id\":\"m1\",\"content\":[{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"Bash\",\"input\":{}}]}}\n{\"type\":\"assistant\",\"message\":{\"id\":\"m2\",\"content\":[{\"type\":\"tool_use\",\"id\":\"t2\",\"name\":\"Bash\",\"input\":{}}]}}\n{\"type\":\"assistant\",\"message\":{\"id\":\"m3\",\"content\":[{\"type\":\"tool_use\",\"id\":\"t3\",\"name\":\"Bash\",\"input\":{}}]}}\n{\"type\":\"assistant\",\"message\":{\"id\":\"m4\",\"content\":[{\"type\":\"tool_use\",\"id\":\"t4\",\"name\":\"Bash\",\"input\":{}}]}}\n{\"type\":\"assistant\",\"message\":{\"id\":\"m5\",\"content\":[{\"type\":\"tool_use\",\"id\":\"t5\",\"name\":\"Bash\",\"input\":{}}]}}\n{\"type\":\"assistant\",\"message\":{\"id\":\"m6\",\"content\":[{\"type\":\"tool_use\",\"id\":\"t6\",\"name\":\"Bash\",\"input\":{}}]}}\n{\"type\":\"assistant\",\"message\":{\"id\":\"m7\",\"content\":[{\"type\":\"tool_use\",\"id\":\"t7\",\"name\":\"Bash\",\"input\":{}}]}}\n"}
+  ],
+  "cases": [
+    {
+      "name": "main chain, six mono-call turns: the third call (one in CLAUDE_BATCHING_SAMPLE) carries the nudge",
+      "hook": "hooks/bash-dispatch.sh",
+      "pre": [
+        {"tool_name": "Bash", "tool_input": {"command": "echo 1"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+        {"tool_name": "Bash", "tool_input": {"command": "echo 2"}, "transcript_path": "{{FIX}}/mono.jsonl"}
+      ],
+      "input": {"tool_name": "Bash", "tool_input": {"command": "echo 3"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+      "expect": {"context": "Batching: the last 6 tool-carrying turns each held a single call"}
+    },
+    {
+      "name": "main chain, first call of the session: sampled out, no nudge",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "echo 1"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+      "expect": {"no_context": true}
+    },
+    {
+      "name": "once per session: the sixth call finds the nudge already sent",
+      "hook": "hooks/bash-dispatch.sh",
+      "pre": [
+        {"tool_name": "Bash", "tool_input": {"command": "echo 1"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+        {"tool_name": "Bash", "tool_input": {"command": "echo 2"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+        {"tool_name": "Bash", "tool_input": {"command": "echo 3"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+        {"tool_name": "Bash", "tool_input": {"command": "echo 4"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+        {"tool_name": "Bash", "tool_input": {"command": "echo 5"}, "transcript_path": "{{FIX}}/mono.jsonl"}
+      ],
+      "input": {"tool_name": "Bash", "tool_input": {"command": "echo 6"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+      "expect": {"no_context": true}
+    },
+    {
+      "name": "a subagent never gets the nudge, at the third call either",
+      "hook": "hooks/bash-dispatch.sh",
+      "pre": [
+        {"tool_name": "Bash", "tool_input": {"command": "echo 1"}, "transcript_path": "{{FIX}}/mono.jsonl", "agent_id": "a1"},
+        {"tool_name": "Bash", "tool_input": {"command": "echo 2"}, "transcript_path": "{{FIX}}/mono.jsonl", "agent_id": "a1"}
+      ],
+      "input": {"tool_name": "Bash", "tool_input": {"command": "echo 3"}, "transcript_path": "{{FIX}}/mono.jsonl", "agent_id": "a1"},
+      "expect": {"no_context": true}
+    },
+    {
+      "name": "the nudge is grafted onto a decision: a denied git commit keeps its deny and carries the nudge",
+      "hook": "hooks/bash-dispatch.sh",
+      "pre": [
+        {"tool_name": "Bash", "tool_input": {"command": "echo 1"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+        {"tool_name": "Bash", "tool_input": {"command": "echo 2"}, "transcript_path": "{{FIX}}/mono.jsonl"}
+      ],
+      "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}, "transcript_path": "{{FIX}}/mono.jsonl"},
+      "expect": {"decision": "deny", "context": "Batching:"}
+    }
+  ]
+}

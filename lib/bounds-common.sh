@@ -16,16 +16,19 @@ BOUNDS_SUBAGENT_BYTES=${CLAUDE_READ_BOUNDS_SUBAGENT_BYTES:-24000}
 # Third way out after the bounded read and the forcing: ask the one-shot worker.
 BOUNDS_BULK_READ="A question about the file rather than an edit (what it does, which rules, which dependencies): cctoolkit bulk-read --question \"...\" --paths <file> — one-shot haiku worker, ~500 fixed tokens, the file never enters this context."
 
-bounds_lower() {
-  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
-}
+# Extensions match case-insensitively without a fork: nocasematch around the `case`, restored after.
+bounds_nocase() { shopt -q nocasematch && _bounds_nc=1 || _bounds_nc=""; shopt -s nocasematch; }
+bounds_case() { [ -n "$_bounds_nc" ] || shopt -u nocasematch; }
 
 # Binary or rendered: the tool reads them natively and an outline of one is noise.
 bounds_is_binary() {
-  case "$(bounds_lower "$1")" in
-    *.png|*.jpg|*.jpeg|*.gif|*.webp|*.bmp|*.svg|*.pdf|*.ipynb|*.zip|*.nupkg) return 0 ;;
+  local r=1
+  bounds_nocase
+  case "$1" in
+    *.png|*.jpg|*.jpeg|*.gif|*.webp|*.bmp|*.svg|*.pdf|*.ipynb|*.zip|*.nupkg) r=0 ;;
   esac
-  return 1
+  bounds_case
+  return $r
 }
 
 # Instruction files (skill, agent, rule, CLAUDE.md) are read whole or not at all.
@@ -46,13 +49,15 @@ bounds_skip() {
 # The declarations of a file, line-numbered, shipped with the refusal.
 bounds_outline() {
   local file=$1 outline_re
-  case "$(bounds_lower "$file")" in
+  bounds_nocase
+  case "$file" in
     *.cs)   outline_re='^[[:space:]]*(public|internal|protected|private|\[Fact|\[Theory|namespace |.*(class|record|interface|enum) )' ;;
     *.ts|*.tsx|*.js|*.jsx) outline_re='^[[:space:]]*(export|function |class |const [A-Za-z_]+ = |describe\(|it\(|test\()' ;;
     *.md)   outline_re='^#{1,4} ' ;;
     *.json) outline_re='^[[:space:]]{0,4}"[^"]+"[[:space:]]*:' ;;
     *)      outline_re='^[^[:space:]#]' ;;
   esac
+  bounds_case
   grep -nE "$outline_re" "$file" 2>/dev/null | head -"$BOUNDS_OUTLINE_MAX" | cut -c1-160
 }
 

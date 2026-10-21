@@ -32,7 +32,8 @@ const workFile = `${runRoot}/.work.jsonl`
 const reportPath = `${runRoot}/batches/${batch}.md`
 const commitAtEnd = !(args && typeof args === 'object' && args.commit === false)
 // Beside another batch: `partner` = the sheet of the batch running at the same time — never reviewed nor
-// amended by this one, it is already running; `lock` = solution builds and whole suites under `cctoolkit build-lock`.
+// amended by this one, it is already running; `lock` = solution builds, whole suites and the cycles' test-project
+// builds (`commands.testFast`) under `cctoolkit build-lock`.
 const partner = slashed(opts.partner || '').trim()
 const lock = opts.lock === true
 const tmpCommand = `cctoolkit run-work tmp ${batch}`
@@ -273,6 +274,8 @@ const cycleState = (c, red, green = false) => `\`cctoolkit run-work append ${wor
 // One tdd-cycle agent per cycle, every closing: its RED, the checkpoint the TDD scope hook checks on the
 // tree (agents/tdd-cycle.md), then its GREEN. `red`: a RED already accepted (saved by an earlier run, or by
 // an earlier attempt whose GREEN was rejected) — the agent re-arms the checkpoint with it and writes the GREEN.
+// A batch run beside another: the test project's build of `commands.testFast` waits for the other's builds.
+const LOCKED_FAST = 'Another batch builds beside this one: every filtered test command, RED and GREEN, starts with `cctoolkit build-lock -- ` then the printed command as words, never quoted — its build step waits for the builds of the other batch, the test run follows.'
 
 function cycleContract(c, red = null) {
   const ripple = red && red.status === 'ALREADY_GREEN' ? red.pendingRipple || [] : []
@@ -293,6 +296,7 @@ function cycleContract(c, red = null) {
     ]),
     '',
     ...(c.guard ? [] : [greenContract(c, ripple), '']),
+    ...(lock ? [LOCKED_FAST, ''] : []),
     AMBIGUITY,
     'Structured output: `red` = the report the checkpoint accepted, unchanged; `green` = your `## GREEN` report (`production`, `command`, `exit`, `testsDiff`, `cost`, `independentOf`, `removed`, `flagged`); `decisions` = your ambiguity lines, empty when none.',
     `Last step before the structured output, after a GREEN: one call, ${cycleState(c, red, true)}${red ? '' : ', `<the RED report>` = the one the checkpoint accepted'}.`,
@@ -700,8 +704,8 @@ if (lotIndex.declaratives.length) {
         '',
         'Write the declarative artefacts below before any RED, per `<kit>/skills/implement-tdd/references/common-rules.md` §4 point 5, that paragraph only: each mirrors the existing file it names, a registry entry goes after the neighbour entry it names; one already on disk with that content stays as is. No test, no signature stub, no logic.',
         ...lotIndex.declaratives.map(d => `- ${d}`),
-        'Then the solution build of `<kit>/skills/implement-tdd/references/test-scope.md` once: exit 0 → `ok: true`; otherwise fix what you wrote, at most twice, then `ok: false`, `detail` = the first error line.',
-        ...(lock ? ["Another batch builds beside this one: run each solution build as `cctoolkit build-lock '<build command>'`, it waits for the other's build to end and keeps the exit."] : []),
+        'Then the solution build once: `cctoolkit config command build` prints it, run it literally (never `eval`); nothing printed → `ok: true`. Exit 0 → `ok: true`; otherwise fix what you wrote, at most twice, then `ok: false`, `detail` = the first error line.',
+        ...(lock ? ["Another batch builds beside this one: run each solution build as `cctoolkit build-lock -- <printed command>`, the command as words, never quoted: it waits for the other's build to end and keeps the exit."] : []),
       ].join('\n') + suffix,
       { schema: OK, phase: 'Design', label: 'declaratives', model: 'sonnet', effort: 'low' },
     ),

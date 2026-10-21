@@ -569,6 +569,7 @@ def rerun(cfg, agent_id):
         return None
     verbs = _test_verbs(cfg)
     seg = next((s for s in reversed(_segments(cmds[-1])) if any(v in s for v in verbs)), "")
+    seg = re.sub(r"^\s*(?:\S*/)?cctoolkit\s+build-lock\s+(?:--(?:wait|stale)\s+\d+\s+)*--\s+", "", seg)
     seg = re.sub(r"^\s*rtk\s+(proxy\s+)?", "", seg)
     seg = re.sub(r"\s+[0-9]?>\s*\S+|\s+2>&1", "", seg).strip()
     if not seg:

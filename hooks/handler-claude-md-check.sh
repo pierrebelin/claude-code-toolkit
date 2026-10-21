@@ -7,11 +7,15 @@
 # additionalContext: plain stdout on PostToolUse never reaches the model.
 
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
-. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 INPUT=$(cat)
 
-# Cheap bail-out before any python.
+# Cheap bail-out before lib/platform.sh and any python.
 case "$INPUT" in *'"file_path"'*) ;; *) exit 0 ;; esac
+. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
+
+# Outside every use-case and test root, per the scope cache: no Python.
+. "${BASH_SOURCE[0]%/*}/../lib/scope-cache.sh" 2>/dev/null || { scope_file_of() { return 1; }; scope_outside() { return 1; }; }
+scope_file_of "$INPUT" && scope_outside "$SCOPE_FILE" uc test && exit 0
 
 KIT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)"
 [ -n "$KIT_LIB" ] || exit 0
@@ -33,10 +37,16 @@ try:
     import kit_config, kit_testtag
     from rule_sheet import SHAPE, rule_rows, shape_issues
     # A file of a linked worktree (a batch run beside another) is judged against that worktree.
-    C = kit_config.load(kit_config.root_of(raw))
+    wt = kit_config.worktree_of(raw)
+    C = kit_config.load(wt or kit_config.project_root())
     AD = kit_testtag.adapter(C)
 except Exception:
     sys.exit(0)
+if not wt:
+    try:
+        kit_config.write_scope_cache(C)
+    except Exception:
+        pass
 
 ROOT = C.root
 SHEET = C.rule_sheet

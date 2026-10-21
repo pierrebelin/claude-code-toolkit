@@ -1,4 +1,5 @@
 {
+  "serial": true,
   "cases": [
     {
       "name": "a stale graph detaches the rebuild and the hook returns at once",

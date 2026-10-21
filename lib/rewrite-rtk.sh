@@ -53,7 +53,14 @@ case "$cmd" in
   *) sed_args+=(-e 's#(^|[;&|(])([[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*)dotnet[[:space:]]+(test|restore|format)([[:space:]]|$)#\1\2rtk dotnet \4\5#g') ;;
 esac
 sed_args+=(-e 's#@@RTKDOTNET@@#dotnet#g')
-normalized=$(printf '%s' "$cmd" | sed "${sed_args[@]}")
+# Every expression needs `/bin/` or `dotnet` (the placeholder aside): without them the sed is
+# skipped, its one visible effect — trailing newlines dropped by `$(…)` — kept.
+case "$cmd" in
+  */bin/*|*dotnet*|*@@RTKDOTNET@@*) normalized=$(printf '%s' "$cmd" | sed "${sed_args[@]}") ;;
+  *)
+    normalized=$cmd
+    while [ "${normalized%$'\n'}" != "$normalized" ]; do normalized=${normalized%$'\n'}; done ;;
+esac
 
 if [ "$normalized" != "$cmd" ]; then
   input=$(printf '%s' "$input" | jq --arg c "$normalized" '.tool_input.command = $c')
