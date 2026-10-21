@@ -4,6 +4,12 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.6.1 — 2026-10-21
+
+2.6.0 was tagged but never released: its CI was red. 2.6.1 carries all of 2.6.0, the notes below it apply.
+
+- `cctoolkit`: `cctoolkit evals` is green on Linux again; it had been red since 2.4.0, on cases out of step with the kit rather than on hooks. The `plan-implementation` gate cases ran the skill's whole command line, whose second `<spec>` was left unreplaced since 2.5.0: they now run its `awk` filter alone. The `run-notes` cases wrote agent transcripts without the `"type": "user"` field the hook reads since 2.5.1. The `tdd-scope` ALREADY_GREEN case cut the refusal shorter than the text it expected.
+
 ## 2.6.0 — 2026-10-21
 
 - `cctoolkit`: a resumed `run-lot` no longer skips the cycles of its batch. The agent that reloads the run state relays the cycle index, and on a measured run it relayed `cycles: []` for a 7-cycle block: the run found nothing to do, went straight to the global green, wrote the GREEN of two cycles there outside TDD, then failed the pre-audit three times on cycles with no state (about 20 min lost). `cctoolkit sheet-cycles --index` now prints `count`, the number of cycles of the block; a copy short of cycles is read again by an agent of its own, and a second short copy stops the batch instead of running it empty.

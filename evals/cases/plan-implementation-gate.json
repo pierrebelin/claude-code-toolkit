@@ -29,7 +29,7 @@
   "cases": [
     {
       "name": "gate: an English spec with a Blocking row in its anchored section prints the row, not the others",
-      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#<spec>#{{FIX}}/gate/en-blocking.md#'); bash -c \"$c\"",
+      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#; echo .*##; s#<spec>#{{FIX}}/gate/en-blocking.md#g'); bash -c \"$c\"",
       "expect": {
         "exit": 0,
         "stdout": "| 1 | Blocking | Who owns it? |"
@@ -37,7 +37,7 @@
     },
     {
       "name": "gate: an English spec with only a Major prints nothing",
-      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#<spec>#{{FIX}}/gate/en-major.md#'); bash -c \"$c\" | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#; echo .*##; s#<spec>#{{FIX}}/gate/en-major.md#g'); bash -c \"$c\" | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
       "expect": {
         "exit": 0,
         "stdout": "bytes=0"
@@ -45,7 +45,7 @@
     },
     {
       "name": "gate: a French spec (## 12. Questions ouvertes, Bloquant) prints its Bloquant row",
-      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#<spec>#{{FIX}}/gate/fr-blocking.md#'); bash -c \"$c\"",
+      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#; echo .*##; s#<spec>#{{FIX}}/gate/fr-blocking.md#g'); bash -c \"$c\"",
       "expect": {
         "exit": 0,
         "stdout": "| 1 | Bloquant | Qui en est propriétaire ? |"
@@ -53,7 +53,7 @@
     },
     {
       "name": "gate: a French spec with only a Majeur prints nothing",
-      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#<spec>#{{FIX}}/gate/fr-major.md#'); bash -c \"$c\" | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
+      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#; echo .*##; s#<spec>#{{FIX}}/gate/fr-major.md#g'); bash -c \"$c\" | wc -c | sed 's/ *\\([0-9]*\\)/bytes=\\1/'",
       "expect": {
         "exit": 0,
         "stdout": "bytes=0"
@@ -61,7 +61,7 @@
     },
     {
       "name": "gate: a Bloquant row of a French spec carrying the anchor is found too",
-      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#<spec>#{{FIX}}/gate/fr-anchored.md#'); bash -c \"$c\"",
+      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#; echo .*##; s#<spec>#{{FIX}}/gate/fr-anchored.md#g'); bash -c \"$c\"",
       "expect": {
         "exit": 0,
         "stdout": "| 1 | Bloquant |"
@@ -69,7 +69,7 @@
     },
     {
       "name": "gate: a Blocking or Bloquant row outside section 12 is never read",
-      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#<spec>#{{FIX}}/gate/en-major.md#'); bash -c \"$c\" | grep -c 'hors section'",
+      "cmd": "c=$(grep -m1 \"^   awk '\" {{KIT}}/skills/plan-implementation/SKILL.md | sed 's#; echo .*##; s#<spec>#{{FIX}}/gate/en-major.md#g'); bash -c \"$c\" | grep -c 'hors section'",
       "expect": {
         "stdout": "0"
       }
