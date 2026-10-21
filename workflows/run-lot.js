@@ -283,7 +283,8 @@ const COST_CLEAR = ['Infrastructure in loop or in-memory filter: none', 'Infrast
 const noGrants = () => ({ tests: new Set(), cost: false })
 
 function grantsFrom(text, grants = noGrants()) {
-  for (const m of String(text || '').matchAll(ALLOW_TEST)) grants.tests.add(repoPath(m[1]))
+  // A path closing the arbiter's sentence keeps its period (`allow-test: tests/A.cs.`): it would match no file.
+  for (const m of String(text || '').matchAll(ALLOW_TEST)) grants.tests.add(repoPath(m[1].replace(/[.:)\]]+$/, '')))
   if (ACCEPT_COST.test(String(text || ''))) grants.cost = true
   return grants
 }

@@ -4,6 +4,11 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.5.1 — 2026-10-21
+
+- `cctoolkit`: a test file the arbiter grants to a GREEN (`allow-test: <path>`) can now be edited. The TDD scope hook read the grant from the agent's first message, and inside a workflow that message is now the harness's relay of your request: every grant was refused, and the checks that read the RED prompt (`pendingRipple`, contract methods) were skipped. The hook now reads the prompt that follows the relay. A path ending the arbiter's sentence also kept its period (`MockGroupAccess.cs.`) and matched no file. Measured run: 4 GREEN attempts out of 10 refused a grant already given, until the batch was set aside.
+- `cctoolkit`: a TDD agent writing through Bash after a `cd` is caught. `cd src/… && sed -i … Handler.cs` was judged from the repo root, so the relative path matched no root: the write was neither refused nor recorded, and a sibling agent running in parallel was blamed for it ("changed since RED start, I never touched them"). Paths after a `cd` are now read from its folder. Measured run: 3 attempts lost that way over two batches.
+
 ## 2.5.0 — 2026-10-21
 
 - `cctoolkit`: `cctoolkit sheet-cycles --index` refuses a test method in two cycles, whatever their waves (a data-driven theory with one row per cycle never goes green alone: the runner filters a method, never a row), and a `full` test file shared by two cycles of successive waves, those under `layout.tests.shared` excepted — `run-lot` starts wave n+1's REDs beside wave n's GREENs, so the rows the next RED adds kept every GREEN red (seen on a run: three cycles of one permission theory, 3 and 4 GREEN attempts, two arbiters). `run-lot` now holds a wave back until the GREENs of the wave before when the two rewrite a test file, for a block validated by an earlier version or waves a resume makes adjacent; the index lists each cycle's `tests`.

@@ -16,6 +16,7 @@ assert(checkGreen(green([f1])) === null, 'testsDiff is display only: the hook ch
 assert(checkGreen(blocked(TESTS_AT_GREEN + f1 + GRANTED + 'none')) === TESTS_AT_GREEN + f1 + GRANTED + 'none', 'hook reason returned verbatim, the arbiter parses it')
 const g = grantsFrom('allow-test: ' + f1 + ' allow-test: \`/Users/x/repo/' + f2 + '\`')
 assert(decided('allow-test: ' + f1, g).includes(GRANT_LINE + f1 + ', ' + f2 + '.'), 'grants reach the prompt on the line the hook reads, absolute path normalised')
+assert([...grantsFrom('Grant it: allow-test: ' + f1 + '. Then allow-test: ' + f2 + '.').tests].join(',') === f1 + ',' + f2, 'a path closing the sentence loses its period')
 assert(checkGreen(green([], 'Cost: … ; Infrastructure in loop or in-memory filter: 1 — design to revisit')) !== null, 'flagged cost refused')
 assert(checkGreen(green([], 'Cost: … ; Infrastructure in loop or in-memory filter: 1 — design to revisit'), grantsFrom('accept-cost: pre-existing')) === null, 'accepted cost passes')
 assert(checkGreen(green([], 'Coût : 0 lecture + 0 écriture hors boucle ; Infrastructure en boucle ou filtre mémoire : aucun')) === null, 'French cost line accepted')

@@ -31,6 +31,7 @@ import glob
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shlex
 import shutil
@@ -251,28 +252,44 @@ def start(cfg, agent_id, agent_type):
 
 
 # --- grants ---------------------------------------------------------------------------
+# The Workflow harness writes its relay of the user request as the agent's first message, the step's prompt after it.
+RELAY = "[Workflow harness"
+
+
 def prompt_of(transcript_path, agent_id):
-    """First user message of the agent: `<session>/subagents/[workflows/<run>/]agent-<id>.jsonl`."""
+    """The agent's prompt, its user messages before its first answer, the harness relay left out:
+    `<session>/subagents/[workflows/<run>/]agent-<id>.jsonl`."""
     if not transcript_path or not agent_id:
         return ""
     base = os.path.splitext(transcript_path)[0]
     for path in glob.glob(os.path.join(base, "subagents", "**", f"agent-{agent_id}.jsonl"), recursive=True):
+        texts = []
         try:
             with open(path, encoding="utf-8") as fh:
-                first = json.loads(fh.readline())
-        except (OSError, ValueError):
+                for line in fh:
+                    try:
+                        entry = json.loads(line)
+                    except ValueError:
+                        break
+                    if entry.get("type") == "assistant":
+                        break
+                    if entry.get("type") != "user":
+                        continue
+                    content = (entry.get("message") or {}).get("content", "")
+                    if isinstance(content, list):
+                        content = "\n".join(c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text")
+                    if isinstance(content, str) and not content.startswith(RELAY):
+                        texts.append(content)
+        except OSError:
             continue
-        content = (first.get("message") or {}).get("content", "")
-        if isinstance(content, list):
-            content = "\n".join(c.get("text", "") for c in content if isinstance(c, dict))
-        return content if isinstance(content, str) else ""
+        return "\n".join(texts)
     return ""
 
 
 def grants(prompt):
     found = set()
     for m in re.finditer(re.escape(GRANTED) + r"(.+?)\.(?:\s|$)", prompt):
-        found.update(p.strip().strip("`") for p in m.group(1).split(",") if p.strip())
+        found.update(p.strip().strip("`").rstrip(".") for p in m.group(1).split(",") if p.strip())
     return found
 
 
@@ -319,6 +336,14 @@ def _tokens(segment):
         return shlex.split(segment, posix=True)
     except ValueError:
         return segment.split()
+
+
+def _at(cwd, token):
+    """`token` as seen from the folder a `cd` moved to: a relative path joined to it."""
+    token = token.strip("'\"")
+    if not cwd or not token or token.startswith(("-", "/", "~")) or re.match(r"^[A-Za-z]:[\\/]", token):
+        return token
+    return posixpath.join(cwd.replace("\\", "/"), token)
 
 
 def _under_root(cfg, token):
@@ -374,10 +399,12 @@ def bash_write(cfg, cmd):
                 return hit
         elif prog in INTERPRETERS and CODE_WRITE.search(body):
             return f"{prog} heredoc code"
-    for m in re.finditer(r"(?<![0-9&])>{1,2}\s*([^\s;&|]+)", cmd):
-        if _under_root(cfg, m.group(1)):
-            return m.group(1)
+    # Paths after a `cd` are relative to its folder (`cd src/A && sed -i … a.cs`).
+    cwd = None
     for seg in _segments(cmd):
+        for m in re.finditer(r"(?<![0-9&])>{1,2}\s*([^\s;&|]+)", seg):
+            if _under_root(cfg, _at(cwd, m.group(1))):
+                return m.group(1)
         toks = _tokens(seg)
         if toks and toks[0] == "rtk":
             toks = toks[2:] if len(toks) > 1 and toks[1] == "proxy" else toks[1:]
@@ -385,7 +412,10 @@ def bash_write(cfg, cmd):
             continue
         prog = os.path.basename(toks[0])
         args = toks[1:]
-        hit = next((a for a in args if _under_root(cfg, a)), None)
+        if prog == "cd":
+            cwd = _at(cwd, args[0]) if args and args[0] != "-" else None
+            continue
+        hit = next((a for a in args if _under_root(cfg, _at(cwd, a))), None)
         if prog in WRITERS or prog == "tee":
             if hit:
                 return hit
