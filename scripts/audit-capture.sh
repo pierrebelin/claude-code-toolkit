@@ -252,6 +252,28 @@ else
     else mrow TDD 'methods of `## Cycles` exist under the test roots' gap "absent: $(tr '\n' ' ' <<<"$MISSING")"; fi
 fi
 
+# `test-edit` lines of the work file (lib/tdd_scope.py): a GREEN may fix a test, never drop an assertion.
+TEST_EDIT_CHECK='Tests changed after the RED checkpoint'
+TEST_EDITS="$(python3 - "$SCRIPTS/../lib" "$STATE_DIR" "$BATCH" 2>/dev/null <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import work_file
+last = {}
+for r in work_file.of(work_file.read(sys.argv[2]), "test-edit", sys.argv[3]):
+    last[(r.get("agent"), r.get("file"))] = r
+cut = [f"{r.get('file')}: {' ; '.join(r['removed'])}" for r in last.values() if r.get("removed")]
+files = sorted({str(r.get("file")) for r in last.values()})
+if cut:
+    print("gap\t" + " ; ".join(cut))
+else:
+    print("ok\t" + (f"no assertion line removed: {', '.join(files)}" if files else "none"))
+PY
+)"
+case "${TEST_EDITS%%$'\t'*}" in
+    gap|ok) mrow Test "$TEST_EDIT_CHECK" "${TEST_EDITS%%$'\t'*}" "${TEST_EDITS#*$'\t'}" ;;
+    *) mrow Test "$TEST_EDIT_CHECK" 'not checked' 'work file unreadable' ;;
+esac
+
 COST_CHECK='no Infrastructure call in a loop or lambda, no in-memory filter'
 case "${COST_RC:-}" in
     0) mrow Cost "$COST_CHECK" ok "$(tail -1 <<<"$COST_OUT")" ;;

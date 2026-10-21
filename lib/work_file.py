@@ -18,6 +18,9 @@ One line of JSON per event:
         run-plan's check of the batches set aside for a common cause
     {"kind": "ack", "batch": "F2", "ref": "<id>", "what": "note-taken"|"applied", "agent"?: "<id>"}
         a script's answer to a line of the pane file `run/.pane.jsonl` (lib/pane_file.py)
+    {"kind": "test-edit", "batch": "F2", "agent": "<id>", "cycle": "C1", "file": "<test path>", "removed": [...], "added": [...]}
+        a test file a GREEN changed after the RED checkpoint, its assertion lines (`tdd.assertion`) on each
+        side; written by lib/tdd_scope.py, read by `cctoolkit audit-capture`
 
 Every append and rewrite holds an exclusive `flock`; a rewrite truncates in place (a rename would
 strand an appender on the unlinked inode). Windows locks one byte past the content (`msvcrt.locking`).
@@ -60,7 +63,7 @@ else:
         fcntl.flock(f, fcntl.LOCK_UN)
 
 NAME = ".work.jsonl"
-KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker", "ack", "closing")
+KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker", "ack", "closing", "test-edit")
 
 
 def tmp_dir(name: str, root=None) -> Path:

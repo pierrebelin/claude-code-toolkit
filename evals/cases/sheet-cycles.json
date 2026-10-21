@@ -16,6 +16,11 @@
       "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
     },
     {
+      "path": "sc/guard.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"guard\": true, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
       "path": "sc/anchored.md",
       "kind": "text",
       "content": "# S\n\n## Cycles <!-- kit:cycles -->\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"One\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldA_WhenB\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [], \"production\": [\"src/P/H.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
@@ -268,6 +273,14 @@
       "expect": {
         "exit": 0,
         "stdout": "Methods: `ATests.ShouldRefuse_WhenNameIsEmpty`"
+      }
+    },
+    {
+      "name": "RED contract of a guard or refactor cycle says it is green at once (`Kind:`, read by the TDD scope checkpoint: its RED exits 0); a plain cycle has no `Kind:` line",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/guard.md --cycle C1 --red --root {{FIX}}/sc | grep '^Kind:'; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --cycle C1 --red --root {{FIX}}/sc | grep -c '^Kind:' || true",
+      "expect": {
+        "exit": 0,
+        "stdout": "Kind: guard — green at once, its RED exits 0\n0"
       }
     },
     {

@@ -2,7 +2,7 @@
   "fixtures": [],
   "cases": [
     {
-      "name": "run-lot checks: grants passed by value, a behaviour already on disk accepted without code, English and French cost lines, RED/GREEN labels carry cycle id and wave, run files under run/.work and run/batches",
+      "name": "run-lot checks: a behaviour already on disk accepted without code, a test changed at GREEN and a flagged cost are no rejection (the hook records the one, the audit judges the other), the hook's RED reason is the retry reason, the cycle label carries id, wave and model",
       "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -cE '^(FAIL|ERR)' | sed 's/^/fails=/'",
       "expect": {
         "exit": 0,
@@ -10,11 +10,219 @@
       }
     },
     {
-      "name": "run-lot checks: an unanswered question takes its recommendation after 10 min, an exhausted RED/GREEN gets one last attempt on opus, a deferred step never escalates",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -E 'FAIL|ERR|10 min|on opus|never escalates' | tr '\n' ';'",
+      "name": "run-lot checks: one cycle contract holds the RED, the checkpoint and the GREEN; an accepted RED is re-armed verbatim; a step outside the cycles is retried once, never on opus",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -E 'FAIL|ERR|one cycle contract|re-armed verbatim|retried once' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "ok   question waits 10 min at most;ok   GREEN stopped twice the same way after its decisions gets one last attempt on opus;ok   deferred step never escalates;"
+        "stdout": "ok   one cycle contract: RED, checkpoint, GREEN, ambiguity decided by the agent;ok   an accepted RED is re-armed verbatim, no test run before;ok   a step outside the cycles is retried once, never on opus;"
+      }
+    },
+    {
+      "name": "run-lot checks: test writes of the global green repair — a declared snapshot quoting the sheet and a shared double pass, an undeclared write or a snapshot without its sheet line is rejected, a double outside layout.tests.shared or a test-code write is a BLOCKED",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -cE '^ok +(declared snapshot|declared path matched|snapshot promoted without|undeclared write|shared double declared|double outside|test-code write|test tree unread)' | sed 's/^/ok=/'",
+      "expect": {
+        "exit": 0,
+        "stdout": "ok=8"
+      }
+    },
+    {
+      "name": "run-lot flow: a valid cycle block runs no design, one tdd-cycle agent per cycle (no RED/GREEN pair, no arbiter, no question), unreachable methods go to review, next sheet reviewed beside the audit, never designed",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js block | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | declaratives | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a global green reached at the first pass is one suites agent on haiku, no repair",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js block | grep -E 'GLOBAL GREEN|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "GLOBAL GREEN suites run haiku;"
+      }
+    },
+    {
+      "name": "run-lot flow: a red suite at the first pass opens the repair on the default model with the failures and their output files; its promoted snapshot, read off the tree, is listed to validate and handed to the audit",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js snapshot | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|GLOBAL|REASON' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Global green | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | suites repair | suites tests | next batch review | audit | next sheet | report;GLOBAL GREEN suites run haiku | suites repair default | suites tests haiku;REASON — | TO VALIDATE test file written to reach green, snapshot-promoted: tests/C/BTests.Get.verified.txt;"
+      }
+    },
+    {
+      "name": "run-lot flow: a write under the test roots without a testEdits entry is rejected, only the repair is retried, the retry declares it",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js undeclared | grep -E 'STATUS|GLOBAL|REASON|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Global green | audits 1;GLOBAL GREEN suites run haiku | suites repair default | suites tests haiku | suites repair default | suites tests haiku;REASON — | TO VALIDATE test file written to reach green, test-double: tests/Core/MockX.cs;"
+      }
+    },
+    {
+      "name": "run-lot flow: a test write outside the two global green exceptions is a BLOCKED, the repair retried once, then the batch stops — no arbiter, no question",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js blocked | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|REASON' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | toReview 3 RED One,RED Two,Global green;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | suites repair | suites tests | suites repair | suites tests | report;REASON global green not reached — BLOCKED — test writes outside the two global green exceptions (test-scope.md §6): tests/U/ATests.cs (test-code) | TO VALIDATE test file written to reach green, test-code: tests/U/ATests.cs;"
+      }
+    },
+    {
+      "name": "run-lot flow: a sheet without the block is designed once, then indexed",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js nodesign | grep -E 'AGENTS|ERR' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "AGENTS resume state | design | index X-PLAN-F3.md | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a cycle saved with green is not redone",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js resume | grep -E 'log: [0-9]+ wave|ERR' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "log: 1 wave(s), 1 behaviour(s), 1 already done;"
+      }
+    },
+    {
+      "name": "run-lot flow: a cycle saved with its RED only is one agent that re-arms that RED and writes the GREEN",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js resumered | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a cycle's RED rejected twice — a retry carrying the reason with its attempt line, then a last attempt on opus with every reason",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js retry | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN opus | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a cycle still rejected after its retry and its opus attempt stops the batch at once, BLOCKED",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js stop | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|REASON' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | toReview 0 ;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN opus | report;REASON RED One — RED not observed: exit 0 on `x` — already in place on disk → status ALREADY_GREEN | TO VALIDATE ;"
+      }
+    },
+    {
+      "name": "run-lot flow: a guard cycle still red after its attempts is left out, listed to validate, the batch goes on",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js guardout | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 2 RED One,Cycle C2 | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | RED C2 w2 Two +GREEN | RED C2 w2 Two +GREEN opus | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a GREEN rejected after an accepted RED — the retry re-arms that RED verbatim and writes the GREEN only",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js greenretry | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a test changed at GREEN, a decision of the cycle agent and a flagged cost each go to validate; the flagged cost is handed to the audit, never a rejection",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js testsdiff | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 4 Cycle C1,RED One,GREEN One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: an index relayed short of its cycles is read again alone, and every cycle runs",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js shortindex | grep -E 'log: (resume|[0-9]+ wave)|STATUS|ERR' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "log: resume state relayed 0 of 2 cycle(s) — index read again;log: 2 wave(s), 2 behaviour(s);STATUS DONE | toReview 2 RED One,RED Two | audits 1;"
+      }
+    },
+    {
+      "name": "run-lot flow: an index short twice stops the batch, no cycle run as if the batch had none",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js shortindex2 | grep -E 'STATUS|ERR' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | toReview 0 ;"
+      }
+    },
+    {
+      "name": "run-lot flow: a batch in a worktree of its own beside another (`root`, `run`, `partner`, `lock`) hands every agent that worktree and the prefix of its Bash calls, keeps the work file in the session's run folder, runs the suites under the build lock, and does not review the batch running beside",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js root | grep -E 'STATUS|ERR|WARN (agent without|work file outside|suites run without)|UNHANDLED|log: next|AGENTS' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "log: next batch review skipped — todo/x/X-PLAN-F4.md runs beside this batch;STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: an ALREADY_GREEN whose ripple is absent from the batch diff still writes its GREEN on those files, one without pending files writes none",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js ripple | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a pre-audit left red is one pass, its failures handed to the audit and listed to validate, never rerun",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js gatered | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Closing | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: full closing, the audit finds Majors — one fix rerunning the suites, no second audit, each gap listed to validate with the fix's objection",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js fullgaps | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 5 RED One,RED Two,Audit,Audit,Audit | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | fix | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: full closing, a Blocking on Correctness — the fix runs filtered tests, a second audit reads the fix's declared files",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js fullblock | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | fix | audit retry | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a Blocking on Correctness still there after the fix ends the batch GAPS",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js wrong | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|REASON' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS GAPS | toReview 2 RED One,RED Two | audits 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | fix | audit retry | report;REASON Blocking on the Correctness axis after the fix: production is wrong | TO VALIDATE ;"
+      }
+    },
+    {
+      "name": "run-lot flow: a light batch, the diff confirms the light closing: one light review, its Majors fixed without a second review (the suites rerun instead), each listed to validate",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js light | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 4 RED One,RED Two,Audit,Audit | light reviews 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | review light | fix | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a Blocking on Correctness of the light review — a second light review on the fix's declared files; a next sheet naming a changed type is reviewed",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js lightblock | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | light reviews 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | review light | fix | review light retry | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: the next sheet's review — a human-only question is applied with the reviewer's answer and listed, a Blocking without answer is `unanswered`, nobody is asked",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js review | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|UNANSWERED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Review todo/x/X-PLAN-F4.md | audits 1;UNANSWERED todo/x/X-PLAN-F4.md — 1 Blocking question(s) without answer;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: past 12 cycles one capture feeds the code and plan auditors in parallel, green suites marked",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js split | grep -E 'AGENTS|ERR|WARN|UNHANDLED' | sed 's/.*B13 +GREEN | //' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "suites run | pre-audit | next batch review | capture | audit code | audit plan | next sheet | report;"
       }
     },
     {
@@ -31,182 +239,6 @@
       "expect": {
         "exit": 0,
         "stdout": "ok   English report: finished batch with carried gaps passes;ok   French report: finished batch with carried gaps passes;"
-      }
-    },
-    {
-      "name": "run-lot flow: a valid cycle block runs no design, unreachable methods go to review, next sheet reviewed beside the audit, never designed",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js block | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two;AGENTS resume state | declaratives | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | next batch review | audit | next sheet | report;"
-      }
-    },
-    {
-      "name": "run-lot flow: a global green reached at the first pass is one suites agent on haiku, no repair (2026-10-20: one agent on the session model took 9 min 53 s, 4 min 50 s of it the repair)",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js block | grep -E 'GLOBAL GREEN|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "GLOBAL GREEN suites run haiku;"
-      }
-    },
-    {
-      "name": "run-lot flow: a red suite at the first pass opens the repair on the default model with the failures and their output files; its promoted snapshot, read off the tree and declared, goes to To validate and to the audit as a point to verify",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js snapshot | grep -E 'STATUS|AGENTS|GLOBAL|REASON|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Global green;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | suites repair | suites tests | next batch review | audit | next sheet | report;GLOBAL GREEN suites run haiku | suites repair default | suites tests haiku;REASON — | TO VALIDATE test file written to reach green, snapshot-promoted: tests/C/BTests.Get.verified.txt;"
-      }
-    },
-    {
-      "name": "run-lot flow: a write under the test roots without a testEdits entry is rejected, only the repair is retried, the retry declares it (2026-10-20: a shared double edited and two snapshots promoted to reach green, none in the report)",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js undeclared | grep -E 'STATUS|GLOBAL|REASON|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Global green;GLOBAL GREEN suites run haiku | suites repair default | suites tests haiku | suites repair default | suites tests haiku;REASON — | TO VALIDATE test file written to reach green, test-double: tests/Core/MockX.cs;"
-      }
-    },
-    {
-      "name": "run-lot flow: a test write outside the two global green exceptions is a BLOCKED settled by the arbiter, never retried as is; the batch stops with the write listed",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js blocked | grep -E 'STATUS|AGENTS|REASON|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS BLOCKED | toReview 3 RED One,RED Two,Global green;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | suites repair | suites tests | arbiter Global green | question F3-1 | report;REASON global green not reached — BLOCKED — test writes outside the two global green exceptions (test-scope.md §6): tests/U/ATests.cs (test-code) | TO VALIDATE test file written to reach green, test-code: tests/U/ATests.cs;"
-      }
-    },
-    {
-      "name": "run-lot checks: test writes of the global green repair — a declared snapshot quoting the sheet and a shared double pass, an undeclared write or a snapshot without its sheet line is rejected, a test-code write or a double outside the shared roots is a BLOCKED",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -cE '^ok +(declared snapshot|declared path matched|snapshot promoted without|undeclared write|shared double declared|double outside|test-code write|test tree unread)' | sed 's/^/ok=/'",
-      "expect": {
-        "exit": 0,
-        "stdout": "ok=8"
-      }
-    },
-    {
-      "name": "run-lot flow: a sheet without the block is designed once, then indexed",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js nodesign | grep -E 'AGENTS|ERR' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "AGENTS resume state | design | index X-PLAN-F3.md | RED C1 w1 One"
-      }
-    },
-    {
-      "name": "run-lot flow: a cycle saved with green is not redone",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js resume | grep -E 'log: |ERR' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "log: 1 wave(s), 1 behaviour(s), 1 already done;"
-      }
-    },
-    {
-      "name": "run-lot flow: an index relayed short of its cycles is read again alone, and every cycle runs",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js shortindex | grep -E 'log: (resume|[0-9]+ wave)|STATUS|ERR' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "log: resume state relayed 0 of 2 cycle(s) — index read again;log: 2 wave(s), 2 behaviour(s);STATUS DONE"
-      }
-    },
-    {
-      "name": "run-lot flow: an index short twice stops the batch, no cycle run as if the batch had none",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js shortindex2 | grep -E 'STATUS|ERR' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS BLOCKED"
-      }
-    },
-    {
-      "name": "run-lot flow: a batch in a worktree of its own beside another (`root`, `run`, `partner`, `lock`) hands every agent that worktree and the prefix of its Bash calls; the work file stays in the session's run folder, the suites run under the build lock, the sheet of the batch running beside is not reviewed",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js root | grep -E 'STATUS|ERR|WARN (agent without|work file outside|suites run without)|UNHANDLED|log: next|AGENTS' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "log: next batch review skipped — todo/x/X-PLAN-F4.md runs beside this batch;STATUS DONE | toReview 2 RED One,RED Two;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | audit | report;"
-      }
-    },
-    {
-      "name": "run-lot flow: a wave rewriting a test file of the wave before starts its REDs after that wave's GREENs (2026-10-20: RED(n+1) beside GREEN(n) on one theory kept every GREEN red)",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js overlap | grep -E 'log: wave|AGENTS|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "log: wave 2 rewrites tests/A/ATests.cs of wave 1: its REDs wait for that wave's GREENs;AGENTS resume state | RED C1 w1 One | GREEN C1 One | RED C2 w2 Two | GREEN C2 Two | suites run"
-      }
-    },
-    {
-      "name": "run-lot flow: an ALREADY_GREEN whose ripple is absent from the batch diff still runs its GREEN on those files, one without pending files runs none (2026-10-20: a resumed C2 skipped the GREEN carrying 9 handlers, caught only by the audit)",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js ripple | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | suites run | pre-audit | next batch review | audit | next sheet | report;"
-      }
-    },
-    {
-      "name": "run-lot flow: a light batch runs one tdd-cycle agent per cycle, the diff confirms the light closing: one light review, its Majors fixed without a second one (suites rerun by the fix), the next sheet that names no changed type not reviewed",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js light | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 4 RED One,RED Two,Audit,Audit | light reviews 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | review light | fix 1 | report;"
-      }
-    },
-    {
-      "name": "run-lot flow: a Blocking of the light review opens the round relays and a second light review on the change set; a next sheet naming a changed type is reviewed",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js lightblock | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | light reviews 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | review light | round 1 open | fix 1 | round 1 close | review light retry 1 | next sheet | report;"
-      }
-    },
-    {
-      "name": "run-lot flow: a cycle agent's RED that check-red rejects is retried by a RED alone, its GREEN by the usual implementer",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js lightred | grep -E 'AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One | GREEN C1 One | RED C2 w2 Two +GREEN | suites run"
-      }
-    },
-    {
-      "name": "run-lot flow: past 12 cycles one capture feeds the code and plan auditors in parallel, green suites marked",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js split | grep -E 'AGENTS|ERR|WARN|UNHANDLED' | sed 's/.*GREEN C13 B13 | //' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "suites run | pre-audit | next batch review | capture | audit code | audit plan | next sheet | report;"
-      }
-    },
-    {
-      "name": "run-lot flow: a contest with a named harm reaches the resume audit, a contest without harm is no contest, a missing response is audited again, Accept closes the gap and lists its trade-off",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js contest | grep -E 'STATUS|REVIEW|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Audit | audits 3;REVIEW contest accepted, trade-off (round 1): S;"
-      }
-    },
-    {
-      "name": "run-lot flow: a Refute keeps the gap open and its text reaches the round 2 fix",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js refute | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 3;AGENTS resume state | RED C1 w1 One | RED C2 w2 Two | GREEN C1 One | GREEN C2 Two | suites run | pre-audit | next batch review | audit | verify Second type of the same shape | round 1 open | fix 1 | round 1 close | audit retry 1 | round 2 open | fix 2 | round 2 close | audit retry 2 | next sheet | report;"
-      }
-    },
-    {
-      "name": "run-lot flow: the change set of an audit fix is read off the tree around it (relays round N open/close), handed to the resume audit with its diff; a file no finding cites becomes a Scope Major the run adds itself, carried for review",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js scope | grep -E 'STATUS|REVIEW|ERR|WARN|UNHANDLED' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Audit | audits 3;REVIEW Major — Scope — Audit fix changed a file;"
-      }
-    },
-    {
-      "name": "run-lot flow: findings that do not go down while the fix's change set grows stop the rounds, the divergence listed for review",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js diverge | grep -E 'STATUS|REVIEW|ERR|WARN|UNHANDLED|log: audit rounds' | tr '\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "log: audit rounds stopped, diverging: round 1 changed 5 file(s) for 2 finding(s), 3 still open;"
-      }
-    },
-    {
-      "name": "run-lot flow: a Blocking or Major on Correctness, Reuse or Placement is checked once by a fresh agent before the fix; a refuted one is not fixed, the fix and the resume audit are told, the auditor repeating it gets no second check, the refutation listed for review",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js verify | grep -E 'STATUS|REVIEW|ERR|WARN|UNHANDLED' | tr '\n' ';'; node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js verify | grep -o 'verify Second' | wc -l | tr -d ' '",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 4 RED One,RED Two,Audit,Audit | audits 2;REVIEW finding refuted by verification, not fix ; Major — Scope — Audit fix changed a file;1"
       }
     },
     {

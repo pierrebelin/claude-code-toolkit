@@ -42,7 +42,7 @@ flowchart LR
 | Stops | a batch that cannot pass is set aside, only its dependents wait; batches set aside for one shared cause stop the plan | the batch comes back `DONE`, or with what needs your eyes |
 | Fits | a plan you trust, a run over lunch or overnight | a new plan, a tricky batch, a team that reviews every commit |
 
-**Whole plan** runs the batches in the order the plan allows. A stop is settled by an agent rather than a question, and what it decided without you opens the run report, to read after the plan. A batch that still cannot pass is set aside with its partial work saved, and the batches that do not depend on it carry on. Each batch that passes gets its own commit; you review them together at the end.
+**Whole plan** runs the batches in the order the plan allows. Nothing waits for you: an ambiguity is decided by the agent that meets it, and what was decided without you opens the run report, to read after the plan. A batch that still cannot pass is set aside with its partial work saved, and the batches that do not depend on it carry on. Each batch that passes gets its own commit; you review them together at the end.
 
 **Batch by batch** keeps you in the loop: each batch ends on a report and its own commit, you read it and start the next one with a clean context.
 
@@ -53,17 +53,16 @@ Inside `run-lot`, each behaviour of the batch is one loop:
 ```mermaid
 flowchart LR
     I["run-lot"] --> R
-    R["RED"] -->|"compact contract:<br/>RM/CU, scenario, level"| A["tdd-test-author subagent<br/>writes the red test"]
-    A -->|"red test<br/>no production code"| R
-    R --> G["GREEN + REFACTOR"]
-    G -->|"compact contract:<br/>red test, signatures,<br/>invariants, expected cost"| B["tdd-implementer subagent<br/>writes the production code<br/>tests read-only"]
-    B -->|"green + cost stated<br/>or BLOCKED"| G
-    G --> C["COST<br/>validated by the orchestrator"]
-    C -.->|"next behaviour"| R
-    C ==>|"whole batch green"| V["audit<br/>ddd-tdd-auditor"]
+    I -->|"compact contract:<br/>RM/CU, scenario, signatures,<br/>invariants, expected cost"| A["tdd-cycle subagent"]
+    A --> R["RED<br/>writes the red test"]
+    R --> K["checkpoint<br/>the hook checks the disk:<br/>red, on an assertion"]
+    K --> G["GREEN + REFACTOR<br/>writes the production code"]
+    G -->|"green + cost stated<br/>or BLOCKED"| I
+    I -.->|"next behaviour"| A
+    I ==>|"whole batch green"| V["audit<br/>ddd-tdd-auditor"]
 ```
 
-The orchestrator writes neither tests nor code: it splits the work, checks the diffs, validates the cost and settles the design. One agent writes the failing test, another makes it pass without touching it, a third audits.
+The orchestrator writes neither tests nor code: it splits the work, checks the reports and settles the design. One agent per behaviour writes the failing test, passes a checkpoint read off the disk, then makes it pass; a test it changes after that checkpoint is recorded with its assertions and judged by the audit. Another agent audits.
 
 A batch that stops short: fix the cause and run `/cctoolkit:run-lot` on the same sheet again, it resumes from the cycles already done. `/cctoolkit:implement-tdd` launches the chain from a plan path, `/cctoolkit:verify-ddd-tdd` audits a batch on demand.
 

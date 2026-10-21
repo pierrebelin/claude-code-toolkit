@@ -310,6 +310,8 @@ def contract(c, phase, text=""):
     if c.get("models"):
         lines.append(f"Model on (existing analogues — read first, copy their shape, never search for others): {' ; '.join(c['models'])}")
     if phase == "--red":
+        if c.get("refactor") or c.get("guard"):
+            lines.append(f"Kind: {'refactor, safety net' if c.get('refactor') else 'guard'} — green at once, its RED exits 0")
         lines += [
             f"Level / skill: {c['level']} / {c['skill']}",
             f"Test class / fixture: `{c['testClass']}` / `{c['fixture']}`",

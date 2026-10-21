@@ -116,7 +116,7 @@ A test asserting through an approval library (Verify, ApprovalTests, …) writes
 
 - GREEN contract hands the agent the approved-file path and the **literal** expected values, taken from the seed fixture. Not "the expected representation of the resource" — the values themselves. Anything less makes acceptance a judgement call the agent can't make.
 - Agent reads the received file, compares, then promotes it to the approved file. Any mismatch — a wrong status code, a validation problem, a field that shouldn't be there — is `## BLOCKED`, never an accepted snapshot.
-- **Only** write allowed under `tests/` during GREEN. Not a test modification.
+- Promoting the approved file is not a test modification. Any other test file a GREEN changes is one only when the test is wrong — a fixture, the compile ripple of a signature the sheet changes, a value a shared helper normalises —, never an assertion of the behaviour removed, negated or loosened; each one in `testsDiff` with its why. The TDD scope hook records it (`test-edit` line of the work file, its assertion lines per `tdd.assertion`) and the audit judges it: the `## Mechanical audit` row `Tests changed after the RED checkpoint` is a `gap` when an assertion line went.
 
 The global green repair writes under the test roots in two cases only, each declared in its `testEdits` (`path`, `kind`, `why`):
 

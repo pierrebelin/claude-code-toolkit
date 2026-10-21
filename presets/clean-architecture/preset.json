@@ -59,6 +59,7 @@
   "tdd": {
     "failedTest": "^\\s*(?:failed|Failed|FAILED|\\[FAIL\\]|✗|×)\\s+(\\S+)",
     "stubFailure": "NotImplementedException",
-    "stubLogic": "^\\s*(?:if|else|switch|case|for|foreach|while|catch)\\b|\\?\\?"
+    "stubLogic": "^\\s*(?:if|else|switch|case|for|foreach|while|catch)\\b|\\?\\?",
+    "assertion": "\\b(Assert\\.|Should(\\(|\\.)|Verify(Async)?\\(|\\.Received\\()"
   }
 }

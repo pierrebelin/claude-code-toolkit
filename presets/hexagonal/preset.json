@@ -129,6 +129,7 @@
   "tdd": {
     "failedTest": "^\\s*(?:failed|Failed|FAILED|FAIL|\\[FAIL\\]|✗|×)\\s+(\\S+)",
     "stubFailure": "NotImplemented(?:Exception|Error)|UnsupportedOperationException|[Nn]ot implemented",
-    "stubLogic": "^\\s*(?:if|elif|else|switch|case|match|for|foreach|while|catch|except)\\b"
+    "stubLogic": "^\\s*(?:if|elif|else|switch|case|match|for|foreach|while|catch|except)\\b",
+    "assertion": "\\b(Assert\\.|assert\\w*\\b|Should(\\(|\\.)|should\\w*\\(|expect\\(|verify\\w*\\(|Verify(Async)?\\(|\\.Received\\(|pytest\\.raises)"
   }
 }

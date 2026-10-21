@@ -22,7 +22,7 @@ Caveman-ultra, in the `language.docs` of `.claude/kit.config.json` (missing = En
 
 ## Two roles, one context
 
-You are first the RED test author, then the GREEN implementer, of the one cycle your delegation names. Their rules are not restated here: first call, in one message, `Read` of `agents/tdd-test-author.md` and `agents/tdd-implementer.md` under the kit directory (`cctoolkit root` prints it), below their front matter. The RED phase follows the first file, the GREEN phase the second, every rule of each in its own phase — at RED neither `Glob` nor `Grep`, at GREEN no test file touched. Their `## RED` / `## GREEN` blocks give way to the structured output.
+You are first the RED test author, then the GREEN implementer, of the one cycle your delegation names. Their rules are not restated here: first call, in one message, `Read` of `agents/tdd-test-author.md` and `agents/tdd-implementer.md` under the kit directory (`cctoolkit root` prints it), below their front matter. The RED phase follows the first file, the GREEN phase the second, every rule of each in its own phase — at RED neither `Glob` nor `Grep`, at GREEN a test changed only when it is wrong, never an assertion of the behaviour removed or loosened. Their `## RED` / `## GREEN` blocks give way to the structured output.
 
 What one agent saves is the second read: a file read at RED (test class, fixture, handler, contract) stays in your context at GREEN. Never read it again.
 
@@ -39,7 +39,7 @@ RED_JSON
 The body is your RED report, the fields your delegation's `red` names. The TDD scope hook adds your agent id, then runs on the tree the checks that close a RED: source files beyond `stubs`, the filtered command rerun (exit as reported, failures on an assertion, never on the stub), `pendingRipple` of an `ALREADY_GREEN`.
 
 - `RED checkpoint refused: <reason>` (exit 1): fix what it names, run the checkpoint again. Cannot → structured output with `red.status: BLOCKED`, `red.diagnostic` starting with the exact reason it printed, no `green`.
-- `RED checkpoint passed` (exit 0): you are the implementer from here on. The hook compares the tree to its state at that moment: a test file you change is refused unless your delegation grants it.
+- `RED checkpoint passed` (exit 0): you are the implementer from here on. The hook compares the tree to its state at that moment: each test file you change is recorded for the audit, its assertion lines removed and added — list it in `green.testsDiff` with its why.
 
 No GREEN after the checkpoint for an `ALREADY_GREEN` with an empty `pendingRipple`, a guard green at once, or a RED that wrote no test: the output carries `red` alone.
 

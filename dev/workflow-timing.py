@@ -26,13 +26,14 @@ import sys
 # Label prefix → run-lot / run-plan phase, first match wins.
 PHASES = [
     (r"^(resume state|design|index |declaratives|closing level)", "Design"),
+    (r"^(RED \S+ w\d+ .*\+GREEN|CYCLE\b)", "CYCLE"),
     (r"^RED\b", "RED"),
     (r"^GREEN\b", "GREEN"),
-    (r"^CYCLE\b", "CYCLE"),
     (r"^suites", "Global green"),
     (r"^pre-audit", "Closing"),
-    (r"^(audit|verify|round |fix |capture|review light)", "Audit"),
+    (r"^(audit|verify|round |fix\b|capture|review light)", "Audit"),
     (r"^(next batch review|next sheet)", "Review"),
+    # Runs before 2.6.0 only: run-lot no longer launches an arbiter nor a question.
     (r"^arbiter", "Arbiter"),
     (r"^(question|wait )", "Question"),
     (r"^report", "Report"),

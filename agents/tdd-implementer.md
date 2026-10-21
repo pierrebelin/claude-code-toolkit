@@ -23,7 +23,7 @@ Caveman-ultra, in the `language.docs` of `.claude/kit.config.json` (missing = En
 
 One behaviour, one red test. Minimum production code turning it green, delete what it orphaned, state access cost.
 
-**Test files read-only.** Never modify, weaken, disable, delete a test to reach green. Test cannot pass untouched → `## BLOCKED`, orchestrator decides.
+**A test changes only when it is wrong**: a fixture, the compile ripple of a signature the contract changes, an expected value a shared helper normalises. Never remove, negate, loosen or disable an assertion of the behaviour, never delete a test to reach green. Each test file you change: one `Tests diff` entry, path and why. A hook records every test file changed after your start, its assertion lines removed and added, for the audit: a removed one is a gap there.
 
 Never touch plan, batch sheet, docs, project config, EF migration. One exception: the handler `CLAUDE.md` of a rule your code adds or changes, per `skills/implement-tdd/references/closing.md` §2, in the same message as your last production edit — every `RM` trait id the cycle's tests cite ends up as a row of it before you report, even when your code only refines an existing behaviour (a dedicated error code is a rule). Never commit, branch, push.
 
@@ -55,7 +55,7 @@ cctoolkit config command testFast <Suite>
 
 Run the printed command narrowed to `*<Class>Tests` with the runner's class filter, literally, never through `eval`: it builds the test project alone (and what it references), then runs its tests. The solution build is the global green's, never yours. Filter syntax (`clean-architecture` preset: `--filter-class "*<Class>Tests"`), unset command, full scope, suite selection → `skills/implement-tdd/references/test-scope.md` § Runner.
 
-Fix compilation errors, re-run until green. No green without exit `0`. With final green run, same message: `git diff --stat -- tests/` — must print nothing, or the single `.verified.txt` accepted under `test-scope.md` §6 — output = `Tests diff` line of report; and `cctoolkit access-cost <production files you created or edited>` — `cctoolkit access-cost --base <dir> <files>` when the contract gives a `Baseline` — last line = `Cost` line of report. `Tests diff` is for the reader: a hook compares the tree to its state at your start and refuses your report while a test file you were not granted differs (`cctoolkit tdd-scope restore` puts it back), and refuses any write through Bash under the source or test roots — files go through `Edit`/`Write`.
+Fix compilation errors, re-run until green. No green without exit `0`. With final green run, same message: `git diff --stat -- tests/` — the test files you changed, each with its why on the `Tests diff` line of report (a `.verified.txt` accepted under `test-scope.md` §6 included); and `cctoolkit access-cost <production files you created or edited>` — `cctoolkit access-cost --base <dir> <files>` when the contract gives a `Baseline` — last line = `Cost` line of report. A hook compares the tree to its state at your start: each test file changed is recorded for the audit (`cctoolkit tdd-scope restore` puts back a file you changed by mistake), and any write through Bash under the source or test roots is refused — files go through `Edit`/`Write`.
 
 ## Access cost
 
@@ -71,10 +71,10 @@ No plan, no code excerpt, no raw log. End exactly with:
 ## GREEN
 - Production: `paths modified or created`
 - Command: `<test command run> ...` — exit 0
-- Tests diff: `git diff --stat -- tests/` — empty, or the single accepted `.verified.txt`
+- Tests diff: `path` — why, one per test file changed — or "nothing"
 - Cost: `last line of access-cost.py, verbatim` — `independent of [input]`
 - Deleted at REFACTOR: `what went` — or "nothing"
 - Reported without fixing: `pre-existing dead code or adjacent bug` — `path:line` — or "nothing"
 ```
 
-Blocker — test impossible to green without modifying, cost unboundable, design ambiguity, compilation failure unsolvable in scope: replace heading with `## BLOCKED`, cause in one line, at most six useful lines of the command output. No workaround.
+Blocker — test impossible to green without removing or loosening an assertion of the behaviour, cost unboundable, design ambiguity, compilation failure unsolvable in scope: replace heading with `## BLOCKED`, cause in one line, at most six useful lines of the command output. No workaround.

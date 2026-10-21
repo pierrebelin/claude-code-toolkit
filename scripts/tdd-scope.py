@@ -5,10 +5,12 @@
         puts each path back as it was when that agent started (snapshot copy, else HEAD,
         else removed); a path the agent did not change is left as is.
     cctoolkit tdd-scope evidence [--since EPOCH]
-        prints the evidence the auditor judges, one `stub-logic <file>: <lines>` line each.
+        prints the evidence the auditor judges, one `stub-logic <file>: <lines>` line each, and one
+        `test-edit <file>: removed <lines> + added <lines>` per test file a GREEN changed outside
+        run-lot (under run-lot, those lines go to the run work file).
     cctoolkit tdd-scope red   (RED report as JSON on stdin)
         the RED checkpoint of a `tdd-cycle` agent: the RED checks run on the tree; passed, the
-        agent is at GREEN, test files read-only. Exit 0 passed, 1 refused (the reason printed).
+        agent is at GREEN. Exit 0 passed, 1 refused (the reason printed).
         The TDD scope hook adds `--agent <id> --transcript <path>`: typed by hand, it is refused.
 """
 import json
@@ -58,8 +60,13 @@ def main(argv):
                         e = json.loads(line)
                     except ValueError:
                         continue
-                    if e.get("at", 0) >= since and e.get("kind") == "stub-logic":
+                    if e.get("at", 0) < since:
+                        continue
+                    if e.get("kind") == "stub-logic":
                         print(f"stub-logic {e.get('file')}: {' | '.join(e.get('lines', []))}")
+                    elif e.get("kind") == tdd_scope.TEST_EDIT:
+                        print(f"test-edit {e.get('file')}: removed {' | '.join(e.get('removed', [])) or 'none'}"
+                              f" + added {' | '.join(e.get('added', [])) or 'none'}")
         except OSError:
             pass
         return 0
