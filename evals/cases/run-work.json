@@ -121,6 +121,14 @@
         "exit": 0,
         "stdout": "audit-round:F1 attempt:F1 cycle:F2 breaker:2026-10-15-1000 "
       }
+    },
+    {
+      "name": "purge keeps the cycles and the snapshot of a batch set aside whose work waits under its ref (resume), and drops its attempts",
+      "cmd": "R={{FIX}}/rwref-{{SID}}; rm -rf $R; mkdir -p $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'x\\n' > a.cs && git add -A && git commit -qm init && git update-ref refs/cctoolkit/aside/x/F7 HEAD && printf '%s\\n' '{\"kind\":\"cycle\",\"batch\":\"F7\",\"slug\":\"s\",\"state\":{},\"at\":1}' '{\"kind\":\"preexisting\",\"batch\":\"F7\",\"files\":{},\"at\":1}' '{\"kind\":\"attempt\",\"batch\":\"F7\",\"step\":\"GREEN\",\"n\":1,\"reason\":\"r\",\"at\":1}' > todo/x/run/.work.jsonl && printf 'p\\n' > todo/x/run/2026-10-13-0826-aside-F7.patch && cd {{ROOT}} && python3 {{KIT}}/scripts/run-work.py purge $R/todo/x/run 2026-10-13-1200 >/dev/null && python3 -c 'import json,sys,collections; c=collections.Counter(); [c.update([(r[\"kind\"]+\" \"+r.get(\"batch\",r.get(\"run\",\"\")))]) for r in map(json.loads, open(sys.argv[1]))]; print(\" \".join(f\"{k}={v}\" for k,v in sorted(c.items())))' $R/todo/x/run/.work.jsonl",
+      "expect": {
+        "exit": 0,
+        "stdout": "cycle F7=1 preexisting F7=1"
+      }
     }
   ]
 }

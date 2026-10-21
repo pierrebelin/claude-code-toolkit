@@ -26,7 +26,10 @@ under `run/`: `tmp` hands out a folder of the system temp directory for them.
         - per batch: `cycle` lines when `batches/FX.md` says `## STATUS — DONE`, or the plan heading `### Batch FX` says `✅ DONE`
           (TDD evidence), or when the batch stopped and was never set aside (resume),
           the `preexisting` line only in that second case; a batch set aside (an
-          `aside-FX.patch` newer than its report and its lines) loses every line;
+          `aside-FX.patch` newer than its report and its lines) keeps its `cycle`,
+          `preexisting`, `test-edit` and `closing` lines while its work waits under
+          `refs/cctoolkit/aside/<plan folder>/FX` (`batch-baseline resume` puts it back),
+          and loses every line without that ref;
         - the 3 most recent runs (`<stamp>.md`, `<stamp>/`, `<stamp>-aside-FX.patch`),
           <stamp> counted among them; the patch of a batch done since and an empty
           `<stamp>/` folder removed;
@@ -36,6 +39,7 @@ Exit 0, 2 on usage error.
 import json
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -136,6 +140,12 @@ def batch_state(run: Path, batch: str, records: list[dict]) -> str:
     return "done" if done else "open"
 
 
+def saved(run: Path, work: Path, batch: str) -> bool:
+    """The work of a set-aside batch waits under its ref, for `batch-baseline resume`."""
+    ref = work_file.aside_ref(work, batch)
+    return subprocess.run(["git", "rev-parse", "--verify", "-q", ref], capture_output=True, cwd=run).returncode == 0
+
+
 def rotate(run: Path, stamp: str | None) -> list[str]:
     stamps = {m.group(1) for p in run.iterdir() if (m := STAMP.match(p.name))}
     if stamp:
@@ -156,6 +166,9 @@ def purge(run: Path, stamp: str | None) -> int:
     work = work_file.work_path(run)
     records = work_file.read(work)
     states = {b: batch_state(run, b, records) for b in {r.get("batch") for r in records if r.get("batch")}}
+    for batch, state in states.items():
+        if state == "aside" and saved(run, work, batch):
+            states[batch] = "saved"
 
     def kept(r: dict) -> bool:
         kind, state = r.get("kind"), states.get(r.get("batch"))
@@ -168,8 +181,8 @@ def purge(run: Path, stamp: str | None) -> int:
         if kind in ("question", "answer"):
             return False
         if kind == "preexisting":
-            return state == "open"
-        return state in ("done", "open")
+            return state in ("open", "saved")
+        return state in ("done", "open", "saved")
 
     dropped = work_file.keep(work, kept)
     if work.is_file() and work.stat().st_size == 0:

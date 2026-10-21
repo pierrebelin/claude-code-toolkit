@@ -165,7 +165,8 @@ const LOADED = obj({
   cycles: arr(obj({ behaviour: str, rmcu: str, steps: arr(str), red: RED, green: GREEN }, ['green'])),
   index: INDEX,
   nextSheet: str,
-})
+  resume: str,
+}, ['resume'])
 
 // An agent's shell starts in the session's checkout and goes back there after each call: in a worktree, every
 // call opens with this prefix, so relative paths and `cctoolkit` (kit_config.project_root()) resolve there —
@@ -605,7 +606,7 @@ const loading = agent(
   [
     FRAME,
     '',
-    `First, one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit run-validate apply ${workFile}; cctoolkit batch-baseline snapshot ${workFile} ${batch}\` — questions of an earlier run never answer this one; run-validate writes the answers given in the run-lot-pane mod into the sheets; the snapshot records the files already modified, left out of the batch diff and commit (kept when it exists).`,
+    `First, one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit run-validate apply ${workFile}; cctoolkit batch-baseline resume ${workFile} ${batch}; cctoolkit batch-baseline snapshot ${workFile} ${batch}\` — questions of an earlier run never answer this one; run-validate writes the answers given in the run-lot-pane mod into the sheets; resume puts back the work of a batch set aside by run-plan, \`resume\` = the line it printed, verbatim; the snapshot records the files already modified, left out of the batch diff and commit (kept when it exists).`,
     `Then in one message: \`cctoolkit sheet-cycles ${sheet} --states ${workFile}\`, \`${indexCommand(sheet)}\` and \`grep -E '^### (Batch|Lot) F[0-9]+' ${plan}\`.`,
     '`cycles` = the JSON array `--states` printed, each object as-is, no field changed (`[]` when no cycle was saved).',
     '`index` = the JSON line `sheet-cycles` printed, verbatim, whatever its exit code (0 valid, 1 invalid, 2 no block).',
@@ -665,6 +666,9 @@ const whole = x => !x || !x.ok || !Number.isInteger(x.count) || x.cycles.length 
 const loaded = await loading
 saved = loaded || { cycles: [] }
 if (!loaded) log('resume state agent without result — no cycle reused')
+const resumeLine = loaded && loaded.resume ? loaded.resume.trim() : ''
+if (/^resume: conflict\b/.test(resumeLine)) toReview('Start', resumeLine.replace(/^resume: /, 'work set aside not put back: '))
+else if (/^resume: \d+ file/.test(resumeLine)) log(resumeLine)
 lotIndex = loaded ? loaded.index : null
 if (!whole(lotIndex)) {
   log(`resume state relayed ${lotIndex.cycles.length} of ${lotIndex.count} cycle(s) — index read again`)

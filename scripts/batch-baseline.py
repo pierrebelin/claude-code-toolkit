@@ -10,15 +10,26 @@
     cctoolkit batch-baseline base <work> FX <path>
         prints the content <path> had at batch start (empty for a file the batch created).
     cctoolkit batch-baseline restore <work> FX [--save <patch>]
-        --save writes the diff first; then every batch file under the source and test
-        roots goes back to HEAD and created files are deleted. A preexisting file the
-        batch also modified is left as is and listed.
+        --save writes the diff first, and the batch files as a commit on top of HEAD
+        (created files included) under `refs/cctoolkit/aside/<plan folder>/FX` — no
+        ref saved, the batch's `cycle`, `test-edit`, `closing` and `attempt` lines are
+        dropped, its code being gone; then
+        every batch file under the source and test roots goes back to HEAD and created
+        files are deleted. A preexisting file the batch also modified is left as is and
+        listed.
+    cctoolkit batch-baseline resume <work> FX
+        puts back the work `restore --save` kept under that ref, merged three-way with
+        what HEAD changed since, then deletes the ref. Without a snapshot of FX one is
+        taken first, before the files come back: they are the batch's, never preexisting.
+        A file both sides changed that does not merge, or a batch file modified in the
+        tree since: nothing is written, the batch's `cycle`, `test-edit`, `closing` and
+        `attempt` lines are dropped (it starts over) and the ref deleted (the patch stays).
     cctoolkit batch-baseline commit <work> FX --sheet <sheet>
         commits the batch files only (`git commit --only`, run folder excluded). Message
         `<type>(<plan folder>): batch FX — <sheet title>`, type `refactor` when every cycle
         is a refactor, `fix` when the title starts with fix/corrig, else `feat`, then the
         trailer `Kit-Batch: <plan folder>/FX`. A preexisting file the batch also modified
-        is committed whole and listed.
+        is committed whole and listed. The aside ref of FX, if any, is deleted.
 
 --root DIR    repository the batch covers (default: `kit_config.project_root()`).
 
@@ -27,9 +38,11 @@ when git refuses the commit.
 """
 import difflib
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
@@ -76,9 +89,13 @@ def batch_files(work: Path, batch: str) -> tuple[list[str], list[str]]:
     return files, [p for p in files if p in before]
 
 
-def head(path: str) -> bytes | None:
-    shown = subprocess.run(["git", "show", f"HEAD:{path}"], capture_output=True, cwd=ROOT)
+def show(rev: str, path: str) -> bytes | None:
+    shown = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True, cwd=ROOT)
     return shown.stdout if shown.returncode == 0 else None
+
+
+def head(path: str) -> bytes | None:
+    return show("HEAD", path)
 
 
 def text(content: bytes | None) -> str:
@@ -112,13 +129,92 @@ def write_diff(paths: list[str], only_code: bool, names: bool, out) -> None:
             out.write("\n")
 
 
-def snapshot(work: Path, batch: str) -> int:
+def snapshot(work: Path, batch: str, quiet: bool = False) -> int:
     if work_file.preexisting(work_file.read(work), batch) is not None:
-        print(f"snapshot kept: {batch} in {work}")
+        quiet or print(f"snapshot kept: {batch} in {work}")
         return 0
     files = hashes(dirty())
     work_file.append(work, {"kind": "preexisting", "batch": batch, "files": files})
-    print(f"snapshot: {len(files)} preexisting file(s) -> {work}")
+    quiet or print(f"snapshot: {len(files)} preexisting file(s) -> {work}")
+    return 0
+
+
+def start_over(work: Path, batch: str) -> None:
+    work_file.keep(work, lambda r: not (r.get("batch") == batch and r.get("kind") in work_file.START_OVER))
+
+
+def save_ref(work: Path, batch: str, paths: list[str], patch: Path) -> str:
+    """The batch files as a commit on HEAD, through a temporary index: the user's index is never touched."""
+    with tempfile.TemporaryDirectory() as folder:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(folder) / "index")}
+
+        def run(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(["git", *args], capture_output=True, text=True, cwd=ROOT, env=env)
+
+        if run("read-tree", "HEAD").returncode or run("add", "-A", "--", *paths).returncode:
+            return ""
+        tree = run("write-tree").stdout.strip()
+        tip = run("commit-tree", tree, "-p", "HEAD", "-m", f"aside {batch} — patch {patch.as_posix()}").stdout.strip()
+    ref = work_file.aside_ref(work, batch)
+    if not tip or subprocess.run(["git", "update-ref", ref, tip], capture_output=True, cwd=ROOT).returncode:
+        return ""
+    return ref
+
+
+def merged(base: bytes | None, ours: bytes | None, theirs: bytes | None) -> tuple[bool, bytes | None]:
+    """(merged cleanly, content — None for a deleted file) of one path, three-way."""
+    if ours == base or ours == theirs:
+        return True, theirs
+    if theirs == base:
+        return True, ours
+    if None in (base, ours, theirs):
+        return False, None
+    with tempfile.TemporaryDirectory() as folder:
+        files = [Path(folder) / name for name in ("ours", "base", "theirs")]
+        for file, content in zip(files, (ours, base, theirs)):
+            file.write_bytes(content)
+        out = subprocess.run(["git", "merge-file", "-p", *map(str, files)], capture_output=True, cwd=ROOT)
+    return out.returncode == 0, out.stdout if out.returncode == 0 else None
+
+
+def resume(work: Path, batch: str) -> int:
+    ref = work_file.aside_ref(work, batch)
+    tip = git("rev-parse", "--verify", "-q", f"{ref}^{{commit}}").strip()
+    if not tip:
+        print("resume: nothing saved")
+        return 0
+    snapshot(work, batch, quiet=True)
+    changed = [p for p in git("diff", "--name-only", "--no-renames", "-z", f"{tip}^", tip).split("\0") if p]
+    now_dirty = set(dirty())
+    plan, clash = {}, []
+    for path in changed:
+        theirs = show(tip, path)
+        if path in now_dirty:
+            current = (ROOT / path).read_bytes() if (ROOT / path).is_file() else None
+            ok, content = current == theirs, theirs
+        else:
+            ok, content = merged(show(f"{tip}^", path), head(path), theirs)
+        if ok:
+            plan[path] = content
+        else:
+            clash.append(path)
+    subprocess.run(["git", "update-ref", "-d", ref], capture_output=True, cwd=ROOT)
+    if clash:
+        start_over(work, batch)
+        saved = git("log", "-1", "--format=%s", tip).strip().partition(" — patch ")[2]
+        print(f"resume: conflict on {', '.join(clash)} — batch starts over, its saved cycles dropped"
+              f"{f'; partial work: {saved}' if saved else ''}")
+        return 0
+    for path, content in plan.items():
+        target = ROOT / path
+        if content is None:
+            if target.is_file():
+                target.unlink()
+                prune(target.parent)
+        elif not target.is_file() or target.read_bytes() != content:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+    print(f"resume: {len(plan)} file(s) reapplied from {ref}")
     return 0
 
 
@@ -135,6 +231,9 @@ def restore(work: Path, batch: str, patch: Path | None) -> int:
         patch.parent.mkdir(parents=True, exist_ok=True)
         with open(patch, "w", encoding="utf-8") as out:
             write_diff(back, False, False, out)
+    ref = save_ref(work, batch, back, patch) if patch and back else ""
+    if patch and not ref:
+        start_over(work, batch)
     restored = deleted = 0
     for path in back:
         start, target = head(path), ROOT / path
@@ -151,7 +250,8 @@ def restore(work: Path, batch: str, patch: Path | None) -> int:
     left = [p for p in kept if in_scope(p)]
     print(f"restored: {restored} file(s), deleted: {deleted}"
           f"{f', left (modified before the batch): {', '.join(left)}' if left else ''}"
-          f"{f', patch: {patch}' if patch else ''}")
+          f"{f', patch: {patch}' if patch else ''}"
+          f"{f', ref: {ref}' if ref else ''}")
     return 0
 
 
@@ -184,6 +284,7 @@ def commit(work: Path, batch: str, sheet: Path) -> int:
     if not done or done.returncode != 0:
         print((done.stderr if done else added.stderr).strip() or "git refused the commit", file=sys.stderr)
         return 1
+    subprocess.run(["git", "update-ref", "-d", work_file.aside_ref(work, batch)], capture_output=True, cwd=ROOT)
     print(f"committed {git('rev-parse', '--short', 'HEAD').strip()}: {len(files)} file(s)"
           f"{f', committed whole with changes made before the batch: {', '.join(whole)}' if whole else ''}")
     return 0
@@ -212,6 +313,8 @@ def main(argv: list[str]) -> int:
         RUN_DIR = ""
     if command == "snapshot":
         return snapshot(work, batch)
+    if command == "resume":
+        return resume(work, batch)
     if work_file.preexisting(work_file.read(work), batch) is None:
         print(f"no snapshot of {batch} in {work}", file=sys.stderr)
         return 2

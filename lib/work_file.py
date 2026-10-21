@@ -79,6 +79,17 @@ def work_path(run_root) -> Path:
     return Path(run_root) / NAME
 
 
+# The lines that describe a batch's code: dropped together when that code is gone and the batch starts over.
+START_OVER = ("cycle", "test-edit", "closing", "attempt")
+
+
+def aside_ref(work, batch: str) -> str:
+    """The ref `batch-baseline restore --save` keeps a set-aside batch's work under, named after the plan folder
+    of `<plan folder>/run/.work.jsonl`."""
+    plan = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(work).resolve().parent.parent.name).strip("-") or "plan"
+    return f"refs/cctoolkit/aside/{plan}/{batch}"
+
+
 def slug(text: str) -> str:
     """Same as run-lot.js and sheet-cycles.py `slug`: the key of a cycle."""
     plain = "".join(c for c in unicodedata.normalize("NFD", text) if not ("\u0300" <= c <= "\u036f"))

@@ -64,6 +64,38 @@
         "exit": 2,
         "stderr": "kit.config.json"
       }
+    },
+    {
+      "name": "batch baseline restore --save keeps the batch under a ref, created file included; resume merges it three-way over a later HEAD commit, the preexisting snapshot untouched, the ref deleted",
+      "cmd": "R={{FIX}}/resume-{{SID}}; W=$R.jsonl; rm -rf $R $R.patch $W; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\nv1\\nv2\\n' > src/A/a.cs && printf 't\\n' > tests/T/t.cs && git add -A && git commit -qm init && printf 'user\\n' > src/A/user.cs && cd {{ROOT}} && B=\"python3 {{KIT}}/scripts/batch-baseline.py\" && $B snapshot $W F1 --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/a.cs && mkdir -p $R/src/New && printf 'new\\n' > $R/src/New/made.cs && rm $R/tests/T/t.cs && printf '%s\\n' '{\"kind\":\"cycle\",\"batch\":\"F1\",\"slug\":\"one\",\"state\":{}}' >> $W && saved=$($B restore $W F1 --root $R --save $R.patch | grep -o 'ref: .*') && printf 'head\\nv0\\nv1\\nv2\\n' > $R/src/A/a.cs && git -C $R commit -qam later && out=$($B resume $W F1 --root $R) && again=$($B resume $W F1 --root $R) && echo \"$saved|$out|$(tr '\\n' ' ' < $R/src/A/a.cs)|$(cat $R/src/New/made.cs)|$(test -e $R/tests/T/t.cs && echo t || echo gone)|$(git -C $R for-each-ref refs/cctoolkit | wc -l | tr -d ' ')|$(python3 -c 'import json,sys; print(sum(json.loads(l)[\"kind\"]==sys.argv[2] for l in open(sys.argv[1])))' $W preexisting)|$(python3 -c 'import json,sys; print(sum(json.loads(l)[\"kind\"]==sys.argv[2] for l in open(sys.argv[1])))' $W cycle)|$($B diff $W F1 --root $R --name-only | tr '\\n' ' ')|$again\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "ref: refs/cctoolkit/aside/fixtures/F1|resume: 3 file(s) reapplied from refs/cctoolkit/aside/fixtures/F1|head v0 v1 v2 batch |new|gone|0|1|1|src/A/a.cs src/New/made.cs tests/T/t.cs |resume: nothing saved"
+      }
+    },
+    {
+      "name": "batch baseline resume on a conflict writes nothing, drops the batch's saved cycles (it starts over), names the patch and deletes the ref",
+      "cmd": "R={{FIX}}/clash-{{SID}}; W=$R.jsonl; rm -rf $R $R.patch $W; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\nv1\\nv2\\n' > src/A/a.cs && printf 't\\n' > tests/T/t.cs && git add -A && git commit -qm init && printf 'user\\n' > src/A/user.cs && cd {{ROOT}} && B=\"python3 {{KIT}}/scripts/batch-baseline.py\" && $B snapshot $W F1 --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/a.cs && mkdir -p $R/src/New && printf 'new\\n' > $R/src/New/made.cs && rm $R/tests/T/t.cs && printf '%s\\n' '{\"kind\":\"cycle\",\"batch\":\"F1\",\"slug\":\"one\",\"state\":{}}' >> $W && saved=$($B restore $W F1 --root $R --save $R.patch | grep -o 'ref: .*') && printf 'v0\\nv1\\nv2\\nhead\\n' > $R/src/A/a.cs && git -C $R commit -qam later && out=$($B resume $W F1 --root $R) && echo \"$out|$(tr '\\n' ' ' < $R/src/A/a.cs)|$(test -e $R/src/New && echo made || echo none)|$(git -C $R for-each-ref refs/cctoolkit | wc -l | tr -d ' ')|$(python3 -c 'import json,sys; print(sum(json.loads(l)[\"kind\"]==sys.argv[2] for l in open(sys.argv[1])))' $W cycle)|$(python3 -c 'import json,sys; print(sum(json.loads(l)[\"kind\"]==sys.argv[2] for l in open(sys.argv[1])))' $W preexisting)\" | sed 's#partial work: [^|]*/clash-[^|]*[.]patch#partial work: P#'",
+      "expect": {
+        "exit": 0,
+        "stdout": "resume: conflict on src/A/a.cs — batch starts over, its saved cycles dropped; partial work: P|v0 v1 v2 head |none|0|0|1"
+      }
+    },
+    {
+      "name": "batch baseline resume without a snapshot takes one before the files come back: the reapplied files are the batch's, never preexisting",
+      "cmd": "R={{FIX}}/nosnap-{{SID}}; W=$R.jsonl; rm -rf $R $R.patch $W; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\nv1\\nv2\\n' > src/A/a.cs && printf 't\\n' > tests/T/t.cs && git add -A && git commit -qm init && printf 'user\\n' > src/A/user.cs && cd {{ROOT}} && B=\"python3 {{KIT}}/scripts/batch-baseline.py\" && $B snapshot $W F1 --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/a.cs && mkdir -p $R/src/New && printf 'new\\n' > $R/src/New/made.cs && rm $R/tests/T/t.cs && printf '%s\\n' '{\"kind\":\"cycle\",\"batch\":\"F1\",\"slug\":\"one\",\"state\":{}}' >> $W && saved=$($B restore $W F1 --root $R --save $R.patch | grep -o 'ref: .*') && python3 -c 'import sys; p=sys.argv[1]; open(p,\"w\").writelines(l for l in open(p).readlines() if \"preexisting\" not in l)' $W && out=$($B resume $W F1 --root $R) && echo \"$out|$(python3 -c 'import json,sys; print(\" \".join(sorted(next(json.loads(l) for l in open(sys.argv[1]) if \"preexisting\" in l)[\"files\"])))' $W)|$($B diff $W F1 --root $R --name-only | tr '\\n' ' ')\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "reapplied from refs/cctoolkit/aside/fixtures/F1|src/A/user.cs|src/A/a.cs src/New/made.cs tests/T/t.cs "
+      }
+    },
+    {
+      "name": "batch baseline restore --save with nothing to keep saves no ref and drops the batch's saved cycles: its code is gone, it starts over",
+      "cmd": "R={{FIX}}/noref-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/a.cs && git add -A && git commit -qm init && cd {{ROOT}} && B=\"python3 {{KIT}}/scripts/batch-baseline.py\" && $B snapshot $W F1 --root $R >/dev/null && printf '%s\\n' '{\"kind\":\"cycle\",\"batch\":\"F1\",\"slug\":\"one\",\"state\":{}}' >> $W && out=$($B restore $W F1 --root $R --save $R.patch) && echo \"$(echo \"$out\" | grep -c 'ref:')|$(python3 -c 'import json,sys,collections; c=collections.Counter(); [c.update([(r[\"kind\"]+\" \"+r.get(\"batch\",r.get(\"run\",\"\")))]) for r in map(json.loads, open(sys.argv[1]))]; print(\" \".join(f\"{k}={v}\" for k,v in sorted(c.items())))' $W)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "0|preexisting F1=1"
+      }
     }
   ]
 }

@@ -6,7 +6,7 @@ export const meta = {
     { title: 'Preflight', detail: 'plan check, doctor, docker, build green, kit root, run stamp, old runs and orphan scratch folders removed' },
     { title: 'Batch', detail: 'next batch, out-of-batch check and journal in one call, run-lot; run.parallelBatches 2: an independent batch beside it, in a worktree of its own, long builds under build-lock' },
     { title: 'Gate', detail: 'report status, plan heading, build green, one repair, batch commit, journal; a worktree batch committed there, landed on the checkout, its build checked once landed — a conflict or a red build reruns it alone' },
-    { title: 'Aside', detail: 'blocked batch: partial work saved as a patch, tree restored to the batch start, dependents skipped; from the second, an arbiter looks for a cause common to the batches set aside — one stops the plan' },
+    { title: 'Aside', detail: 'blocked batch: partial work saved under a git ref (and a patch to read), its saved cycles kept, tree restored to the batch start, dependents skipped — the next run puts the work back and resumes; from the second, an arbiter looks for a cause common to the batches set aside — one stops the plan' },
     { title: 'Final check', detail: 'every test suite run whole once, integration included, after the last batch: reported, never blocking' },
     { title: 'Security', detail: 'one read-only pass over the batch commits of the plan: findings listed for review, never blocking' },
     { title: 'Merge', detail: 'whole plan delivered, spec written against the knowledge base: its merge drafted and staged by knowledge-merger, never written — /cctoolkit:knowledge-merge shows it and writes it on confirmation' },
@@ -225,8 +225,8 @@ function setAside(b, reason, at = null) {
       FRAME + treeLine(at),
       '',
       `Batch ${b.batch} is set aside: ${reason}. Put the tree back to its state at the batch start, in this order:`,
-      `1. \`cctoolkit batch-baseline restore ${work} ${b.batch} --save ${patch}\` (the script alone touches the source and test roots). Exit ≠ 0 → \`ok: false\`, \`detail\` = its output verbatim, stop.`,
-      `2. \`cctoolkit run-work drop ${work} --batch ${b.batch}; ${rmTmp(`gate-${b.batch}`, b.batch)}\`: the saved cycles describe code just removed, a later run starts the batch over; the patch alone is kept.`,
+      `1. \`cctoolkit batch-baseline restore ${work} ${b.batch} --save ${patch}\` (the script alone touches the source and test roots; it keeps the work under a git ref, or drops the saved cycles when it could not). Exit ≠ 0 → \`ok: false\`, \`detail\` = its output verbatim, stop.`,
+      `2. \`cctoolkit run-work drop ${work} --batch ${b.batch} --kind question,answer; ${rmTmp(`gate-${b.batch}`, b.batch)}\`: the saved cycles and the snapshot stay — the next run puts the work back (\`cctoolkit batch-baseline resume\`) and resumes the batch from them.`,
       `3. \`grep -nE "^### (Batch|Lot) ${b.batch}\\b" ${inTree(pre.plan, at)}\`: the heading carries \`✅ DONE\` → one Edit putting \`⬜\` in place of \`✅ DONE\` and its date, nothing else moves.`,
       `4. \`${journalLine(`${b.batch} ✗ — set aside — ${reason} — patch ${patch}`)}\`.`,
       '`ok: true`, `detail` = the last line the restore printed.',
@@ -467,7 +467,10 @@ while (!stop) {
 
 for (const x of aside) {
   x.dependents = dependentsOf(x.batch, held)
-  toReview.push({ batch: x.batch, step: 'Set aside', text: `${x.reason}${x.patch ? ` — partial work: \`${x.patch}\` (\`git apply\` to take it back)` : ''}${/left \(/.test(x.restored || '') ? ` — ${x.restored}` : ''} — dependents not launched: ${x.dependents.length ? x.dependents.join(', ') : 'none'}` })
+  const ref = (/, ref: (\S+)/.exec(x.restored || '') || [])[1]
+  const kept = ref ? ` — partial work kept under \`${ref}\` (patch \`${x.patch}\`), put back by the next run, which resumes from the saved cycles`
+    : x.patch ? ` — partial work: \`${x.patch}\` (\`git apply\` to take it back), the next run starts the batch over` : ''
+  toReview.push({ batch: x.batch, step: 'Set aside', text: `${x.reason}${kept}${/left \(/.test(x.restored || '') ? ` — ${x.restored}` : ''} — dependents not launched: ${x.dependents.length ? x.dependents.join(', ') : 'none'}` })
 }
 const left = aside.length
   ? `batches set aside: ${aside.map(x => `${x.batch}${x.dependents.length ? ` (holds back ${x.dependents.join(', ')})` : ''}`).join(', ')}`
@@ -593,7 +596,7 @@ const rep = await agent(
   { schema: REPORT, phase: 'Report', label: 'report', model: 'haiku' },
 )
 
-const RESTART = `A blocked batch never ends the plan: its partial work is saved as \`run/<stamp>-aside-FX.patch\`, the tree goes back to the last batch commit (files the user modified before the batch left as they are), its saved cycles are cleared and the plan goes on with every batch that does not depend on it; \`${BLOCKED}\` here means batches were set aside (listed in \`setAside\` with their dependents) or the run met a technical stop (\`reason\`). The arbiter settles what it can, a question waits 10 min then takes its recommendation, so a batch is set aside for a technical stop, a production Blocking the audit fixes did not lift, a \`STOP\` answer, a question without answer nor recommendation, a step still stopped after its last attempt, or a gate still red after its repair. From the second batch set aside, an arbiter compares the reasons: a cause shared with an earlier one stops the plan, named under \`## Plan stopped — common cause\` of the run report with what to fix in the spec or the plan first. Fix the cause (reapply the patch with \`git apply\` to keep the partial work), write the decision into \`decisions\` of the cycles it touches in the \`## Cycles\` block of the batch sheet (and as \`Hn\` marked \`${USER}\`), then launch a new run-plan: batches ✅ DONE are skipped. Never \`resumeFromRunId\`: replay re-runs finished work.`
+const RESTART = `A blocked batch never ends the plan: its partial work is kept under \`refs/cctoolkit/aside/<plan folder>/FX\` (and \`run/<stamp>-aside-FX.patch\` to read), the tree goes back to the last batch commit (files the user modified before the batch left as they are), its saved cycles stay and the plan goes on with every batch that does not depend on it; \`${BLOCKED}\` here means batches were set aside (listed in \`setAside\` with their dependents) or the run met a technical stop (\`reason\`). The arbiter settles what it can, a question waits 10 min then takes its recommendation, so a batch is set aside for a technical stop, a production Blocking the audit fixes did not lift, a \`STOP\` answer, a question without answer nor recommendation, a step still stopped after its last attempt, or a gate still red after its repair. From the second batch set aside, an arbiter compares the reasons: a cause shared with an earlier one stops the plan, named under \`## Plan stopped — common cause\` of the run report with what to fix in the spec or the plan first. Fix the cause: write the decision into \`decisions\` of the cycles it touches in the \`## Cycles\` block of the batch sheet (and as \`Hn\` marked \`${USER}\`), or answer in the run-lot-pane mod, then launch a new run-plan: batches ✅ DONE are skipped, a batch set aside gets its work back and resumes from its saved cycles (a file that no longer merges: it starts over, listed to validate). Never \`resumeFromRunId\`: replay re-runs finished work.`
 
 return {
   status: reason ? BLOCKED : DONE,

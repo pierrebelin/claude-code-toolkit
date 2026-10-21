@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.7.0 — 2026-10-21
+
+- `cctoolkit`: a batch `run-plan` sets aside keeps its progress. Until now its saved cycles were deleted and its partial work survived only as a patch: the next run started the batch over from its first cycle, and taking the work back meant fixing the cause, `git apply`, writing the decision into the sheet, then relaunching. The work is now also kept under the git ref `refs/cctoolkit/aside/<plan folder>/FX`, created files included, and the batch's cycles and snapshot stay in the run's work file. The next `run-plan` or `run-lot` on that batch puts the work back first (`cctoolkit batch-baseline resume`, a three-way merge with what was committed since), then resumes from the saved cycles. The files put back count as the batch's, never as files you had modified before it. A file that no longer merges: nothing is written, the batch starts over, and the run report lists it under `## To validate` with the patch. Relaunching is now: fix the cause in the sheet's `decisions` (or answer in the `run-lot-pane` mod), then run `run-plan` again.
+
 ## 2.6.1 — 2026-10-21
 
 2.6.0 was tagged but never released: its CI was red. 2.6.1 carries all of 2.6.0, the notes below it apply.

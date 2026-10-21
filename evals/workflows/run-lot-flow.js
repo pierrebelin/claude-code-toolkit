@@ -21,6 +21,7 @@
 // answer — `unanswered`.
 // shortindex: the resume agent relays the index without its cycles — read again alone, both cycles run;
 // shortindex2: the second copy is short too — BLOCKED, nothing run.
+// asideconflict: the work of a batch set aside does not merge back — the batch starts over, listed to validate.
 // root: the batch runs in a worktree of its own beside another — every agent is handed it and the prefix of its Bash
 // calls, the work file stays in the session's run folder, the suites run under the build lock, the next sheet (the
 // batch running beside) is not reviewed.
@@ -130,11 +131,12 @@ const agent = async (prompt, o) => {
   }
   if (l === 'resume state' && !prompt.includes('cctoolkit batch-baseline snapshot todo/x/run/.work.jsonl F3')) console.log('WARN no batch snapshot')
   if (l === 'resume state' && !prompt.includes('--states todo/x/run/.work.jsonl')) console.log('WARN saved states not read through sheet-cycles --states')
+  if (l === 'resume state' && !/batch-baseline resume \S+\.work\.jsonl F3; cctoolkit batch-baseline snapshot /.test(prompt)) console.log('WARN work set aside not put back before the snapshot')
   if (l === 'resume state') {
     const saved = variant === 'resume' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { ...REDOK, unreachable: [] }, green: { status: 'GREEN', exit: 0 } }]
       : variant === 'resumered' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: REDOK }]
       : []
-    return { cycles: saved, index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : variant.startsWith('shortindex') ? { ...idx, count: 2, cycles: [] } : idx, nextSheet: 'todo/x/X-PLAN-F4.md' }
+    return { cycles: saved, index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : variant.startsWith('shortindex') ? { ...idx, count: 2, cycles: [] } : idx, nextSheet: 'todo/x/X-PLAN-F4.md', ...(variant === 'asideconflict' ? { resume: 'resume: conflict on src/X.cs — batch starts over, its saved cycles dropped; partial work: /p.patch' } : {}) }
   }
   if (l.startsWith('index')) return variant === 'shortindex2' ? { ...idx, count: 2, cycles: idx.cycles.slice(1) } : variant === 'shortindex' ? { ...idx, count: 2 } : idx
   if (l === 'design') return { blocked: false, reason: '', review: ['choice x'] }

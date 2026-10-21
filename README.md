@@ -42,7 +42,7 @@ flowchart LR
 | Stops | a batch that cannot pass is set aside, only its dependents wait; batches set aside for one shared cause stop the plan | the batch comes back `DONE`, or with what needs your eyes |
 | Fits | a plan you trust, a run over lunch or overnight | a new plan, a tricky batch, a team that reviews every commit |
 
-**Whole plan** runs the batches in the order the plan allows. Nothing waits for you: an ambiguity is decided by the agent that meets it, and what was decided without you opens the run report, to read after the plan. A batch that still cannot pass is set aside with its partial work saved, and the batches that do not depend on it carry on. Each batch that passes gets its own commit; you review them together at the end.
+**Whole plan** runs the batches in the order the plan allows. Nothing waits for you: an ambiguity is decided by the agent that meets it, and what was decided without you opens the run report, to read after the plan. A batch that still cannot pass is set aside with its partial work saved, the next run picking it up where it stopped, and the batches that do not depend on it carry on. Each batch that passes gets its own commit; you review them together at the end.
 
 **Batch by batch** keeps you in the loop: each batch ends on a report and its own commit, you read it and start the next one with a clean context.
 

@@ -323,6 +323,14 @@
         "exit": 0,
         "stdout": "STATUS DONE | — | F1 DONE, F2 DONE, F3 DONE;AGENTS preflight | next batch | run-lot F1 | gate F1 | commit F1 | next batch | run-lot F2 | gate F2 | commit F2 | next batch | run-lot F3 | gate F3 | commit F3 | next batch | final check | security | merge prepare | report;"
       }
+    },
+    {
+      "name": "run-lot flow: work set aside by run-plan that no longer merges back — the batch starts over, the conflict listed to validate",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js asideconflict | grep -E 'REVIEW|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "REVIEW Start: work set aside not put back: conflict on src/X.cs — batch st"
+      }
     }
   ]
 }

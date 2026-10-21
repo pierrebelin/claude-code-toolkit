@@ -4,6 +4,7 @@
 // merge: every batch DONE — the merge is prepared, drafted by knowledge-merger and staged, the report
 // given its knowledge-base section, the result its `merge`. nomerge: every batch DONE, nothing to merge.
 // A security pass reads the batch commits after the final check; its findings (merge) go to `## To validate`.
+// A batch set aside keeps its saved cycles: F1's work kept under its ref resumes, F2 without a ref starts over.
 // Usage: node run-plan-flow.js <run-plan.js> common|distinct|merge|nomerge
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
@@ -19,7 +20,8 @@ const agent = async (prompt, o) => {
     const b = order[next++]
     return b ? { kind: 'BATCHES', line: '', batches: [{ batch: b, repo: '/r', sheet: `todo/x/X-PLAN-${b}.md` }], held: [], outsideBatch: '', outsidePaths: [] } : { kind: 'END', line: '', batches: [], held: [], outsideBatch: '', outsidePaths: [] }
   }
-  if (l.startsWith('aside')) return { ok: true, detail: 'restored' }
+  if (l.startsWith('aside') && !prompt.includes(`cctoolkit run-work drop /r/todo/x/run/.work.jsonl --batch ${l.slice(6)} --kind question,answer;`)) console.log('WARN aside drops the saved cycles')
+  if (l.startsWith('aside')) return { ok: true, detail: l === 'aside F1' ? 'restored: 2 file(s), deleted: 0, patch: p, ref: refs/cctoolkit/aside/x/F1' : 'restored' }
   if (l === 'breaker line') { if (!prompt.includes(`"decision":"${variant === 'common' ? 'stop' : 'continue'}"`)) console.log('WARN breaker line without its decision'); return { ok: true } }
   if (l.startsWith('breaker ')) {
     if (!prompt.includes('F1 — BLOCKED — design ambiguity on archive date') || !prompt.includes('report `todo/x/run/batches/F2.md`')) console.log('WARN breaker without the reasons and reports')
@@ -43,6 +45,7 @@ const agent = async (prompt, o) => {
     return { staged: true, stagedLine: 'staged: 2 file(s) — cctoolkit knowledge-write apply --merge X', files: ['+3 −0 docs/business/Catalog/rules.md'], warnings: [], blocked: '' }
   }
   if (l === 'report') {
+    if (variant === 'distinct' && !(prompt.includes('partial work kept under `refs/cctoolkit/aside/x/F1`') && prompt.includes('aside-F2.patch` (`git apply` to take it back), the next run starts the batch over'))) console.log('WARN report without where the work set aside waits')
     if (variant === 'common' && !prompt.includes('## Plan stopped — common cause')) console.log('WARN report without the common-cause section')
     if (variant === 'merge' && (!prompt.includes('## Knowledge base') || !prompt.includes('"state": "staged"'))) console.log('WARN report without the knowledge-base merge')
     if (variant === 'merge' && (!prompt.includes('### Security') || !prompt.includes('"step": "Security"'))) console.log('WARN report without the security findings')
