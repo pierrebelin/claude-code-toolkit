@@ -14,6 +14,8 @@
 // Majors fixed without a second review (the suites rerun instead), no next-batch review the next sheet does not need.
 // lightblock: the light review finds a Blocking — round relays, a second light review on the change set; the next
 // sheet names a changed type, so it is reviewed. lightred: the cycle agent's RED is rejected — RED alone, then GREEN.
+// shortindex: the resume agent relays the index without its cycles — read again alone, both cycles run; shortindex2:
+// the second copy is short too — BLOCKED, nothing run.
 // overlap: two waves rewrite one test file — wave 2's RED starts only after wave 1's GREEN.
 // root: the batch runs in a worktree of its own beside another — every agent is handed it and the prefix of its Bash
 // calls, the work file stays in the session's run folder, the suites run under the build lock, the next sheet (the
@@ -21,7 +23,7 @@
 // Global green: a green first pass is one haiku agent; snapshot: a red suite → repair (default model), its promoted
 // snapshot read off the tree, declared, listed for review and handed to the audit; undeclared: a write under the test
 // roots without a `testEdits` entry is rejected, the retry declares it; blocked: a `test-code` write is a BLOCKED.
-// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|contest|refute|scope|diverge|verify|ripple|light|lightblock|lightred|overlap|snapshot|undeclared|blocked|root
+// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|contest|refute|scope|diverge|verify|ripple|light|lightblock|lightred|overlap|shortindex|shortindex2|snapshot|undeclared|blocked|root
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
 const variant = process.argv[3] || 'block'
@@ -114,8 +116,8 @@ const agent = async (prompt, o) => {
   }
   if (l === 'resume state' && !prompt.includes('cctoolkit batch-baseline snapshot todo/x/run/.work.jsonl F3')) console.log('WARN no batch snapshot')
   if (l === 'resume state' && !prompt.includes('--states todo/x/run/.work.jsonl')) console.log('WARN saved states not read through sheet-cycles --states')
-  if (l === 'resume state') return { cycles: variant === 'resume' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { status: 'RED', exit: 1, table: [{ test: 'A.ShouldX_WhenY', case: '' }], tests: [], stubs: [], productionDiff: [], removed: [], expectedFailure: '', command: 'x' }, green: { status: 'GREEN', exit: 0 } }] : [], index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : idx, nextSheet: 'todo/x/X-PLAN-F4.md' }
-  if (l.startsWith('index')) return idx
+  if (l === 'resume state') return { cycles: variant === 'resume' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { status: 'RED', exit: 1, table: [{ test: 'A.ShouldX_WhenY', case: '' }], tests: [], stubs: [], productionDiff: [], removed: [], expectedFailure: '', command: 'x' }, green: { status: 'GREEN', exit: 0 } }] : [], index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : variant.startsWith('shortindex') ? { ...idx, count: 2, cycles: [] } : idx, nextSheet: 'todo/x/X-PLAN-F4.md' }
+  if (l.startsWith('index')) return variant === 'shortindex2' ? { ...idx, count: 2, cycles: idx.cycles.slice(1) } : variant === 'shortindex' ? { ...idx, count: 2 } : idx
   if (l === 'design') return { blocked: false, reason: '', review: ['choice x'] }
   if (l === 'declaratives') return { ok: true }
   if (variant === 'ripple' && l.startsWith('RED')) { if (!prompt.includes('--pending todo/x/run/.work.jsonl')) console.log('WARN RED without the pending command'); return { status: 'ALREADY_GREEN', exit: 0, command: 'x', tests: ['t.cs'], stubs: [], productionDiff: [], table: [{ test: 'A.ShouldX_WhenY', case: '' }], removed: [], expectedFailure: '', pendingRipple: l.startsWith('RED C1') ? ['src/R.cs'] : [] } }

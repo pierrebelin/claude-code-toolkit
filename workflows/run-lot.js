@@ -78,7 +78,7 @@ const FULL = 'full'
 const LIGHT = 'light'
 const LEVEL = obj({ level: { type: 'string', enum: [FULL, LIGHT] }, reasons: arr(str), production: int }, ['production'])
 
-const INDEX = obj({ ok: bool, missing: bool, errors: arr(str), declaratives: arr(str), closing: LEVEL, cycles: arr(CYCLE) }, ['closing'])
+const INDEX = obj({ ok: bool, missing: bool, errors: arr(str), declaratives: arr(str), closing: LEVEL, count: int, cycles: arr(CYCLE) }, ['closing', 'count'])
 
 const DESIGN = obj({ blocked: bool, reason: str, review: arr(str) }, ['review'])
 
@@ -762,12 +762,22 @@ const designRejected = x => (!x || !x.design ? 'design agent without result'
   : x.design.blocked ? `BLOCKED — ${x.design.reason}`
   : !x.index ? 'index agent without result'
   : !x.index.ok ? `\`## Cycles\` still invalid — ${x.index.errors.join(' ; ')}: fix the block, then rerun \`${indexCommand(sheet)}\` until exit 0`
+  : !whole(x.index) ? `index relayed with ${x.index.cycles.length} of its ${x.index.count} cycle(s)`
   : null)
+
+// An agent relays the index: a copy short of cycles would run none of them (2026-10-21: `cycles: []` relayed
+// for a 7-cycle block, the run went straight to the global green). `count` is printed by `sheet-cycles --index`.
+const whole = x => !x || !x.ok || !Number.isInteger(x.count) || x.cycles.length === x.count
 
 const loaded = await loading
 saved = loaded || { cycles: [] }
 if (!loaded) log('resume state agent without result — no cycle reused')
 lotIndex = loaded ? loaded.index : null
+if (!whole(lotIndex)) {
+  log(`resume state relayed ${lotIndex.cycles.length} of ${lotIndex.count} cycle(s) — index read again`)
+  lotIndex = await readIndex(sheet, 'Design')
+  if (!whole(lotIndex)) return await finish(BLOCKED, `cycle index relayed incomplete twice (${lotIndex.cycles.length} of ${lotIndex.count} cycles): rerun the batch`)
+}
 const nextSheet = loaded ? loaded.nextSheet.trim() : ''
 if (!lotIndex || !lotIndex.ok) {
   log(!lotIndex ? 'cycle index unread — design writes the block' : lotIndex.missing ? 'no `## Cycles` block — design writes it' : `\`## Cycles\` invalid — design fixes it: ${short(lotIndex.errors.join(' ; '), 80)}`)

@@ -4,7 +4,8 @@
     cctoolkit sheet-cycles <sheet> --index [--root DIR]      validate, print the compact index as JSON
                                                              (`closing`: the run-lot closing level the block plans,
                                                              lib/closing_level.py; `files` per cycle: the code it writes,
-                                                             `tests`: the test files its RED rewrites, shared ones left out)
+                                                             `tests`: the test files its RED rewrites, shared ones left out;
+                                                             `count`: the number of cycles, so a relayed copy can be checked)
     cctoolkit sheet-cycles <sheet> --cycle ID --red|--green  print the RED or GREEN contract of one cycle
     cctoolkit sheet-cycles <sheet> --cycle ID --pending WORK files of its `ripple` and `toCreate` absent from the batch
                                                              diff, one per line: an ALREADY_GREEN that leaves any is no GREEN
@@ -255,6 +256,7 @@ def index(data, layout):
         "errors": [],
         "declaratives": data.get("declaratives", []),
         "closing": planned_closing(data, layout.root),
+        "count": len(data["cycles"]),
         "cycles": [
             {**{k: c.get(k, False if k in ("refactor", "guard") else "") for k in
                 ("id", "wave", "behaviour", "rmcu", "steps", "refactor", "guard", "methods", "decisions")},

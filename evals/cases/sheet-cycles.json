@@ -151,6 +151,14 @@
       }
     },
     {
+      "name": "valid block: the index counts its cycles, so a relayed copy can be checked",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --index --root {{FIX}}/sc",
+      "expect": {
+        "exit": 0,
+        "stdout": "\"count\": 1"
+      }
+    },
+    {
       "name": "an anchor comment on the heading still finds the block",
       "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/anchored.md --index --root {{FIX}}/sc",
       "expect": {

@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.6.0 — 2026-10-21
+
+- `cctoolkit`: a resumed `run-lot` no longer skips the cycles of its batch. The agent that reloads the run state relays the cycle index, and on a measured run it relayed `cycles: []` for a 7-cycle block: the run found nothing to do, went straight to the global green, wrote the GREEN of two cycles there outside TDD, then failed the pre-audit three times on cycles with no state (about 20 min lost). `cctoolkit sheet-cycles --index` now prints `count`, the number of cycles of the block; a copy short of cycles is read again by an agent of its own, and a second short copy stops the batch instead of running it empty.
+
 ## 2.5.1 — 2026-10-21
 
 - `cctoolkit`: a test file the arbiter grants to a GREEN (`allow-test: <path>`) can now be edited. The TDD scope hook read the grant from the agent's first message, and inside a workflow that message is now the harness's relay of your request: every grant was refused, and the checks that read the RED prompt (`pendingRipple`, contract methods) were skipped. The hook now reads the prompt that follows the relay. A path ending the arbiter's sentence also kept its period (`MockGroupAccess.cs.`) and matched no file. Measured run: 4 GREEN attempts out of 10 refused a grant already given, until the batch was set aside.

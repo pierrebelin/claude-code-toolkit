@@ -98,6 +98,22 @@
       }
     },
     {
+      "name": "run-lot flow: an index relayed short of its cycles is read again alone, and every cycle runs",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js shortindex | grep -E 'log: (resume|[0-9]+ wave)|STATUS|ERR' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "log: resume state relayed 0 of 2 cycle(s) — index read again;log: 2 wave(s), 2 behaviour(s);STATUS DONE"
+      }
+    },
+    {
+      "name": "run-lot flow: an index short twice stops the batch, no cycle run as if the batch had none",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js shortindex2 | grep -E 'STATUS|ERR' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED"
+      }
+    },
+    {
       "name": "run-lot flow: a batch in a worktree of its own beside another (`root`, `run`, `partner`, `lock`) hands every agent that worktree and the prefix of its Bash calls; the work file stays in the session's run folder, the suites run under the build lock, the sheet of the batch running beside is not reviewed",
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js root | grep -E 'STATUS|ERR|WARN (agent without|work file outside|suites run without)|UNHANDLED|log: next|AGENTS' | tr '\n' ';'",
       "expect": {
