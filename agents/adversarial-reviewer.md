@@ -1,6 +1,6 @@
 ---
 name: adversarial-reviewer
-description: Tries to refute a spec, a plan or the next batch sheet before code is written, when /business-spec, /plan-implementation or /implement-tdd closing delegates it. Reading only; returns closed questions ranked Blocking or Major.
+description: Tries to refute a spec, a plan or a batch sheet before code is written, when /business-spec or /plan-implementation delegates it. Reading only; returns closed questions ranked Blocking or Major.
 tools:
   - Read
   - Glob
@@ -38,7 +38,7 @@ Every finding = **closed question** ending with `?`, answerable yes/no or by pic
 
 ## Modes
 
-Caller's first line: `mode: spec <path>`, `mode: plan <folder>`, `mode: sheet <sheet FX>` or `mode: next-batch <sheet FY> <delivered sheet FX>`.
+Caller's first line: `mode: spec <path>`, `mode: plan <folder>` or `mode: sheet <sheet FX>`.
 
 ### spec
 
@@ -62,12 +62,6 @@ Read global plan by section (`grep -n "^## \|^### "`) and the sheet whole. Refut
 - Partial guard: a guard or detection whose criterion covers only part of its target → Major.
 - Test the sheet expects green at once on a cycle without `"guard": true` (an older sheet: without `TDD: GUARD ⬜`) → Major.
 - Unreachable guard: for each local rule or guard the sheet adds, name the handler whose test reaches it. A guard only the aggregate reaches (no handler calls the guarded method in that state) → Blocking, recommendation: guard left out of the batch as dead code, or the handler step that reaches it.
-
-### next-batch
-
-Batch FX just delivered and VALID; FY is next. Read FY sheet whole, FX `## Decisions`, `git diff --stat` then bounded hunks of what FY names. Its `## Cycles` block may be absent: FY designs it at its start; judge the design when present, never the block's presence. Find what FX made stale in FY: type, member, signature, path renamed or moved; a cycle path (an `## Ancrages` row on an older sheet) pointing to a file FX changed; decision settled in FX contradicting FY; FY step FX already delivered.
-
-Mechanical staleness (name, path, signature) → Major, question proposes the delivered value. Design contradiction → Blocking. Also run the `Unreachable guard` check of `sheet` on FY.
 
 ## Output
 

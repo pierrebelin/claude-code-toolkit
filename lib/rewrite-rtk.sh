@@ -12,12 +12,28 @@ cmd="${HOOK_CMD:-}"
 # Without rtk, a `rtk dotnet test` prefix would turn a working command into a missing one.
 command -v rtk >/dev/null 2>&1 || exit 0
 
+# Pre-filter, no fork: `rtk hook claude` rewrites only the commands of its registry (`rtk rewrite`).
+# A command naming none of the words below, needing no path or dotnet normalisation, is left as
+# written — the answer rtk would give. The list is generous (a word rtk ignores costs one fork, a
+# word missing here costs a rewrite): extend it when `rtk rewrite "<word> …"` starts answering.
+rtk_words='ls|tree|cat|head|tail|git|gh|glab|aws|psql|pnpm|find|diff|grep|egrep|fgrep|rg|ast-grep|dotnet|docker|podman|kubectl|oc|wget|wc|curl|jest|vitest|ctest|prisma|tsc|eslint|prettier|playwright|npx|npm|bun|bunx|bundle|rspec|rubocop|rake|gradle|gradlew|mvn|make|helm|biome|turbo|nx|stat|du|df|ps|pytest|mypy|ruff|pip|pip3|uv|uvx|go|golangci-lint|cargo|next|php|composer|python|python3|deno|gcloud|az|ping|jq|pio|swift|terraform|tofu|systemctl|journalctl|yarn|ng|sed|rtk|proxy|err|json|read|smart|summary|log|deps|format|lint|test|env|time|nohup|xargs|sort|uniq|less|ss|lsof|tar|unzip|node|flutter|poetry|mix|cmake|bazel|mise'
+rtk_re="(^|[^A-Za-z0-9_-])($rtk_words)([^A-Za-z0-9_-]|$)"
+if ! [[ $cmd =~ $rtk_re ]] && [ "${cmd%$'\n'}" = "$cmd" ]; then
+  case "$cmd" in */bin/*) ;; *) exit 0 ;; esac
+fi
+
 # In a linked git worktree (an isolated agent's), a command running git is left as
 # written: Claude Code's isolation check refuses `rtk git …`, whose text no longer shows
 # that git stays in the worktree. A linked worktree's top level holds a `.git` file.
 case " $cmd " in
   *[\ \;\&\|\(]git\ *)
-    d=$(printf '%s' "$input" | jq -r '.cwd // ""' 2>/dev/null)
+    # cwd by bash regex (`\` unescaped), jq when the key is held twice or another escape is left.
+    d="" re_cwd='"cwd"[[:space:]]*:[[:space:]]*"(([^"\\]|\\\\)*)"' rest=${input#*'"cwd"'}
+    case "$rest" in
+      *'"cwd"'*) ;;
+      *) if [[ $input =~ $re_cwd ]]; then d=${BASH_REMATCH[1]//\\\\/\\}; fi ;;
+    esac
+    [ -n "$d" ] || d=$(printf '%s' "$input" | jq -r '.cwd // ""' 2>/dev/null)
     [ -n "$d" ] || d=$PWD
     kit_path d
     while [ -n "$d" ]; do

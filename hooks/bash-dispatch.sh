@@ -12,13 +12,48 @@ LIB="${BASH_SOURCE[0]%/*}/../lib"
 
 HOOK_INPUT=$(cat)
 
-# One jq. US (\x1f) separator, not a tab: bash collapses IFS-whitespace runs, so an
-# empty field would shift the rest. The command follows an RS (\x1e), split on the
-# FIRST one. -j, not -r: no trailing newline injected into the command.
-PARSED=$(printf '%s' "$HOOK_INPUT" | jq -j '([(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.transcript_path // ""), (.agent_type // ""), (.tool_input.run_in_background // false | tostring)] | join("\u001f")) + "\u001e" + (.tool_input.command // "")')
+# Fast path, no fork: a bash regex reads each key held once whose value carries no JSON escape
+# beyond \\ \" \/ \n \t (unescaped by hand). A key held twice, another escape (\uXXXX, \r…) or a
+# non-string value sends the whole payload to the jq below; an absent key takes jq's default.
+# `json_str KEY VAR [DEFAULT]` returns 1 when the regex cannot tell.
+json_str() {
+  local key=$1 rest re s
+  rest=${HOOK_INPUT#*"\"$key\""}
+  if [ "$rest" = "$HOOK_INPUT" ]; then printf -v "$2" '%s' "${3-}"; return 0; fi
+  case "$rest" in *"\"$key\""*) return 1 ;; esac
+  re="\"$key\"[[:space:]]*:[[:space:]]*\"(([^\"\\\\]|\\\\[\\\\\"/nt])*)\""
+  [[ $HOOK_INPUT =~ $re ]] || return 1
+  s=${BASH_REMATCH[1]}
+  case "$s" in *\\*)
+    s=${s//\\\\/$'\x01'}; s=${s//\\\"/\"}; s=${s//\\\//\/}; s=${s//\\n/$'\n'}; s=${s//\\t/$'\t'}
+    case "$s" in *\\*) return 1 ;; esac
+    s=${s//$'\x01'/\\} ;;
+  esac
+  printf -v "$2" '%s' "$s"
+}
+json_bool() {
+  local rest=${HOOK_INPUT#*'"run_in_background"'} re='^[[:space:]]*:[[:space:]]*(true|false)([[:space:],}]|$)'
+  HOOK_BACKGROUND=false
+  [ "$rest" != "$HOOK_INPUT" ] || return 0
+  case "$rest" in *'"run_in_background"'*) return 1 ;; esac
+  [[ $rest =~ $re ]] || return 1
+  HOOK_BACKGROUND=${BASH_REMATCH[1]}
+}
 
-IFS=$'\x1f' read -r HOOK_TOOL_NAME HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH HOOK_AGENT_TYPE HOOK_BACKGROUND <<<"${PARSED%%$'\x1e'*}"
-HOOK_CMD="${PARSED#*$'\x1e'}"
+if json_str tool_name HOOK_TOOL_NAME "" && json_str session_id HOOK_SESSION_ID unknown \
+  && json_str agent_id HOOK_AGENT_ID "" && json_str transcript_path HOOK_TRANSCRIPT_PATH "" \
+  && json_str agent_type HOOK_AGENT_TYPE "" && json_str command HOOK_CMD "" && json_bool; then
+  # What the jq path yields: `$(…)` drops the trailing newlines of the command.
+  while [ "${HOOK_CMD%$'\n'}" != "$HOOK_CMD" ]; do HOOK_CMD=${HOOK_CMD%$'\n'}; done
+else
+  # One jq. US (\x1f) separator, not a tab: bash collapses IFS-whitespace runs, so an
+  # empty field would shift the rest. The command follows an RS (\x1e), split on the
+  # FIRST one. -j, not -r: no trailing newline injected into the command.
+  PARSED=$(printf '%s' "$HOOK_INPUT" | jq -j '([(.tool_name // ""), (.session_id // "unknown"), (.agent_id // ""), (.transcript_path // ""), (.agent_type // ""), (.tool_input.run_in_background // false | tostring)] | join("\u001f")) + "\u001e" + (.tool_input.command // "")')
+
+  IFS=$'\x1f' read -r HOOK_TOOL_NAME HOOK_SESSION_ID HOOK_AGENT_ID HOOK_TRANSCRIPT_PATH HOOK_AGENT_TYPE HOOK_BACKGROUND <<<"${PARSED%%$'\x1e'*}"
+  HOOK_CMD="${PARSED#*$'\x1e'}"
+fi
 
 [ "$HOOK_TOOL_NAME" = "Bash" ] || exit 0
 [ -n "$HOOK_CMD" ] || exit 0

@@ -1,45 +1,53 @@
 {
- "fixtures": [],
- "cases": [
-  {
-   "name": "closing level light: two production files added, no rule matched, no ripple, no next batch",
-   "cmd": "R={{FIX}}/cl-{{SID}}; W=$R/run/.work.jsonl; rm -rf $R && mkdir -p $R/src/A/Security $R/tests/T $R/todo && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class Guard {}\\n' > src/A/Security/Guard.cs && printf 'class H {}\\n' > src/A/H.cs && printf 'v0\\n' > tests/T/X.verified.txt && printf '# S\\n' > todo/X-PLAN-F1.md && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && L(){ python3 {{KIT}}/scripts/closing-level.py $R/todo/X-PLAN-F1.md $W --root $R \"$@\"; } && printf 'class N {}\\n' > $R/src/A/N.cs && printf 'class M {}\\n' > $R/src/A/M.cs && printf 'class NTests {}\\n' > $R/tests/T/NTests.cs && L",
-   "expect": {
-    "exit": 0,
-    "stdout": "{\"level\": \"light\", \"reasons\": [], \"production\": 2, \"review\": false, \"reviewWhy\": \"no next batch\"}"
-   }
-  },
-  {
-   "name": "closing level full: a modified authorisation file and a modified approved snapshot (an added one does not count); the next sheet naming a changed type keeps its review; --record writes the closing line",
-   "cmd": "R={{FIX}}/cl-{{SID}}; W=$R/run/.work.jsonl; rm -rf $R && mkdir -p $R/src/A/Security $R/tests/T $R/todo && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class Guard {}\\n' > src/A/Security/Guard.cs && printf 'class H {}\\n' > src/A/H.cs && printf 'v0\\n' > tests/T/X.verified.txt && printf '# S\\n' > todo/X-PLAN-F1.md && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && L(){ python3 {{KIT}}/scripts/closing-level.py $R/todo/X-PLAN-F1.md $W --root $R \"$@\"; } && printf 'class Guard { int x; }\\n' > $R/src/A/Security/Guard.cs && printf 'v1\\n' > $R/tests/T/X.verified.txt && printf 'v0\\n' > $R/tests/T/New.verified.txt && printf '# F2\\nUses `Guard` and H.\\n' > $R/todo/X-PLAN-F2.md && out=$(L --next $R/todo/X-PLAN-F2.md --record) && echo \"$out\" | jq -r '.level, (.reasons | join(\" ; \")), .review, .reviewWhy' | tr '\\n' '|' && jq -r 'select(.kind == \"closing\") | .level' $W",
-   "expect": {
-    "exit": 0,
-    "stdout": "full|authorisation: `src/A/Security/Guard.cs` ; approved snapshot: `tests/T/X.verified.txt`|true|the next sheet names types this batch changed: Guard|full"
-   }
-  },
-  {
-   "name": "closing level full past the production cap of the repo's kit.config.json, a deleted file counted; a next sheet naming none of the changed types skips its review",
-   "cmd": "R={{FIX}}/cl-{{SID}}; W=$R/run/.work.jsonl; rm -rf $R && mkdir -p $R/src/A/Security $R/tests/T $R/todo && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class Guard {}\\n' > src/A/Security/Guard.cs && printf 'class H {}\\n' > src/A/H.cs && printf 'v0\\n' > tests/T/X.verified.txt && printf '# S\\n' > todo/X-PLAN-F1.md && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && L(){ python3 {{KIT}}/scripts/closing-level.py $R/todo/X-PLAN-F1.md $W --root $R \"$@\"; } && mkdir -p $R/.claude && printf '{\"closing\": {\"maxProductionFiles\": 1}}' > $R/.claude/kit.config.json && rm $R/src/A/H.cs && printf 'class N {}\\n' > $R/src/A/N.cs && printf '# F2\\nNothing shared.\\n' > $R/todo/X-PLAN-F2.md && L --next $R/todo/X-PLAN-F2.md | jq -r '.level, (.reasons | join(\" ; \")), .review' | tr '\\n' '|'",
-   "expect": {
-    "exit": 0,
-    "stdout": "full|2 production files, more than 1|false|"
-   }
-  },
-  {
-   "name": "closing level: a sheet asking for light lifts the production cap and the ripple, never a matched rule (the request refused, named)",
-   "cmd": "R={{FIX}}/cl-{{SID}}; W=$R/run/.work.jsonl; rm -rf $R && mkdir -p $R/src/A/Security $R/tests/T $R/todo && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class Guard {}\\n' > src/A/Security/Guard.cs && printf 'class H {}\\n' > src/A/H.cs && printf 'v0\\n' > tests/T/X.verified.txt && printf '# S\\n' > todo/X-PLAN-F1.md && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && L(){ python3 {{KIT}}/scripts/closing-level.py $R/todo/X-PLAN-F1.md $W --root $R \"$@\"; } && mkdir -p $R/.claude && printf '{\"closing\": {\"maxProductionFiles\": 1}}' > $R/.claude/kit.config.json && printf '# S\n\n## Cycles\n\n```json\n{\"closing\": \"light\", \"cycles\": [{\"id\": \"C1\", \"ripple\": [\"src/A/H.cs — call\"]}]}\n```\n' > $R/todo/X-PLAN-F1.md && printf 'class N {}\n' > $R/src/A/N.cs && printf 'class M {}\n' > $R/src/A/M.cs && a=$(L | jq -r '.level') && printf 'class Guard { int x; }\n' > $R/src/A/Security/Guard.cs && b=$(L | jq -r '.level, (.reasons | join(\" ; \"))' | tr '\n' '|') && echo \"$a|$b\"",
-   "expect": {
-    "exit": 0,
-    "stdout": "light|full|authorisation: `src/A/Security/Guard.cs` ; sheet: `closing` set to light, refused — a rule above is never lifted|"
-   }
-  },
-  {
-   "name": "closing level without a snapshot of the batch exits 2",
-   "cmd": "R={{FIX}}/cl0-{{SID}}; rm -rf $R && mkdir -p $R && cd $R && git init -q && cd {{ROOT}} && python3 {{KIT}}/scripts/closing-level.py $R/X-PLAN-F1.md $R/w.jsonl --root $R",
-   "expect": {
-    "exit": 2,
-    "stderr": "no snapshot of F1"
-   }
-  }
- ]
+  "fixtures": [],
+  "cases": [
+    {
+      "name": "closing level light: two production files added, no rule matched",
+      "cmd": "R={{FIX}}/cl-{{SID}}; W=$R/run/.work.jsonl; rm -rf $R && mkdir -p $R/src/A/Security $R/tests/T $R/todo && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class Guard {}\\n' > src/A/Security/Guard.cs && printf 'class H {}\\n' > src/A/H.cs && printf 'v0\\n' > tests/T/X.verified.txt && printf '# S\\n' > todo/X-PLAN-F1.md && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && L(){ python3 {{KIT}}/scripts/closing-level.py $R/todo/X-PLAN-F1.md $W --root $R \"$@\"; } && printf 'class N {}\\n' > $R/src/A/N.cs && printf 'class M {}\\n' > $R/src/A/M.cs && printf 'class NTests {}\\n' > $R/tests/T/NTests.cs && L",
+      "expect": {
+        "exit": 0,
+        "stdout": "{\"level\": \"light\", \"reasons\": [], \"production\": 2}"
+      }
+    },
+    {
+      "name": "closing level light: a cycle carrying a signature ripple no longer makes the batch full",
+      "cmd": "R={{FIX}}/cl-{{SID}}; W=$R/run/.work.jsonl; rm -rf $R && mkdir -p $R/src/A/Security $R/tests/T $R/todo && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class Guard {}\\n' > src/A/Security/Guard.cs && printf 'class H {}\\n' > src/A/H.cs && printf 'v0\\n' > tests/T/X.verified.txt && printf '# S\\n' > todo/X-PLAN-F1.md && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && L(){ python3 {{KIT}}/scripts/closing-level.py $R/todo/X-PLAN-F1.md $W --root $R \"$@\"; } && printf 'class N {}\\n' > $R/src/A/N.cs && printf 'class M {}\\n' > $R/src/A/M.cs && printf 'class NTests {}\\n' > $R/tests/T/NTests.cs && L | jq -r '.level'",
+      "expect": {
+        "exit": 0,
+        "stdout": "light"
+      }
+    },
+    {
+      "name": "closing level full: a modified authorisation file and a modified approved snapshot (an added one does not count); --record writes the closing line",
+      "cmd": "R={{FIX}}/cl-{{SID}}; W=$R/run/.work.jsonl; rm -rf $R && mkdir -p $R/src/A/Security $R/tests/T $R/todo && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class Guard {}\\n' > src/A/Security/Guard.cs && printf 'class H {}\\n' > src/A/H.cs && printf 'v0\\n' > tests/T/X.verified.txt && printf '# S\\n' > todo/X-PLAN-F1.md && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && L(){ python3 {{KIT}}/scripts/closing-level.py $R/todo/X-PLAN-F1.md $W --root $R \"$@\"; } && printf 'class Guard { int x; }\\n' > $R/src/A/Security/Guard.cs && printf 'v1\\n' > $R/tests/T/X.verified.txt && printf 'v0\\n' > $R/tests/T/New.verified.txt && printf '# F2\\nUses `Guard` and H.\\n' > $R/todo/X-PLAN-F2.md && out=$(L --record) && echo \"$out\" | jq -r '.level, (.reasons | join(\" ; \"))' | tr '\\n' '|' && jq -r 'select(.kind == \"closing\") | .level' $W",
+      "expect": {
+        "exit": 0,
+        "stdout": "full|authorisation: `src/A/Security/Guard.cs` ; approved snapshot: `tests/T/X.verified.txt`|full"
+      }
+    },
+    {
+      "name": "closing level full past the production cap of the repo's kit.config.json, a deleted file counted",
+      "cmd": "R={{FIX}}/cl-{{SID}}; W=$R/run/.work.jsonl; rm -rf $R && mkdir -p $R/src/A/Security $R/tests/T $R/todo && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class Guard {}\\n' > src/A/Security/Guard.cs && printf 'class H {}\\n' > src/A/H.cs && printf 'v0\\n' > tests/T/X.verified.txt && printf '# S\\n' > todo/X-PLAN-F1.md && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && L(){ python3 {{KIT}}/scripts/closing-level.py $R/todo/X-PLAN-F1.md $W --root $R \"$@\"; } && mkdir -p $R/.claude && printf '{\"closing\": {\"maxProductionFiles\": 1}}' > $R/.claude/kit.config.json && rm $R/src/A/H.cs && printf 'class N {}\\n' > $R/src/A/N.cs && printf '# F2\\nNothing shared.\\n' > $R/todo/X-PLAN-F2.md && L | jq -r '.level, (.reasons | join(\" ; \"))' | tr '\\n' '|'",
+      "expect": {
+        "exit": 0,
+        "stdout": "full|2 production files, more than 1|"
+      }
+    },
+    {
+      "name": "closing level: a sheet asking for light lifts the production cap, never a matched rule (the request refused, named)",
+      "cmd": "R={{FIX}}/cl-{{SID}}; W=$R/run/.work.jsonl; rm -rf $R && mkdir -p $R/src/A/Security $R/tests/T $R/todo && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'class Guard {}\\n' > src/A/Security/Guard.cs && printf 'class H {}\\n' > src/A/H.cs && printf 'v0\\n' > tests/T/X.verified.txt && printf '# S\\n' > todo/X-PLAN-F1.md && git add -A && git commit -qm init && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && L(){ python3 {{KIT}}/scripts/closing-level.py $R/todo/X-PLAN-F1.md $W --root $R \"$@\"; } && mkdir -p $R/.claude && printf '{\"closing\": {\"maxProductionFiles\": 1}}' > $R/.claude/kit.config.json && printf '# S\n\n## Cycles\n\n```json\n{\"closing\": \"light\", \"cycles\": [{\"id\": \"C1\", \"ripple\": [\"src/A/H.cs — call\"]}]}\n```\n' > $R/todo/X-PLAN-F1.md && printf 'class N {}\n' > $R/src/A/N.cs && printf 'class M {}\n' > $R/src/A/M.cs && a=$(L | jq -r '.level') && printf 'class Guard { int x; }\n' > $R/src/A/Security/Guard.cs && b=$(L | jq -r '.level, (.reasons | join(\" ; \"))' | tr '\n' '|') && echo \"$a|$b\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "light|full|authorisation: `src/A/Security/Guard.cs` ; sheet: `closing` set to light, refused — a rule above is never lifted|"
+      }
+    },
+    {
+      "name": "closing level without a snapshot of the batch exits 2",
+      "cmd": "R={{FIX}}/cl0-{{SID}}; rm -rf $R && mkdir -p $R && cd $R && git init -q && cd {{ROOT}} && python3 {{KIT}}/scripts/closing-level.py $R/X-PLAN-F1.md $R/w.jsonl --root $R",
+      "expect": {
+        "exit": 2,
+        "stderr": "no snapshot of F1"
+      }
+    }
+  ]
 }

@@ -1,7 +1,7 @@
 // Whole run-lot body driven by schema-shaped fake agents: a sheet with a valid `## Cycles` block runs no
 // design, a sheet without it runs the design once, a resumed cycle carrying `green` is not redone, an
 // unreachable method is listed for review instead of retried, the audit is handed the run's decisions,
-// the next sheet is reviewed beside the audit, never designed by this batch; past 12 cycles one capture
+// the next sheet is never reviewed, amended nor designed by this batch; past 12 cycles one capture
 // feeds two auditors in parallel, the green suites marked for the rerun guard. No agent is ever an arbiter,
 // a question or a wait, and every cycle is one tdd-cycle agent.
 // retry: C1's RED is rejected twice — a retry carrying the reason, then a last attempt on opus that passes.
@@ -15,21 +15,18 @@
 // fullblock: a Blocking on Correctness — the fix, then a second audit on its declared files. wrong: the
 // Blocking stays after the fix — STATUS GAPS. gatered: the pre-audit stays red — one pass, its failures to the audit.
 // light: the block plans a light closing, the diff confirms it: one light review, its Majors fixed without a
-// second review, no next-batch review the next sheet does not need. lightblock: the light review finds a
-// Blocking on Correctness — a second light review on the fix's files; the next sheet names a changed type.
-// review: the next sheet's review asks a human-only question (applied, listed) and one Blocking without
-// answer — `unanswered`.
+// second review. lightblock: the light review finds a
+// Blocking on Correctness — a second light review on the fix's files.
 // shortindex: the resume agent relays the index without its cycles — read again alone, both cycles run;
 // shortindex2: the second copy is short too — BLOCKED, nothing run.
 // asideconflict: the work of a batch set aside does not merge back — the batch starts over, listed to validate.
 // root: the batch runs in a worktree of its own beside another — every agent is handed it and the prefix of its Bash
-// calls, the work file stays in the session's run folder, the suites run under the build lock, the next sheet (the
-// batch running beside) is not reviewed.
+// calls, the work file stays in the session's run folder, the suites run under the build lock.
 // Global green: a green first pass is one haiku agent; snapshot: a red suite → repair (default model), its promoted
 // snapshot read off the tree, declared, listed for review and handed to the audit; undeclared: a write under the test
 // roots without a `testEdits` entry is rejected, the retry declares it; blocked: a `test-code` write is a BLOCKED,
 // retried once, then the batch stops.
-// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|retry|stop|guardout|greenretry|resumered|testsdiff|ripple|fullgaps|fullblock|wrong|gatered|light|lightblock|review|shortindex|shortindex2|snapshot|undeclared|blocked|root
+// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|retry|stop|guardout|greenretry|resumered|testsdiff|ripple|fullgaps|fullblock|wrong|gatered|light|lightblock|shortindex|shortindex2|snapshot|undeclared|blocked|root
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
 const variant = process.argv[3] || 'block'
@@ -90,8 +87,8 @@ const agent = async (prompt, o) => {
   if (/^RED \S+ w\d+ .* \+GREEN( opus)?$/.test(l)) return cycleAgent(prompt, o, l)
   if (o.phase === 'Global green') green.push(`${l} ${o.model || 'default'}`)
   if (isLight && l === 'suites run') {
-    if (!prompt.includes('cctoolkit closing-level todo/x/X-PLAN-F3.md todo/x/run/.work.jsonl --record --next todo/x/X-PLAN-F4.md')) console.log('WARN suites without the closing level')
-    return { ...RUNOK, closing: JSON.stringify({ level: 'light', reasons: [], production: 3, review: variant === 'lightblock', reviewWhy: variant === 'lightblock' ? 'the next sheet names types this batch changed: X' : 'the next sheet names no type this batch changed' }) }
+    if (!prompt.includes('cctoolkit closing-level todo/x/X-PLAN-F3.md todo/x/run/.work.jsonl --record')) console.log('WARN suites without the closing level')
+    return { ...RUNOK, closing: JSON.stringify({ level: 'light', reasons: [], production: 3 }) }
   }
   if (l === 'suites run') {
     if (!prompt.includes('cctoolkit suites-plan todo/x/run/.work.jsonl F3') || prompt.includes('test-scope.md')) console.log('WARN suites run not handed the plan, or left to read test-scope.md')
@@ -136,7 +133,7 @@ const agent = async (prompt, o) => {
     const saved = variant === 'resume' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { ...REDOK, unreachable: [] }, green: { status: 'GREEN', exit: 0 } }]
       : variant === 'resumered' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: REDOK }]
       : []
-    return { cycles: saved, index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : variant.startsWith('shortindex') ? { ...idx, count: 2, cycles: [] } : idx, nextSheet: 'todo/x/X-PLAN-F4.md', ...(variant === 'asideconflict' ? { resume: 'resume: conflict on src/X.cs — batch starts over, its saved cycles dropped; partial work: /p.patch' } : {}) }
+    return { cycles: saved, index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : variant.startsWith('shortindex') ? { ...idx, count: 2, cycles: [] } : idx, ...(variant === 'asideconflict' ? { resume: 'resume: conflict on src/X.cs — batch starts over, its saved cycles dropped; partial work: /p.patch' } : {}) }
   }
   if (l.startsWith('index')) return variant === 'shortindex2' ? { ...idx, count: 2, cycles: idx.cycles.slice(1) } : variant === 'shortindex' ? { ...idx, count: 2 } : idx
   if (l === 'design') return { blocked: false, reason: '', review: ['choice x'] }
@@ -156,20 +153,14 @@ const agent = async (prompt, o) => {
     if ((variant === 'fullblock' && audits === 1) || variant === 'wrong') return WRONGV
     return VALIDV
   }
-  if (l === 'next batch review') {
-    if (variant === 'review') return { result: 'GAPS', questions: [{ severity: 'Blocking', question: 'archive or delete?', evidence: 'e', decidedBy: '', answer: 'archive, RM-03 keeps the history', options: ['archive', 'delete'], humanOnly: true }, { severity: 'Blocking', question: 'which tenant?', evidence: 'e', decidedBy: '', answer: '', options: [], humanOnly: true }] }
-    return { result: 'GAPS', questions: [{ severity: 'Major', question: 'q', evidence: 'e', decidedBy: 'x', answer: 'a', options: [] }] }
-  }
-  if (l === 'next sheet') { if (variant === 'review' && (!prompt.includes('archive or delete?') || prompt.includes('which tenant?'))) console.log('WARN next sheet not handed the applied answers only'); return { ok: true } }
   if (l === 'report') { if (!prompt.includes('## To validate')) console.log('WARN report without To validate'); if (prompt.includes('## STATUS — DONE') && !(prompt.includes('cctoolkit batch-baseline commit todo/x/run/.work.jsonl F3 --sheet todo/x/X-PLAN-F3.md') && prompt.includes('--kind preexisting,question,answer'))) console.log('WARN batch not committed nor its lines reduced'); if (!prompt.includes('run/batches/F3.md')) console.log('WARN report not under run/batches'); return { path: 'todo/x/run/batches/F3.md' } }
   console.log('UNHANDLED', l); return null
 }
 const fn = new (Object.getPrototypeOf(async function () {}).constructor)('args', 'agent', 'log', 'phase', 'parallel', 'workflow', src)
-fn(variant === 'root' ? { sheet: 'todo/x/X-PLAN-F3.md', root: '/w/F3/', run: '/m/todo/x/run', partner: '/m/todo/x/X-PLAN-F4.md', lock: true } : 'todo/x/X-PLAN-F3.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), async () => null)
+fn(variant === 'root' ? { sheet: 'todo/x/X-PLAN-F3.md', root: '/w/F3/', run: '/m/todo/x/run', lock: true } : 'todo/x/X-PLAN-F3.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), async () => null)
   .then(r => {
     console.log('STATUS', r.status, '| toReview', r.toReview.length, r.toReview.map(x => x.step).join(',') + (audits ? ` | audits ${audits}` : '') + (reviews ? ` | light reviews ${reviews}` : ''))
     console.log('REVIEW', r.toReview.map(x => `${x.step}: ${x.text.slice(0, 60)}`).join(' ; '))
-    if (r.unanswered) console.log('UNANSWERED', r.unanswered)
     console.log('AGENTS', labels.join(' | '))
     console.log('GLOBAL GREEN', green.join(' | '))
     if (GREENTRAP.includes(variant) || ['stop', 'wrong'].includes(variant)) console.log('REASON', r.reason, '| TO VALIDATE', r.toReview.filter(x => x.step === 'Global green').map(x => x.text).join(' ; '))

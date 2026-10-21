@@ -48,7 +48,7 @@
     ]
   },
   "closing": {
-    "maxProductionFiles": 12,
+    "maxProductionFiles": 0,
     "full": [
       {"name": "authorisation", "path": "(?i)(authori[sz]|permission|polic(y|ies)\\b|securit|claims?\\b|access(control|provider|rule|right)|grant)", "changes": "AMD"},
       {"name": "migration", "path": "(?i)(^|/)migrations?/", "changes": "AMD"},

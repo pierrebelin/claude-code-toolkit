@@ -29,11 +29,11 @@
       }
     },
     {
-      "name": "run-lot flow: a valid cycle block runs no design, one tdd-cycle agent per cycle (no RED/GREEN pair, no arbiter, no question), unreachable methods go to review, next sheet reviewed beside the audit, never designed",
+      "name": "run-lot flow: a valid cycle block runs no design, one tdd-cycle agent per cycle (no RED/GREEN pair, no arbiter, no question), unreachable methods go to review, the next sheet never reviewed nor designed",
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js block | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | declaratives | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | declaratives | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -49,7 +49,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js snapshot | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|GLOBAL|REASON' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Global green | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | suites repair | suites tests | next batch review | audit | next sheet | report;GLOBAL GREEN suites run haiku | suites repair default | suites tests haiku;REASON — | TO VALIDATE test file written to reach green, snapshot-promoted: tests/C/BTests.Get.verified.txt;"
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Global green | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | suites repair | suites tests | audit | report;GLOBAL GREEN suites run haiku | suites repair default | suites tests haiku;REASON — | TO VALIDATE test file written to reach green, snapshot-promoted: tests/C/BTests.Get.verified.txt;"
       }
     },
     {
@@ -73,7 +73,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js nodesign | grep -E 'AGENTS|ERR' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "AGENTS resume state | design | index X-PLAN-F3.md | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "AGENTS resume state | design | index X-PLAN-F3.md | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -89,7 +89,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js resumered | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -97,7 +97,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js retry | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN opus | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN opus | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -113,7 +113,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js guardout | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,Cycle C2 | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | RED C2 w2 Two +GREEN | RED C2 w2 Two +GREEN opus | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,Cycle C2 | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | RED C2 w2 Two +GREEN | RED C2 w2 Two +GREEN opus | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -121,7 +121,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js greenretry | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -129,7 +129,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js testsdiff | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 4 Cycle C1,RED One,GREEN One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 4 Cycle C1,RED One,GREEN One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -149,11 +149,11 @@
       }
     },
     {
-      "name": "run-lot flow: a batch in a worktree of its own beside another (`root`, `run`, `partner`, `lock`) hands every agent that worktree and the prefix of its Bash calls, keeps the work file in the session's run folder, runs the suites under the build lock, and does not review the batch running beside",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js root | grep -E 'STATUS|ERR|WARN (agent without|work file outside|suites run without)|UNHANDLED|log: next|AGENTS' | tr '\\n' ';'",
+      "name": "run-lot flow: a batch in a worktree of its own beside another (`root`, `run`, `lock`) hands every agent that worktree and the prefix of its Bash calls, keeps the work file in the session's run folder and runs the suites under the build lock",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js root | grep -E 'STATUS|ERR|WARN (agent without|work file outside|suites run without)|UNHANDLED|AGENTS' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "log: next batch review skipped — todo/x/X-PLAN-F4.md runs beside this batch;STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -161,7 +161,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js ripple | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -169,7 +169,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js gatered | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Closing | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Closing | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
     {
@@ -177,7 +177,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js fullgaps | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 5 RED One,RED Two,Audit,Audit,Audit | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | fix | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 5 RED One,RED Two,Audit,Audit,Audit | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | fix | report;"
       }
     },
     {
@@ -185,7 +185,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js fullblock | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | fix | audit retry | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | fix | audit retry | report;"
       }
     },
     {
@@ -193,7 +193,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js wrong | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|REASON' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS GAPS | toReview 2 RED One,RED Two | audits 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | fix | audit retry | report;REASON Blocking on the Correctness axis after the fix: production is wrong | TO VALIDATE ;"
+        "stdout": "STATUS GAPS | toReview 2 RED One,RED Two | audits 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | fix | audit retry | report;REASON Blocking on the Correctness axis after the fix: production is wrong | TO VALIDATE ;"
       }
     },
     {
@@ -205,19 +205,11 @@
       }
     },
     {
-      "name": "run-lot flow: a Blocking on Correctness of the light review — a second light review on the fix's declared files; a next sheet naming a changed type is reviewed",
+      "name": "run-lot flow: a Blocking on Correctness of the light review — a second light review on the fix's declared files",
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js lightblock | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | light reviews 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | review light | fix | review light retry | next sheet | report;"
-      }
-    },
-    {
-      "name": "run-lot flow: the next sheet's review — a human-only question is applied with the reviewer's answer and listed, a Blocking without answer is `unanswered`, nobody is asked",
-      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js review | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|UNANSWERED' | tr '\\n' ';'",
-      "expect": {
-        "exit": 0,
-        "stdout": "STATUS DONE | toReview 3 RED One,RED Two,Review todo/x/X-PLAN-F4.md | audits 1;UNANSWERED todo/x/X-PLAN-F4.md — 1 Blocking question(s) without answer;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | next batch review | audit | next sheet | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | light reviews 2;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | review light | fix | review light retry | report;"
       }
     },
     {
@@ -225,7 +217,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js split | grep -E 'AGENTS|ERR|WARN|UNHANDLED' | sed 's/.*B13 +GREEN | //' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "suites run | pre-audit | next batch review | capture | audit code | audit plan | next sheet | report;"
+        "stdout": "suites run | pre-audit | capture | audit code | audit plan | report;"
       }
     },
     {

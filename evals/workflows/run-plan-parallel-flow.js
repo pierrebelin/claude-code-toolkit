@@ -94,9 +94,9 @@ const workflow = async (name, a) => {
   const inTree = !!a.root
   if (b === 'F2') f2InTree = inTree
   labels.push(`run-lot ${b}${inTree ? ' wt' : ''}`)
-  if (inTree && !(a.root === WT && a.sheet === `${WT}/todo/x/X-PLAN-${b}.md` && a.run === '/r/todo/x/run' && a.partner === sheet('F1') && a.lock === true)) warn(`run-lot ${b} in the worktree without root, sheet, run, partner or lock`)
-  if (!inTree && b === 'F1' && variant !== 'serial' && !(a.partner === sheet('F2') && a.lock === true)) warn('run-lot F1 without its partner or the build lock')
-  if (!inTree && (b !== 'F1' || variant === 'serial') && (a.partner || a.lock || a.root)) warn(`run-lot ${b} alone carries parallel arguments`)
+  if (inTree && !(a.root === WT && a.sheet === `${WT}/todo/x/X-PLAN-${b}.md` && a.run === '/r/todo/x/run' && a.lock === true)) warn(`run-lot ${b} in the worktree without root, sheet, run, partner or lock`)
+  if (!inTree && b === 'F1' && variant !== 'serial' && a.lock !== true) warn('run-lot F1 without the build lock')
+  if (!inTree && (b !== 'F1' || variant === 'serial') && (a.lock || a.root)) warn(`run-lot ${b} alone carries parallel arguments`)
   return variant === 'aside' && inTree
     ? { status: 'BLOCKED', reason: 'GREEN stopped', report: `/r/todo/x/run/batches/${b}.md`, toReview: [], hypotheses: [], minors: [] }
     : { status: 'DONE', reason: '—', report: `/r/todo/x/run/batches/${b}.md`, toReview: [], hypotheses: [], minors: [] }

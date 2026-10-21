@@ -4,7 +4,7 @@ import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput, TurnStepChunk,
 
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
-  figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, parseCycles,
+  figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, stageLabelOf, phaseTitleOf, parseCycles,
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, relativePath, samePath, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
@@ -1594,6 +1594,22 @@ describe('sheet-driven cycles', () => {
     expect(live.cycles!.map(one => one.live).slice(0, 3)).toEqual(['GREEN', 'RED', undefined])
     expect(isSheetDone(live)).toBe(false)
     expect(withLiveCycles(done, [agent(`GREEN ${first!.id} x`, 'done')]).cycles).toEqual(done.cycles)
+  })
+
+  test('live cycles: one agent per cycle shows GREEN once its RED state is written', () => {
+    const sheet = parseSheet(CYCLES_SHEET, SHEET_PATH)
+    const [first, second] = sheet.cycles!
+    const red = { ...sheet, cycles: sheet.cycles!.map((one, at) => ({ ...one, state: at === 0 ? ('red' as const) : ('pending' as const) })) }
+    const agent = (label: string, state: WorkflowAgent['state']) => ({ label, state }) as WorkflowAgent
+    const atGreen = agent(`RED ${first!.id} w1 x +GREEN opus`, 'running')
+    const atRed = agent(`RED ${second!.id} w1 y +GREEN`, 'running')
+    const live = withLiveCycles(red, [atGreen, atRed])
+    expect(live.cycles!.map(one => [one.state, one.live]).slice(0, 2)).toEqual([['red', 'GREEN'], ['pending', 'RED']])
+    expect([stageLabelOf(atGreen, live), stageLabelOf(atRed, live)]).toEqual([`GREEN ${first!.id} w1 x`, `RED ${second!.id} w1 y`])
+    expect(stageLabelOf(agent(`RED ${first!.id} w1 x +GREEN`, 'done'), live)).toBe(`RED ${first!.id} w1 x`)
+    expect(stageLabelOf(agent('pre-audit', 'running'), live)).toBe('pre-audit')
+    expect(phaseTitleOf({ phases: ['Design', 'RED', 'Global green'] } as WorkflowRun, 'RED')).toBe('RED · GREEN')
+    expect(phaseTitleOf({ phases: ['Design', 'RED', 'GREEN'] } as WorkflowRun, 'RED')).toBe('RED')
   })
 
   test('phase of a label: ternary paired branch by branch, parameter resolved at its call sites', () => {

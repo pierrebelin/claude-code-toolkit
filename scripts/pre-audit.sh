@@ -90,15 +90,14 @@ fi
 # Outside the code roots, .claude/, todo/ and the plan folder: a deviation unless the sheet names it.
 PLAN_DIR="$(dirname "$SHEET")"
 OUTSIDE=""
+SHEET_TXT="$(<"$SHEET")"
 while IFS= read -r f; do
     [[ -z "$f" ]] && continue
     [[ "$f" =~ ^$KIT_CODE_RE ]] && continue
     case "$f" in
         .claude/*|todo/*|"$PLAN_DIR"/*|*/__pycache__/*) continue ;;
     esac
-    if grep -qF -- "$(basename "$f")" "$SHEET"; then
-        continue
-    fi
+    [[ "$SHEET_TXT" == *"${f##*/}"* ]] && continue
     OUTSIDE+="$f"$'\n'
 done < <(git diff --name-only 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)
 if [[ -z "$OUTSIDE" ]]; then
@@ -113,6 +112,9 @@ fi
 TOUCHED_CLASSES="$(python3 "$KIT_PY" diff-test-classes "$ROOT" <"$DIFF_FILE")"
 TOUCHED_TRAITS="$(python3 "$KIT_PY" diff-tags "$ROOT" <"$DIFF_FILE")"
 UNTESTED="$(python3 "$SCRIPTS"/rules-coverage.py --untested 2>&1)"
+# Words of the added lines, built once: a method is "added" when it is a whole word of one of them.
+declare -A ADDED_WORDS=()
+while IFS= read -r w; do ADDED_WORDS["$w"]=1; done < <(grep '^+' "$DIFF_FILE" | grep -oE '[[:alnum:]_]+' | sort -u)
 STALE=""
 OLD_UNBOUND=""
 while IFS= read -r l; do
@@ -123,13 +125,13 @@ while IFS= read -r l; do
             m="${l##*.}"; m="${m%% *}"
             for n in $TOUCHED_CLASSES; do
                 [[ "$l" == *"$n"* ]] || continue
-                if [[ -n "$m" ]] && grep -qE "^\+.*\b${m}\b" "$DIFF_FILE"; then STALE+="$l"$'\n'; else OLD_UNBOUND+="$l"$'\n'; fi
+                if [[ -n "$m" ]] && if [[ "$m" =~ ^[[:alnum:]_]+$ ]]; then [[ -n "${ADDED_WORDS[$m]:-}" ]]; else grep -qE "^\+.*\b${m}\b" "$DIFF_FILE"; fi; then STALE+="$l"$'\n'; else OLD_UNBOUND+="$l"$'\n'; fi
                 break
             done
             continue ;;
         *" with no test — "*|*" sans test — "*)
             h="${l%%:*}"; h="${h##*/}"
-            grep -qF -- "/$h/" <<<"$CHANGED" && STALE+="$l"$'\n'
+            [[ "$CHANGED" == *"/$h/"* ]] && STALE+="$l"$'\n'
             continue ;;
         *) continue ;;
     esac
@@ -229,7 +231,7 @@ fi
 
 # ── 7. Handler tests observe results and SavedEvents, never the double ──────
 # Spy names: identifiers holding Received/CallCount/Called that the sources do not already use.
-ADDED_TESTS="$(python3 "$KIT_PY" diff-interaction "$ROOT" <"$DIFF_FILE")"
+ADDED_TESTS="$(python3 "$KIT_PY" diff-interaction "$ROOT" <"$DIFF_FILE" | grep -E 'Received|CallCount|Called|_fixture\.')"
 DOMAIN_WORDS="$(grep -rhoE "${SOURCE_INCLUDES[@]}" '\b[A-Za-z]*(Received|CallCount|Called)[A-Za-z]*\b' "${SOURCE_DIRS[@]}" 2>/dev/null | sort -u)"
 INTERACTIONS=""
 while IFS= read -r l; do

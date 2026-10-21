@@ -29,7 +29,7 @@ The test-authoring skills — `tests-unit-tests` (handlers/services: business ru
 | `tdd-implementer` | the GREEN and REFACTOR rules — a test changed only when it is wrong, never an assertion of the behaviour; read by `tdd-cycle`, spawned alone by no workflow |
 | `tdd-cycle` | one cycle's RED then its GREEN in one agent, following the two above; the RED checkpoint the hook checks on the tree turns it from author to implementer, so a file read at RED is not read again at GREEN |
 | `ddd-tdd-auditor` | audits a batch, read-only, for `/verify-ddd-tdd` |
-| `adversarial-reviewer` | tries to refute a spec, a plan or the next batch sheet before any code, read-only; returns closed questions ranked `Blocking` / `Major` |
+| `adversarial-reviewer` | tries to refute a spec, a plan or a batch sheet before any code, read-only; returns closed questions ranked `Blocking` / `Major` |
 | `knowledge-merger` | drafts the merge of a delivered feature for `/knowledge-merge` and `run-plan`: the spec's use cases and rules rewritten in the base's format from the spec and the sheets' code elements, citations of retired objects removed, `OVERVIEW.md` rewritten when the spec reaches it; writes only into `<root>/.merge/<CODE>/.drafts/`, runs `cctoolkit knowledge-merge stage`, returns `## MERGE STAGED — <CODE>` |
 | `knowledge-extractor` | drafts one bounded context of the knowledge base for `/knowledge-sync` — from the rule sheets (`specified`), and from guards, tests, `DESIGN.md`, git and graphify (`observed`, with `path:line` and a confidence level); writes only into the staging, with provisional ids, and returns `## EXTRACTED — <Context>`: counts, conflicts between sheet and code, objects to remove |
 

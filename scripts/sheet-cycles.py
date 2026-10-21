@@ -245,8 +245,7 @@ def planned_closing(data, root):
         cfg = kit_config.load(root)
     except Exception:
         return {"level": "full", "reasons": ["kit.config.json unreadable"], "production": 0}
-    return closing_level.decide(cfg, closing_level.planned_files(cfg, data["cycles"], path_of), data["cycles"],
-                                data.get("closing", ""))
+    return closing_level.decide(cfg, closing_level.planned_files(cfg, data["cycles"], path_of), data.get("closing", ""))
 
 
 def index(data, layout):

@@ -1,6 +1,6 @@
 export const meta = {
   name: 'run-lot',
-  description: 'FX batch under strict TDD, autonomous: cycles from the sheet, RED/GREEN per behaviour, global green, pre-audit, audit, next-batch review',
+  description: 'FX batch under strict TDD, autonomous: cycles from the sheet, RED/GREEN per behaviour, global green, pre-audit, audit',
   whenToUse: 'Implement a plan batch without human intervention. Argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`; plan, batch and run folder are derived from it.',
   phases: [
     { title: 'Design', detail: 'cycle index of the sheet; design writes the `## Cycles` block only when absent or invalid; declaratives' },
@@ -8,7 +8,6 @@ export const meta = {
     { title: 'Global green', detail: 'beside the pre-audit gate: suites run on haiku as cctoolkit suites-plan resolves them; red → suites repair, its writes under the test roots checked against testEdits; closing level full or light read off the batch diff' },
     { title: 'Closing', detail: 'cctoolkit pre-audit and what it lists, one pass beside global green; what stays red goes to the audit' },
     { title: 'Audit', detail: 'full: cctoolkit audit-capture, ddd-tdd-auditor; light: one review of the diff on Correctness and Scope; GAPS → one fix, a second review only after a Blocking on Correctness' },
-    { title: 'Review', detail: 'adversarial-reviewer on the next sheet, beside the audit, every answer applied and listed for review; light: only when the next sheet names a type the batch changed' },
     { title: 'Report', detail: 'run/batches/FX.md, written even on stop; DONE: batch committed, its lines reduced to the cycle states' },
   ],
 }
@@ -31,10 +30,8 @@ const runRoot = opts.run ? slashed(opts.run).trim().replace(/\/+$/, '') : `${she
 const workFile = `${runRoot}/.work.jsonl`
 const reportPath = `${runRoot}/batches/${batch}.md`
 const commitAtEnd = !(args && typeof args === 'object' && args.commit === false)
-// Beside another batch: `partner` = the sheet of the batch running at the same time — never reviewed nor
-// amended by this one, it is already running; `lock` = solution builds, whole suites and the cycles' test-project
-// builds (`commands.testFast`) under `cctoolkit build-lock`.
-const partner = slashed(opts.partner || '').trim()
+// Beside another batch: `lock` = solution builds, whole suites and the cycles' test-project builds
+// (`commands.testFast`) under `cctoolkit build-lock`.
 const lock = opts.lock === true
 const tmpCommand = `cctoolkit run-work tmp ${batch}`
 const TMP = `\`<tmp>\` = the folder \`${tmpCommand}\` prints (system temp, never under run/)`
@@ -154,17 +151,12 @@ const VERDICT = obj({
 
 const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str), objections: arr(str), extensions: arr(obj({ file: str, why: str })) })
 
-const REVIEW = obj({
-  result: { type: 'string', enum: ['CLEAR', 'GAPS'] },
-  questions: arr(obj({ severity: { type: 'string', enum: ['Blocking', 'Major'] }, question: str, evidence: str, decidedBy: str, answer: str, options: arr(str), humanOnly: bool }, ['humanOnly'])),
-})
 
 const REPORT = obj({ path: str, commit: str }, ['commit'])
 
 const LOADED = obj({
   cycles: arr(obj({ behaviour: str, rmcu: str, steps: arr(str), red: RED, green: GREEN }, ['green'])),
   index: INDEX,
-  nextSheet: str,
   resume: str,
 }, ['resume'])
 
@@ -207,11 +199,9 @@ function testWrites(tree, declared) {
   return null
 }
 
-const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], review: null, audit: null, toReview: [], closing: null }
+const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], audit: null, toReview: [], closing: null }
 const toReview = (step, text, why = '') => history.toReview.push({ step, text, why })
-let reviewing = null
 const USER = 'user decision'
-const REVIEWER = 'reviewer recommendation'
 
 // lib/tdd_scope.py writes this at the head of a BLOCKED diagnostic, from the tree it checks.
 const RED_ON_STUB = 'RED on stub: '
@@ -481,7 +471,6 @@ function renderReport(status, reason, verdict) {
   const gapsOf = v => v.gaps.filter(g => g.severity !== 'Minor')
   const auditGaps = history.verdicts.flatMap((v, i) => gapsOf(v).map(g =>
     `- ${g.severity} — ${g.axis} — ${cell(g.gap)} (evidence: ${cell(g.evidence)}). Fix: ${cell(g.fix)}${history.fixes[i] ? `; applied in round ${i + 1}: ${cell(history.fixes[i].fixed.join('; '))}` : '; not applied'}.${g.closure ? ` Closure: ${cell(g.closure)}.` : ''}`))
-  const reviews = history.review ? [history.review] : []
   const tests = new Map()
   for (const c of cycles) {
     for (const t of c.red?.table ?? []) {
@@ -500,7 +489,7 @@ function renderReport(status, reason, verdict) {
     '',
     `Verdict: ${finalVerdict}`,
     '',
-    ...(history.closing ? [`Closing: ${history.closing.level} — ${cell(history.closing.reasons.join('; ') || 'no file on authorisation, migration or public contract, no ripple, few production files')}`, ''] : []),
+    ...(history.closing ? [`Closing: ${history.closing.level} — ${cell(history.closing.reasons.join('; ') || 'no file on authorisation, migration or public contract')}`, ''] : []),
     `## Closing summary — batch ${batch}`,
     '',
     `${cycles.length} TDD cycle(s)${cycles.some(c => c.resumed) ? `, ${cycles.filter(c => c.resumed).length} resumed from an earlier run` : ''}.`,
@@ -527,9 +516,6 @@ function renderReport(status, reason, verdict) {
       ? history.verdicts.map((v, i) => `- ${i ? 'After the fix' : history.closing && history.closing.level === LIGHT ? 'Light review (Correctness, Scope)' : 'Initial'}: ${v.verdict}${gapsOf(v).length ? ` (${gapsOf(v).map(g => g.severity).join(', ')})` : ''}`)
       : ['No audit.']),
     ...history.fixes.flatMap(f => f.objections.map(o => `- Fix objection, gap left as it was: ${cell(o)}`)),
-    ...(reviews.length
-      ? ['', '### Next batch review', '', ...reviews.map(r => `- ${r.result} — ${r.questions.length} question(s)${r.questions.length ? ': ' + r.questions.map(q => `${q.severity} — ${cell(q.question)} — answer: ${cell(q.answer)}`).join('; ') : ''}`)]
-      : []),
     '',
     '### Validations',
     '',
@@ -583,7 +569,6 @@ async function report(status, reason, verdict) {
 }
 
 async function finish(status, reason, verdict) {
-  if (reviewing) history.review = await reviewing
   const written = await report(status, reason, verdict)
   return {
     status,
@@ -592,7 +577,6 @@ async function finish(status, reason, verdict) {
     gaps: verdict ? verdict.gaps.filter(e => e.severity !== 'Minor') : [],
     hypotheses: verdict ? verdict.hypotheses : [],
     minors: verdict ? verdict.minors : [],
-    review: history.review,
     audit: history.audit,
     toReview: history.toReview,
     report: written ? written.path : null,
@@ -607,10 +591,9 @@ const loading = agent(
     FRAME,
     '',
     `First, one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit run-validate apply ${workFile}; cctoolkit batch-baseline resume ${workFile} ${batch}; cctoolkit batch-baseline snapshot ${workFile} ${batch}\` — questions of an earlier run never answer this one; run-validate writes the answers given in the run-lot-pane mod into the sheets; resume puts back the work of a batch set aside by run-plan, \`resume\` = the line it printed, verbatim; the snapshot records the files already modified, left out of the batch diff and commit (kept when it exists).`,
-    `Then in one message: \`cctoolkit sheet-cycles ${sheet} --states ${workFile}\`, \`${indexCommand(sheet)}\` and \`grep -E '^### (Batch|Lot) F[0-9]+' ${plan}\`.`,
+    `Then in one message: \`cctoolkit sheet-cycles ${sheet} --states ${workFile}\` and \`${indexCommand(sheet)}\`.`,
     '`cycles` = the JSON array `--states` printed, each object as-is, no field changed (`[]` when no cycle was saved).',
     '`index` = the JSON line `sheet-cycles` printed, verbatim, whatever its exit code (0 valid, 1 invalid, 2 no block).',
-    `\`nextSheet\` = the first \`### Batch FY\` (or \`### Lot FY\`) heading after the one of ${batch} without \`✅ DONE\` → \`${naming[1]}-FY.md\` when that file exists; empty string otherwise.`,
   ].join('\n'),
   { schema: LOADED, phase: 'Design', label: 'resume state', model: 'haiku', effort: 'low' },
 ).catch(() => null)
@@ -675,7 +658,6 @@ if (!whole(lotIndex)) {
   lotIndex = await readIndex(sheet, 'Design')
   if (!whole(lotIndex)) return await finish(BLOCKED, `cycle index relayed incomplete twice (${lotIndex.cycles.length} of ${lotIndex.count} cycles): rerun the batch`)
 }
-const nextSheet = loaded ? loaded.nextSheet.trim() : ''
 if (!lotIndex || !lotIndex.ok) {
   log(!lotIndex ? 'cycle index unread — design writes the block' : lotIndex.missing ? 'no `## Cycles` block — design writes it' : `\`## Cycles\` invalid — design fixes it: ${short(lotIndex.errors.join(' ; '), 80)}`)
   const { result, reason } = await withRetry('Design', designed, designRejected)
@@ -744,7 +726,7 @@ phase('Global green')
 // Two agents (2026-10-20: one agent on the session model took 9 min 53 s, 4 min 50 s of it the repair;
 // resolving, building, running and reading exits is mechanical): `suites run` on haiku runs what
 // `cctoolkit suites-plan` resolves, `suites repair` only when a suite is red or a scope unresolved.
-const closingCommand = `cctoolkit closing-level ${sheet} ${workFile} --record${nextSheet ? ` --next ${nextSheet}` : ''}`
+const closingCommand = `cctoolkit closing-level ${sheet} ${workFile} --record`
 const planCommand = `cctoolkit suites-plan ${workFile} ${batch}${lock ? ' --lock' : ''}`
 
 const runSuites = (suffix = '') => agent(
@@ -973,40 +955,6 @@ function auditPending() {
   toReview('Audit', `audit of batch ${batch} without result after two attempts: ${AUDIT_PENDING} (\`/verify-ddd-tdd batch ${batch}\`)`)
 }
 
-function reviewNext(label) {
-  return agent(
-    `${root ? `${ROOT_LINE}\n\n` : ''}mode: next-batch ${nextSheet} ${sheet}\n\nReturn your questions through the structured output: \`result\` CLEAR or GAPS, each question with its severity, its evidence, \`decidedBy\` (the \`Settled by\` column, empty when none), \`answer\` (the answer the source dictates; without source, your recommendation and why), \`options\` (without source: 2 to 4 short mutually exclusive answers, recommended first; empty otherwise) and \`humanOnly\` (your \`Human only\` rule). Nobody answers during the run: it applies every answer, \`humanOnly\` ones included, and the user reviews them afterwards.`,
-    { agentType: 'cctoolkit:adversarial-reviewer', schema: REVIEW, phase: 'Review', label },
-  ).catch(() => null)
-}
-
-function amendNext(questions, gaps) {
-  return agent(
-    [
-      FRAME,
-      '',
-      `Update the next batch sheet \`${nextSheet}\` per the questions and audit gaps below, one Edit per spot, its \`## Cycles\` block included. The review ran beside the audit: check each name, path and signature against the current code, audit fixes included.`,
-      '- Major: mechanical staleness (name, path, signature changed by batch ' + batch + '), apply the delivered value.',
-      `- Blocking: settled by the cited source; rewrite the design of the sheet per that source and \`answer\`. A change of scope or of an RM/CU gets one line under \`## Decisions\`: the answer and its source, marked \`${USER}\` when the source is \`${USER}\`, \`${TO_REVIEW}\` otherwise. No \`Hn\`: the run lists every other answer for the user review.`,
-      `- Audit gap of batch ${batch}: apply it to the next sheet only where that sheet repeats the rejected choice.`,
-      `Last: \`${indexCommand(nextSheet)}\` until exit 0, fixing what it lists in the block; exit 2 (no block) → nothing to fix there.`,
-      '',
-      questions.map(q => `- ${q.severity} — ${q.question} — ${q.evidence} — source: ${q.decidedBy || '—'} — answer: ${q.answer}`).join('\n'),
-      ...gaps.map(g => `- Audit gap ${g.severity} — ${g.axis} — ${g.gap} — fix: ${g.fix}`),
-    ].join('\n'),
-    { schema: OK, phase: 'Review', label: 'next sheet', effort: questions.some(q => q.severity === 'Blocking') ? 'medium' : 'low' },
-  ).catch(() => null)
-}
-
-const nextIsPartner = !!partner && !!nextSheet && partner.split('/').pop() === nextSheet.split('/').pop()
-if (nextIsPartner) {
-  log(`next batch review skipped — ${nextSheet} runs beside this batch`)
-} else if (nextSheet && (!light || history.closing.review)) {
-  reviewing = reviewNext('next batch review')
-} else if (nextSheet) {
-  log(`next batch review skipped — ${history.closing.reviewWhy || 'light closing'}`)
-}
-
 // One line per cycle for the fix brief: its id, its behaviour, the files its RED and GREEN reported.
 function cycleFiles() {
   return (lotIndex?.cycles ?? []).map(c => {
@@ -1053,7 +1001,7 @@ function lightReview(retry, again = false) {
     [
       FRAME,
       '',
-      `Light review of batch ${batch} (closing level light: ${history.closing.reasons.length ? history.closing.reasons.join(' ; ') : 'no file on authorisation, migration or public contract, no ripple, few production files'}). Two axes only, Correctness and Scope.`,
+      `Light review of batch ${batch} (closing level light: ${history.closing.reasons.length ? history.closing.reasons.join(' ; ') : 'no file on authorisation, migration or public contract'}). Two axes only, Correctness and Scope.`,
       `Read in \`<kit>/skills/verify-ddd-tdd/SKILL.md\`, by range: the Correctness and Scope rows of the §2 table, the bug-class paragraph under it, § Severities and § Verdict. Nothing else of the skill: no coverage table, no other axis, no validation run — the suites are green (${history.suites.suites.map(x => `${x.name} exit ${x.exit}, ${x.scope}`).join('; ')}).`,
       retry
         ? `Mode resume: the Blocking gaps below were fixed. Read only the files the fix declared — ${list(retry.fix.files)}, diff from \`git diff -- <these files>\` — and judge each gap closed or not, plus Scope on those files. Gaps:\n${retry.verdict.gaps.filter(g => g.severity !== 'Minor').map(e => `| ${e.severity} | ${e.axis} | ${e.gap} | ${e.evidence} | ${e.closure} | ${e.fix} |`).join('\n')}`
@@ -1116,25 +1064,6 @@ else {
         }
       }
     }
-  }
-}
-
-// The next sheet's review: every answer applied and listed for review, `humanOnly` included; a Blocking
-// question with neither source nor answer is `unanswered`, which run-plan turns into the next batch set aside.
-if (reviewing) {
-  phase('Review')
-  const review = await reviewing
-  reviewing = null
-  history.review = review
-  const questions = review ? review.questions : []
-  const unanswered = questions.filter(q => q.severity === 'Blocking' && !q.decidedBy.trim() && !q.answer.trim())
-  const applied = questions.filter(q => !unanswered.includes(q)).map(q => (q.decidedBy.trim() ? q : { ...q, decidedBy: REVIEWER }))
-  for (const q of applied.filter(q => q.decidedBy === REVIEWER)) toReview(`Review ${nextSheet}`, `${q.humanOnly ? 'human-only question, answered by the reviewer: ' : ''}${q.question} → ${q.answer}`, q.evidence)
-  const carried = history.verdicts.flatMap(v => v.gaps).filter(g => g.severity !== 'Minor')
-  if (applied.length || carried.length) await amendNext(applied, carried)
-  if (unanswered.length) {
-    const result = await finish(DONE, '—', verdict)
-    return { ...result, unanswered: `${nextSheet} — ${unanswered.length} Blocking question(s) without answer` }
   }
 }
 

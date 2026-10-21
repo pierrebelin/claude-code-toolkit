@@ -310,17 +310,6 @@ async function sealed(b, entry, at = null) {
   return s
 }
 
-async function unansweredOf(result) {
-  const unansweredBatch = result.unanswered && (/-(F\d+)\.md\b/.exec(result.unanswered) || [])[1]
-  if (unansweredBatch) {
-    aside.push({ batch: unansweredBatch, reason: `review questions without answer — ${result.unanswered}`, patch: null, report: null })
-    await journal(`${unansweredBatch} ⏸ — set aside, questions without answer`)
-  } else if (result.unanswered) {
-    stop = `next batch without answer — ${result.unanswered}`
-    await journal(`⏸ — ${stop}`)
-  }
-}
-
 // The batch that may run beside `b`, or null: the second of `plan-next-batch --parallel` when its first is `b`.
 async function partnerOf(b) {
   const skip = aside.length ? ` --skip ${aside.map(x => x.batch).join(',')}` : ''
@@ -406,8 +395,8 @@ async function runPair(b, p, at) {
   await journal(`${b.batch} ∥ ${p.batch} — run together, ${p.batch} in worktree ${at}`)
   const failed = e => ({ status: BLOCKED, reason: `run-lot failed: ${e.message}`, report: null })
   const [ra, rb] = await Promise.all([
-    workflow('cctoolkit:run-lot', { sheet: slashed(b.sheet), commit: false, partner: slashed(p.sheet), lock: true }).catch(failed),
-    workflow('cctoolkit:run-lot', { sheet: inTree(p.sheet, at), commit: false, root: at, run: runRoot, partner: slashed(b.sheet), lock: true }).catch(failed),
+    workflow('cctoolkit:run-lot', { sheet: slashed(b.sheet), commit: false, lock: true }).catch(failed),
+    workflow('cctoolkit:run-lot', { sheet: inTree(p.sheet, at), commit: false, root: at, run: runRoot, lock: true }).catch(failed),
   ])
   const ea = record(b, ra, p.batch)
   const eb = record(p, rb, b.batch)
@@ -420,8 +409,6 @@ async function runPair(b, p, at) {
   else await landed(p, rb, eb, at)
   await treeCall(`remove ${p.batch}`, [`One call: \`cctoolkit batch-worktree remove ${p.batch}\`. \`ok\` = exit 0, \`detail\` = its output.`])
   if (halt || stop) return true
-  await unansweredOf(ra)
-  await unansweredOf(rb)
   return !!stop
 }
 
@@ -462,7 +449,6 @@ while (!stop) {
     if (await putAside(b, result, entry, failure)) break
   } else await sealed(b, entry)
 
-  await unansweredOf(result)
 }
 
 for (const x of aside) {

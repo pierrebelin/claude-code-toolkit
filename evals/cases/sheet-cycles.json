@@ -379,11 +379,11 @@
       }
     },
     {
-      "name": "--index plans a full closing when the block forces it and a cycle carries a ripple; the contract prints the cycle's models first",
+      "name": "--index plans a full closing when the block forces it, a cycle's ripple adding no reason; the contract prints the cycle's models first",
       "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/forced.md --index --root {{FIX}}/sc | jq -r '.closing.level, (.closing.reasons | join(\" ; \"))' | tr '\n' '|' && python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/forced.md --cycle C1 --red --root {{FIX}}/sc | sed -n 3p",
       "expect": {
         "exit": 0,
-        "stdout": "full|sheet: `closing` set to full ; signature ripple in C1|Model on (existing analogues — read first, copy their shape, never search for others): src/P/H.cs — same handler shape"
+        "stdout": "full|sheet: `closing` set to full|Model on (existing analogues — read first, copy their shape, never search for others): src/P/H.cs — same handler shape"
       }
     },
     {
@@ -395,11 +395,11 @@
       }
     },
     {
-      "name": "--index plans a light closing when the block asks for it: its ripple and production cap lifted",
+      "name": "--index plans a light closing when the block asks for it: its production cap lifted",
       "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/asklight.md --index --root {{FIX}}/sc | jq -r '.closing.level, (.closing.reasons | join(\" ; \"))' | tr '\n' '|'",
       "expect": {
         "exit": 0,
-        "stdout": "light|sheet: `closing` set to light (production cap and ripple lifted)|"
+        "stdout": "light|sheet: `closing` set to light (production cap lifted)|"
       }
     },
     {

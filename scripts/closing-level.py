@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """cctoolkit closing-level — the run-lot closing of a batch, `full` or `light`, from its diff.
 
-    cctoolkit closing-level <sheet> <work> [--next <next sheet>] [--record] [--batch FX] [--root DIR]
+    cctoolkit closing-level <sheet> <work> [--record] [--batch FX] [--root DIR]
 
 The files are the batch diff (`cctoolkit batch-baseline diff <work> FX --name-only`), each
 added, modified or deleted against HEAD; the rules and the cap are `closing` of
-kit.config.json, the ripples and a forced `closing` the sheet's `## Cycles` block
-(lib/closing_level.py). `--next`: whether the next batch needs the review of its sheet — it
-does when that sheet names a production type this batch modified or deleted.
+kit.config.json, a forced `closing` the sheet's `## Cycles` block (lib/closing_level.py).
 `--record`: the result is also appended to <work> as a `closing` line.
 
-Prints one JSON line: {"level", "reasons", "production", "review", "reviewWhy"}.
+Prints one JSON line: {"level", "reasons", "production"}.
 Exit 0; 2 on usage error, missing snapshot or unreadable kit.config.json.
 """
 import importlib.util
@@ -46,26 +44,10 @@ def batch_files(root, work, batch):
     return out
 
 
-def review_of(cfg, files, next_sheet):
-    """(review needed, why): the next sheet names a production type this batch modified or deleted."""
-    if not next_sheet:
-        return False, "no next batch"
-    try:
-        text = open(next_sheet, encoding="utf-8").read()
-    except OSError:
-        return True, f"next sheet unreadable: {next_sheet}"
-    changed = sorted({os.path.splitext(os.path.basename(p))[0] for p, ch in files
-                      if ch in "MD" and closing_level.production(cfg, p)})
-    named = [t for t in changed if re.search(rf"\b{re.escape(t)}\b", text)]
-    if named:
-        return True, f"the next sheet names types this batch changed: {', '.join(named[:5])}"
-    return False, "the next sheet names no type this batch changed"
-
-
 def main(argv):
     args = [a for a in argv[1:]]
     opt = {}
-    for key in ("--next", "--batch", "--root"):
+    for key in ("--batch", "--root"):
         if key in args:
             i = args.index(key)
             if i + 1 >= len(args):
@@ -89,14 +71,12 @@ def main(argv):
         print(f"kit.config.json: {e} — cctoolkit doctor", file=sys.stderr)
         return 2
     data, _ = sc.load(sheet) if os.path.isfile(sheet) else (None, [])
-    cycles = data["cycles"] if data else []
     try:
         files = batch_files(root, work, batch)
     except SystemExit as e:
         print(str(e), file=sys.stderr)
         return 2
-    result = closing_level.decide(cfg, files, cycles, (data or {}).get("closing", ""))
-    result["review"], result["reviewWhy"] = review_of(cfg, files, opt.get("--next", ""))
+    result = closing_level.decide(cfg, files, (data or {}).get("closing", ""))
     if record:
         work_file.append(work, {"kind": "closing", "batch": batch, "level": result["level"], "reasons": result["reasons"]})
     print(json.dumps(result, ensure_ascii=False))

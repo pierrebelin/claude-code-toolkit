@@ -5,16 +5,16 @@
   - the block forces it (`"closing": "full"` beside `cycles`);
   - a file matches a rule of `closing.full` in kit.config.json (authorisation, migration, public
     contract…) for a change kind the rule names (`A` added, `M` modified, `D` deleted) — never lifted;
-  - more production files than `closing.maxProductionFiles`, or a cycle carrying a signature ripple —
-    both lifted when the block asks for `"closing": "light"`.
-`light` otherwise. Read by `scripts/sheet-cycles.py --index` (the files the block plans) and
-`scripts/closing-level.py` (the files the batch diff holds); run-lot reads the result.
+  - more production files than `closing.maxProductionFiles` (0 in every preset: no cap) — lifted when
+    the block asks for `"closing": "light"`.
+`light` otherwise, a signature ripple included. Read by `scripts/sheet-cycles.py --index` (the files the
+block plans) and `scripts/closing-level.py` (the files the batch diff holds); run-lot reads the result.
 """
 import os
 import re
 
 FORCED = "full"
-# Asked by the sheet: lifts the production cap and the ripple, never a rule of `closing.full`.
+# Asked by the sheet: lifts the production cap, never a rule of `closing.full`.
 ASKED_LIGHT = "light"
 
 
@@ -29,8 +29,8 @@ def _shown(paths, n=3):
     return ", ".join(f"`{p}`" for p in paths[:n]) + (f" and {len(paths) - n} more" if len(paths) > n else "")
 
 
-def decide(cfg, files, cycles, forced=""):
-    """files = [(repo-relative path, change kind A|M|D)]; cycles = the block's cycles.
+def decide(cfg, files, forced=""):
+    """files = [(repo-relative path, change kind A|M|D)].
     -> {"level": "full"|"light", "reasons": [...], "production": n}."""
     rules = cfg.closing
     reasons = []
@@ -46,16 +46,13 @@ def decide(cfg, files, cycles, forced=""):
     prod = sorted({p for p, _ in files if production(cfg, p)})
     if forced == ASKED_LIGHT:
         if not reasons:
-            return {"level": "light", "reasons": ["sheet: `closing` set to light (production cap and ripple lifted)"],
+            return {"level": "light", "reasons": ["sheet: `closing` set to light (production cap lifted)"],
                     "production": len(prod)}
         reasons.append("sheet: `closing` set to light, refused — a rule above is never lifted")
         return {"level": "full", "reasons": reasons, "production": len(prod)}
     limit = rules.get("maxProductionFiles", 0)
     if limit and len(prod) > limit:
         reasons.append(f"{len(prod)} production files, more than {limit}")
-    rippled = [str(c.get("id", "?")) for c in cycles if isinstance(c, dict) and c.get("ripple")]
-    if rippled:
-        reasons.append(f"signature ripple in {', '.join(rippled)}")
     return {"level": "full" if reasons else "light", "reasons": reasons, "production": len(prod)}
 
 

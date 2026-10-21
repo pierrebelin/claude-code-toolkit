@@ -1200,19 +1200,35 @@ export const cycleProgressOf = (cycle: SheetCycle, saved: string | null): SheetC
   return { ...cycle, state: isGreen || needsNoGreen ? 'done' : 'red', unreachable }
 }
 
+// Since 2.6.0 one agent runs a whole cycle, labelled `RED <id> w<wave> … +GREEN`: it writes the cycle's RED
+// state once its checkpoint passes, so a RED state under that agent still running means it is at GREEN.
+const BOTH_STAGES = / \+GREEN(?: (?:haiku|sonnet|opus))?$/i
+
 export const withLiveCycles = (sheet: Sheet, agents: WorkflowAgent[]): Sheet => {
   if (sheet.cycles === undefined) return sheet
   const running = agents.filter(agent => agent.state === 'running').map(agent => agent.label)
-  const isRunning = (phase: string, id: string) => running.some(label => label.startsWith(`${phase} ${id} `))
-  const cycles = sheet.cycles.map((one): SheetCycle =>
-    isRunning('RED', one.id)
-      ? { ...one, state: 'pending', live: 'RED' }
-      : isRunning('GREEN', one.id)
-        ? { ...one, state: one.state === 'done' ? 'red' : one.state, live: 'GREEN' }
-        : one,
-  )
+  const runningAs = (phase: string, id: string) => running.find(label => label.startsWith(`${phase} ${id} `))
+  const cycles = sheet.cycles.map((one): SheetCycle => {
+    const red = runningAs('RED', one.id)
+    if (red !== undefined && BOTH_STAGES.test(red) && one.state !== 'pending') return { ...one, state: 'red', live: 'GREEN' }
+    if (red !== undefined) return { ...one, state: 'pending', live: 'RED' }
+    return runningAs('GREEN', one.id) === undefined ? one : { ...one, state: one.state === 'done' ? 'red' : one.state, live: 'GREEN' }
+  })
   return { ...sheet, cycles }
 }
+
+// A cycle agent shows the stage it is at, `RED` or `GREEN`, its `+GREEN` dropped: the phase title names both.
+export const stageLabelOf = (agent: WorkflowAgent, sheet: Sheet | null): string => {
+  if (!BOTH_STAGES.test(agent.label)) return agent.label
+  const label = agent.label.replace(BOTH_STAGES, '')
+  const id = /^RED (\S+) /.exec(label)?.[1]
+  const isGreen = agent.state === 'running' && sheet?.cycles?.find(one => one.id === id)?.live === 'GREEN'
+  return isGreen ? label.replace(/^RED /, 'GREEN ') : label
+}
+
+// The RED phase of a run-lot without a GREEN phase holds both stages of each cycle.
+export const phaseTitleOf = (run: WorkflowRun, title: string): string =>
+  title === 'RED' && !run.phases.includes('GREEN') ? 'RED · GREEN' : title
 
 export const isSheetDone = (sheet: Sheet): boolean =>
   sheet.isDone || (sheet.cycles !== undefined && sheet.cycles.every(one => one.state === 'done'))
@@ -4310,7 +4326,7 @@ export const register: Register = on => {
                       ? staged(agent.state === 'running' ? 'running' : 'done', { color: isDesktop ? labelColor : undefined }, labelColor)
                       : { color: 'inactive', dimColor: true })}
                   >
-                    {fit(agent.label, labelWidth)}
+                    {fit(stageLabelOf(agent, sheet), labelWidth)}
                   </Text>,
                   ...(retry !== '' ? [<Text key="retry" color="warning">{retry}</Text>] : []),
                 ],
@@ -4383,7 +4399,8 @@ export const register: Register = on => {
     const phaseRow = (phase: PhaseRow) => {
       const hasAgents = phase.agents.length > 0
       const isToggled = hasAgents || phase.earlier.length > 0
-      const room = columns - 4 - phase.title.length - (hasAgents ? figuresWidth : 0)
+      const title = phaseTitleOf(current, phase.title)
+      const room = columns - 4 - title.length - (hasAgents ? figuresWidth : 0)
       const attempts = attemptsOf(phase.agents)
       return (
         <Box key={`phase-${phase.title}`} flexDirection="column" {...(isDesktop ? { gap: 'xs' as const, marginTop: 'xs' as const, ...(phase.mark === 'running' ? { backgroundColor: washOf('claude'), ...BLEED } : {}) } : {})}>
@@ -4410,7 +4427,7 @@ export const register: Register = on => {
                       { bold: phase.mark === 'running', color: phase.mark === 'pending' ? 'inactive' : undefined },
                     )}
                   >
-                    {phase.title}
+                    {title}
                   </Text>,
                 ],
               )}
