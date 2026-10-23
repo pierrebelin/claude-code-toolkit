@@ -4,6 +4,12 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.8.2 — 2026-10-23
+
+2.8.1 was tagged but never released: its CI was red. 2.8.2 carries all of 2.8.1, the notes below it apply.
+
+- `cctoolkit`: `cctoolkit evals` is green on Ubuntu 26 again, whose Rust `coreutils` count `cut -c` in characters where GNU counted bytes. A `pre-audit` case cut a line holding `·` and `—` at 70 and got 3 characters more. The cases now cut with `cut -b`, bytes on both.
+
 ## 2.8.1 — 2026-10-23
 
 - `cctoolkit`: the graph autosync (`Stop` hook) finds `graphify` on the PATH. It only tried `~/.local/bin/graphify` unless `GRAPHIFY_BIN` was set, so a `pip` install on Windows (`Python3xx/Scripts`) was skipped on every Stop and the graph never resynced. It now tries `GRAPHIFY_BIN`, then the PATH, then `~/.local/bin`. When none holds it, `/tmp/graphify-hook.log` says `ALERT graphify not found (…)` instead of a silent skip.

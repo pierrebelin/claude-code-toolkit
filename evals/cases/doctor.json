@@ -82,7 +82,7 @@
     },
     {
       "name": "tooling lines over the opt-in budget print a NOTE, never a FAIL",
-      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude/rules\nprintf 'a\\nb\\nc\\n' > $R/.claude/rules/x.md\nbash {{KIT}}/tools/doctor --quiet | grep -E '^(NOTE tooling budget|FAIL tooling)' | cut -c1-20",
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude/rules\nprintf 'a\\nb\\nc\\n' > $R/.claude/rules/x.md\nbash {{KIT}}/tools/doctor --quiet | grep -E '^(NOTE tooling budget|FAIL tooling)' | cut -b1-20",
       "env": {
         "CLAUDE_DOCTOR_ROOT": "{{FIX}}/doc-{{SID}}",
         "CLAUDE_DOCTOR_BUDGET_LINES": "1"

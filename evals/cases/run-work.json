@@ -52,7 +52,7 @@
     },
     {
       "name": "purge: a batch DONE in the plan without its report (run cut) is done, its older aside patch removed, an empty run folder removed",
-      "cmd": "R={{FIX}}/rw-cut-{{SID}}/run; rm -rf $(dirname $R); mkdir -p $R/2026-10-13-0835 $R/2026-10-13-0826 && printf 'p\\n' > $R/2026-10-13-0826/aside-F7.patch && printf 'x\\n' > $R/2026-10-13-0826/TO-VALIDATE.md && sleep 1 && printf '# P\\n\\n### Lot F7 — Core — ✅ DONE (2026-10-13)\\n' > $(dirname $R)/P-PLAN.md && printf '{\"kind\": \"cycle\", \"batch\": \"F7\", \"slug\": \"s\", \"state\": {}, \"at\": 1}\\n{\"kind\": \"preexisting\", \"batch\": \"F7\", \"files\": {}, \"at\": 1}\\n' > $R/.work.jsonl && python3 {{KIT}}/scripts/run-work.py purge $R >/dev/null && echo \"$(ls -A $R | tr '\\n' ' ')|$(ls $R/2026-10-13-0826 | tr '\\n' ' ')|$(cut -c1-30 $R/.work.jsonl)\"",
+      "cmd": "R={{FIX}}/rw-cut-{{SID}}/run; rm -rf $(dirname $R); mkdir -p $R/2026-10-13-0835 $R/2026-10-13-0826 && printf 'p\\n' > $R/2026-10-13-0826/aside-F7.patch && printf 'x\\n' > $R/2026-10-13-0826/TO-VALIDATE.md && sleep 1 && printf '# P\\n\\n### Lot F7 — Core — ✅ DONE (2026-10-13)\\n' > $(dirname $R)/P-PLAN.md && printf '{\"kind\": \"cycle\", \"batch\": \"F7\", \"slug\": \"s\", \"state\": {}, \"at\": 1}\\n{\"kind\": \"preexisting\", \"batch\": \"F7\", \"files\": {}, \"at\": 1}\\n' > $R/.work.jsonl && python3 {{KIT}}/scripts/run-work.py purge $R >/dev/null && echo \"$(ls -A $R | tr '\\n' ' ')|$(ls $R/2026-10-13-0826 | tr '\\n' ' ')|$(cut -b1-30 $R/.work.jsonl)\"",
       "expect": {
         "exit": 0,
         "stdout": ".work.jsonl 2026-10-13-0826 |TO-VALIDATE.md |{\"kind\":\"cycle\",\"batch\":\"F7\""
