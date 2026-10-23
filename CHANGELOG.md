@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.8.3 — 2026-10-23
+
+- `knowledge-pane`, `run-lot-pane`: the pane opens at its widest, 45 % of the terminal (Claude Code's ceiling for a docked pane, which no mod can raise). `run-lot-pane` asked for 100 columns and `knowledge-pane` for nothing (the dock's default share). A width you drag the pane to still wins.
+
 ## 2.8.2 — 2026-10-23
 
 2.8.1 was tagged but never released: its CI was red. 2.8.2 carries all of 2.8.1, the notes below it apply.

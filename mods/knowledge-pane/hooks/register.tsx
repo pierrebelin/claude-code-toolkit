@@ -25,6 +25,8 @@ import type {
 
 const PANE = 'knowledge-pane'
 const TITLE = 'Knowledge'
+// Wider than any terminal: the dock opens at its ceiling, 45 % of the terminal's columns.
+const PANE_COLUMNS = 1000
 const SPEC_TITLE = 'Spec'
 const TICK_MS = 3_000
 const DEFAULT_ROOT = 'docs/business'
@@ -1067,7 +1069,7 @@ async function closePane($: EngineInterface): Promise<void> {
 }
 
 async function openPane($: EngineInterface): Promise<void> {
-  const opened = await $.ui.open({ id: PANE, title: TITLE }).catch(() => null)
+  const opened = await $.ui.open({ id: PANE, title: TITLE, columns: PANE_COLUMNS }).catch(() => null)
   if (opened?.isPlaced) await update($, isShown, () => true)
 }
 

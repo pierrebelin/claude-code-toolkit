@@ -32,7 +32,8 @@ const DONE = '✅'
 const COUNT_WIDTH = 6
 const TIME_WIDTH = 7
 const TOKENS_WIDTH = 7
-const PANE_COLUMNS = 100
+// Wider than any terminal: the dock opens at its ceiling, 45 % of the terminal's columns.
+const PANE_COLUMNS = 1000
 const MODEL_WIDTH = 14
 const rule = (cells: number): string => '─'.repeat(Math.max(0, cells))
 const WIDE_COLUMNS = 56
