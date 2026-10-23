@@ -15,6 +15,16 @@
       "name": "a missing graph is an alert, never a rebuild",
       "cmd": "d={{FIX}}/autosync-{{SID}}; mkdir -p $d/src $d/bin; echo 'class A {}' > $d/src/A.cs; printf '#!/bin/bash\\necho never\\n' > $d/bin/graphify; chmod +x $d/bin/graphify; printf '{\"session_id\":\"{{SID}}\"}' | GRAPHIFY_REPO=$d GRAPHIFY_BIN=$d/bin/graphify GRAPHIFY_HOOK_LOG=/tmp/claude-autosync-log-{{SID}} GRAPHIFY_AUTOSYNC_LOCK=/tmp/claude-autosync-lock-{{SID}} bash {{KIT}}/hooks/graphify-autosync.sh; tail -1 /tmp/claude-autosync-log-{{SID}}",
       "expect": {"exit": 0, "stdout": "graph.json missing"}
+    },
+    {
+      "name": "graphify on the PATH only, GRAPHIFY_BIN unset: the rebuild runs",
+      "cmd": "d={{FIX}}/autosync-{{SID}}; mkdir -p $d/graphify-out $d/src $d/bin $d/home; printf '{}' > $d/graphify-out/graph.json; touch -t 202001010000 $d/graphify-out/graph.json; echo 'class A {}' > $d/src/A.cs; printf '#!/bin/bash\ntouch \"$2/graphify-out/graph.json\"\necho updated\n' > $d/bin/graphify; chmod +x $d/bin/graphify; P=$(printf '%s' \"$PATH\" | tr ':' '\n' | while IFS= read -r x; do [ -e \"$x/graphify\" ] || [ -e \"$x/graphify.exe\" ] || printf '%s:' \"$x\"; done); unset GRAPHIFY_BIN; printf '{\"session_id\":\"{{SID}}\"}' | HOME=$d/home PATH=\"$d/bin:$P\" GRAPHIFY_REPO=$d GRAPHIFY_HOOK_LOG=/tmp/claude-autosync-log-{{SID}} GRAPHIFY_AUTOSYNC_LOCK=/tmp/claude-autosync-lock-{{SID}} bash {{KIT}}/hooks/graphify-autosync.sh; sleep 3; grep -c 'update OK' /tmp/claude-autosync-log-{{SID}}",
+      "expect": {"exit": 0, "stdout": "1"}
+    },
+    {
+      "name": "graphify nowhere: an alert naming what was tried, exit 0",
+      "cmd": "d={{FIX}}/autosync-{{SID}}; mkdir -p $d/graphify-out $d/src $d/home; printf '{}' > $d/graphify-out/graph.json; touch -t 202001010000 $d/graphify-out/graph.json; echo 'class A {}' > $d/src/A.cs; P=$(printf '%s' \"$PATH\" | tr ':' '\n' | while IFS= read -r x; do [ -e \"$x/graphify\" ] || [ -e \"$x/graphify.exe\" ] || printf '%s:' \"$x\"; done); unset GRAPHIFY_BIN; printf '{\"session_id\":\"{{SID}}\"}' | HOME=$d/home PATH=\"$P\" GRAPHIFY_REPO=$d GRAPHIFY_HOOK_LOG=/tmp/claude-autosync-log-{{SID}} GRAPHIFY_AUTOSYNC_LOCK=/tmp/claude-autosync-lock-{{SID}} bash {{KIT}}/hooks/graphify-autosync.sh; tail -1 /tmp/claude-autosync-log-{{SID}}",
+      "expect": {"exit": 0, "stdout": "ALERT graphify not found (GRAPHIFY_BIN unset, not on PATH, not in ~/.local/bin)"}
     }
   ]
 }

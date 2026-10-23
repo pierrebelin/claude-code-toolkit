@@ -4,14 +4,15 @@
 # rebuild re-executes this script detached (`--sync`) under a mkdir lock.
 # A write is proven by graph.json's mtime: `graphify update` exits 0 without writing.
 # A node-shrink refusal is replayed with --force when the extraction is complete and
-# the drop is ≤ MAX_SHRINK_PCT. GRAPHIFY_BIN, GRAPHIFY_HOOK_LOG, GRAPHIFY_AUTOSYNC_LOCK: evals.
+# the drop is ≤ MAX_SHRINK_PCT. The binary: lib/graphify-bin.sh (GRAPHIFY_BIN, PATH,
+# ~/.local/bin). GRAPHIFY_HOOK_LOG, GRAPHIFY_AUTOSYNC_LOCK: evals.
 
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 
 # Repo resolved by lib/project-root.sh, never hardcoded.
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/project-root.sh"
 REPO="${GRAPHIFY_REPO:-$PROJECT_ROOT}"
-GRAPHIFY="${GRAPHIFY_BIN:-$HOME/.local/bin/graphify}"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/graphify-bin.sh"
 GRAPH="$REPO/graphify-out/graph.json"
 # The helper sits beside this script, never under $REPO (GRAPHIFY_REPO may point elsewhere).
 FRESHNESS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/graphify-freshness.sh"
@@ -29,7 +30,7 @@ fi
 say() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1 (session=$SID)" >> "$LOG"; }
 mtime() { stat -c %Y "$GRAPH" 2>/dev/null || stat -f %m "$GRAPH" 2>/dev/null || echo 0; }
 
-[ -x "$GRAPHIFY" ] || { say "graphify not found, skip"; exit 0; }
+graphify_bin GRAPHIFY || { say "ALERT $GRAPHIFY_NOT_FOUND"; exit 0; }
 
 STALE=$("$FRESHNESS" --refresh 2>/dev/null)
 case "$STALE" in

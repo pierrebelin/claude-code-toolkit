@@ -4,6 +4,11 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.8.1 — 2026-10-23
+
+- `cctoolkit`: the graph autosync (`Stop` hook) finds `graphify` on the PATH. It only tried `~/.local/bin/graphify` unless `GRAPHIFY_BIN` was set, so a `pip` install on Windows (`Python3xx/Scripts`) was skipped on every Stop and the graph never resynced. It now tries `GRAPHIFY_BIN`, then the PATH, then `~/.local/bin`. When none holds it, `/tmp/graphify-hook.log` says `ALERT graphify not found (…)` instead of a silent skip.
+- `cctoolkit`: `cctoolkit doctor` checks `graphify` the way the hook resolves it, and names the cause when the graph is behind: `FAIL binary graphify` with what was tried, the `graphify graph` warning pointing at it, and a `graphify autosync` warning when the hook's last run found no `graphify` while your shell does (set `GRAPHIFY_BIN` in the `env` of `.claude/settings.local.json`).
+
 ## 2.8.0 — 2026-10-21
 
 - `cctoolkit`: a batch closes `light` unless it touches authorisation, a migration, a public contract or an approved snapshot (the `closing.full` rules of `kit.config.json`). A cycle carrying a signature ripple no longer makes it full, and the presets drop their cap of 12 production files (`closing.maxProductionFiles` is now `0`, no cap; a repo can still set one). The full audit runs on `sonnet` instead of `opus`. On a measured run, the audit phase took about 30 minutes of a 69-minute active batch.

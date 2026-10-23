@@ -65,7 +65,10 @@ if command -v rtk >/dev/null 2>&1; then
 else
   report FAIL "rtk" "not on PATH — rewrite-rtk.sh has nothing to call"
 fi
-command -v graphify >/dev/null 2>&1 && report ok "binary graphify" "$(command -v graphify)" || report FAIL "binary graphify" "not on PATH — the graph autosync is dead (INSTALL.md of the kit)"
+# Resolved as the Stop hook resolves it: a binary the hook cannot reach never resyncs the graph.
+. "$HERE/../lib/graphify-bin.sh"
+if graphify_bin GRAPHIFY; then report ok "binary graphify" "$GRAPHIFY"
+else report FAIL "binary graphify" "$GRAPHIFY_NOT_FOUND — the Stop hook never resyncs the graph: install it or set GRAPHIFY_BIN (INSTALL.md of the kit)"; fi
 command -v ast-grep >/dev/null 2>&1 || command -v sg >/dev/null 2>&1 && report ok "binary ast-grep" || report WARN "binary ast-grep" "cctoolkit access-cost exits 3, COST stated by hand; structural search unavailable (brew install ast-grep)"
 
 # --- plugin registration and hook wiring ----------------------------------------
@@ -172,12 +175,17 @@ if [ -f "$GRAPH" ]; then
     case "$lag" in
       0) report ok "graphify graph" "up to date ($(date -r "$GRAPH" '+%Y-%m-%d %H:%M'))" ;;
       ''|*[!0-9]*) report WARN "graphify graph" "freshness unknown" ;;
-      *) report WARN "graphify graph" "$lag source(s) newer than graph.json — the Stop hook resyncs, or graphify update ." ;;
+      *) if [ -n "$GRAPHIFY" ]; then report WARN "graphify graph" "$lag source(s) newer than graph.json — the Stop hook resyncs, or graphify update ."
+         else report WARN "graphify graph" "$lag source(s) newer than graph.json — the Stop hook cannot resolve graphify (binary graphify above)"; fi ;;
     esac
   fi
   log=/tmp/graphify-hook.log
   if [ -f "$log" ] && tail -5 "$log" 2>/dev/null | grep -q 'ALERT update refused'; then
     report WARN "graphify autosync" "last run refused to overwrite a shrunken graph — graphify update . --force after a deleting refactor"
+  fi
+  # The hook runs under Claude Code's environment, which may lack the PATH entry this shell has.
+  if [ -n "$GRAPHIFY" ] && [ -f "$log" ] && tail -1 "$log" 2>/dev/null | grep -q 'ALERT graphify not found'; then
+    report WARN "graphify autosync" "the Stop hook's last run found no graphify, this shell finds $GRAPHIFY — set GRAPHIFY_BIN in the env of .claude/settings.local.json"
   fi
 else
   report FAIL "graphify graph" "graphify-out/graph.json absent — graphify update ."
