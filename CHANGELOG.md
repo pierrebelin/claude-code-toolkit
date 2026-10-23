@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.8.4 — 2026-10-23
+
+- `run-lot-pane`: a resumed plan shows its total time next to this run's: `12m03 · total 48m10` adds the time of the batches an earlier run finished (the figures already shown on their rows). A batch run again in this run counts once.
+
 ## 2.8.3 — 2026-10-23
 
 - `knowledge-pane`, `run-lot-pane`: the pane opens at its widest, 45 % of the terminal (Claude Code's ceiling for a docked pane, which no mod can raise). `run-lot-pane` asked for 100 columns and `knowledge-pane` for nothing (the dock's default share). A width you drag the pane to still wins.

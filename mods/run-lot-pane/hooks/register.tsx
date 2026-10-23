@@ -223,6 +223,10 @@ export const lotFiguresOf = (agents: WorkflowAgent[]): LotFigures | null => {
   return { agents: agents.length, durationMs: endedAt - startedAt, tokens: totals.tokens, endedAt }
 }
 
+// A resumed plan: the time its batches finished by an earlier run took, this run's time excluded.
+export const earlierMsOf = (run: WorkflowRun): number =>
+  run.lots.reduce((sum, entry) => (entry.past && !run.agents.some(agent => agent.lot === entry.lot) ? sum + entry.past.durationMs : sum), 0)
+
 export const lotFiguresFrom = (value: unknown): LotFigures | null => {
   if (typeof value !== 'object' || value === null) return null
   const fields = value as Record<string, unknown>
@@ -4188,7 +4192,7 @@ export const register: Register = on => {
     )
 
     // The plan view and the batch view open alike: the header, the headline with the time and the count done, the progress bar.
-    const statusLine = (run: WorkflowRun, headline: ReturnType<typeof headlineOf>, tally: (string | number)[], pass: JSX.Element | false = false, eta: JSX.Element | false = false) => (
+    const statusLine = (run: WorkflowRun, headline: ReturnType<typeof headlineOf>, tally: (string | number)[], pass: JSX.Element | false = false, eta: JSX.Element | false = false, earlierMs = 0) => (
       <Text wrap="truncate-end">
         {'  '}
         <Text bold color={headline.tone}>
@@ -4199,6 +4203,7 @@ export const register: Register = on => {
           {'   '}
           {duration(run.durationMs ?? at - run.startedAt)}
         </Text>
+        {earlierMs > 0 && <Text color="inactive">{` · total ${duration((run.durationMs ?? at - run.startedAt) + earlierMs)}`}</Text>}
         <Text color="inactive">
           {'   '}
           {tally}
@@ -4597,7 +4602,7 @@ export const register: Register = on => {
           {viewHeader(planRun.name, [
             code !== null && <Text key="header-code" color="inactive"> · {code}</Text>,
           ])}
-          {statusLine(planRun, planHeadline, [finished, '/', states.length, ' batches'])}
+          {statusLine(planRun, planHeadline, [finished, '/', states.length, ' batches'], false, false, earlierMsOf(planRun))}
           {progressRow(finished, states.length, planHeadline.tone)}
           {lotBar}
           {bannerRow}

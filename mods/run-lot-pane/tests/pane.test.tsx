@@ -4,7 +4,7 @@ import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput, TurnStepChunk,
 
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
-  figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, stageLabelOf, phaseTitleOf, parseCycles,
+  earlierMsOf, figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, stageLabelOf, phaseTitleOf, parseCycles,
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, relativePath, samePath, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
@@ -1230,6 +1230,17 @@ describe('batch plan through run-plan', () => {
     expect(lotFiguresFrom({ agents: 3, durationMs: 9, tokens: 1, endedAt: 2 })).toEqual({ agents: 3, durationMs: 9, tokens: 1, endedAt: 2 })
     expect(lotFiguresFrom({ agents: '3' })).toBeNull()
     expect(lotFiguresFrom(undefined)).toBeNull()
+  })
+
+  test('resumed plan: the batches an earlier run finished add their time, a batch run again here counts once', () => {
+    const lot = (name: string, durationMs: number | null) => ({
+      lot: name, sheet: null, deps: [], isDone: true, outcome: null, audit: null, view: null,
+      ...(durationMs === null ? {} : { past: { agents: 2, durationMs, tokens: 10, endedAt: 1 } }),
+    })
+    const agent = { ...blankAgent('a', 0, 'a', 'Sonnet', 'x', 'p', 0), lot: 'F3' }
+    const run = { lots: [lot('F1', 60_000), lot('F2', null), lot('F3', 30_000), lot('F4', 120_000)], agents: [agent] } as unknown as WorkflowRun
+    expect(earlierMsOf(run)).toBe(180_000)
+    expect(earlierMsOf({ lots: [], agents: [] } as unknown as WorkflowRun)).toBe(0)
   })
 
   test('child call, plan as argument, batch read from the agent prompt', () => {
