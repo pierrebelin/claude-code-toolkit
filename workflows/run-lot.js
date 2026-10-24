@@ -200,7 +200,14 @@ function testWrites(tree, declared) {
 }
 
 const history = { cycles: [], suites: null, gate: null, verdicts: [], fixes: [], audit: null, toReview: [], closing: null }
-const toReview = (step, text, why = '') => history.toReview.push({ step, text, why })
+// `info`: decided alone, nothing for the user to do (a compile ripple, a choice of the smallest change,
+// a gap fixed): `## Decided alone` of the batch report, out of `## To validate`.
+const toReview = (step, text, why = '', info = false) => history.toReview.push({ step, text, why, ...(info ? { info: true } : {}) })
+// A test helper written to follow a signature (fixture, builder, double): never an assertion.
+const TEST_HELPER = /(^|[\/._-])(fixtures?|builders?|databuilders?|doubles?|mocks?|fakes?|stubs?)([\/._-]|$)|(Fixture|Builder|Mock|Fake|Stub|Double)s?\.[A-Za-z]+$/i
+const helperOnly = path => TEST_HELPER.test(path) && !/\.(verified|approved|received)\./i.test(path)
+// The prefix a cycle agent puts on a decision a user or a client of the product sees.
+const VISIBLE = /^visible:\s*/i
 const USER = 'user decision'
 
 // lib/tdd_scope.py writes this at the head of a BLOCKED diagnostic, from the tree it checks.
@@ -208,7 +215,7 @@ const RED_ON_STUB = 'RED on stub: '
 const COST_CLEAR = ['Infrastructure in loop or in-memory filter: none', 'Infrastructure en boucle ou filtre mémoire : aucun']
 
 // Nobody answers a run: an ambiguity is decided by the agent that meets it, listed for the review after the plan.
-const AMBIGUITY = `An ambiguity of the sheet or the contract → never stop on it: pick the option the spec, the rules, the handler \`CLAUDE.md\` or an earlier \`Hn\` favour, else the smallest one keeping every RM/CU; one line in \`decisions\` (question → choice → why). Never copy it into the sheet: the run lists it for the user review after the plan.`
+const AMBIGUITY = `An ambiguity of the sheet or the contract → never stop on it: pick the option the spec, the rules, the handler \`CLAUDE.md\` or an earlier \`Hn\` favour, else the smallest one keeping every RM/CU; one line in \`decisions\` (question → choice → why), opened by \`visible: \` when the choice changes what a user or a client of the product sees (a message, a response field, a status code, a rule kept or dropped) — the user validates those; the others are the run's log. A compile ripple, a stub shape or a parameter position is no decision: no line. Never copy it into the sheet.`
 
 const slug = text => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
 
@@ -391,7 +398,7 @@ async function runCycle(c, together = false) {
     if (!red) red = x.red
     const greenWhy = !x ? 'cycle agent without result' : needsGreen(c, red) ? checkGreen(x.green) : null
     if (!greenWhy) {
-      for (const d of x.decisions || []) toReview(`Cycle ${c.id}`, d)
+      for (const d of x.decisions || []) toReview(`Cycle ${c.id}`, d.replace(VISIBLE, ''), '', !VISIBLE.test(d))
       accepted(c, red, x.green || null)
       return null
     }
@@ -428,7 +435,7 @@ function accepted(c, red, green) {
     trace.green = noGreen('guard green at once, no GREEN')
     return
   }
-  for (const t of green.testsDiff || []) toReview(`GREEN ${c.behaviour}`, `test changed at GREEN: \`${t.path ?? t}\``, t.why || '')
+  for (const t of green.testsDiff || []) toReview(`GREEN ${c.behaviour}`, `test changed at GREEN: \`${t.path ?? t}\``, t.why || '', helperOnly(t.path ?? t))
   if (costFlagged(green)) trace.green = { ...green, flagged: [green.flagged, `${short(c.behaviour, 60)}: ${green.cost}`].filter(Boolean).join(' ; ') }
 }
 
@@ -456,6 +463,9 @@ const bullets = xs => (xs.length ? xs.map(x => `- ${cell(x)}`) : ['None.'])
 
 function renderReport(status, reason, verdict) {
   const cycles = history.cycles
+  const reviewLine = x => `- ${cell(x.step)} — ${cell(x.text)}${x.why ? ` (${cell(x.why)})` : ''}`
+  const toAct = history.toReview.filter(x => !x.info)
+  const logged = history.toReview.filter(x => x.info)
   const files = new Set([
     ...(lotIndex?.declaratives ?? []),
     ...cycles.flatMap(c => [...(c.red?.tests ?? []), ...(c.red?.stubs ?? []), ...(c.red?.productionDiff ?? []), ...(c.green?.production ?? []), ...(c.green?.testsDiff ?? []).map(t => t.path ?? t)]),
@@ -532,7 +542,11 @@ function renderReport(status, reason, verdict) {
       : ['No test written.', '']),
     '## To validate',
     '',
-    ...(history.toReview.length ? history.toReview.map(x => `- ${cell(x.step)} — ${cell(x.text)}${x.why ? ` (${cell(x.why)})` : ''}`) : ['None.']),
+    ...(toAct.length ? toAct.map(reviewLine) : ['None.']),
+    '',
+    '## Decided alone',
+    '',
+    ...(logged.length ? logged.map(reviewLine) : ['None.']),
     '',
     '## Audit gaps',
     '',
@@ -615,7 +629,7 @@ function designPrompt(target, targetBatch) {
     `Earlier batches and sheet paths in one call: \`cctoolkit plan-next-batch ${plan} --context ${targetBatch}\` prints the \`## Audit gaps\` of the earlier batches' reports, the \`${USER}\`/GAPS lines of the sheets, saved cycles, and the source and test paths the sheet cites that do not exist. Never reread those reports nor grep those sheets.`,
     'A choice an earlier audit rejected or a recorded user decision overrides a contrary line of the sheet (test level, double, exception "carried over"): design per the source, one `review` line citing it. Never design a choice already rejected.',
     'An absent cited path is either a file the batch creates (`toCreate`) or a stale anchor: fix the stale one in the block, never search for it twice.',
-    `Ambiguity → decide, never stop: the option the spec, the rules, the handler \`CLAUDE.md\` or an earlier decision favour, else the smallest one keeping every RM/CU; one line in \`review\` (question → choice → why). A choice that changes scope or an RM/CU also gets one line under \`## Decisions\`, marked \`${TO_REVIEW}\`. \`blocked: true\` only when no option is defensible (options of comparable weight on behaviour a customer sees, data loss, security, contract of an external system) or the sheet cannot be implemented at all.`,
+    `Ambiguity → decide, never stop: the option the spec, the rules, the handler \`CLAUDE.md\` or an earlier decision favour, else the smallest one keeping every RM/CU; one line in \`review\` (question → choice → why). A choice that changes scope or an RM/CU also gets one line under \`## Decisions\`, marked \`${TO_REVIEW}\`, and its \`review\` line opens with \`visible: \` — the user validates those, the other lines are the run's log. \`blocked: true\` only when no option is defensible (options of comparable weight on behaviour a customer sees, data loss, security, contract of an external system) or the sheet cannot be implemented at all.`,
     `A \`${USER}\` of the sheet overriding a contract → its text in \`decisions\` of each cycle it touches.`,
     'Saved cycles listed by `--context`: keep their `behaviour` verbatim in the block, the run reuses them by that key.',
     '',
@@ -664,7 +678,7 @@ if (!lotIndex || !lotIndex.ok) {
   log(!lotIndex ? 'cycle index unread — design writes the block' : lotIndex.missing ? 'no `## Cycles` block — design writes it' : `\`## Cycles\` invalid — design fixes it: ${short(lotIndex.errors.join(' ; '), 80)}`)
   const { result, reason } = await withRetry('Design', designed, designRejected)
   if (reason) return await finish(BLOCKED, `design — ${reason}`)
-  for (const line of result.design.review || []) toReview('Design', line)
+  for (const line of result.design.review || []) toReview('Design', line.replace(VISIBLE, ''), '', !VISIBLE.test(line))
   lotIndex = result.index
 }
 
@@ -821,7 +835,7 @@ const [{ result: suites, reason: greenStop }, { result: gated }] = await Promise
 history.suites = suites
 history.gate = gated
 // Every test file the repair wrote goes to the user's review and to the audit, as a point to check.
-for (const e of (suites && suites.testEdits) || []) toReview('Global green', `test file written to reach green, ${e.kind}: ${e.path}`, e.why)
+for (const e of (suites && suites.testEdits) || []) toReview('Global green', `test file written to reach green, ${e.kind}: ${e.path}`, e.why, helperOnly(e.path))
 const testEditsToCheck = () => (history.suites && history.suites.testEdits && history.suites.testEdits.length
   ? `Test files the global green repair wrote, each a point to verify: a promoted snapshot against the sheet line its \`why\` quotes, a shared double against the value of the batch it names; anything else, or a reason that does not hold, is a Test gap (test-scope.md §6): ${history.suites.testEdits.map(e => `\`${e.path}\` (${e.kind}) — ${e.why}`).join(' ; ')}.`
   : '')
@@ -839,8 +853,8 @@ function closingOf(text) {
 history.closing = closingOf(suites.closing) || { level: FULL, reasons: ['closing level unread — full by default'], review: true, reviewWhy: '' }
 const light = history.closing.level === LIGHT
 log(`closing ${history.closing.level}${history.closing.reasons.length ? ` — ${short(history.closing.reasons.join(' ; '), 100)}` : ''}`)
-if (!gated || !gated.ok) toReview('Closing', `pre-audit not run, the audit judges it: ${gated ? gated.diagnostic || '' : 'agent without result'}`)
-else if (!gated.preauditGreen) toReview('Closing', `pre-audit RED, the audit judges it: ${gated.failures.join(' ; ')}`)
+if (!gated || !gated.ok) toReview('Closing', `pre-audit not run, the audit judges it: ${gated ? gated.diagnostic || '' : 'agent without result'}`, '', true)
+else if (!gated.preauditGreen) toReview('Closing', `pre-audit RED, the audit judges it: ${gated.failures.join(' ; ')}`, '', true)
 const gateToCheck = () => (!gated || !gated.ok
   ? `The pre-audit gate did not run (${gated ? gated.diagnostic || '' : 'agent without result'}): run \`cctoolkit pre-audit ${batch} ${sheet}\` once, each failure it lists is a gap of its axis.`
   : !gated.preauditGreen
@@ -1028,8 +1042,9 @@ async function reviewedLight(retry) {
   return lightReview(retry, true)
 }
 
-const toValidate = (gaps, why) => {
-  for (const g of gaps.filter(g => g.severity !== 'Minor')) toReview('Audit', `${g.severity} — ${g.axis} — ${g.gap}`, `${g.evidence} ; ${why(g)}`)
+// `fixed`: a gap the fix closed without a second review stays to validate when Blocking, the others are logged.
+const toValidate = (gaps, why, fixed = false) => {
+  for (const g of gaps.filter(g => g.severity !== 'Minor')) toReview('Audit', `${g.severity} — ${g.axis} — ${g.gap}`, `${g.evidence} ; ${why(g)}`, fixed && g.severity !== 'Blocking')
 }
 
 // One audit pass: the audit (full) or the light review, one fix when GAPS, a second review only after a
@@ -1051,7 +1066,7 @@ else {
       toValidate(verdict.gaps, g => `not fixed (fix agent without result) ; proposed fix: ${g.fix}`)
     } else if (!reaudit) {
       history.audit = GAPS_CARRIED
-      toValidate(verdict.gaps, () => `fixed without a second review: ${fix.fixed.join('; ')}`)
+      toValidate(verdict.gaps, () => `fixed without a second review: ${fix.fixed.join('; ')}`, true)
     } else {
       const retry = { verdict, fix }
       const next = light ? await reviewedLight(retry) : await audited(retry)

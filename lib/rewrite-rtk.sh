@@ -64,8 +64,10 @@ if [ -n "$test_timeout" ]; then
   esac
 fi
 sed_args+=(-e 's#(rtk|proxy)[[:space:]]+dotnet#\1 @@RTKDOTNET@@#g')
+# The final check's line (`KIT_FINAL_CHECK=1`, scripts/suites-plan.py --final) streams its log raw:
+# rtk would hold the output until the end, a suite stopped at its ceiling leaving nothing.
 case "$cmd" in
-  *'<<'*) ;;
+  *'<<'*|*KIT_FINAL_CHECK=1*) ;;
   *) sed_args+=(-e 's#(^|[;&|(])([[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*)dotnet[[:space:]]+(test|restore|format)([[:space:]]|$)#\1\2rtk dotnet \4\5#g') ;;
 esac
 sed_args+=(-e 's#@@RTKDOTNET@@#dotnet#g')

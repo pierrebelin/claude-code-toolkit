@@ -12,7 +12,9 @@ Plan: the suites `commands.suites` of kit.config.json requires for the batch dif
 "<runner filter, {namespace} expanded>", "project": "<test project glob>", "env": "<VAR=value>",
 "requires": ["docker"]}`: no `when` = always, `filter` = filtered, its namespaces read off the production folders the diff
 touches matched against the first-level folders of `project` (test-scope.md §3). A namespace
-not found leaves the suite `unresolved`, its scope a judgement. The plan also records the
+not found leaves the suite `unresolved`, its scope a judgement. A `filter` without `{namespace}`
+is run as written. A suite named in two entries (a second `when`, its own filter) runs once per
+entry that matches, the second output file suffixed `-2`. The plan also records the
 dirty files under `layout.tests.roots` and their hashes, read back by `--tests-changed`.
 
 Prints one JSON object: {"tmp", "build": {"run", "output"}, "suites": [{"name", "scope",
@@ -23,8 +25,10 @@ Prints one JSON object: {"tmp", "build": {"run", "output"}, "suites": [{"name", 
 `docker=down` line in the output file and exit 1 instead of a Testcontainers run hanging.
 `--final <tag>`: every suite whole, for run-plan's final check — {"suites": [{"name", "job", "start",
 "log"}], "notRun"}: `start` runs the suite detached as `cctoolkit bg` job `job` (`final-<tag>-<suite>`),
-its env prefix and `KIT_FINAL_CHECK=1` (the integration guard's marker) ahead of `commands.test`;
-`log` = the job's output.
+`KIT_FINAL_CHECK=1` (the integration guard's marker), `commands.finalCheck.env` and its env prefix
+ahead of `commands.test` without `rtk`, `commands.finalCheck.args` after it: the log fills test by
+test, a job stopped at its ceiling shows how far it went; `log` = the job's output. A suite named
+twice (two `when` for one suite) runs once.
 `--tests-changed`: {"changed": [{"path", "shared"}]}, the files under the test roots written
 since the plan, `shared` = under `layout.tests.shared`.
 `--failed`: the failed test names `tdd.failedTest` reads in a suite output, one per line.
@@ -97,17 +101,28 @@ def line(cmd, out, lock=False, docker=False):
     return f'{cmd} > "{out}" 2>&1; echo "exit=$?"; tail -15 "{out}"'
 
 
+# `rtk` in command position: it holds a run's whole output until the end, a job stopped at its
+# ceiling would leave an empty log.
+RTK = re.compile(r"(^|&&\s*|\|\|\s*|;\s*)rtk\s+(?:proxy\s+)?")
+
+
 def final(c, tag):
     """Every suite whole, each a detached `cctoolkit bg` job (scripts/bg.py names its folder)."""
     result = {"suites": [], "notRun": []}
     entries = c.commands.get("suites")
+    fc = c.commands.get("finalCheck") if isinstance(c.commands.get("finalCheck"), dict) else {}
+    seen = set()
     for e in entries if isinstance(entries, list) else []:
         name = e.get("name", "")
-        cmd = c.command("test", name)
+        if name in seen:
+            continue
+        seen.add(name)
+        cmd = RTK.sub(r"\1", c.command("test", name))
         if not cmd:
             result["notRun"].append({"name": name, "why": "commands.test unset"})
             continue
-        run = " ".join(x for x in ("KIT_FINAL_CHECK=1", (e.get("env") or "").strip(), cmd) if x)
+        run = " ".join(x for x in ("KIT_FINAL_CHECK=1", (fc.get("env") or "").strip(), (e.get("env") or "").strip(),
+                                   cmd, (fc.get("args") or "").strip()) if x)
         if needs_docker(e):
             run = f"{DOCKER_UP} && {run}"
         job = f"final-{tag}-{name}"
@@ -142,7 +157,9 @@ def plan(c, root, work, batch, lock=False):
                 result["notRun"].append({"name": name, "why": f"no batch file matches {e['when']}"})
                 continue
         scope, filters = "whole suite", ""
-        if e.get("filter"):
+        if e.get("filter") and "{namespace}" not in e["filter"]:
+            filters = scope = e["filter"]
+        elif e.get("filter"):
             found, missing = namespaces(c, e, hit)
             if missing or not found:
                 result["unresolved"].append({"name": name, "why": f"no test namespace for {', '.join((missing or hit)[:5])}"})
@@ -150,7 +167,8 @@ def plan(c, root, work, batch, lock=False):
             filters = " ".join(e["filter"].replace("{namespace}", ns) for ns in found)
             scope = filters
         env = (e.get("env") or "").strip()
-        out = f"{tmp.as_posix()}/test-{name}.txt"
+        twice = sum(s["name"] == name for s in result["suites"])
+        out = f"{tmp.as_posix()}/test-{name}{f'-{twice + 1}' if twice else ''}.txt"
         run = " ".join(x for x in (env, cmd, filters) if x)
         result["suites"].append({"name": name, "scope": scope, "run": line(run, out, lock, needs_docker(e)), "output": out})
     return result, tmp

@@ -132,6 +132,7 @@
         "stdout": "STATUS DONE | toReview 4 Cycle C1,RED One,GREEN One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
       }
     },
+    {"name": "run-lot flow: the batch report sorts what the run decided — a snapshot changed at GREEN, a `visible:` decision and the unreachable guards stay under `## To validate`; a fixture builder changed, a plain decision and Majors the fix closed go to `## Decided alone`", "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js triage | grep -E 'TRIAGE|ERR|WARN|UNHANDLED' | tr '\n' ';'", "expect": {"exit": 0, "stdout": "TRIAGE act 4 ok | info 4 ok;"}},
     {
       "name": "run-lot flow: an index relayed short of its cycles is read again alone, and every cycle runs",
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js shortindex | grep -E 'log: (resume|[0-9]+ wave)|STATUS|ERR' | tr '\\n' ';'",

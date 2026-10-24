@@ -493,8 +493,11 @@ def validate(root):
             req = s.get("requires", [])
             if not isinstance(req, list) or any(r not in SUITE_REQUIRES for r in req):
                 out.append(("FAIL", f"commands.suites.{s['name']}.requires", f"expects a list among {', '.join(sorted(SUITE_REQUIRES))}"))
-            if s.get("filter") and not s.get("project"):
-                out.append(("FAIL", f"commands.suites.{s['name']}", "a filtered suite needs `project`, the test project its namespaces are read from"))
+            if "{namespace}" in (s.get("filter") or "") and not s.get("project"):
+                out.append(("FAIL", f"commands.suites.{s['name']}", "a filter by `{namespace}` needs `project`, the test project its namespaces are read from"))
+    fc = c.commands.get("finalCheck", {})
+    if not isinstance(fc, dict) or any(not isinstance(fc.get(k, ""), str) for k in ("env", "args")):
+        out.append(("FAIL", "commands.finalCheck", "expects {\"env\": \"VAR=value\", \"args\": \"<runner arguments>\"}"))
     out += validate_test_fast(c)
     out += validate_closing(c.data.get("closing"))
     out += validate_run(c.data.get("run"))

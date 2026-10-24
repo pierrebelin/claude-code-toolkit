@@ -58,6 +58,7 @@
         "command_absent": "rtk dotnet"
       }
     },
+    {"name": "the final check's line (KIT_FINAL_CHECK=1) keeps dotnet test raw: rtk would hold its log until the end", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "cctoolkit bg start final-t-IntegrationTests -- 'cctoolkit docker-up && KIT_FINAL_CHECK=1 dotnet test --project x --output Detailed'"}}, "expect": {"command_absent": "rtk dotnet"}},
     {
       "name": "dotnet reached through a tool path is not a dotnet command",
       "hook": "hooks/bash-dispatch.sh",

@@ -8,6 +8,8 @@
 // stop: C1's RED is rejected three times — the batch stops BLOCKED. guardout: the guard C2 stays red — left
 // out, listed to validate, the batch goes on. greenretry: C1's GREEN is rejected — the retry re-arms the
 // accepted RED and writes the GREEN only. resumered: C1 saved with its RED only — one agent re-arms it.
+// triage: a fixture changed at GREEN, a plain decision and Majors the fix closed go to `## Decided alone`; a snapshot
+// changed and a `visible:` decision stay under `## To validate`.
 // testsdiff: a GREEN changed a test, took a decision and reported a flagged cost — each to validate, the
 // cost handed to the audit, never a rejection.
 // ripple: an ALREADY_GREEN leaving ripple files out of the batch diff still writes its GREEN on them.
@@ -26,7 +28,7 @@
 // snapshot read off the tree, declared, listed for review and handed to the audit; undeclared: a write under the test
 // roots without a `testEdits` entry is rejected, the retry declares it; blocked: a `test-code` write is a BLOCKED,
 // retried once, then the batch stops.
-// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|retry|stop|guardout|greenretry|resumered|testsdiff|ripple|fullgaps|fullblock|wrong|gatered|light|lightblock|shortindex|shortindex2|snapshot|undeclared|blocked|root
+// Usage: node run-lot-flow.js <run-lot.js> block|nodesign|resume|split|retry|stop|guardout|greenretry|resumered|testsdiff|ripple|fullgaps|fullblock|wrong|gatered|light|lightblock|shortindex|shortindex2|snapshot|undeclared|blocked|root|triage
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
 const variant = process.argv[3] || 'block'
@@ -73,6 +75,7 @@ function cycleAgent(prompt, o, l) {
   if (variant === 'stop' && own === 'C1') return { red: { ...REDOK, exit: 0 } }
   if (variant === 'guardout' && own === 'C2') return { red: { ...REDOK, unreachable: [] } }
   if (variant === 'greenretry' && own === 'C1' && n === 1) return { red: REDOK, green: { ...GREENOK, exit: 1 } }
+  if (variant === 'triage' && own === 'C1') return { red: REDOK, green: { ...GREENOK, testsDiff: [{ path: 'tests/Core/DataBuilder/XBuilder.cs', why: 'compile ripple' }, { path: 'tests/U/X.verified.txt', why: 'message the contract gives' }] }, decisions: ['stub returns an empty list → hook refuses NotImplementedException', 'visible: refusal message → the ADR wording'] }
   if (variant === 'testsdiff' && own === 'C1') return { red: REDOK, green: { ...GREENOK, cost: FLAGGED, testsDiff: [{ path: 'tests/A/ATests.cs', why: 'fixture built the wrong id' }] }, decisions: ['empty name → refused, RM-01 says so'] }
   return { red: REDOK, green: GREENOK }
 }
@@ -149,11 +152,11 @@ const agent = async (prompt, o) => {
     if (audits === 1 && !prompt.includes('--base todo/x/run/.work.jsonl --suites-green UnitTests')) console.log('WARN audit capture without base or green suites')
     if (!prompt.includes('Decisions the run took')) console.log('WARN audit without decisions')
     if (audits === 2 && !(l === 'audit retry' && prompt.includes('Files the fix declared: `src/X.cs`'))) console.log('WARN second audit not on the fix files:', l)
-    if (variant === 'fullgaps' && audits === 1) return GAPV
+    if (['fullgaps', 'triage'].includes(variant) && audits === 1) return GAPV
     if ((variant === 'fullblock' && audits === 1) || variant === 'wrong') return WRONGV
     return VALIDV
   }
-  if (l === 'report') { if (!prompt.includes('## To validate')) console.log('WARN report without To validate'); if (prompt.includes('## STATUS — DONE') && !(prompt.includes('cctoolkit batch-baseline commit todo/x/run/.work.jsonl F3 --sheet todo/x/X-PLAN-F3.md') && prompt.includes('--kind preexisting,question,answer'))) console.log('WARN batch not committed nor its lines reduced'); if (!prompt.includes('run/batches/F3.md')) console.log('WARN report not under run/batches'); return { path: 'todo/x/run/batches/F3.md' } }
+  if (l === 'report') { if (!prompt.includes('## To validate')) console.log('WARN report without To validate'); if (variant === 'triage') { const at = h => prompt.indexOf(h); const act = prompt.slice(at('## To validate'), at('## Decided alone')); const info = prompt.slice(at('## Decided alone'), at('## Audit gaps')); console.log('TRIAGE act', (act.match(/^- /gm) || []).length, act.includes('X.verified.txt') && act.includes('refusal message') ? 'ok' : 'MISSING', '| info', (info.match(/^- /gm) || []).length, info.includes('XBuilder.cs') && info.includes('empty list') && info.includes('Second type') ? 'ok' : 'MISSING') } if (prompt.includes('## STATUS — DONE') && !(prompt.includes('cctoolkit batch-baseline commit todo/x/run/.work.jsonl F3 --sheet todo/x/X-PLAN-F3.md') && prompt.includes('--kind preexisting,question,answer'))) console.log('WARN batch not committed nor its lines reduced'); if (!prompt.includes('run/batches/F3.md')) console.log('WARN report not under run/batches'); return { path: 'todo/x/run/batches/F3.md' } }
   console.log('UNHANDLED', l); return null
 }
 const fn = new (Object.getPrototypeOf(async function () {}).constructor)('args', 'agent', 'log', 'phase', 'parallel', 'workflow', src)

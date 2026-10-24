@@ -66,7 +66,7 @@ const OK = obj({ ok: bool, detail: str })
 const SEALED = obj({ ok: bool, commit: str })
 const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str) })
 const REPORT = obj({ path: str, lastLine: str })
-const FINAL = obj({ suites: arr(obj({ name: str, exit: int, failed: arr(str) })) })
+const FINAL = obj({ suites: arr(obj({ name: str, exit: int, failed: arr(str), last: arr(str) }, ['last'])) })
 const BREAKER = obj({ commonCause: bool, cause: str, batches: arr(str), fixBeforeRelaunch: str })
 const PREPARED = obj({ exit: int, nothing: str, refused: arr(str) })
 const MERGED = obj({ staged: bool, stagedLine: str, files: arr(str), warnings: arr(str), blocked: str })
@@ -473,14 +473,14 @@ const finalCheck = ran.some(r => r.status === DONE) && !scope.startsWith('--only
         `1. One call: \`cctoolkit suites-plan --final ${pre.stamp}\`. It prints \`suites\` (each with \`name\`, \`job\`, \`start\`, \`log\`) and \`notRun\`: copy each line literally, never rebuild nor \`eval\` one — the suite's env prefix, the integration guard's \`KIT_FINAL_CHECK=1\` marker and the Docker start are in it. \`suites\` empty → \`suites\` empty, stop.`,
         '2. Every `start` line in a single message, one Bash call each: each suite runs detached, a `cctoolkit bg` job.',
         `3. Then each job in turn, Bash timeout 600000: \`cctoolkit bg wait <job> --seconds 540\`. It prints \`DONE exit=<n>\`, \`FAILED exit=<n>\` (\`exit=none\`: the process died without an exit code) or \`RUNNING <seconds>s\`. \`RUNNING\` under ${FINAL_TIMEOUT_MIN * 60} s → the same call again; ${FINAL_TIMEOUT_MIN * 60} s or more → \`cctoolkit bg stop <job>\`, that suite's \`exit\` = 124. No other wait loop, no \`sleep\`.`,
-        '4. One entry per suite: `name`, `exit` = the code `bg wait` printed (`exit=none` → 125), `failed` = for an exit other than 0, the lines `cctoolkit suites-plan --failed <log>` prints, those calls in one message; empty for a green suite. Never open a log beyond that.',
+        '4. One entry per suite: `name`, `exit` = the code `bg wait` printed (`exit=none` → 125), `failed` = for an exit other than 0, the lines `cctoolkit suites-plan --failed <log>` prints, those calls in one message; empty for a green suite. A suite at 124 also gets `last` = the lines `cctoolkit bg log <job> --lines 8` prints (the log fills test by test: they name the test the suite stopped on). Never open a log beyond that.',
       ].join('\n'),
       { schema: FINAL, phase: 'Final check', label: 'final check', ...SHELL },
     ).catch(() => null))
   : null
 const finalRed = finalCheck ? finalCheck.suites.filter(x => x.exit !== 0) : []
 if (finalCheck === null && ran.some(r => r.status === DONE) && !scope.startsWith('--only')) toReview.push({ batch: '—', step: 'Final check', text: 'final check agent without result: suites not run whole' })
-for (const x of finalRed) toReview.push({ batch: '—', step: 'Final check', text: `${x.name} exit=${x.exit}${x.failed.length ? `: ${x.failed.join(', ')}` : ''} — not attributed: a batch of this run or a failure already on the starting tree; output removed with the temp folder of the run, rerun filtered to inspect` })
+for (const x of finalRed) toReview.push({ batch: '—', step: 'Final check', text: `${x.name} exit=${x.exit}${x.exit === 124 ? ` (stopped after ${FINAL_TIMEOUT_MIN} min)` : ''}${x.failed.length ? `: ${x.failed.join(', ')}` : ''} — not attributed: a batch of this run or a failure already on the starting tree; log: \`cctoolkit bg log final-${pre.stamp}-${x.name} --lines 40\``, why: (x.last || []).join(' / ') })
 if (finalRed.length) log(`final check red: ${finalRed.map(x => x.name).join(', ')}`)
 
 // One security pass over what the plan committed, read-only, never a stop: the audits judge a batch
@@ -554,7 +554,9 @@ if (!ran.length) {
   return { status: reason ? BLOCKED : DONE, reason: reason || '—', report: null, batches: [] }
 }
 const payload = JSON.stringify({ plan: pre.plan, scope: scope || 'whole plan', report: reportFile, stop: reason, batches: ran, aside, finalCheck: finalCheck ? finalCheck.suites : null }, null, 1)
-const review = JSON.stringify({ stop: reason, breaker, merge, toReview, audits: ran.filter(r => r.audit).map(r => ({ batch: r.batch, audit: r.audit, report: r.report })), hypotheses: ran.flatMap(r => r.hypotheses.map(h => ({ batch: r.batch, h }))) }, null, 1)
+// What run-lot logged as decided alone (`info`) stays in its batch report: here, a count per batch.
+const decidedAlone = Object.entries(toReview.filter(x => x.info).reduce((n, x) => ({ ...n, [x.batch]: (n[x.batch] || 0) + 1 }), {})).map(([batch, n]) => ({ batch, n }))
+const review = JSON.stringify({ stop: reason, breaker, merge, toReview: toReview.filter(x => !x.info), decidedAlone, audits: ran.filter(r => r.audit).map(r => ({ batch: r.batch, audit: r.audit, report: r.report })), hypotheses: ran.flatMap(r => r.hypotheses.map(h => ({ batch: r.batch, h }))) }, null, 1)
 const rep = await agent(
   [
     FRAME,
@@ -564,7 +566,7 @@ const rep = await agent(
     '- table `| Batch | Status | Report | Commit | Patch |`, one row per batch of the first JSON, `Commit` = the hash `commit` starts with (`—` when absent)',
     ...(paired ? ['- in that table, a batch carrying `with` gets ` ∥ <with>` after its status: the two ran together, the second listed in a worktree of its own, then landed on the checkout or `DISCARDED` and run again alone'] : []),
     ...(breaker ? ['- `## Plan stopped — common cause` — from `breaker` of the second JSON: the cause, the batches it reached, what to fix in the spec or the plan before relaunching (`fixBeforeRelaunch`), then the relaunch: a new `/run-plan` skips the batches ✅ DONE'] : []),
-    `- \`## To validate\` — from the second JSON, everything the run decided without the user (marked \`${TO_REVIEW}\`), to review after the plan, one \`###\` per kind: \`### Stop\` (\`stop\` verbatim, only when not null), \`### Batches set aside\` (\`toReview\` entries of step \`Set aside\`), \`### Start\` (\`toReview\` entries of step \`Start\`), \`### Final check\` (\`toReview\` entries of step \`Final check\`), \`### Security\` (\`toReview\` entries of step \`Security\`),\`### Audits to redo\` (\`audit\` = \`to redo\`: batch, report, command \`/verify-ddd-tdd batch FX\`), \`### Audit gaps carried\` (\`toReview\` entries of step \`Audit\`, and \`audit\` = \`GAPS carried\`), \`### Arbiter and design decisions\` (other \`toReview\` entries, step and why kept), \`### Assumptions\` (every \`h\`). One bullet per entry, prefixed by its batch; \`None.\` for an empty section.`,
+    `- \`## To validate\` — from the second JSON, everything the run decided without the user (marked \`${TO_REVIEW}\`), to review after the plan, one \`###\` per kind: \`### Stop\` (\`stop\` verbatim, only when not null), \`### Batches set aside\` (\`toReview\` entries of step \`Set aside\`), \`### Start\` (\`toReview\` entries of step \`Start\`), \`### Final check\` (\`toReview\` entries of step \`Final check\`), \`### Security\` (\`toReview\` entries of step \`Security\`),\`### Audits to redo\` (\`audit\` = \`to redo\`: batch, report, command \`/verify-ddd-tdd batch FX\`), \`### Audit gaps carried\` (\`toReview\` entries of step \`Audit\`, and \`audit\` = \`GAPS carried\`), \`### Arbiter and design decisions\` (other \`toReview\` entries, step and why kept), \`### Assumptions\` (every \`h\`). One bullet per entry, prefixed by its batch; \`None.\` for an empty section. Last, when \`decidedAlone\` is not empty, one line after the sections: \`Decided alone, nothing to do: <total> — section Decided alone of the batch reports (<FX n, …>).\``,
     '- `## Minor` — every minor of the first JSON, prefixed by its batch; `None.` when none',
     '- `## Final check` — table `| Suite | Exit | Failed tests |` from `finalCheck`; `Not run.` when `finalCheck` is null',
     '- `## Knowledge base` — from `merge` of the second JSON: `state` staged → its `lines` verbatim one bullet each, then its `warnings`, then the line `Staged, not written: <next> shows the diff and writes it on confirmation.`; refused, blocked or failed → its `lines` verbatim, then `Not staged: <next>.`; nothing → its line verbatim; `merge` null → `Not run.`',

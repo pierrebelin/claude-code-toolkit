@@ -40,11 +40,16 @@
       "run": "rtk dotnet test --project tests/{product}.ArchitectureTests/{product}.ArchitectureTests.csproj --no-build --no-restore",
       "when": "^src/.*(Handler|Endpoints/|Repositories/|Extensions/|DbContext)"
     },
+    "finalCheck": {
+      "env": "DOTNET_CLI_UI_LANGUAGE=en",
+      "args": "--output Detailed --no-ansi --progress off --long-running 300"
+    },
     "suites": [
       {"name": "UnitTests"},
       {"name": "ArchitectureTests", "when": "^src/.*(Handler|Endpoints/|Repositories/|Extensions/|DbContext)"},
       {"name": "ContractTests", "when": "^src/[^/]*\\.(Api|Abstractions)[^/]*/|Endpoints/"},
-      {"name": "IntegrationTests", "when": "^src/[^/]*\\.Infrastructure/", "filter": "--filter-class \"*.{namespace}.*\"", "project": "tests/{product}.IntegrationTests", "requires": ["docker"]}
+      {"name": "IntegrationTests", "when": "^src/[^/]*\\.Infrastructure/", "filter": "--filter-class \"*.{namespace}.*\"", "project": "tests/{product}.IntegrationTests", "requires": ["docker"]},
+      {"name": "IntegrationTests", "when": "(?i)(^|/)migrations?/", "filter": "--filter-method \"*Migration*\"", "requires": ["docker"]}
     ]
   },
   "closing": {
