@@ -1,0 +1,54 @@
+{
+  "fixtures": [],
+  "cases": [
+    {
+      "name": "docker-up: engine up → docker=ready, exit 0, nothing started",
+      "cmd": "F={{FIX}}/du-{{SID}}; rm -rf $F; mkdir -p $F && printf '#!/bin/sh\n[ -f %s/up ] || { echo \"error during connect: engine stopped\" >&2; exit 1; }\n' $F > $F/docker && chmod +x $F/docker && touch $F/up && DOCKER_BIN=$F/docker DOCKER_DESKTOP=$F/none bash {{KIT}}/scripts/docker-up.sh; echo \"exit=$?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "docker=ready\nexit=0"
+      }
+    },
+    {
+      "name": "docker-up: no docker CLI → docker=absent, exit 0 (a stack without Docker runs on)",
+      "cmd": "DOCKER_BIN=no-such-docker-cli bash {{KIT}}/scripts/docker-up.sh; echo \"exit=$?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "docker=absent\nexit=0"
+      }
+    },
+    {
+      "name": "docker-up: engine down → Docker Desktop started, the engine waited for: docker=ready (started, N s)",
+      "cmd": "F={{FIX}}/du-{{SID}}; rm -rf $F; mkdir -p $F && printf '#!/bin/sh\n[ -f %s/up ] || { echo \"error during connect: engine stopped\" >&2; exit 1; }\n' $F > $F/docker && chmod +x $F/docker && printf '#!/bin/sh\ntouch %s/up\n' $F > $F/desk && chmod +x $F/desk && DOCKER_BIN=$F/docker DOCKER_DESKTOP=$F/desk bash {{KIT}}/scripts/docker-up.sh --wait 20; echo \"exit=$?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "docker=ready (started, "
+      }
+    },
+    {
+      "name": "docker-up: the engine still down after --wait → docker=down with the CLI's error, exit 1 — the suite fails at once instead of hanging",
+      "cmd": "F={{FIX}}/du-{{SID}}; rm -rf $F; mkdir -p $F && printf '#!/bin/sh\n[ -f %s/up ] || { echo \"error during connect: engine stopped\" >&2; exit 1; }\n' $F > $F/docker && chmod +x $F/docker && printf '#!/bin/sh\n:\n' > $F/desk && chmod +x $F/desk && DOCKER_BIN=$F/docker DOCKER_DESKTOP=$F/desk bash {{KIT}}/scripts/docker-up.sh --wait 3; echo \"exit=$?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "docker=down — engine unreachable 3 s after starting Docker Desktop (error during connect: engine stopped)\nexit=1"
+      }
+    },
+    {
+      "name": "docker-up --wait 0: Docker Desktop started, no wait — docker=starting, exit 0 (the preflight boots it during the build)",
+      "cmd": "F={{FIX}}/du-{{SID}}; rm -rf $F; mkdir -p $F && printf '#!/bin/sh\n[ -f %s/up ] || { echo \"error during connect: engine stopped\" >&2; exit 1; }\n' $F > $F/docker && chmod +x $F/docker && printf '#!/bin/sh\n:\n' > $F/desk && chmod +x $F/desk && DOCKER_BIN=$F/docker DOCKER_DESKTOP=$F/desk bash {{KIT}}/scripts/docker-up.sh --wait 0; echo \"exit=$?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "docker=starting\nexit=0"
+      }
+    },
+    {
+      "name": "docker-up: --wait takes seconds, anything else is a usage error",
+      "cmd": "bash {{KIT}}/scripts/docker-up.sh --wait soon; echo \"exit=$?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "exit=2",
+        "stderr": "--wait takes seconds"
+      }
+    }
+  ]
+}

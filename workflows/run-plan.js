@@ -73,7 +73,8 @@ const MERGED = obj({ staged: bool, stagedLine: str, files: arr(str), warnings: a
 const PAIR = obj({ batches: arr(obj({ batch: str, repo: str, sheet: str })), apart: arr(obj({ batch: str, reason: str })) })
 const WORKTREE = obj({ ok: bool, path: str, detail: str })
 const LANDED = obj({ landed: bool, commit: str, from: str, detail: str })
-const FINAL_TIMEOUT_MIN = 40
+// A whole IntegrationTests run measured 602 s downstream (2026-09-10): past 25 min the suite hangs.
+const FINAL_TIMEOUT_MIN = 25
 
 function newFailures(build) {
   return build === 0 ? [] : [`build=${build}`]
@@ -106,10 +107,10 @@ const pre = await agent(
     '',
     `Plan argument: \`${words[0]}\`.`,
     '1. `plan` = absolute path of the plan (`realpath`; under Git Bash on Windows `cygpath -m "$(realpath <p>)"`, a `C:/…` path the Write tool reads), `root` = `git rev-parse --show-toplevel`, `kit` = `cctoolkit root`.',
-    '2. First, one call: `command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && case "$(uname)" in Darwin) open -a Docker ;; MINGW*|MSYS*) (\"/c/Program Files/Docker/Docker/Docker Desktop.exe\" >/dev/null 2>&1 &) ;; esac; true` (Docker Desktop boots during the build, no wait loop).',
+    '2. First, one call: `cctoolkit docker-up --wait 0 || true` (Docker Desktop boots during the build, no wait loop).',
     '   Then in one message, from `root`: `cctoolkit plan-next-batch <plan> --check`, `cctoolkit doctor --quiet`, `cctoolkit config parallel-batches` (→ `parallel`, 1 when it fails) and `cctoolkit config command build`, the build configured by kit-init (`commands.build`, empty for a stack without one).',
-    '   Then one call, from `root` (timeout 600000): the printed build command run literally, never through `eval` (the Bash guards read the command text) — `f=$(mktemp); <printed command> > "$f" 2>&1; echo "build=$?"; grep -m1 -iE \'(^|[^a-z])error([^a-z]|$)\' "$f"; rm -f "$f"`, nothing printed → `echo build=none` in its place —, followed by `; command -v docker >/dev/null && { docker info >/dev/null 2>&1; echo "docker=$?"; } || echo docker=absent`.',
-    '3. `--check` exit ≠ 0, a doctor `FAIL` line, `docker` neither 0 nor `absent`, or `build` neither 0 nor `none` → `ok: false`, `failure` = the failing line verbatim (for the build: `build=<code>` followed by the first error line, the working tree must compile before any batch starts), `runRoot` and `stamp` empty, stop. No test suite runs here: each batch runs the tests its diff reaches, in its own global green.',
+    '   Then one call, from `root` (timeout 600000): the printed build command run literally, never through `eval` (the Bash guards read the command text) — `f=$(mktemp); <printed command> > "$f" 2>&1; echo "build=$?"; grep -m1 -iE \'(^|[^a-z])error([^a-z]|$)\' "$f"; rm -f "$f"`, nothing printed → `echo build=none` in its place —, followed by `; cctoolkit docker-up --wait 120`.',
+    '3. `--check` exit ≠ 0, a doctor `FAIL` line, a `docker=` line other than `docker=ready…` or `docker=absent`, or `build` neither 0 nor `none` → `ok: false`, `failure` = the failing line verbatim (for the build: `build=<code>` followed by the first error line, the working tree must compile before any batch starts), `runRoot` and `stamp` empty, stop. No test suite runs here: each batch runs the tests its diff reaches, in its own global green.',
     `4. Otherwise \`stamp\` = \`$(date +%Y-%m-%d-%H%M)\`, \`runRoot\` = \`<plan folder>/run\` (absolute). One call: \`cctoolkit run-work purge <runRoot> <stamp> && cctoolkit run-validate apply <runRoot>/.work.jsonl && cctoolkit run-work journal <runRoot>/.work.jsonl <stamp> "start $(date '+%Y-%m-%d %H:%M') — plan <plan> — scope ${scope || 'whole plan'}"\` (purge: older layouts migrated, lines no run needs dropped, the 3 most recent runs kept; run-validate: the answers given in the run-lot-pane mod written into the sheets). \`ok: true\`, \`failure\` empty.`,
   ].join('\n'),
   { schema: PREFLIGHT, phase: 'Preflight', label: 'preflight', ...SHELL },
@@ -469,10 +470,10 @@ const finalCheck = ran.some(r => r.status === DONE) && !scope.startsWith('--only
         FRAME,
         '',
         `Final check of the plan, after its last batch: every suite runs whole once, \`IntegrationTests\` included. The result is reported, never a stop: fix nothing.`,
-        `1. Read the Runner section and the §2 table of \`${pre.kit}/skills/implement-tdd/references/test-scope.md\`: the suites are the rows of that table, the command is \`commands.test\` resolved per suite. Prefix each command with \`KIT_FINAL_CHECK=1\` (the integration guard lets a whole suite through on that marker only) and the suite's test-mode variable when its own \`CLAUDE.md\` documents one.`,
-        `2. \`<tmp>\` = the folder \`cctoolkit run-work tmp final\` prints (system temp). One call starts every suite detached, in parallel: \`nohup sh -c '<command> > "<tmp>/final-<Suite>.txt" 2>&1; echo $? > "<tmp>/final-<Suite>.exit"' >/dev/null 2>&1 &\` per suite.`,
-        `3. Then wait, Bash timeout 600000: \`for i in $(seq 1 55); do [ $(ls "<tmp>"/final-*.exit 2>/dev/null | wc -l) -ge <suite count> ] && break; sleep 10; done; ls "<tmp>"/final-*.exit\`. Repeat that call until every exit file exists, ${FINAL_TIMEOUT_MIN} min in all; a suite still without exit file then gets \`exit\` 124.`,
-        `4. One entry per suite: \`name\`, \`exit\` = the content of its exit file, \`failed\` = the failing tests named in its output file (\`grep -iE '^\\s*(failed|\\[FAIL\\]|✗|×)\\s'\`), one fully qualified \`Namespace.Class.Method\` each, arguments and duration dropped; empty for a green suite. Never open the output files beyond that grep.`,
+        `1. One call: \`cctoolkit suites-plan --final ${pre.stamp}\`. It prints \`suites\` (each with \`name\`, \`job\`, \`start\`, \`log\`) and \`notRun\`: copy each line literally, never rebuild nor \`eval\` one — the suite's env prefix, the integration guard's \`KIT_FINAL_CHECK=1\` marker and the Docker start are in it. \`suites\` empty → \`suites\` empty, stop.`,
+        '2. Every `start` line in a single message, one Bash call each: each suite runs detached, a `cctoolkit bg` job.',
+        `3. Then each job in turn, Bash timeout 600000: \`cctoolkit bg wait <job> --seconds 540\`. It prints \`DONE exit=<n>\`, \`FAILED exit=<n>\` (\`exit=none\`: the process died without an exit code) or \`RUNNING <seconds>s\`. \`RUNNING\` under ${FINAL_TIMEOUT_MIN * 60} s → the same call again; ${FINAL_TIMEOUT_MIN * 60} s or more → \`cctoolkit bg stop <job>\`, that suite's \`exit\` = 124. No other wait loop, no \`sleep\`.`,
+        '4. One entry per suite: `name`, `exit` = the code `bg wait` printed (`exit=none` → 125), `failed` = for an exit other than 0, the lines `cctoolkit suites-plan --failed <log>` prints, those calls in one message; empty for a green suite. Never open a log beyond that.',
       ].join('\n'),
       { schema: FINAL, phase: 'Final check', label: 'final check', ...SHELL },
     ).catch(() => null))

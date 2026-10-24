@@ -89,7 +89,7 @@ const pre = await agent(
     '   - `project`: the `.sln` name without extension;',
     `   - \`tmp\` = \`cctoolkit run-work tmp audit-<C>\`, \`cache\` = \`cctoolkit run-work tmp stryker-<C>\`, both run from \`${checkout}\` (absolute paths, created: \`mkdir -p\`);`,
     `   - \`sinceTarget\`: \`metadata.commit\` of the newest \`${checkout}/docs/metrics/quality-report-*.json\` (else its \`stryker.since_target\`), else \`git -C <worktree> rev-list -1 HEAD~50\`, else empty;`,
-    '   - Docker: `command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && case "$(uname)" in Darwin) open -a Docker ;; MINGW*|MSYS*) (\"/c/Program Files/Docker/Docker/Docker Desktop.exe\" >/dev/null 2>&1 &) ;; esac; true` (it boots during the build).',
+    '   - Docker: `cctoolkit docker-up --wait 0 || true` (it boots during the build).',
     '4. `ok: true`, `failure` empty.',
   ].join('\n'),
   { schema: PREFLIGHT, phase: 'Preflight', label: 'preflight', ...SHELL },

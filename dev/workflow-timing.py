@@ -74,7 +74,9 @@ def read_jsonl(path):
 
 def agent_figures(path, slow):
     lines = read_jsonl(path)
-    times = [t for t in (stamp(d.get("timestamp")) for d in lines) if t]
+    # Sorted: an entry can land out of order (a Bash call moved to the background writes its result
+    # later), and a gap read in file order then counts twice — the stall outgrew the span (-7:56).
+    times = sorted(t for t in (stamp(d.get("timestamp")) for d in lines) if t)
     idle = sum(b - a for a, b in zip(times, times[1:]) if b - a >= IDLE)
     calls, reads, greps, bash = 0, 0, 0, 0
     bash_time, slow_calls, opened, model = 0.0, [], {}, ""

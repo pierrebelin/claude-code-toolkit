@@ -9,8 +9,8 @@ Plan: the suites `commands.suites` of kit.config.json requires for the batch dif
 (`cctoolkit batch-baseline diff <work> FX --name-only`), each with the shell line that runs it
 (`env` prefix, `commands.test`, the filter of a filtered suite, output to a file of
 `cctoolkit run-work tmp FX`). A suite entry is `{"name", "when": "<path regex>", "filter":
-"<runner filter, {namespace} expanded>", "project": "<test project glob>", "env": "<VAR=value>"}`:
-no `when` = always, `filter` = filtered, its namespaces read off the production folders the diff
+"<runner filter, {namespace} expanded>", "project": "<test project glob>", "env": "<VAR=value>",
+"requires": ["docker"]}`: no `when` = always, `filter` = filtered, its namespaces read off the production folders the diff
 touches matched against the first-level folders of `project` (test-scope.md §3). A namespace
 not found leaves the suite `unresolved`, its scope a judgement. The plan also records the
 dirty files under `layout.tests.roots` and their hashes, read back by `--tests-changed`.
@@ -19,6 +19,12 @@ Prints one JSON object: {"tmp", "build": {"run", "output"}, "suites": [{"name", 
 "run", "output"}], "unresolved": [{"name", "why"}], "notRun": [{"name", "why"}]}.
 `--lock`: each run line holds its command under `cctoolkit build-lock` — a batch run beside another
 (run-plan, `run.parallelBatches`): the solution builds and whole suites of the two pass one at a time.
+`requires` docker: the line opens with `cctoolkit docker-up`, the engine started and waited for, its
+`docker=down` line in the output file and exit 1 instead of a Testcontainers run hanging.
+`--final <tag>`: every suite whole, for run-plan's final check — {"suites": [{"name", "job", "start",
+"log"}], "notRun"}: `start` runs the suite detached as `cctoolkit bg` job `job` (`final-<tag>-<suite>`),
+its env prefix and `KIT_FINAL_CHECK=1` (the integration guard's marker) ahead of `commands.test`;
+`log` = the job's output.
 `--tests-changed`: {"changed": [{"path", "shared"}]}, the files under the test roots written
 since the plan, `shared` = under `layout.tests.shared`.
 `--failed`: the failed test names `tdd.failedTest` reads in a suite output, one per line.
@@ -28,8 +34,10 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "lib"))
@@ -73,11 +81,39 @@ def namespaces(c, entry, paths):
 ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
 
 
-def line(cmd, out, lock=False):
+DOCKER_UP = "cctoolkit docker-up"
+
+
+def needs_docker(entry):
+    return "docker" in (entry.get("requires") or [])
+
+
+def line(cmd, out, lock=False, docker=False):
     if lock:
         # The command as words after `--`, never one quoted string: the Bash guards read it.
         cmd = f"cctoolkit build-lock -- {'env ' if ASSIGNMENT.match(cmd) else ''}{cmd}"
+    if docker:
+        cmd = f"{{ {DOCKER_UP} && {cmd}; }}"
     return f'{cmd} > "{out}" 2>&1; echo "exit=$?"; tail -15 "{out}"'
+
+
+def final(c, tag):
+    """Every suite whole, each a detached `cctoolkit bg` job (scripts/bg.py names its folder)."""
+    result = {"suites": [], "notRun": []}
+    entries = c.commands.get("suites")
+    for e in entries if isinstance(entries, list) else []:
+        name = e.get("name", "")
+        cmd = c.command("test", name)
+        if not cmd:
+            result["notRun"].append({"name": name, "why": "commands.test unset"})
+            continue
+        run = " ".join(x for x in ("KIT_FINAL_CHECK=1", (e.get("env") or "").strip(), cmd) if x)
+        if needs_docker(e):
+            run = f"{DOCKER_UP} && {run}"
+        job = f"final-{tag}-{name}"
+        log = os.path.join(tempfile.gettempdir(), "cctoolkit-bg", job, "log").replace(os.sep, "/")
+        result["suites"].append({"name": name, "job": job, "start": f"cctoolkit bg start {job} -- {shlex.quote(run)}", "log": log})
+    return result
 
 
 def plan(c, root, work, batch, lock=False):
@@ -116,7 +152,7 @@ def plan(c, root, work, batch, lock=False):
         env = (e.get("env") or "").strip()
         out = f"{tmp.as_posix()}/test-{name}.txt"
         run = " ".join(x for x in (env, cmd, filters) if x)
-        result["suites"].append({"name": name, "scope": scope, "run": line(run, out, lock), "output": out})
+        result["suites"].append({"name": name, "scope": scope, "run": line(run, out, lock, needs_docker(e)), "output": out})
     return result, tmp
 
 
@@ -155,6 +191,17 @@ def main(argv):
         rx = (c.data.get("tdd") or {}).get("failedTest", "")
         names = sorted({m.group(1) for m in re.finditer(rx, text, re.M)}) if rx else []
         print("\n".join(names))
+        return 0
+    if len(args) == 2 and args[0] == "--final":
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,40}", args[1]):
+            print("suites-plan: --final takes a tag of letters, digits, '.', '_' or '-'", file=sys.stderr)
+            return 2
+        try:
+            c = kit_config.load()
+        except kit_config.KitConfigError as e:
+            print(f"kit.config.json: {e} — cctoolkit doctor", file=sys.stderr)
+            return 2
+        print(json.dumps(final(c, args[1]), ensure_ascii=False))
         return 0
     root = None
     if "--root" in args:

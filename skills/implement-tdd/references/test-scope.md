@@ -84,7 +84,7 @@ APP_TEST_MODE=true <commands.test, {suite}=IntegrationTests> \
   --filter-class "*.Catalog.Products.Save.*" > "$SCRATCH/test-integration.txt" 2>&1; echo "exit=$?"; tail -15 "$SCRATCH/test-integration.txt"
 ```
 
-`APP_TEST_MODE` stands for the integration suite's test-mode variable: use the name the repo documents for it (typically in the suite's own `CLAUDE.md`). Namespace roots = the first-level folders of `{{PRODUCT}}.IntegrationTests` (`ls`), never a remembered list.
+`APP_TEST_MODE` stands for the integration suite's test-mode variable: the `env` of its `commands.suites` entry (`kit.config.json`), which `cctoolkit suites-plan` already puts ahead of each run line; when unset, the name the repo documents (the suite's own `CLAUDE.md`). Namespace roots = the first-level folders of `{{PRODUCT}}.IntegrationTests` (`ls`), never a remembered list.
 
 **Selection rule**: modified repository → its aggregate's namespace **and** that of any aggregate whose persistence test builds it. One level deeper (`*.Catalog.Products.Save.*` rather than `*.Catalog.Products.*`) as soon as the touched method is identified; one level up only when a shared signature changes. Doubt about scope → widen one level, never run everything.
 

@@ -15,6 +15,7 @@ let next = 0
 const agent = async (prompt, o) => {
   labels.push(o.label)
   const l = o.label
+  if (l === 'preflight' && (!prompt.includes('`cctoolkit docker-up --wait 0 || true`') || !prompt.includes('; cctoolkit docker-up --wait 120`'))) console.log('WARN preflight starts or checks Docker without docker-up')
   if (l === 'preflight') return { ok: true, failure: '', plan: '/r/todo/x/X-PLAN.md', root: '/r', kit: '/k', runRoot: '/r/todo/x/run', stamp: '2026-10-15-1000' }
   if (l === 'next batch') {
     const b = order[next++]
@@ -31,6 +32,7 @@ const agent = async (prompt, o) => {
   if (l.startsWith('gate') && (!prompt.includes('`cctoolkit config command build` prints the solution build') || prompt.includes('test-scope.md'))) console.log('WARN gate without the build command, or sent to test-scope.md')
   if (l.startsWith('gate')) return { statusLine: '## STATUS — DONE', verdictLine: 'Verdict: VALID', planDone: true, build: 0 }
   if (l.startsWith('commit')) return { ok: true, commit: `committed abc12${labels.length % 10}f: 3 file(s)` }
+  if (l === 'final check' && (!prompt.includes('`cctoolkit suites-plan --final 2026-10-15-1000`') || !prompt.includes('`cctoolkit bg wait <job> --seconds 540`') || !prompt.includes('1500 s or more → `cctoolkit bg stop <job>`') || prompt.includes('sleep 10'))) console.log('WARN final check without the resolved suites, the bounded bg wait or its stop')
   if (l === 'final check') return { suites: [] }
   if (l === 'security') {
     if (!/Batch commits of the plan: abc12\df( abc12\df)*\./.test(prompt)) console.log('WARN security pass without the batch commits')

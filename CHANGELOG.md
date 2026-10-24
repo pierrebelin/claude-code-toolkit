@@ -4,6 +4,13 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.9.0 — 2026-10-24
+
+- `cctoolkit`: `run-plan`'s final check no longer waits an hour for a suite that hangs. On two measured plans, `IntegrationTests` never finished: the check polled 6 times for 10 minutes, then reported `exit 124`, 47 to 56 minutes lost each time. Each suite now runs as a `cctoolkit bg` job, which notices a process that died. A suite still running after 25 minutes is stopped (a whole `IntegrationTests` run takes about 10). Its lines come from `cctoolkit suites-plan --final`, so they carry the suite's `env` from `commands.suites` (the test-mode variable). Before, the agent added that variable only when the suite's `CLAUDE.md` documented it, and the plans above ran without it.
+- `cctoolkit`: a suite whose `commands.suites` entry sets `"requires": ["docker"]` checks that the Docker engine is up before it starts (`cctoolkit docker-up`). If it is down, Docker Desktop is started and waited for, up to 3 minutes. If it is still down, the suite fails at once with `docker=down — <why>`, instead of a Testcontainers run hanging until the Bash call's 10-minute timeout (measured several times per plan). The `clean-architecture` preset sets it on `IntegrationTests`. `run-plan` and `run-audit` start Docker Desktop through `docker-up` too, which also finds a per-user install (`%LOCALAPPDATA%\Programs\DockerDesktop`). Before, only `Program Files` was tried.
+- `cctoolkit`: in `run-lot`, the cycles of one wave that run side by side build under `cctoolkit build-lock`. They used to compile the same test project at the same time in one checkout and hit `file in use` errors, which the agents worked around with retry loops (about 2 minutes per cycle, measured on a wave of 4).
+- `cctoolkit`: `kit.config.json` validation names a `commands.suites[].requires` value other than `docker`.
+
 ## 2.8.4 — 2026-10-23
 
 - `run-lot-pane`: a resumed plan shows its total time next to this run's: `12m03 · total 48m10` adds the time of the batches an earlier run finished (the figures already shown on their rows). A batch run again in this run counts once.

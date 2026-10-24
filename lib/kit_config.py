@@ -42,6 +42,8 @@ PREFIX_RE = re.compile(r"[A-Z][A-Z0-9]{1,5}")
 # What a preset or the repo leaves unset of `closing` (lib/closing_level.py): no rule, no cap.
 CLOSING_DEFAULTS = {"maxProductionFiles": 0, "full": []}
 CLOSING_CHANGES = re.compile(r"[AMD]+")
+# What a suite of `commands.suites` may require before it starts (scripts/suites-plan.py): `cctoolkit docker-up`.
+SUITE_REQUIRES = {"docker"}
 # `run` is stack-neutral: its defaults live here. One batch at a time; two at most share a checkout, the
 # second in a worktree of its own (`cctoolkit batch-worktree`), their long builds one at a time (`build-lock`).
 RUN_DEFAULTS = {"parallelBatches": 1}
@@ -481,13 +483,16 @@ def validate(root):
             out.append(("FAIL", "commands.architectureTest.when", f"invalid regex: {e}"))
     suites = c.commands.get("suites", [])
     if not isinstance(suites, list) or not all(isinstance(s, dict) and isinstance(s.get("name"), str) and s["name"] for s in suites):
-        out.append(("FAIL", "commands.suites", "expects [{\"name\": \"<suite>\", \"when\": \"<path regex>\", \"filter\": \"…{namespace}…\", \"project\": \"<test project>\", \"env\": \"VAR=value\"}]"))
+        out.append(("FAIL", "commands.suites", "expects [{\"name\": \"<suite>\", \"when\": \"<path regex>\", \"filter\": \"…{namespace}…\", \"project\": \"<test project>\", \"env\": \"VAR=value\", \"requires\": [\"docker\"]}]"))
     else:
         for s in suites:
             try:
                 re.compile(c.expand(s.get("when") or ""))
             except re.error as e:
                 out.append(("FAIL", f"commands.suites.{s['name']}.when", f"invalid regex: {e}"))
+            req = s.get("requires", [])
+            if not isinstance(req, list) or any(r not in SUITE_REQUIRES for r in req):
+                out.append(("FAIL", f"commands.suites.{s['name']}.requires", f"expects a list among {', '.join(sorted(SUITE_REQUIRES))}"))
             if s.get("filter") and not s.get("project"):
                 out.append(("FAIL", f"commands.suites.{s['name']}", "a filtered suite needs `project`, the test project its namespaces are read from"))
     out += validate_test_fast(c)

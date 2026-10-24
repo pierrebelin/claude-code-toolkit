@@ -48,6 +48,7 @@ const run = async () => {
   const rearm = cycleContract(c, red('RED', 1))
   assert(rearm.includes('its RED was accepted earlier') && rearm.includes(JSON.stringify(red('RED', 1))) && rearm.includes('Run no test before the checkpoint'), 'an accepted RED is re-armed verbatim, no test run before')
   assert(!cycleContract({ ...c, guard: true }).includes('--cycle C1 --green'), 'a guard has no GREEN contract')
+  assert(cycleContract(c, null, true).includes('starts with \`cctoolkit build-lock -- \`') && !contract.includes('cctoolkit build-lock'), 'cycles of a wave run side by side build under build-lock, a cycle alone does not')
   const calls = []
   const out = await withRetry('Design', (suffix, options) => (calls.push({ suffix, options }), Promise.resolve(null)), r => (r ? null : 'design agent without result'))
   assert(out.reason && calls.length === 2 && calls.every(x => !x.options.model), 'a step outside the cycles is retried once, never on opus')

@@ -265,10 +265,12 @@ const cycleState = (c, red, green = false) => `\`cctoolkit run-work append ${wor
 // One tdd-cycle agent per cycle, every closing: its RED, the checkpoint the TDD scope hook checks on the
 // tree (agents/tdd-cycle.md), then its GREEN. `red`: a RED already accepted (saved by an earlier run, or by
 // an earlier attempt whose GREEN was rejected) — the agent re-arms the checkpoint with it and writes the GREEN.
-// A batch run beside another: the test project's build of `commands.testFast` waits for the other's builds.
-const LOCKED_FAST = 'Another batch builds beside this one: every filtered test command, RED and GREEN, starts with `cctoolkit build-lock -- ` then the printed command as words, never quoted — its build step waits for the builds of the other batch, the test run follows.'
+// A batch run beside another, or cycles of one wave run side by side in one checkout (measured downstream:
+// four cycles building the same test project fought over `obj/`, 2 min of `file in use` retries each): the
+// test project's build of `commands.testFast` waits for the other builds.
+const LOCKED_FAST = 'Other builds run beside this one (another batch, or the cycles of this wave): every filtered test command, RED and GREEN, starts with `cctoolkit build-lock -- ` then the printed command as words, never quoted — it waits for the other builds, then builds and runs; never a retry loop around a build.'
 
-function cycleContract(c, red = null) {
+function cycleContract(c, red = null, together = false) {
   const ripple = red && red.status === 'ALREADY_GREEN' ? red.pendingRipple || [] : []
   const noGreenAfter = c.guard
     ? 'A guard writes no GREEN: the output carries `red` alone.'
@@ -287,7 +289,7 @@ function cycleContract(c, red = null) {
     ]),
     '',
     ...(c.guard ? [] : [greenContract(c, ripple), '']),
-    ...(lock ? [LOCKED_FAST, ''] : []),
+    ...(lock || together ? [LOCKED_FAST, ''] : []),
     AMBIGUITY,
     'Structured output: `red` = the report the checkpoint accepted, unchanged; `green` = your `## GREEN` report (`production`, `command`, `exit`, `testsDiff`, `cost`, `independentOf`, `removed`, `flagged`); `decisions` = your ambiguity lines, empty when none.',
     `Last step before the structured output, after a GREEN: one call, ${cycleState(c, red, true)}${red ? '' : ', `<the RED report>` = the one the checkpoint accepted'}.`,
@@ -370,7 +372,7 @@ const needsGreen = (c, red) => !c.guard && red.table.length > 0 && !(red.status 
 // One cycle: an attempt, one retry carrying the reason, one last attempt on opus with every reason. A RED
 // accepted on the way is kept: the next attempt re-arms it and writes the GREEN only. Still rejected: a
 // refactor or guard cycle is left out and listed to validate, any other stops the batch. The stop reason, or null.
-async function runCycle(c) {
+async function runCycle(c, together = false) {
   const resumed = c.resume ? savedOf(c) : null
   let red = resumed && resumed.red && !checkRed(c, resumed.red) ? resumed.red : null
   if (c.resume && !red) log(`${c.behaviour}: saved RED ${resumed && resumed.red ? 'rejected' : 'missing'}, RED rerun`)
@@ -380,7 +382,7 @@ async function runCycle(c) {
     const model = n === 3 ? LAST_MODEL : null
     if (model) log(`${step}: last attempt on ${LAST_MODEL} — ${short(reasons[reasons.length - 1], 60)}`)
     const suffix = n === 1 ? '' : retryHead(step, n, reasons[reasons.length - 1]) + (model ? escalation(reasons) : retryText(reasons[reasons.length - 1]))
-    const x = await agent(cycleContract(c, red) + suffix, { agentType: 'cctoolkit:tdd-cycle', schema: CYCLE_RESULT, phase: 'RED', label: cycleLabel(c, model), ...(model ? { model } : {}) }).catch(() => null)
+    const x = await agent(cycleContract(c, red, together) + suffix, { agentType: 'cctoolkit:tdd-cycle', schema: CYCLE_RESULT, phase: 'RED', label: cycleLabel(c, model), ...(model ? { model } : {}) }).catch(() => null)
     const redWhy = red ? null : x ? checkRed(c, x.red) : 'cycle agent without result'
     if (redWhy) {
       reasons.push(redWhy)
@@ -716,7 +718,7 @@ log(`closing planned ${planned}${lotIndex.closing && lotIndex.closing.reasons.le
 
 for (const wave of waves) {
   for (const group of disjoint(wave)) {
-    const stops = await parallel(group.map(c => () => runCycle(c)))
+    const stops = await parallel(group.map(c => () => runCycle(c, group.length > 1)))
     const stop = stops.find(Boolean)
     if (stop) return await finish(BLOCKED, stop)
   }

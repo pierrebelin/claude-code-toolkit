@@ -44,7 +44,7 @@
       {"name": "UnitTests"},
       {"name": "ArchitectureTests", "when": "^src/.*(Handler|Endpoints/|Repositories/|Extensions/|DbContext)"},
       {"name": "ContractTests", "when": "^src/[^/]*\\.(Api|Abstractions)[^/]*/|Endpoints/"},
-      {"name": "IntegrationTests", "when": "^src/[^/]*\\.Infrastructure/", "filter": "--filter-class \"*.{namespace}.*\"", "project": "tests/{product}.IntegrationTests"}
+      {"name": "IntegrationTests", "when": "^src/[^/]*\\.Infrastructure/", "filter": "--filter-class \"*.{namespace}.*\"", "project": "tests/{product}.IntegrationTests", "requires": ["docker"]}
     ]
   },
   "closing": {
