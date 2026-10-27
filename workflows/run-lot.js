@@ -253,13 +253,17 @@ const rippleOnly = files => (files.length
   ? `The red test already passes: no test covers the files below, which the batch diff does not hold yet. Your GREEN is them, per the \`Signature ripple\` and \`To create\` lines of your contract: ${list(files)}. The filtered test stays green.`
   : '')
 
-function greenContract(c, ripple = []) {
+// The filtered test builds its test project alone: a production file it does not reference (an adapter, an
+// endpoint) first compiled at the global green (2026-10-26: a wave-2 RED blocked on wave 1's adapter, then the
+// batch's solution build red, an opus repair). The cycle that wrote it compiles it, the solution build once.
+function greenContract(c, ripple = [], locked = false) {
   return [
     `GREEN + REFACTOR phase, once the checkpoint passed: your contract is \`${contractCommand(c, '--green')}\` (out of scope, to create, production you may fill, signature ripple, read bounded, elements, applied ids, invariants, expected cost). Never read the sheet itself.`,
     c.refactor
       ? 'Safety net, green and kept green — behaviour unchanged: the tests of your RED report, untouched.'
       : 'Red tests: those of your RED report; the stubs it lists are bodies to fill (read in full).',
     rippleOnly(ripple),
+    `Once the filtered test is green, the solution build: \`cctoolkit config command build\` prints it (nothing printed → skip this step), run it literally${locked ? ' as `cctoolkit build-lock -- <printed command>`, the command as words, never quoted' : ''}, never \`eval\`. An error in a file of your \`production\` → fix it, then the filtered test and this build again; errors only in files you did not change → another cycle's work in flight, leave them.`,
     `\`Cost\` line from \`cctoolkit access-cost --base ${workFile} ${batch} <production files>\`: lines this batch added flagged, earlier ones listed pre-existing.`,
     'Your `## GREEN` report: `production` = paths modified or created (handler `CLAUDE.md` included), `exit` = code of the final filtered test,',
     '`testsDiff` = each test file you changed after the checkpoint, `path` and `why` (a test changes only when it is wrong: fixture, compile ripple, a value a shared helper normalises — never an assertion of the behaviour removed or loosened; a hook records each one for the audit), `cost` = last line of `cctoolkit access-cost` verbatim, a flagged line included (the audit judges it),',
@@ -295,7 +299,7 @@ function cycleContract(c, red = null, together = false) {
       noGreenAfter,
     ]),
     '',
-    ...(c.guard ? [] : [greenContract(c, ripple), '']),
+    ...(c.guard ? [] : [greenContract(c, ripple, lock || together), '']),
     ...(lock || together ? [LOCKED_FAST, ''] : []),
     AMBIGUITY,
     'Structured output: `red` = the report the checkpoint accepted, unchanged; `green` = your `## GREEN` report (`production`, `command`, `exit`, `testsDiff`, `cost`, `independentOf`, `removed`, `flagged`); `decisions` = your ambiguity lines, empty when none.',

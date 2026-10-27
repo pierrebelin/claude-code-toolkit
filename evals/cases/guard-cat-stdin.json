@@ -1,0 +1,57 @@
+{
+  "cases": [
+    {
+      "name": "cat > /dev/null before a heredoc meant for another command is denied (run-plan 2026-10-26, 120 s timeout then 20 min of waiting)",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "agent_id": "agent-abc", "agent_type": "cctoolkit:tdd-cycle", "tool_input": {"command": "cd /c/repo; cat > /dev/null; cctoolkit tdd-scope red <<'RED_JSON'\n{\"status\": \"RED\"}\nRED_JSON"}},
+      "expect": {"decision": "deny", "reason": "`cat` with nothing to read refused (cat > /dev/null)"}
+    },
+    {
+      "name": "cat > file 2>/dev/null after && is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "cd /c/repo && cat > /tmp/x 2>/dev/null; cctoolkit run-work append todo/x"}},
+      "expect": {"decision": "deny", "reason": "cat > /tmp/x 2>/dev/null"}
+    },
+    {
+      "name": "cat > file at the end of the command is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "ls; cat >f"}},
+      "expect": {"decision": "deny", "reason": "nothing to read"}
+    },
+    {
+      "name": "cat > file fed by a heredoc passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "cat > /tmp/red.json <<'EOF'\n{\"a\": 1}\nEOF"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "cat > file fed by < or <<< passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "cat > /tmp/a < /tmp/b; cat >> /tmp/a <<< \"x\""}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "cat fed by a pipe passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "echo a | cat > /tmp/f"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "cat of a file redirected, and a bare $(cat), pass",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "cat a.txt > /tmp/out; printf x | { y=$(cat); echo \"$y\"; }"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "a word ending in cat passes",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "tool_input": {"command": "concat > /tmp/f"}},
+      "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "empty input exits 0, silent",
+      "cmd": "echo '{}' | bash {{KIT}}/lib/guard-cat-stdin.sh; echo \"exit=$?\"",
+      "expect": {"stdout": "exit=0"}
+    }
+  ]
+}

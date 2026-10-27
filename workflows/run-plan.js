@@ -66,7 +66,7 @@ const OK = obj({ ok: bool, detail: str })
 const SEALED = obj({ ok: bool, commit: str })
 const FIX = obj({ fixed: arr(str), files: arr(str), validations: arr(str) })
 const REPORT = obj({ path: str, lastLine: str })
-const FINAL = obj({ suites: arr(obj({ name: str, exit: int, failed: arr(str), last: arr(str) }, ['last'])) })
+const FINAL = obj({ suites: arr(obj({ name: str, exit: int, failed: arr(str), last: arr(str), stalled: bool }, ['last', 'stalled'])) })
 const BREAKER = obj({ commonCause: bool, cause: str, batches: arr(str), fixBeforeRelaunch: str })
 const PREPARED = obj({ exit: int, nothing: str, refused: arr(str) })
 const MERGED = obj({ staged: bool, stagedLine: str, files: arr(str), warnings: arr(str), blocked: str })
@@ -75,6 +75,9 @@ const WORKTREE = obj({ ok: bool, path: str, detail: str })
 const LANDED = obj({ landed: bool, commit: str, from: str, detail: str })
 // A whole IntegrationTests run measured 602 s downstream (2026-09-10): past 25 min the suite hangs.
 const FINAL_TIMEOUT_MIN = 25
+// A suite whose log has not grown for this long hangs: one line per test, a test past 5 min flagged
+// (`commands.finalCheck`). 2026-10-26: IntegrationTests silent from minute 2, stopped at the ceiling, 23 min idle.
+const FINAL_SILENT_MIN = 10
 
 function newFailures(build) {
   return build === 0 ? [] : [`build=${build}`]
@@ -472,7 +475,7 @@ const finalCheck = ran.some(r => r.status === DONE) && !scope.startsWith('--only
         `Final check of the plan, after its last batch: every suite runs whole once, \`IntegrationTests\` included. The result is reported, never a stop: fix nothing.`,
         `1. One call: \`cctoolkit suites-plan --final ${pre.stamp}\`. It prints \`suites\` (each with \`name\`, \`job\`, \`start\`, \`log\`) and \`notRun\`: copy each line literally, never rebuild nor \`eval\` one — the suite's env prefix, the integration guard's \`KIT_FINAL_CHECK=1\` marker and the Docker start are in it. \`suites\` empty → \`suites\` empty, stop.`,
         '2. Every `start` line in a single message, one Bash call each: each suite runs detached, a `cctoolkit bg` job.',
-        `3. Then each job in turn, Bash timeout 600000: \`cctoolkit bg wait <job> --seconds 540\`. It prints \`DONE exit=<n>\`, \`FAILED exit=<n>\` (\`exit=none\`: the process died without an exit code) or \`RUNNING <seconds>s\`. \`RUNNING\` under ${FINAL_TIMEOUT_MIN * 60} s → the same call again; ${FINAL_TIMEOUT_MIN * 60} s or more → \`cctoolkit bg stop <job>\`, that suite's \`exit\` = 124. No other wait loop, no \`sleep\`.`,
+        `3. Then each job in turn, Bash timeout 600000: \`cctoolkit bg wait <job> --seconds 540 --silent ${FINAL_SILENT_MIN * 60}\`. It prints \`DONE exit=<n>\`, \`FAILED exit=<n>\` (\`exit=none\`: the process died without an exit code), \`RUNNING <seconds>s\` or \`STALLED <seconds>s\` (its log silent ${FINAL_SILENT_MIN} min: the suite hangs). \`RUNNING\` under ${FINAL_TIMEOUT_MIN * 60} s → the same call again; ${FINAL_TIMEOUT_MIN * 60} s or more → \`cctoolkit bg stop <job>\`, that suite's \`exit\` = 124. \`STALLED\` → \`cctoolkit bg stop <job>\`, \`exit\` = 124, \`stalled\` = true. No other wait loop, no \`sleep\`.`,
         '4. One entry per suite: `name`, `exit` = the code `bg wait` printed (`exit=none` → 125), `failed` = for an exit other than 0, the lines `cctoolkit suites-plan --failed <log>` prints, those calls in one message; empty for a green suite. A suite at 124 also gets `last` = the lines `cctoolkit bg log <job> --lines 8` prints (the log fills test by test: they name the test the suite stopped on). Never open a log beyond that.',
       ].join('\n'),
       { schema: FINAL, phase: 'Final check', label: 'final check', ...SHELL },
@@ -480,7 +483,7 @@ const finalCheck = ran.some(r => r.status === DONE) && !scope.startsWith('--only
   : null
 const finalRed = finalCheck ? finalCheck.suites.filter(x => x.exit !== 0) : []
 if (finalCheck === null && ran.some(r => r.status === DONE) && !scope.startsWith('--only')) toReview.push({ batch: '—', step: 'Final check', text: 'final check agent without result: suites not run whole' })
-for (const x of finalRed) toReview.push({ batch: '—', step: 'Final check', text: `${x.name} exit=${x.exit}${x.exit === 124 ? ` (stopped after ${FINAL_TIMEOUT_MIN} min)` : ''}${x.failed.length ? `: ${x.failed.join(', ')}` : ''} — not attributed: a batch of this run or a failure already on the starting tree; log: \`cctoolkit bg log final-${pre.stamp}-${x.name} --lines 40\``, why: (x.last || []).join(' / ') })
+for (const x of finalRed) toReview.push({ batch: '—', step: 'Final check', text: `${x.name} exit=${x.exit}${x.exit === 124 ? (x.stalled ? ` (stopped: its log silent ${FINAL_SILENT_MIN} min)` : ` (stopped after ${FINAL_TIMEOUT_MIN} min)`) : ''}${x.failed.length ? `: ${x.failed.join(', ')}` : ''} — not attributed: a batch of this run or a failure already on the starting tree; log: \`cctoolkit bg log final-${pre.stamp}-${x.name} --lines 40\``, why: (x.last || []).join(' / ') })
 if (finalRed.length) log(`final check red: ${finalRed.map(x => x.name).join(', ')}`)
 
 // One security pass over what the plan committed, read-only, never a stop: the audits judge a batch

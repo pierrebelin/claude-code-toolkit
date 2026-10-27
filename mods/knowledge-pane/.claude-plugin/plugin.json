@@ -1,6 +1,6 @@
 {
   "name": "knowledge-pane",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "description": "Side pane browsing the business knowledge base: contexts, use cases and their rules, decisions, ADRs, history, a staged merge or sync; and following a /business-spec: decisions and answers, open questions, use cases, business rules, sections, unfolded inline on click; read-only, no model context spent",
   "author": {
     "name": "Pierre Belin",

@@ -2,14 +2,16 @@
 """Detached jobs a Workflow agent starts and waits for in bounded calls — a run longer than a Bash call.
 
     cctoolkit bg start <name> -- <command>     # detached; refused while <name> runs
-    cctoolkit bg wait <name> [--seconds 540]   # 0 done, 1 failed, 3 still running
+    cctoolkit bg wait <name> [--seconds 540] [--silent N]   # 0 done, 1 failed, 3 still running, 4 log silent N s
     cctoolkit bg status <name>                 # same exit codes, no wait
     cctoolkit bg stop <name>...                # SIGTERM to the job's process group
     cctoolkit bg log <name> [--lines 20]       # last lines of the log
 
 `<command>` is one shell string run by `bash -c` (several words are joined). The job's
 folder is `<temp>/cctoolkit-bg/<name>/`: `pid`, `exit`, `log`. `wait` prints one line,
-`DONE exit=0`, `FAILED exit=<n>` or `RUNNING <seconds>s`, then the last log lines.
+`DONE exit=0`, `FAILED exit=<n>`, `RUNNING <seconds>s` or, under `--silent N`, `STALLED <seconds>s`
+as soon as a running job's log has not grown for N seconds — a hung suite told apart from a slow
+one — then the last log lines.
 Exit 2: unknown job or bad arguments.
 """
 import os
@@ -81,19 +83,30 @@ def tail(name, lines):
     return [l.rstrip() for l in text.replace("\r", "\n").splitlines() if l.strip()][-lines:]
 
 
-def report(name, verbose=True):
+def silence(name):
+    """Seconds since the job's log last grew."""
+    try:
+        return time.time() - os.path.getmtime(os.path.join(folder(name), "log"))
+    except OSError:
+        return 0
+
+
+def report(name, verbose=True, silent=None):
     s, code, started = state(name)
     if s == "unknown":
         print(f"UNKNOWN {name}")
         return 2
-    if s == "running":
+    stalled = s == "running" and silent is not None and silence(name) >= silent
+    if stalled:
+        print(f"STALLED {int(time.time() - started)}s, log silent {int(silence(name))}s")
+    elif s == "running":
         print(f"RUNNING {int(time.time() - started)}s")
     else:
         print(f"{'DONE' if s == 'done' else 'FAILED'} exit={'none (process gone without an exit code)' if code is None else code}")
     if verbose:
         for line in tail(name, TAIL):
             print(f"  {line[:300]}")
-    return {"done": 0, "failed": 1, "running": 3}[s]
+    return 4 if stalled else {"done": 0, "failed": 1, "running": 3}[s]
 
 
 def start(name, words):
@@ -126,12 +139,12 @@ def start(name, words):
     return 0
 
 
-def wait(name, seconds):
+def wait(name, seconds, silent=None):
     deadline = time.time() + seconds
     while True:
         s = state(name)[0]
-        if s != "running" or time.time() >= deadline:
-            return report(name)
+        if s != "running" or time.time() >= deadline or (silent is not None and silence(name) >= silent):
+            return report(name, silent=silent)
         time.sleep(min(POLL, max(0.2, deadline - time.time())))
 
 
@@ -173,7 +186,8 @@ def main(argv):
     if cmd == "status":
         return report(names[0])
     seconds = float(rest[rest.index("--seconds") + 1]) if "--seconds" in rest else 540
-    return wait(names[0], seconds)
+    silent = float(rest[rest.index("--silent") + 1]) if "--silent" in rest else None
+    return wait(names[0], seconds, silent)
 
 
 if __name__ == "__main__":

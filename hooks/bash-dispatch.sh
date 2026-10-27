@@ -93,6 +93,7 @@ emit() {
 # here; the module keeps its own copy for a run alone (an eval).
 MODULES=(
   "guard-git.sh                 cmd=git"
+  "guard-cat-stdin.sh           cmd=cat"
   "guard-tdd-scope.sh           agent=(tdd-implementer|tdd-test-author|tdd-cycle)$"
   "guard-cat-bounds.sh          cmd=cat|head|tail|sed|awk"
   "guard-diff-bounds.sh         cmd=git"

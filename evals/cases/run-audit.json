@@ -104,6 +104,14 @@
       }
     },
     {
+      "name": "bg wait --silent: a job whose log stops growing returns STALLED (exit 4) before --seconds; a job writing every second runs to DONE (run-plan 2026-10-26: a suite silent 23 min waited to its ceiling)",
+      "cmd": "B='python3 {{KIT}}/scripts/bg.py'; $B start ev4-{{SID}} -- 'echo one; sleep 30' >/dev/null; $B wait ev4-{{SID}} --seconds 20 --silent 2 | head -1 | sed 's/ [0-9]*s, log silent [0-9]*s$/ s/'; echo \"code=${PIPESTATUS[0]}\"; $B stop ev4-{{SID}} >/dev/null; $B start ev5-{{SID}} -- 'for i in 1 2 3 4; do echo $i; sleep 1; done' >/dev/null; $B wait ev5-{{SID}} --seconds 20 --silent 3 | head -1",
+      "expect": {
+        "exit": 0,
+        "stdout": "STALLED s\ncode=4\nDONE exit=0"
+      }
+    },
+    {
       "name": "audit-worktree: create detached at the main branch, untracked kit config copied, remove refuses a path that is no audit worktree",
       "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && echo '{}' > .claude/kit.config.json && python3 {{KIT}}/scripts/audit-worktree.py create | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[\"branch\"], d[\"copied\"])'; git worktree list | wc -l | tr -d ' '; python3 {{KIT}}/scripts/audit-worktree.py remove /tmp/x 2>&1; python3 {{KIT}}/scripts/audit-worktree.py remove; git worktree list | wc -l | tr -d ' '",
       "expect": {
