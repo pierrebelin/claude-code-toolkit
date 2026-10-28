@@ -81,7 +81,7 @@ def create(ref):
     copied = []
     for rel in UNTRACKED:
         src, dst = os.path.join(ROOT, rel), os.path.join(path, rel)
-        if not os.path.exists(src) or os.path.exists(dst):
+        if not os.path.exists(src) or os.path.lexists(dst):
             continue
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)

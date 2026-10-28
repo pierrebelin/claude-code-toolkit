@@ -20,7 +20,7 @@ The measuring is the `run-audit` workflow (`workflows/run-audit.js`, shipped by 
    - **Full (~2h)** — mutate every file. Scores comparable between reports.
    - **Since (~45 min)** — Stryker .NET only: mutate the files changed since the last report's commit. Scores not comparable across reports.
 2. In one message: `date +%F` and `git rev-parse --show-toplevel`.
-3. Skill `cctoolkit:run-audit`, argument as text: `--stryker off|full|since --date <date> --checkout <top level>`.
+3. Skill `cctoolkit:run-audit`, argument as text: `--stryker off|full|since --date <date> --checkout <top level>`, plus `--ref <branch|sha>` when the user names the branch to audit ("the current branch" → `git branch --show-current`). Without it the audit measures the main branch (`origin/HEAD`), not the checked-out one; the report states the branch and commit measured.
 
 The run never asks anything: a tool that fails gives `missing` and the run goes on. It takes 15-30 min without Stryker, Stryker's time on top (the run stops it past 4 h in full, 1 h 30 in since). An interrupted run leaves its worktree: the next one prunes it (`cctoolkit audit-worktree prune` by hand).
 
@@ -42,7 +42,7 @@ Read by the workflow's report, repair and coherence agents. The report is produc
 
 Every measured block has one of four statuses. Tests, coverage, SonarQube and Stryker record theirs in `metadata.evidence`; `activity.hotspots` and each `codebase.*` block of `cctoolkit audit-collect` and `risk-cross` carry their own `{status, reason, commit}`:
 
-- **measured** — the tool ran on the report commit and its result was read. Clean or with findings.
+- **measured** — the tool ran on the report commit and its result was read. Clean or with findings. A *partial* result stays `measured` and carries a `reason`: the tests block when the unit, contract and architecture suites ran and the integration suite was stopped or refused — the suites that ran hold their numbers, the others are `null`. §1 shows ⚠️ for it, never ✅, and §9 names the suite that did not run and why.
 - **not_configured** — the project has no such tool. The section says so (`Stryker is not configured on this project.`); §1 shows `—`, not ✅.
 - **skipped** — the tool exists, this run chose not to run it (Stryker off). The section says `Skipped — Stryker off for this run.`; §1 shows `—`; §9 names it among the blind spots: never measured is never clean.
 - **missing** — the tool exists but gave no usable result: run failed or timed out, no network, output unreadable, or the result read belongs to another commit (a SonarQube analysis whose `revision` is not the report commit). The section says `Missing — <reason>`, §1 shows 🔴, §9 counts it.

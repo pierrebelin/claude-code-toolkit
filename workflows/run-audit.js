@@ -1,7 +1,7 @@
 export const meta = {
   name: 'run-audit',
   description: 'Quality report of the main branch, in a throwaway worktree: tests, coverage, SonarQube, hotspots, traceability, suppressions, vulnerabilities, Stryker on demand, report and coherence checks',
-  whenToUse: 'Launched by /quality-report once the Stryker mode is chosen. Argument: `--stryker off|full|since --date YYYY-MM-DD --checkout <absolute path of the main checkout>`.',
+  whenToUse: 'Launched by /quality-report once the Stryker mode is chosen. Argument: `--stryker off|full|since --date YYYY-MM-DD --checkout <absolute path of the main checkout> [--ref <branch|sha>]`; without `--ref` the main branch is audited.',
   phases: [
     { title: 'Preflight', detail: 'doctor, leftover jobs stopped, audit worktree of the main branch, stack, temp folder, Docker' },
     { title: 'Tests', detail: 'dependencies, build, every suite with coverage — alone: Testcontainers and Docker' },
@@ -31,8 +31,9 @@ const flag = name => {
 const mode = flag('stryker') || 'off'
 const date = flag('date')
 const checkout = slashed(flag('checkout')).replace(/\/$/, '')
+const ref = flag('ref')
 if (!['off', 'full', 'since'].includes(mode) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^(?:[A-Za-z]:)?\//.test(checkout)) {
-  throw new Error('expected argument: `--stryker off|full|since --date YYYY-MM-DD --checkout <absolute path of the main checkout>`')
+  throw new Error('expected argument: `--stryker off|full|since --date YYYY-MM-DD --checkout <absolute path of the main checkout> [--ref <branch|sha>]`')
 }
 
 const DONE = 'DONE'
@@ -83,7 +84,7 @@ const pre = await agent(
     '',
     '1. In one message: `cctoolkit doctor --quiet`, `date +%s` (→ `startedAt`) and `cctoolkit bg stop audit-stryker audit-sonar` (the jobs of an interrupted audit).',
     '   A doctor line starting `FAIL` → `ok: false`, `failure` = that line verbatim, every other field empty or 0, stop.',
-    '2. `cctoolkit audit-worktree create` → its JSON line: `worktree` = `path`, `commit`, `branch`, `copied`. Exit ≠ 0 → `ok: false`, `failure` = its stderr, stop.',
+    `2. \`cctoolkit audit-worktree create${ref ? ` --ref ${ref}` : ''}\` → its JSON line: \`worktree\` = \`path\`, \`commit\`, \`branch\`, \`copied\`. Exit ≠ 0 → \`ok: false\`, \`failure\` = its stderr, stop.`,
     '3. In one message, `C` = the commit\'s first 12 characters:',
     '   - stack: `cd <worktree> && if ls *.sln *.slnx >/dev/null 2>&1 || ls */*.csproj >/dev/null 2>&1; then echo dotnet; else echo none; fi` — `none` → `ok: false`, `failure` = `no .NET solution found`, stop;',
     '   - `project`: the `.sln` name without extension;',
@@ -96,6 +97,9 @@ const pre = await agent(
 )
 if (!pre) throw new Error('preflight agent without result')
 if (!pre.ok) return { status: BLOCKED, reason: pre.failure, report: null }
+if (!pre.worktree || !pre.commit || !pre.tmp) {
+  return { status: BLOCKED, reason: 'preflight answered ok without a worktree, a commit or a run folder — `cctoolkit audit-worktree create` did not run', report: null }
+}
 
 const wt = slashed(pre.worktree).replace(/\/$/, '')
 const sha = pre.commit
@@ -120,9 +124,10 @@ const FRAME = [
 
 const evidence = {}
 const nulls = {}
-const proof = (block, s, reason) => {
+const proof = (block, s, reason, partial = false) => {
   const fallback = s === NOT_CONFIGURED ? 'not configured on this project' : 'agent without result'
-  evidence[block] = { status: s, source: 'local', commit: s === MEASURED ? sha : null, reason: s === MEASURED ? null : reason || fallback }
+  // A partial block is `measured` and keeps its `reason`: the suites that ran hold numbers, the others stay null.
+  evidence[block] = { status: s, source: 'local', commit: s === MEASURED ? sha : null, reason: s === MEASURED ? (partial && reason ? reason : null) : reason || fallback }
   if (s !== MEASURED) nulls[block] = null
 }
 const fragments = []
@@ -140,13 +145,13 @@ try {
       '',
       'You run the build and the tests with coverage, nothing else.',
       `1. Section \`## Step 1\` of the stack commands (Docker) when the suites need it; then the dependencies: \`dotnet restore\`. A restore that fails → \`status: missing\`, \`reason\` = its error line, write \`{"build": {"duration_seconds": null}}\` into \`${tmp}/tests.json\`, stop.`,
-      `2. Section \`## Step 2\`: the build, timed → \`build.duration_seconds\`; then every suite with coverage as written there, logs under \`${tmp}\` in place of \`/tmp/test-*.log\`, coverage files where the section puts them (the next step reads them). Bash timeout 600000. A suite longer than that: \`cctoolkit bg start audit-tests -- '<its command>'\`, then \`cctoolkit bg wait audit-tests --seconds ${WAIT_SECONDS}\` (Bash timeout 600000) until it no longer prints \`RUNNING\`, 6 times at most.`,
+      `2. Section \`## Step 2\`: the build, timed → \`build.duration_seconds\`; then every suite with coverage as written there, logs under \`${tmp}\` in place of \`/tmp/test-*.log\`, coverage files where the section puts them (the next step reads them). The command of every run that targets IntegrationTests starts with the marker \`KIT_FINAL_CHECK=1\` (\`KIT_FINAL_CHECK=1 dotnet-coverage collect ...\`, also inside a \`cctoolkit bg start\` string): this audit is the one whole run the guard allows, without \`--filter-class\`. The same command also carries the \`env\` of the \`IntegrationTests\` entry of \`commands.suites\` in \`${checkout}/.claude/kit.config.json\` (\`jq -r '[.commands.suites[] | select(.name=="IntegrationTests") | .env // empty][0] // empty'\`, e.g. \`KIT_FINAL_CHECK=1 STID_TEST_MODE=true dotnet-coverage collect ...\`): that variable sizes the test container pool, and a whole run without it starts twice the containers and databases on the same memory. Bash timeout 600000. A suite longer than that: \`cctoolkit bg start audit-tests -- '<its command>'\`, then \`cctoolkit bg wait audit-tests --seconds ${WAIT_SECONDS}\` (Bash timeout 600000) until it no longer prints \`RUNNING\`, 6 times at most.`,
       `3. Write \`${tmp}/tests.json\`: \`{"tests": {<type>: {"passed", "failed", "skipped", "duration_seconds"}}, "build": {"duration_seconds"}}\` — one key per suite type of the schema (\`unit\`, \`integration\`, \`contract\`, \`architecture\`, \`e2e\`, or the repo's own), durations rounded to whole seconds, no \`total\` (the assembly sums it). A suite that did not run: its key with \`null\` values.`,
-      '`status`: `measured` when every suite ran to the end (failures included: a failing test is a result), `missing` otherwise with the reason. `file` = the fragment path.',
+      '`status`: `measured` when the suites that ran gave a result (failures included: a failing test is a result) — and then, if a suite did not run to the end (stopped, timed out, refused), its key stays `null` and `reason` names it and why (a partial result: the suites that ran are kept in the report). `missing` only when no suite gave a result (restore or build failed), with the reason. `file` = the fragment path.',
     ].join('\n'),
     { schema: FRAGMENT, phase: 'Tests', label: 'tests', ...STEP },
   ).catch(() => null)
-  proof('tests', tests ? tests.status : MISSING, tests && tests.reason)
+  proof('tests', tests ? tests.status : MISSING, tests && tests.reason, true)
   if (tests && tests.file) fragments.push(tests.file)
 
   phase('Measures')

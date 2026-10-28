@@ -49,9 +49,11 @@ def check_tests(report):
         elif got != expected:
             fail(f"tests.total.{field} = {got}, sum per type = {expected}")
 
+    # A suite that did not run holds nothing but nulls: the evidence reason says so, no duration to ask for.
+    ran = [t for t in types if any(tests[t].get(f) is not None for f in ("passed", "failed", "skipped"))]
     durations = {t: number(tests[t].get("duration_seconds")) for t in types}
     for name, value in durations.items():
-        if value is None:
+        if value is None and name in ran:
             warn(f"tests.{name}.duration_seconds missing")
     expected_total = sum(v for v in durations.values() if v is not None)
     got_total = number(total.get("duration_seconds"))
@@ -222,6 +224,8 @@ def check_evidence(report):
                     f"metadata.evidence.{block}: measured at {entry.get('commit')}, report commit {commit} "
                     "— results from another commit are missing, not measured"
                 )
+            if entry.get("reason"):
+                warn(f"metadata.evidence.{block}: measured partially — {entry['reason']} (§1 shows ⚠️, §9 names what did not run)")
         else:
             if numbers_in(report.get(block)):
                 fail(f"{block}: status {status} but the block holds numbers — null them, never 0 or an older figure")

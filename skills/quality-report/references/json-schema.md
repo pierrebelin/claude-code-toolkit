@@ -182,7 +182,7 @@ Schema version `2.0`. **Never modify the first-level key structure** — cross-r
 
 **Schema v2.0 notes:**
 
-- `metadata.commit` / `metadata.evidence` (optional, older reports lack them): one entry per measured block — hotspots and the `codebase.*` blocks below carry their own —, `status` = `measured` | `not_configured` | `skipped` | `missing` (SKILL.md § Evidence status); `skipped` and `missing` carry a `reason`. `source` = `local` or the CI run ID; `commit` = the commit the result belongs to, equal to `metadata.commit` when measured. A block not `measured` has its own numbers at `null`, never `0`.
+- `metadata.commit` / `metadata.evidence` (optional, older reports lack them): one entry per measured block — hotspots and the `codebase.*` blocks below carry their own —, `status` = `measured` | `not_configured` | `skipped` | `missing` (SKILL.md § Evidence status); `skipped` and `missing` carry a `reason`. `source` = `local` or the CI run ID; `commit` = the commit the result belongs to, equal to `metadata.commit` when measured. A block not `measured` has its own numbers at `null`, never `0`. A partial block (`tests` with the integration suite stopped) is `measured` with a non-null `reason`; the suites that did not run keep `null` values.
 - `metadata.stack`: always `"dotnet"`; kept for the schema.
 - 🔴 Every `duration_seconds` (tests and build) is an integer number of seconds, rounded at collection: a runner float (`465.89999999999998`) leaks into the Markdown tables as unreadable digits.
 - `tests.e2e`: E2E tests. `null` if not run.
