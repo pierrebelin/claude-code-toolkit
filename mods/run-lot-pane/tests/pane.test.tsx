@@ -5,6 +5,7 @@ import type { AgentSpawnInput, ModelUsage, On, TurnCompleteInput, TurnStepChunk,
 import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
   earlierMsOf, figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, stageLabelOf, phaseTitleOf, parseCycles,
+  cycleTestsOf, methodNameOf, rulesOf, testsByRuleOf, testTally, wordsOf,
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, relativePath, samePath, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
@@ -1559,6 +1560,57 @@ const cycleLine = (lot: string, behaviour: string, red: object, green?: object) 
   JSON.stringify({ kind: 'cycle', batch: lot, slug: cycleSlugOf(behaviour), state: JSON.parse(cycleState(behaviour, red, green)) })
 
 describe('sheet-driven cycles', () => {
+  test('planned tests: methods, rules, level, class and observation read from the cycles block', () => {
+    const sheet = `## Cycles
+
+\`\`\`json
+{"cycles": [{"id": "C1", "wave": 1, "behaviour": "Archive", "rmcu": "CAT-RM-003, CAT-RM-001 / CAT-CU-02", "level": "UT", "testClass": "ArchiveProductTests",
+  "observation": "SavedEvents holds ProductArchived", "methods": ["ArchiveProductTests.ShouldArchive_WhenPublished", "", 4]}]}
+\`\`\`
+`
+    expect(parseCycles(sheet)?.[0]).toMatchObject({
+      rmcu: 'CAT-RM-003, CAT-RM-001 / CAT-CU-02', level: 'UT', testClass: 'ArchiveProductTests', observation: 'SavedEvents holds ProductArchived', methods: ['ArchiveProductTests.ShouldArchive_WhenPublished'],
+    })
+    expect(Object.keys(parseCycles(CYCLES_SHEET)![2]!)).not.toContain('rmcu')
+  })
+
+  test('written tests: the RED table of the cycle state, planned methods matched by name, extra ones kept, unreachable flagged', () => {
+    const [plain] = parseCycles(CYCLES_SHEET)!
+    const cycle = { ...plain!, methods: ['A.Create', 'A.Refuse', 'A.Lock'] }
+    const red = { status: 'RED', exit: 1, table: [{ test: '`tests/A.cs::Create`', case: 'Product created' }, { test: 'A.Extra' }, { case: 'no test' }], unreachable: [{ method: 'A.Lock' }] }
+    const atRed = cycleProgressOf(cycle, cycleState('x', red))
+    expect(atRed.written).toEqual([{ test: '`tests/A.cs::Create`', case: 'Product created' }, { test: 'A.Extra', case: '' }])
+    expect(cycleTestsOf(atRed)).toEqual([
+      { method: 'Create', qualified: 'Create', said: 'Product created', state: 'red', isPlanned: true },
+      { method: 'Refuse', qualified: 'Refuse', said: 'Refuse', state: 'planned', isPlanned: true },
+      { method: 'Lock', qualified: 'Lock', said: 'Lock', state: 'unreachable', isPlanned: true },
+      { method: 'Extra', qualified: 'Extra', said: 'Extra', state: 'red', isPlanned: false },
+    ])
+    expect(cycleTestsOf(cycleProgressOf(cycle, cycleState('x', red, { status: 'GREEN', exit: 0 })))[0]!.state).toBe('green')
+    expect(cycleProgressOf(cycle, null).written).toEqual([])
+    expect(testTally(cycleTestsOf(atRed))).toEqual({ green: 0, total: 3 })
+    expect(methodNameOf('tests\\Catalog\\ArchiveProductTests.cs')).toBe('ArchiveProductTests')
+    expect(wordsOf('ShouldThrowProductNotFoundException_WhenProductBelongsToAnotherOrganisation')).toBe('Should throw product not found exception when product belongs to another organisation')
+    expect(wordsOf('ShouldReturn204_WhenIDIsValid')).toBe('Should return204 when id is valid')
+  })
+
+  test('tests by rule: each rule or use case its cycles cite, rules before use cases, a cycle citing none under —', () => {
+    expect(rulesOf('CAT-RM-003, CAT-RM-001 / CAT-CU-02')).toEqual(['CAT-RM-003', 'CAT-RM-001', 'CAT-CU-02'])
+    expect(rulesOf('RM-01, RM-01 / CU-2 — the TERM-1 note')).toEqual(['RM-01', 'CU-2'])
+    expect(rulesOf(undefined)).toEqual([])
+    const cycle = (id: string, rmcu: string | undefined, method: string) => ({ id, behaviour: id, wave: 1, guard: false, state: 'done' as const, unreachable: [], methods: [`T.${method}`], written: [{ test: `T.${method}`, case: method }], ...(rmcu === undefined ? {} : { rmcu }) })
+    const sheets = [
+      { lot: 'F1', name: 'One', isDone: true, steps: [], hypotheses: 0, cycles: [cycle('C1', 'CAT-RM-010 / CAT-CU-02', 'A'), cycle('C2', 'CAT-RM-002', 'B')] },
+      { lot: 'F2', name: 'Two', isDone: false, steps: [], hypotheses: 0, cycles: [cycle('C1', 'CAT-RM-002', 'C'), cycle('C2', undefined, 'D')] },
+    ]
+    expect(testsByRuleOf(sheets).map(group => [group.rule, group.tests.map(test => `${test.batch} ${test.cycle} ${test.method}`)])).toEqual([
+      ['CAT-RM-002', ['F1 C2 B', 'F2 C1 C']],
+      ['CAT-RM-010', ['F1 C1 A']],
+      ['CAT-CU-02', ['F1 C1 A']],
+      ['—', ['F2 C2 D']],
+    ])
+  })
+
   test('cycles block: parsed from the json fence under ## Cycles, absent without a block, slug of the state file', () => {
     expect(parseCycles(CYCLES_SHEET)?.map(one => [one.id, one.wave, one.guard, one.state])).toEqual([
       ['X1', 1, false, 'pending'], ['X2', 1, false, 'pending'], ['X3', 2, true, 'pending'],

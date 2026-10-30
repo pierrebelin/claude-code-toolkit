@@ -326,6 +326,76 @@ test('demo end: audit rounds under the Audit phase, to validate in each state, a
   await desktop.unmount()
 })
 
+test('tests view: every planned test by cycle with its state, regrouped by rule; the plan at its end', async ($, on) => {
+  planWorld(on, {})
+  const copies: string[] = []
+  on('ui.copy', ($, e) => {
+    copies.push(e.text)
+    return { value: { isCopied: true } }
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await paneCommand($, 'demo')
+  let ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...paneAt(100) })
+  expect((await ui.find({ key: 'open-tests' }))?.text).toBe('tests 3/7')
+  await ui.press({ key: 'open-tests' })
+  expect(await ui.find({ type: 'Text', text: /› tests$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}8 tests · 3 green · 2 red · 2 to write · 1 unreachable$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^F4 · Product lifecycle · 3\/7 green/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}✓ X1 Create the product$/ })).toBeDefined()
+  const written = await ui.find({ type: 'Text', text: /^ {4}✓ Product created in an active catalog$/ })
+  expect((written?.children[1] as { props?: { color?: string } } | undefined)?.props?.color).toBe('success')
+  expect(await ui.find({ type: 'Text', text: /^ {4}⚠ Refuse when catalog archived$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {4}● Locked product not published$/ })).toBeDefined()
+  // Not written yet: the method read as words, dimmed.
+  const planned = await ui.find({ type: 'Text', text: /^ {4}○ Should delete product item when product item removed event is saved$/ })
+  expect((planned?.children[2] as { props?: { dimColor?: boolean } } | undefined)?.props?.dimColor).toBe(true)
+  // One line per test at rest: the method, the rules and the observation wait under the pointer, each under its label.
+  const row = await ui.find({ key: 'tests-F4-X1-0-hover' })
+  expect(row?.children).toHaveLength(2)
+  expect((row?.children[1] as { props?: object }).props).toMatchObject({ display: 'none' })
+  for (const [label, text] of [
+    ['test', 'CreateProductTests.ShouldSaveProductCreatedEvent_WhenCatalogIsActive'],
+    ['rules', 'CAT-RM-001 · CAT-CU-01'],
+    ['level', 'UT · CreateProductTests'],
+    ['observes', 'the stored product no longer holds the item'],
+    ['note', 'unreachable, not written'],
+  ]) {
+    expect(await ui.find({ type: 'Text', text: label })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text })).toBeDefined()
+  }
+  expect((await ui.find({ key: 'tests-F4-X1-0-hover-copy-test' }))?.props.plain).toBeUndefined()
+  // A cut behaviour shows whole there too.
+  const whole = /^Catalog of another organisation hidden$/
+  expect(await ui.findAll({ type: 'Text', text: whole })).toHaveLength(1)
+  await ui.unmount()
+  const narrow = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...paneAt(40) })
+  expect(await narrow.findAll({ type: 'Text', text: whole })).toHaveLength(2)
+  await narrow.unmount()
+  ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...paneAt(100) })
+  await ui.press({ key: 'tests-F4-X1-0-hover-copy-test' })
+  await ui.press({ key: 'tests-F4-X1-0-hover-copy-case' })
+  await ui.press({ key: 'tests-F4-X1-hover-copy-behaviour' })
+  expect(copies).toEqual(['CreateProductTests.ShouldSaveProductCreatedEvent_WhenCatalogIsActive', 'Product created in an active catalog', 'Create the product'])
+
+  await ui.press({ key: 'tests-group' })
+  expect(await ui.find({ type: 'Text', text: /^CAT-RM-003 · 0\/2 green/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'X3' })).toBeDefined()
+  expect((await ui.find({ key: 'tests-group' }))?.text).toBe('by batch')
+  await ui.press({ key: 'back' })
+  expect(await ui.find({ key: 'open-tests' })).toBeDefined()
+
+  await paneCommand($, 'demo plan merge')
+  await ui.press({ key: 'open-tests' })
+  expect(await ui.find({ type: 'Text', text: /^ {2}9 tests · 9 green · 0 red · 0 to write$/ })).toBeDefined()
+  // Still grouped by rule: on the plan, each test names its batch beside its cycle.
+  expect(await ui.find({ type: 'Text', text: 'F2 C2' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^CAT-RM-003 · 6\/6 green/ })).toBeDefined()
+  await ui.press({ key: 'tests-group' })
+  expect(await ui.find({ type: 'Text', text: /^F1 · Archive a product · 6\/6 green/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^F2 · Restore a product · 3\/3 green/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {4}✓ Other organisation hidden$/ })).toBeDefined()
+})
+
 test('demo plan: graph as a tree on the terminal and an SVG on the desktop, entries of every batch; plan end', async ($, on) => {
   planWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })

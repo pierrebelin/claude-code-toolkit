@@ -4,6 +4,11 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.11.2 — 2026-10-30
+
+- `run-lot-pane`: a Tests view, `t` on a batch or a plan. It lists every test the batch sheets plan (their `## Cycles` block), one line each, with the behaviour it verifies: the use case its RED table gives once written, its method name read as words before. Each test shows whether it is still to write, written and red, green, or left unwritten as unreachable, followed live during the run; on a plan every batch is listed, those still to come and those an earlier run finished included, so the view is the record of what the plan proved once it ends. `r` regroups the tests by business rule and use case. The pointer on a row shows the test's full name, the cycle's rules, level and observation, a line the pane's width cut, and `copy test` / `copy behaviour` buttons. The same information was only in the `## Test recap` of each batch report, written at the end of the batch.
+- `run-lot-pane`: seated inline above the prompt, the pane asks for 40 rows instead of a third of the screen. Docked beside the transcript it already took the widest the terminal allows (45 %).
+
 ## 2.11.1 — 2026-10-28
 
 - `cctoolkit`: `/quality-report` measures the integration suite again. `run-audit` ran `IntegrationTests` whole, which the integration guard refuses without `--filter-class`: the suite never ran, the block `tests` was nulled with it (the evidence contract keeps no number under a block not measured), and the Infrastructure files read 0 % coverage. Every audit run of `IntegrationTests` now carries the `KIT_FINAL_CHECK=1` marker, as the final check of `run-plan` does. Measured on one repo: 6,785 unit, contract and architecture tests passed and none showed in the report.

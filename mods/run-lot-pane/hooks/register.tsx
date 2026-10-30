@@ -3,7 +3,7 @@ import type { EngineInterface, FsEntry, ModelUsage, Register, TurnStepChunk } fr
 
 import type {
   AuditVerdict, ChildWorkflow, Journal, KnowledgeMerge, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet,
-  LotFigures, PlanLot, Prompted, RunFeed, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun,
+  LotFigures, PlanLot, Prompted, RunFeed, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun, WrittenTest,
 } from '../types'
 
 const PANE = 'run-lot-pane'
@@ -34,6 +34,8 @@ const TIME_WIDTH = 7
 const TOKENS_WIDTH = 7
 // Wider than any terminal: the dock opens at its ceiling, 45 % of the terminal's columns.
 const PANE_COLUMNS = 1000
+// Inline above the prompt the pane asks for this many rows, not the third it gets by default.
+const PANE_ROWS = 40
 const MODEL_WIDTH = 14
 const rule = (cells: number): string => '─'.repeat(Math.max(0, cells))
 const WIDE_COLUMNS = 56
@@ -52,6 +54,8 @@ const WAITING_TONE = 'cyan'
 const WAVE_LABEL = /^RED \S+ w(\d+)\b/
 const REPORT_PHASE = 'Report'
 const CYCLES_SECTION = '## Cycles'
+// The tests view's grouping, kept in the navigation's toggles: by rule when present, by batch otherwise.
+const BY_RULE = 'tests:by-rule'
 const PANE_FILE = '.pane.jsonl'
 const FEED_KINDS = ['question', 'answer', 'audit-round', 'attempt', 'breaker', 'ack', 'journal']
 const STEP_PHASES = ['Global green', 'Closing']
@@ -1165,6 +1169,14 @@ export const parseCycles = (text: string): SheetCycle[] | null => {
     const fields = one !== null && typeof one === 'object' ? (one as Record<string, unknown>) : null
     const behaviour = textOf(fields?.behaviour)
     if (fields === null || behaviour === null) return []
+    const said = (key: string) => {
+      const text = textOf(fields[key])?.trim() ?? ''
+      return text === '' ? {} : { [key]: text }
+    }
+    const methods = (Array.isArray(fields.methods) ? (fields.methods as unknown[]) : []).flatMap(one => {
+      const method = textOf(one)?.trim() ?? ''
+      return method === '' ? [] : [method]
+    })
     return [
       {
         id: textOf(fields.id) ?? `${at + 1}`,
@@ -1173,6 +1185,11 @@ export const parseCycles = (text: string): SheetCycle[] | null => {
         guard: fields.guard === true,
         state: 'pending',
         unreachable: [],
+        ...said('rmcu'),
+        ...said('level'),
+        ...said('testClass'),
+        ...said('observation'),
+        ...(methods.length === 0 ? {} : { methods }),
       },
     ]
   })
@@ -1194,16 +1211,97 @@ const fieldsOf = (value: unknown): Record<string, unknown> | null =>
 export const cycleProgressOf = (cycle: SheetCycle, saved: string | null): SheetCycle => {
   const state = saved === null ? null : recordOf(saved)
   const red = fieldsOf(state?.red)
-  if (red === null) return { ...cycle, state: 'pending', unreachable: [] }
+  if (red === null) return { ...cycle, state: 'pending', unreachable: [], written: [] }
   const green = fieldsOf(state?.green)
   const unreachable = (Array.isArray(red.unreachable) ? (red.unreachable as unknown[]) : []).flatMap(one => {
     const method = textOf(fieldsOf(one)?.method)
     return method === null ? [] : [method]
   })
+  const written = (Array.isArray(red.table) ? (red.table as unknown[]) : []).flatMap((one): WrittenTest[] => {
+    const test = textOf(fieldsOf(one)?.test)?.trim() ?? ''
+    return test === '' ? [] : [{ test, case: textOf(fieldsOf(one)?.case)?.trim() ?? '' }]
+  })
   const isGreen = green?.status === 'GREEN' && green.exit === 0
   const needsNoGreen = red.status === 'ALREADY_GREEN' || cycle.guard || (Array.isArray(red.table) && red.table.length === 0)
-  return { ...cycle, state: isGreen || needsNoGreen ? 'done' : 'red', unreachable }
+  return { ...cycle, state: isGreen || needsNoGreen ? 'done' : 'red', unreachable, written }
 }
+
+// A test of a cycle as the tests view shows it: planned by the sheet, written at RED (red until its cycle is
+// green), green, or left unwritten as unreachable. `said` is the use case the RED table gives it, or, before it
+// is written, its method name read as words.
+export type TestState = 'planned' | 'red' | 'green' | 'unreachable'
+
+// `qualified` is the name a test filter takes: the class and the method when the sheet names the class.
+export type CycleTest = { method: string; qualified: string; said: string; state: TestState; isPlanned: boolean }
+
+// `ArchiveProductTests.ShouldSave_WhenX` in the sheet, `tests/…/ArchiveProductTests.cs::ShouldSave_WhenX` or a
+// backticked name in a RED table: the method alone.
+export const methodNameOf = (test: string): string => {
+  const bare = test.replace(/`/g, '').trim().split(/\s+/)[0] ?? ''
+  return bare.split(/::|[.\\/]/).filter(one => one !== '' && !/^cs$/i.test(one)).pop() ?? bare
+}
+
+export const wordsOf = (method: string): string => {
+  const words = method
+    .replace(/_+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .trim()
+    .toLowerCase()
+  return words === '' ? method : `${words[0]!.toUpperCase()}${words.slice(1)}`
+}
+
+export const cycleTestsOf = (cycle: SheetCycle): CycleTest[] => {
+  const written = cycle.written ?? []
+  const writtenState: TestState = cycle.state === 'done' ? 'green' : 'red'
+  const qualify = (method: string) => (cycle.testClass === undefined ? method : `${cycle.testClass}.${method}`)
+  const matching = (method: string) => written.find(one => methodNameOf(one.test) === methodNameOf(method))
+  const planned = (cycle.methods ?? []).map((method): CycleTest => {
+    const name = methodNameOf(method)
+    const found = matching(method)
+    const isUnreachable = cycle.unreachable.some(one => methodNameOf(one) === name)
+    return {
+      method: name,
+      qualified: qualify(name),
+      said: found !== undefined && found.case !== '' ? found.case : wordsOf(name),
+      state: isUnreachable ? 'unreachable' : found !== undefined ? writtenState : 'planned',
+      isPlanned: true,
+    }
+  })
+  const known = new Set(planned.map(one => one.method))
+  const extra = written
+    .filter(one => !known.has(methodNameOf(one.test)))
+    .map((one): CycleTest => ({ method: methodNameOf(one.test), qualified: qualify(methodNameOf(one.test)), said: one.case !== '' ? one.case : wordsOf(methodNameOf(one.test)), state: writtenState, isPlanned: false }))
+  return [...planned, ...extra]
+}
+
+// The rule and use case ids a cycle's `rmcu` cites, global (`CAT-RM-003`) or local (`RM-01`), in their order.
+export const rulesOf = (rmcu: string | undefined): string[] => [...new Set((rmcu ?? '').match(/\b(?:[A-Z][A-Z0-9]*-)*(?:RM|CU)-\d+\b/g) ?? [])]
+
+export type RuleTests = { rule: string; tests: (CycleTest & { batch: string; cycle: string })[] }
+
+// The tests of every batch regrouped under each rule or use case their cycle cites, rules first, then use cases,
+// each in id order; a cycle citing none goes under `—`.
+export const testsByRuleOf = (sheets: Sheet[]): RuleTests[] => {
+  const groups = new Map<string, RuleTests['tests']>()
+  for (const sheet of sheets) {
+    for (const cycle of sheet.cycles ?? []) {
+      const rules = rulesOf(cycle.rmcu)
+      for (const rule of rules.length === 0 ? [NO_PHASE] : rules) {
+        groups.set(rule, [...(groups.get(rule) ?? []), ...cycleTestsOf(cycle).map(one => ({ ...one, batch: sheet.lot, cycle: cycle.id }))])
+      }
+    }
+  }
+  const rank = (rule: string) => (rule === NO_PHASE ? 2 : /(?:^|-)CU-\d+$/.test(rule) ? 1 : 0)
+  return [...groups]
+    .map(([rule, tests]) => ({ rule, tests }))
+    .sort((a, b) => rank(a.rule) - rank(b.rule) || a.rule.localeCompare(b.rule, 'en', { numeric: true }))
+}
+
+export const testTally = (tests: CycleTest[]): { green: number; total: number } => ({
+  green: tests.filter(one => one.state === 'green').length,
+  total: tests.filter(one => one.state !== 'unreachable').length,
+})
 
 // Since 2.6.0 one agent runs a whole cycle, labelled `RED <id> w<wave> … +GREEN`: it writes the cycle's RED
 // state once its checkpoint passes, so a RED state under that agent still running means it is at GREEN.
@@ -2088,11 +2186,42 @@ const demoSheet = (isFinished: boolean): Sheet => {
     hypotheses: 2,
     steps: [],
     cycles: [
-      cycle('X1', 1, 'Create the product', 'done'),
-      cycle('X2', 1, 'Refuse without catalog', 'done', ['ProductTests.Refuse_WhenCatalogArchived']),
-      cycle('X3', 1, 'Publication lock', isFinished ? 'done' : 'red'),
-      cycle('X4', 2, 'Remove a deleted item', isFinished ? 'done' : 'pending'),
-      { ...cycle('X5', 2, 'Product audit', isFinished ? 'done' : 'pending'), guard: true },
+      {
+        ...cycle('X1', 1, 'Create the product', 'done'),
+        rmcu: 'CAT-RM-001 / CAT-CU-01', level: 'UT', testClass: 'CreateProductTests', observation: 'SavedEvents holds ProductCreated with ProductId and CatalogId',
+        methods: ['CreateProductTests.ShouldSaveProductCreatedEvent_WhenCatalogIsActive', 'CreateProductTests.ShouldThrowCatalogNotFoundException_WhenCatalogBelongsToAnotherOrganisation'],
+        written: [
+          { test: 'CreateProductTests.ShouldSaveProductCreatedEvent_WhenCatalogIsActive', case: 'Product created in an active catalog' },
+          { test: 'CreateProductTests.ShouldThrowCatalogNotFoundException_WhenCatalogBelongsToAnotherOrganisation', case: 'Catalog of another organisation hidden' },
+        ],
+      },
+      {
+        ...cycle('X2', 1, 'Refuse without catalog', 'done', ['ProductTests.Refuse_WhenCatalogArchived']),
+        rmcu: 'CAT-RM-002 / CAT-CU-01', level: 'UT', testClass: 'CreateProductTests', observation: 'CatalogArchivedException',
+        methods: ['CreateProductTests.ShouldThrowCatalogArchivedException_WhenCatalogIsArchived', 'ProductTests.Refuse_WhenCatalogArchived'],
+        written: [{ test: 'CreateProductTests.ShouldThrowCatalogArchivedException_WhenCatalogIsArchived', case: 'Archived catalog refused' }],
+      },
+      {
+        ...cycle('X3', 1, 'Publication lock', isFinished ? 'done' : 'red'),
+        rmcu: 'CAT-RM-003 / CAT-CU-02', level: 'UT', testClass: 'PublishProductTests', observation: 'ProductLockedException; the product keeps its status',
+        methods: ['PublishProductTests.ShouldThrowProductLockedException_WhenProductIsLocked', 'PublishProductTests.ShouldSaveProductPublishedEvent_WhenProductIsUnlocked'],
+        written: [
+          { test: 'PublishProductTests.ShouldThrowProductLockedException_WhenProductIsLocked', case: 'Locked product not published' },
+          { test: 'PublishProductTests.ShouldSaveProductPublishedEvent_WhenProductIsUnlocked', case: 'Unlocked product published' },
+        ],
+      },
+      {
+        ...cycle('X4', 2, 'Remove a deleted item', isFinished ? 'done' : 'pending'),
+        rmcu: 'CAT-RM-004 / CAT-CU-03', level: 'IT', testClass: 'SaveTests', observation: 'the stored product no longer holds the item',
+        methods: ['SaveTests.ShouldDeleteProductItem_WhenProductItemRemovedEventIsSaved'],
+        written: isFinished ? [{ test: 'SaveTests.ShouldDeleteProductItem_WhenProductItemRemovedEventIsSaved', case: 'Removed item deleted from the store' }] : [],
+      },
+      {
+        ...cycle('X5', 2, 'Product audit', isFinished ? 'done' : 'pending'), guard: true,
+        rmcu: 'CAT-RM-005', level: 'architecture', testClass: 'AuditTests',
+        methods: ['AuditTests.ShouldAuditEveryProductCommand'],
+        written: isFinished ? [{ test: 'AuditTests.ShouldAuditEveryProductCommand', case: 'Every product command audited' }] : [],
+      },
     ],
   }
 }
@@ -2383,17 +2512,37 @@ export const demoMergeRuns = (at: number): WorkflowRun[] => {
   const begin = at - total
   const { agents } = cast(begin)
   const all = demoMarks(true, true, true)
+  // The cycles of the kit example (`examples/todo/product-archiving/`), every test green: the tests view at the end of a plan.
+  const green = (id: string, behaviour: string, rmcu: string, level: string, testClass: string, tests: [string, string][]): SheetCycle => ({
+    id, wave: 1, behaviour, guard: false, state: 'done', unreachable: [], rmcu, level, testClass,
+    methods: tests.map(([method]) => `${testClass}.${method}`), written: tests.map(([method, said]) => ({ test: `${testClass}.${method}`, case: said })),
+  })
   const views: Record<string, Sheet> = {
-    F1: demoPlanSheet('F1', 'Archive a product', [
+    F1: { ...demoPlanSheet('F1', 'Archive a product', [
       demoStep('1', 'A manager archives a published product of their organisation', all),
       demoStep('2', 'Handler documentation', all),
       demoStep('3', 'Build + test verification', all),
-    ], true),
-    F2: demoPlanSheet('F2', 'Restore a product', [
+    ], true), cycles: [
+      green('C1', 'A manager archives a published product of their organisation', 'CAT-RM-003, CAT-RM-001 / CAT-CU-02', 'UT', 'ArchiveProductTests', [
+        ['ShouldSaveProductArchivedEvent_WhenProductIsPublished', 'Published product archived'],
+        ['ShouldThrowProductNotPublishedException_WhenProductIsDraft', 'Draft refused'],
+        ['ShouldThrowProductNotPublishedException_WhenProductIsAlreadyArchived', 'Archived refused'],
+        ['ShouldThrowProductNotFoundException_WhenProductBelongsToAnotherOrganisation', 'Other organisation hidden'],
+      ]),
+      green('C2', 'An archived product is stored with the archived status', 'CAT-RM-003 / CAT-CU-02', 'IT', 'SaveTests', [['ShouldPersistArchivedStatus_WhenProductArchivedEventIsSaved', 'Archived status stored']]),
+      green('C3', 'The archive route answers 204 on a valid request', 'CAT-CU-02', 'contract', 'ArchiveProductTests', [['ShouldReturnNoContent_WhenArchiveRequestIsValid', 'Route answers 204']]),
+    ] },
+    F2: { ...demoPlanSheet('F2', 'Restore a product', [
       demoStep('1', 'A manager restores an archived product', all),
       demoStep('2', 'The catalogue listing hides archived products', all),
       demoStep('3', 'Build + test verification', all),
-    ], true),
+    ], true), cycles: [
+      green('C1', 'A manager restores an archived product', 'CAT-RM-004, CAT-RM-001 / CAT-CU-03', 'UT', 'RestoreProductTests', [
+        ['ShouldSaveProductRestoredEvent_WhenProductIsArchived', 'Archived product restored'],
+        ['ShouldThrowProductNotArchivedException_WhenProductIsPublished', 'Published product not restored'],
+      ]),
+      green('C2', 'The catalogue listing hides archived products', 'CAT-RM-003 / CAT-CU-01', 'IT', 'ListProductsTests', [['ShouldNotReturnArchivedProducts_WhenListingTheCatalogue', 'Archived products hidden from the listing']]),
+    ] },
   }
   const lot = (id: string, deps: string[]): PlanLot => ({
     lot: id, sheet: `todo/product-archiving/PRD-ARCH-PLAN-${id}.md`, deps, isDone: false,
@@ -2572,7 +2721,7 @@ async function closePane($: EngineInterface): Promise<void> {
 }
 
 async function openPane($: EngineInterface): Promise<void> {
-  const opened = await $.ui.open({ id: PANE, title: 'Workflow', columns: PANE_COLUMNS }).catch(() => null)
+  const opened = await $.ui.open({ id: PANE, title: 'Workflow', columns: PANE_COLUMNS, rows: PANE_ROWS }).catch(() => null)
   if (opened?.isPlaced) await update($, isShown, () => true)
 }
 
@@ -2672,6 +2821,14 @@ async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> 
     const agents = run.agents.filter(agent => agent.lot === entry.lot)
     const sheet = entry.sheet ?? (run.plan === null ? null : run.plan.replace(/\.md$/, `-${entry.lot}.md`))
     if (run.transcriptDir !== null && sheet !== null && agents.length === 0 && entry.isDone && entry.past === undefined) pasts[entry.lot] = await pastFiguresOf($, run, sheet)
+    // A batch this run has not started, still to come or done by an earlier run, is read for its tests only.
+    if (sheet !== null && agents.length === 0) {
+      const text = await changedText($, sheet)
+      const parsed = text === null ? null : parseSheet(text, sheet)
+      const base = parsed ?? entry.view
+      const view = base === null ? null : await withCycleProgress($, base, sheet, entry.lot, parsed !== null)
+      if (view !== null) views[entry.lot] = view
+    }
     if (entry.sheet === null || agents.length === 0) continue
     const asking = await askingOf($, entry.sheet, entry.lot)
     if (asking !== (entry.asking ?? 0)) askings[entry.lot] = asking
@@ -3699,10 +3856,20 @@ export const register: Register = on => {
     }
 
     const isPlanView = planRun !== null && lotInView === null
+    // The sheets whose `## Cycles` block lists tests: every batch of the plan on the plan view, the batch in view otherwise.
+    const testSheets = (
+      isPlanView
+        ? planRun!.lots.flatMap(entry => (entry.view === null ? [] : [withLiveCycles(entry.view, planRun!.agents.filter(agent => agent.lot === entry.lot))]))
+        : current.sheet === null
+          ? []
+          : [withLiveCycles(current.sheet, current.agents)]
+    ).filter(sheet => (sheet.cycles ?? []).length > 0)
+    const testsTally = testTally(testSheets.flatMap(sheet => (sheet.cycles ?? []).flatMap(cycleTestsOf)))
     const gap = (key: string) => <Text key={key}>{'  '}</Text>
     const steerBar = isDesktop ? (
       <Box key="steer-bar" flexDirection="row" flexWrap="wrap" gap="xs" marginTop="sm">
         {action('open-validate', `To validate${unanswered > 0 ? ` (${unanswered})` : ''}`, go({ screen: 'validate' }), 'v')}
+        {testSheets.length > 0 && action('open-tests', `Tests ${testsTally.green}/${testsTally.total}`, go({ screen: 'tests' }), 't')}
         {isPlanView && action('open-graph', 'Graph', go({ screen: 'graph' }), 'g')}
         {noteTarget !== null && action('note', 'Note', ask({ kind: 'note', target: noteTarget }), 'n')}
       </Box>
@@ -3712,6 +3879,12 @@ export const register: Register = on => {
         <Button key="open-validate" hotkey="v" plain dimColor onPress={go({ screen: 'validate' })}>
           {`to validate${unanswered > 0 ? ` ${unanswered}` : ''}`}
         </Button>
+        {testSheets.length > 0 && gap('tests-gap')}
+        {testSheets.length > 0 && (
+          <Button key="open-tests" hotkey="t" plain dimColor onPress={go({ screen: 'tests' })}>
+            {`tests ${testsTally.green}/${testsTally.total}`}
+          </Button>
+        )}
         {isPlanView && gap('graph-gap')}
         {isPlanView && (
           <Button key="open-graph" hotkey="g" plain dimColor onPress={go({ screen: 'graph' })}>
@@ -3959,6 +4132,149 @@ export const register: Register = on => {
           {workPath !== null && line('apply-hint', `Applied at the next /run-plan or /run-lot start, or now with cctoolkit run-validate apply ${absolute(workPath)}`, 'inactive', 'wrap')}
           {entries.length === 0 && line('no-entry', 'Nothing to validate.', 'inactive')}
           {entries.map(entryBlock)}
+        </Box>
+      )
+    }
+
+    // Every test the sheets plan, by batch and cycle (behaviour, rules, level, the observation the cycle asserts)
+    // or regrouped by rule: planned, written and red, green, or unreachable — followed live, then the end state.
+    if (where.screen === 'tests') {
+      const byRule = where.toggled.includes(BY_RULE)
+      const testGlyph = (state: TestState) => (state === 'green' ? '✓' : state === 'red' ? '●' : state === 'unreachable' ? '⚠' : '○')
+      const testTone = (state: TestState) => (state === 'green' ? 'success' : state === 'red' ? 'claude' : state === 'unreachable' ? 'warning' : 'inactive')
+      const glyphLine = (key: string, depth: number, glyph: string, tone: string, text: string, isDim = false) =>
+        isDesktop ? (
+          line(key, `${'  '.repeat(depth)}${glyph} ${text}`, isDim ? 'inactive' : tone === 'inactive' ? 'inactive' : undefined)
+        ) : (
+          <Text key={key} wrap="truncate-end">
+            {'  '.repeat(depth + 1)}
+            <Text color={tone}>{glyph} </Text>
+            <Text {...(isDim ? { color: 'inactive', dimColor: true } : {})}>{text}</Text>
+          </Text>
+        )
+      const dimLine = (key: string, depth: number, text: string, wrap: 'truncate-end' | 'wrap' = 'truncate-end') => line(key, `${'  '.repeat(depth)}${text}`, 'inactive', wrap)
+      // The pointer on a row reveals beneath it its details, each under a dim label in its own column (a cut line's
+      // whole text among them), then its actions as framed buttons; nothing crosses to the mod until one is pressed.
+      const isCut = (depth: number, text: string) => [...text].length > columns - 2 * (depth + 1) - 2
+      const copy = (text: string) => () => void $.ui.copy({ text, surface: e.surface }).catch(() => undefined)
+      const LABEL_WIDTH = 11
+      const hovered = (key: string, depth: number, lines: JSX.Element[], details: [string, string][], actions: [string, string, () => void][]) => (
+        <Box key={key} flexDirection="column">
+          {lines}
+          <Box flexDirection="column" display="none" hover={{ display: 'flex' }} paddingLeft={2 * (depth + 2)}>
+            {details.map(([label, text], index) => (
+              <Box key={`${key}-whole-${index}`} flexDirection="row">
+                <Box width={LABEL_WIDTH} flexShrink={0}>
+                  <Text color="inactive" dimColor>
+                    {label}
+                  </Text>
+                </Box>
+                <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                  <Text wrap="wrap">{text}</Text>
+                </Box>
+              </Box>
+            ))}
+            {actions.length > 0 && (
+              <Box key={`${key}-actions`} flexDirection="row" gap={isDesktop ? 'xs' : 1} {...(details.length > 0 ? { marginTop: isDesktop ? 'xs' : 0 } : {})}>
+                {actions.map(([id, label, onPress]) => (
+                  <Button key={`${key}-${id}`} label={label} onPress={onPress} />
+                ))}
+              </Box>
+            )}
+          </Box>
+        </Box>
+      )
+      // One line per test and per cycle at rest; what names and proves it waits under the pointer.
+      const testLines = (key: string, test: CycleTest, depth: number, place: string) => {
+        const note = [test.state === 'unreachable' ? 'unreachable, not written' : '', test.isPlanned ? '' : 'not in the sheet'].filter(one => one !== '').join(' · ')
+        return [
+          hovered(
+            `${key}-hover`,
+            depth,
+            [glyphLine(key, depth, testGlyph(test.state), testTone(test.state), test.said, test.state === 'planned')],
+            [
+              ...(isCut(depth, `${testGlyph(test.state)} ${test.said}`) ? [['behaviour', test.said] as [string, string]] : []),
+              ['test', test.qualified],
+              ...(place === '' ? [] : [['cycle', place] as [string, string]]),
+              ...(note === '' ? [] : [['note', note] as [string, string]]),
+            ],
+            [
+              ['copy-test', 'copy test', copy(test.qualified)],
+              ['copy-case', 'copy behaviour', copy(test.said)],
+            ],
+          ),
+        ]
+      }
+      const cycleLines = (sheet: Sheet, cycle: SheetCycle) => {
+        const tests = cycleTestsOf(cycle)
+        const isStarted = cycle.state === 'red' || cycle.live !== undefined
+        const tone = cycle.state === 'done' ? 'success' : isStarted ? 'claude' : 'inactive'
+        const rules = rulesOf(cycle.rmcu).join(' · ') || (cycle.rmcu ?? '')
+        const level = [cycle.level ?? '', cycle.testClass ?? ''].filter(one => one !== '').join(' · ')
+        const title = `${cycle.id} ${cycle.behaviour}`
+        return [
+          hovered(
+            `tests-${sheet.lot}-${cycle.id}-hover`,
+            0,
+            [glyphLine(`tests-${sheet.lot}-${cycle.id}`, 0, cycle.state === 'done' ? '✓' : isStarted ? spin : '○', tone, title)],
+            [
+              ...(isCut(0, `○ ${title}`) ? [['behaviour', cycle.behaviour] as [string, string]] : []),
+              ...(rules === '' ? [] : [['rules', rules] as [string, string]]),
+              ...(level === '' ? [] : [['level', level] as [string, string]]),
+              ...(cycle.observation === undefined ? [] : [['observes', cycle.observation] as [string, string]]),
+            ],
+            [['copy-behaviour', 'copy behaviour', copy(cycle.behaviour)]],
+          ),
+          ...tests.flatMap((test, index) => testLines(`tests-${sheet.lot}-${cycle.id}-${index}`, test, 1, '')),
+          ...(tests.length === 0 ? [dimLine(`tests-${sheet.lot}-${cycle.id}-none`, 1, 'no test method in the sheet')] : []),
+        ]
+      }
+      const tallied = (tests: CycleTest[]) => {
+        const { green, total } = testTally(tests)
+        return `${green}/${total} green`
+      }
+      const sections = byRule
+        ? testsByRuleOf(testSheets).map(group =>
+            section(
+              `tests-rule-${group.rule}`,
+              `${group.rule} · ${tallied(group.tests)}`,
+              group.tests.flatMap((test, index) => testLines(`tests-rule-${group.rule}-${index}`, test, 0, `${isPlanView ? `${test.batch} ` : ''}${test.cycle}`)),
+            ),
+          )
+        : testSheets.map(sheet => {
+            const tests = (sheet.cycles ?? []).flatMap(cycleTestsOf)
+            return section(`tests-${sheet.lot}`, `${sheet.lot} · ${sheet.name} · ${tallied(tests)}`, (sheet.cycles ?? []).flatMap(cycle => cycleLines(sheet, cycle)))
+          })
+      const all = testSheets.flatMap(sheet => (sheet.cycles ?? []).flatMap(cycleTestsOf))
+      const count = (state: TestState) => all.filter(one => one.state === state).length
+      const summary = [`${count('green')} green`, `${count('red')} red`, `${count('planned')} to write`, ...(count('unreachable') > 0 ? [`${count('unreachable')} unreachable`] : [])].join(' · ')
+      const toggleRule = () =>
+        void update($, nav, state => ({ ...state, toggled: state.toggled.includes(BY_RULE) ? state.toggled.filter(one => one !== BY_RULE) : [...state.toggled, BY_RULE] }))
+      return (
+        <Box flexDirection="column" marginTop={1} {...frame}>
+          {crumbs(isPlanView ? planRun!.name : `${current.name}${batchInView === null ? '' : ` ${batchInView}`}`, 'tests')}
+          {isDesktop ? (
+            <Box key="nav" flexDirection="row" marginTop="xs" gap="xs">
+              <Button key="back" label="← Back" hotkey="b" onPress={go({ screen: 'run' })} />
+              <Button key="tests-group" label={byRule ? 'By batch' : 'By rule'} hotkey="r" onPress={toggleRule} />
+            </Box>
+          ) : (
+            <Box key="nav" height={1}>
+              <Text>{'  '}</Text>
+              <Button key="back" hotkey="b" plain dimColor onPress={go({ screen: 'run' })}>
+                back
+              </Button>
+              <Text>{'  '}</Text>
+              <Button key="tests-group" hotkey="r" plain dimColor onPress={toggleRule}>
+                {byRule ? 'by batch' : 'by rule'}
+              </Button>
+            </Box>
+          )}
+          {lotBar}
+          {bannerRow}
+          {!isDesktop && <Box key="tests-gap" height={1} />}
+          {testSheets.length === 0 ? line('no-tests', 'No sheet with a ## Cycles block: no test listed.', 'inactive') : line('tests-summary', `${all.length} tests · ${summary}`, 'inactive')}
+          {sections}
         </Box>
       )
     }

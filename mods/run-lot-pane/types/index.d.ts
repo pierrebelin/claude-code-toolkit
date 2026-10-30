@@ -91,7 +91,26 @@ export type Step = {
 
 export type CycleState = 'pending' | 'red' | 'done'
 
-export type SheetCycle = { id: string; behaviour: string; wave: number; guard: boolean; state: CycleState; unreachable: string[]; live?: 'RED' | 'GREEN' }
+// A test the cycle wrote: the method as its RED table names it, and the use case it verifies.
+export type WrittenTest = { test: string; case: string }
+
+// `methods` to `observation` come from the sheet's `## Cycles` block (the tests the plan expects), `written`
+// from the cycle's RED state in `run/.work.jsonl` (the tests the cycle wrote).
+export type SheetCycle = {
+  id: string
+  behaviour: string
+  wave: number
+  guard: boolean
+  state: CycleState
+  unreachable: string[]
+  live?: 'RED' | 'GREEN'
+  rmcu?: string
+  level?: string
+  testClass?: string
+  observation?: string
+  methods?: string[]
+  written?: WrittenTest[]
+}
 
 export type Sheet = { lot: string; name: string; isDone: boolean; steps: Step[]; hypotheses: number; cycles?: SheetCycle[] }
 
@@ -153,7 +172,7 @@ export type SessionFigures = {
   percent: number | null
 }
 
-export type Screen = 'run' | 'phase' | 'agent' | 'validate' | 'graph'
+export type Screen = 'run' | 'phase' | 'agent' | 'validate' | 'graph' | 'tests'
 
 export type Prompted = { kind: 'reject' | 'amend' | 'note'; target: string }
 
