@@ -16,7 +16,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `presets/`, `rules/` | layouts, `kit.config.json`, layer and universal rules, the preset's test skills |
 | `templates/` | settings, statusline, `.gitignore` merged into the repo |
 | `evals/` | recorded hook cases |
-| `workflows/` | `run-lot` (one batch), `run-plan` (whole plan) and `run-audit` (the quality report), as Workflow scripts |
+| `workflows/` | `run-lot` (one batch), `run-plan` (whole plan), `run-replay` (a delivered batch or plan rechecked, read-only) and `run-audit` (the quality report), as Workflow scripts |
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
 | `docs/` | context cost, the frozen literals registry, the README screenshots |

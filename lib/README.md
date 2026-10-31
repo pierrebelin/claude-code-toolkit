@@ -18,7 +18,7 @@ What the [hooks](../hooks/README.md) and the [scripts](../scripts/README.md) cal
 | `closing_level.py` | for `sheet-cycles --index` (the files the block plans) and `cctoolkit closing-level` (the batch diff): the run-lot closing level, `full` when the block forces it, a file matches a `closing.full` rule for its change kind, or the production files pass `closing.maxProductionFiles` (0 in the presets: no cap) — lifted by a block asking `light`, a rule never; `light` otherwise, each level with its reasons |
 | `pane_file.py` | for `run_notes.py`, `run-validate`: the pane file `run/.pane.jsonl`, written whole by the `run-lot-pane` mod alone (notes, answers to `## To validate`), answered by `ack` lines of the work file |
 | `run_notes.py` | for `hooks/run-notes.sh`: the batch and work file an agent works for, read once from the first line of its run-lot prompt and cached per agent; each note of that batch it has not received, as additional context, then an `ack` naming the agent |
-| `work_file.py` | the run work file `run/.work.jsonl` of run-lot and run-plan — shared by the two batches of a parallel run, the worktree's included: one JSON line per event, appended and rewritten under `flock`; read by `batch-baseline`, `run-work`, `run-question`, `sheet-cycles`, `plan-next-batch`, `pre-audit` |
+| `work_file.py` | the run work file `run/.work.jsonl` of run-lot and run-plan — shared by the two batches of a parallel run, the worktree's included: one JSON line per event, appended and rewritten under `flock`; read by `batch-baseline`, `run-work`, `run-question`, `sheet-cycles`, `plan-next-batch`, `pre-audit`; a `replay` line holds the commit range of a batch `run-replay` goes over |
 
 ## Modules
 

@@ -66,6 +66,8 @@ The orchestrator writes neither tests nor code: it splits the work, checks the r
 
 A batch that stops short: fix the cause and run `/cctoolkit:run-lot` on the same sheet again, it resumes from the cycles already done. `/cctoolkit:implement-tdd` launches the chain from a plan path, `/cctoolkit:verify-ddd-tdd` audits a batch on demand.
 
+A batch already delivered, or a whole plan: **`/cctoolkit:run-replay <sheet|plan>`** goes over it again without changing anything — each cycle's tests and the suites its commit reaches rerun on today's code, with `--red` the same tests run once more without the batch's production code (they must fail), then the audit. Its report lists what no longer holds, each with the correction to launch.
+
 Want to see the files? **[`examples/`](examples/README.md)** walks one small feature from spec to report.
 
 ## A business knowledge base beside the code

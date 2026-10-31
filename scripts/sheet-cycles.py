@@ -13,6 +13,12 @@
     cctoolkit sheet-cycles <sheet> --done WORK               every cycle reached its final state
     cctoolkit sheet-cycles <sheet> --summary WORK            one line per cycle: RED/GREEN exits (audit capture)
     cctoolkit sheet-cycles <sheet> --states WORK             every saved cycle state, one JSON array (run-lot resume)
+    cctoolkit sheet-cycles <sheet> --tests WORK              {"count", "cycles"}: per cycle its `id`, `behaviour`, `rmcu`,
+                                                             `refactor`, `guard`, `level`, `testClass`, `saved` (a state is
+                                                             saved), `tests` (`Class.Method`, the RED table when saved, the
+                                                             contract methods otherwise; empty for a RED that wrote none),
+                                                             `files` (its test paths) and `command` (the filtered command its
+                                                             GREEN ran, else its RED's; empty unsaved) — run-replay
     --batch FX                                               batch of the WORK lines (default: the FX of the sheet name)
 
 WORK is the run work file `run/.work.jsonl`: one `cycle` line per state, the last line of a
@@ -468,7 +474,7 @@ def main(argv):
             return 0
         print(contract(c, phase, open(sheet, encoding="utf-8").read()))
         return 0
-    if mode in ("--methods", "--done", "--summary") and not arg:
+    if mode in ("--methods", "--done", "--summary", "--tests") and not arg:
         print(f"{mode} needs WORK", file=sys.stderr)
         return 1
     cycles = [c for c in data["cycles"] if isinstance(c, dict) and isinstance(c.get("behaviour"), str)]
@@ -494,6 +500,23 @@ def main(argv):
             print(f"{c.get('id')} — RED {red.get('status', 'absent')} exit {red.get('exit', '—')} — "
                   f"GREEN {green.get('status', '—')} exit {green.get('exit', '—')}"
                   + (f" — not written: {', '.join(gone)}" if gone else ""))
+        return 0
+    if mode == "--tests":
+        out = []
+        for c in cycles:
+            s = state_of(arg, c)
+            red = (s or {}).get("red") or {}
+            green = (s or {}).get("green") or {}
+            if s and isinstance(s.get("red"), dict):
+                tests = [row["test"] for row in red.get("table", []) if isinstance(row, dict) and row.get("test")]
+            else:
+                tests = [f"{c.get('testClass', '')}.{m.split('.')[-1]}" for m in c.get("methods", [])]
+            ran = green.get("command") if green.get("status") == "GREEN" else ""
+            out.append({"id": c.get("id", ""), "behaviour": c["behaviour"], "rmcu": c.get("rmcu", ""),
+                        "refactor": bool(c.get("refactor")), "guard": bool(c.get("guard")), "level": c.get("level", ""),
+                        "testClass": c.get("testClass", ""), "saved": bool(s), "tests": tests,
+                        "files": red.get("tests", []) or [], "command": ran or red.get("command", "") or ""})
+        print(json.dumps({"count": len(out), "cycles": out}, ensure_ascii=False))
         return 0
     print(f"unknown mode {mode}", file=sys.stderr)
     return 1

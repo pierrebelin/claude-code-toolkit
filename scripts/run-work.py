@@ -6,7 +6,7 @@ under `run/`: `tmp` hands out a folder of the system temp directory for them.
 
     cctoolkit run-work append <work>
         appends the JSON object read on stdin (`kind` among preexisting, cycle, question,
-        answer, journal, audit-round, attempt, breaker, ack). A `cycle` without `slug` gets the slug of `state.behaviour`.
+        answer, journal, audit-round, attempt, breaker, ack, closing, test-edit, replay). A `cycle` without `slug` gets the slug of `state.behaviour`.
     cctoolkit run-work journal <work> <stamp> [<text>]
         with <text>: appends a journal line of run <stamp>; without: prints the run's lines
     cctoolkit run-work drop <work> [--batch FX] [--run STAMP] [--kind k1,k2]
@@ -20,7 +20,8 @@ under `run/`: `tmp` hands out a folder of the system temp directory for them.
         holds for confirmation (unresolvable target) and denies in an unattended session
     cctoolkit run-work purge <run folder> [<stamp>]
         keeps, for every run:
-        - journal and breaker lines of run <stamp> only; question and answer lines never;
+        - journal and breaker lines of run <stamp> only; question, answer and replay lines
+          never (a replay drops its own, one left behind was interrupted);
           audit-round and attempt lines of a batch still open only; ack lines always (an
           answer of the pane applied twice would write its decision twice);
         - per batch: `cycle` lines when `batches/FX.md` says `## STATUS — DONE`, or the plan heading `### Batch FX` says `✅ DONE`
@@ -178,7 +179,7 @@ def purge(run: Path, stamp: str | None) -> int:
             return True
         if kind in ("audit-round", "attempt"):
             return state == "open"
-        if kind in ("question", "answer"):
+        if kind in ("question", "answer", "replay"):
             return False
         if kind == "preexisting":
             return state in ("open", "saved")

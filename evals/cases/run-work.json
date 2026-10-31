@@ -129,6 +129,14 @@
         "exit": 0,
         "stdout": "cycle F7=1 preexisting F7=1"
       }
+    },
+    {
+      "name": "purge drops a replay line left by an interrupted run-replay, append accepts the kind",
+      "cmd": "R={{FIX}}/rw-replay-{{SID}}/run; rm -rf $R; mkdir -p $R && echo '{\"kind\": \"replay\", \"batch\": \"F1\", \"base\": \"a\", \"head\": \"b\", \"commits\": [\"b\"], \"files\": []}' | python3 {{KIT}}/scripts/run-work.py append $R/.work.jsonl && python3 {{KIT}}/scripts/run-work.py purge $R && ls -A $R | wc -l | tr -d ' '",
+      "expect": {
+        "exit": 0,
+        "stdout": "appended replay F1\npurged: 1 line(s)\n0"
+      }
     }
   ]
 }

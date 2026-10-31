@@ -31,10 +31,25 @@
         trailer `Kit-Batch: <plan folder>/FX`. A preexisting file the batch also modified
         is committed whole and listed. The aside ref of FX, if any, is deleted.
 
+    cctoolkit batch-baseline replay <work> FX [--base <rev>]
+        a batch already delivered, for run-replay: its commits read off their trailer
+        `Kit-Batch: <plan folder>/FX` (oldest first), `base` = the parent of the oldest,
+        `head` = the newest, `files` = every file they touch; `--base <rev>`: the batch is
+        `<rev>..HEAD` instead (a batch committed without the trailer). Recorded as the
+        batch's `replay` line, an earlier one replaced. One JSON line `batch`, `base`,
+        `head`, `commits`, `files` (under the source and test roots). Refused (exit 1, one
+        JSON line `refused`) when FX has a snapshot — still open, or committed by hand — or
+        no commit. With no snapshot of FX, `diff` and `base` read that line: the diff goes
+        from `base` to `head`, the batch as delivered, whatever later batches changed.
+    cctoolkit batch-baseline red <work> FX --root <worktree>
+        in that worktree, the files the replay of FX touches under the source roots (the
+        test roots left out) put back to their content at `base`, files it created
+        deleted: the batch's tests left without its production code (run-replay `--red`).
+
 --root DIR    repository the batch covers (default: `kit_config.project_root()`).
 
-Exit 0, exit 2 on usage error, missing snapshot or unreadable kit.config.json, exit 1
-when git refuses the commit.
+Exit 0, exit 2 on usage error, missing snapshot or replay, or unreadable kit.config.json,
+exit 1 when git refuses the commit or the replay.
 """
 import difflib
 import json
@@ -52,7 +67,10 @@ import work_file  # noqa: E402
 
 ROOT = Path(kit_config.project_root()).resolve()
 SCOPE: list[str] = []
+TEST_ROOTS: list[str] = []
 RUN_DIR = ""
+# Frozen literal (docs/FROZEN-LITERALS.md): `message` writes it, `commits` reads it.
+TRAILER = "Kit-Batch: "
 
 
 def git(*args: str) -> str:
@@ -76,8 +94,12 @@ def hashes(paths: list[str]) -> dict[str, str]:
     return found
 
 
+def under(path: str, roots: list[str]) -> bool:
+    return any(path == root or path.startswith(root.rstrip("/") + "/") for root in roots)
+
+
 def in_scope(path: str) -> bool:
-    return any(path == root or path.startswith(root.rstrip("/") + "/") for root in SCOPE)
+    return under(path, SCOPE)
 
 
 def batch_files(work: Path, batch: str) -> tuple[list[str], list[str]]:
@@ -111,11 +133,13 @@ def code(path: str) -> bool:
     return not path.endswith(".md") and ".verified." not in path
 
 
-def write_diff(paths: list[str], only_code: bool, names: bool, out) -> None:
+def write_diff(paths: list[str], only_code: bool, names: bool, out, before_of=None, after_of=None) -> None:
+    before_of = before_of or (lambda p: text(head(p)))
+    after_of = after_of or now
     for path in paths:
         if only_code and not code(path):
             continue
-        before, after = text(head(path)), now(path)
+        before, after = before_of(path), after_of(path)
         if before == after:
             continue
         if names:
@@ -255,6 +279,76 @@ def restore(work: Path, batch: str, patch: Path | None) -> int:
     return 0
 
 
+def rev(name: str) -> str:
+    return git("rev-parse", "--verify", "-q", f"{name}^{{commit}}").strip()
+
+
+def commits(work: Path, batch: str) -> list[str]:
+    """The commits carrying the batch's trailer as a whole line, oldest first (`--grep` alone takes F1 for F10)."""
+    mark = f"{TRAILER}{work.parent.parent.name}/{batch}"
+    out = git("log", "--format=%H%x00%B%x01", "--fixed-strings", f"--grep={mark}")
+    found = []
+    for entry in out.split("\x01"):
+        sha, _, body = entry.lstrip("\n").partition("\x00")
+        if sha and any(line.strip() == mark for line in body.splitlines()):
+            found.append(sha)
+    return found[::-1]
+
+
+def refuse(why: str) -> int:
+    print(json.dumps({"refused": why}, ensure_ascii=False))
+    return 1
+
+
+def replay(work: Path, batch: str, since: str | None) -> int:
+    if work_file.preexisting(work_file.read(work), batch) is not None:
+        return refuse(f"{batch} has a snapshot: a batch still open, or committed outside the kit — "
+                      f"commit or set it aside first, or drop its `preexisting` line")
+    if since:
+        base, top = rev(since), rev("HEAD")
+        if not base:
+            return refuse(f"{since}: no such commit")
+        shas = [x for x in git("rev-list", "--reverse", f"{base}..{top}").split() if x]
+        files = [p for p in git("diff", "--name-only", "--no-renames", "-z", base, top).split("\0") if p]
+    else:
+        shas = commits(work, batch)
+        if not shas:
+            return refuse(f"no commit carries `{TRAILER}{work.parent.parent.name}/{batch}` — "
+                          f"pass --base <rev> for a batch committed without it")
+        base, top = rev(f"{shas[0]}^"), shas[-1]
+        if not base:
+            return refuse(f"{shas[0][:12]} has no parent")
+        files = sorted({p for sha in shas
+                        for p in git("diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", "-z", sha).split("\0") if p})
+    if not shas:
+        return refuse(f"{base[:12]}..HEAD holds no commit")
+    files = [p for p in files if not (RUN_DIR and (p + "/").startswith(RUN_DIR))]
+    work_file.keep(work, lambda r: not (r.get("kind") == "replay" and r.get("batch") == batch))
+    work_file.append(work, {"kind": "replay", "batch": batch, "base": base, "head": top, "commits": shas, "files": files})
+    print(json.dumps({"batch": batch, "base": base, "head": top, "commits": shas,
+                      "files": [p for p in files if in_scope(p)]}, ensure_ascii=False))
+    return 0
+
+
+def red(record: dict) -> int:
+    restored = deleted = 0
+    for path in record.get("files", []):
+        if not in_scope(path) or under(path, TEST_ROOTS):
+            continue
+        start, target = show(record["base"], path), ROOT / path
+        if start is None:
+            if target.is_file():
+                target.unlink()
+                deleted += 1
+                prune(target.parent)
+        elif not target.is_file() or target.read_bytes() != start:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(start)
+            restored += 1
+    print(f"red: {restored} production file(s) back to {record['base'][:12]}, {deleted} deleted, tests left as they are")
+    return 0
+
+
 def message(batch: str, sheet: Path) -> str:
     first = next((l for l in sheet.read_text(encoding="utf-8").splitlines() if l.startswith("# ")), f"# {batch}")
     title = re.sub(r"\s+—\s+✅ DONE.*$", "", first[2:]).strip()
@@ -269,7 +363,7 @@ def message(batch: str, sheet: Path) -> str:
             else "fix" if re.match(r"(fix|corrig)", title, re.I) else "feat")
     plan = sheet.resolve().parent.name
     # Trailer is a frozen literal: knowledge-scan skips commits carrying it.
-    return f"{kind}({plan}): batch {batch} — {title}\n\nKit-Batch: {plan}/{batch}"
+    return f"{kind}({plan}): batch {batch} — {title}\n\n{TRAILER}{plan}/{batch}"
 
 
 def commit(work: Path, batch: str, sheet: Path) -> int:
@@ -305,6 +399,7 @@ def main(argv: list[str]) -> int:
         print(f"kit.config.json: {e} — cctoolkit doctor", file=sys.stderr)
         return 2
     SCOPE[:] = list(dict.fromkeys(config.source_roots + config.test_roots))
+    TEST_ROOTS[:] = config.test_roots
     command, work, batch = argv[0], Path(argv[1]), argv[2]
     work = (work if work.is_absolute() else Path.cwd() / work).resolve()
     try:
@@ -315,7 +410,26 @@ def main(argv: list[str]) -> int:
         return snapshot(work, batch)
     if command == "resume":
         return resume(work, batch)
-    if work_file.preexisting(work_file.read(work), batch) is None:
+    if command == "replay":
+        since = argv[argv.index("--base") + 1] if "--base" in argv and argv.index("--base") + 1 < len(argv) else None
+        return replay(work, batch, since)
+    records = work_file.read(work)
+    replayed = work_file.replay(records, batch) if work_file.preexisting(records, batch) is None else None
+    if command == "red":
+        if replayed is None:
+            print(f"no replay of {batch} in {work} — batch-baseline replay first", file=sys.stderr)
+            return 2
+        return red(replayed)
+    if replayed is not None and command in ("diff", "base"):
+        at = lambda sha: (lambda p: text(show(sha, p)))  # noqa: E731
+        if command == "diff":
+            write_diff([p for p in replayed.get("files", []) if in_scope(p)], "--code" in argv, "--name-only" in argv,
+                       sys.stdout, at(replayed["base"]), at(replayed["head"]))
+            return 0
+        if len(argv) == 4:
+            sys.stdout.write(at(replayed["base"])(argv[3]))
+            return 0
+    if work_file.preexisting(records, batch) is None:
         print(f"no snapshot of {batch} in {work}", file=sys.stderr)
         return 2
     if command == "diff":

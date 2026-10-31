@@ -21,6 +21,10 @@ One line of JSON per event:
     {"kind": "test-edit", "batch": "F2", "agent": "<id>", "cycle": "C1", "file": "<test path>", "removed": [...], "added": [...]}
         a test file a GREEN changed after the RED checkpoint, its assertion lines (`tdd.assertion`) on each
         side; written by lib/tdd_scope.py, read by `cctoolkit audit-capture`
+    {"kind": "replay", "batch": "F2", "base": "<sha>", "head": "<sha>", "commits": [...], "files": [...]}
+        a delivered batch under replay (`batch-baseline replay`): the range its commits span and the files
+        they touch; with no snapshot of the batch, `batch-baseline diff` and `base` read it; dropped at the
+        end of the replay
 
 Every append and rewrite holds an exclusive `flock`; a rewrite truncates in place (a rename would
 strand an appender on the unlinked inode). Windows locks one byte past the content (`msvcrt.locking`).
@@ -63,7 +67,7 @@ else:
         fcntl.flock(f, fcntl.LOCK_UN)
 
 NAME = ".work.jsonl"
-KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker", "ack", "closing", "test-edit")
+KINDS = ("preexisting", "cycle", "question", "answer", "journal", "audit-round", "attempt", "breaker", "ack", "closing", "test-edit", "replay")
 
 
 def tmp_dir(name: str, root=None) -> Path:
@@ -177,3 +181,9 @@ def preexisting(records, batch: str) -> dict | None:
     """Files dirty at the batch start: the FIRST snapshot of the batch, a resumed batch keeps it."""
     lines = of(records, "preexisting", batch)
     return lines[0].get("files", {}) if lines else None
+
+
+def replay(records, batch: str) -> dict | None:
+    """The range of a delivered batch under replay: the LAST `replay` line of the batch."""
+    lines = of(records, "replay", batch)
+    return lines[-1] if lines else None

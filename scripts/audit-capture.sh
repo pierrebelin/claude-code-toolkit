@@ -5,7 +5,8 @@ set -uo pipefail
 # Audit capture — the deterministic material for /verify-ddd-tdd, in one file.
 # Usage:
 #   cctoolkit audit-capture <batch> <sheet.md> <output> [--base <work>] [--suites-green <S1,S2>]
-# --base: run work file with the batch's `batch-baseline snapshot`: the diff is the batch's own.
+# --base: run work file with the batch's `batch-baseline snapshot`: the diff is the batch's own;
+#         with its `batch-baseline replay` line instead (run-replay), the diff of its commits.
 # --suites-green: writes `suites-green` beside the output, read by lib/guard-auditor.sh.
 # Targeted test filters are left to the audit: only build and ArchitectureTests run here.
 # The `## Mechanical audit — F<n>` section (table Axis | Check | Result | Evidence) states
@@ -154,8 +155,10 @@ if [[ $? -ne 2 ]]; then
 fi
 
 # Stubs carrying logic recorded by lib/tdd_scope.py since the batch started; no record, no section.
-SINCE="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import work_file; r = work_file.of(work_file.read(sys.argv[2]), "preexisting", sys.argv[3]); print(r[0].get("at", 0) if r else 0)' "$SCRIPTS/../lib" "$STATE_DIR" "$BATCH" 2>/dev/null || echo 0)"
-STUBS="$(python3 "$SCRIPTS"/tdd-scope.py evidence --since "${SINCE:-0}" 2>/dev/null)"
+# A replayed batch (no snapshot, a `replay` line) started long ago: its run's records are not told apart.
+SINCE="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import work_file; w = work_file.read(sys.argv[2]); r = work_file.of(w, "preexisting", sys.argv[3]); print(r[0].get("at", 0) if r else "-" if work_file.replay(w, sys.argv[3]) else 0)' "$SCRIPTS/../lib" "$STATE_DIR" "$BATCH" 2>/dev/null || echo 0)"
+STUBS=""
+[[ "$SINCE" == "-" ]] || STUBS="$(python3 "$SCRIPTS"/tdd-scope.py evidence --since "${SINCE:-0}" 2>/dev/null)"
 if [[ -n "$STUBS" ]]; then
     section "stubs with logic (lib/tdd_scope.py, RED check)"
     printf '%s\n' "$STUBS" >>"$OUT"

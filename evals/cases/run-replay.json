@@ -1,0 +1,61 @@
+{
+  "fixtures": [],
+  "cases": [
+    {
+      "name": "run-replay of a batch: range, tests (on sonnet: a cycle without saved command), audit on the replayed range, report FX-replay.md and the replay line dropped — PASSED",
+      "cmd": "node {{KIT}}/evals/workflows/run-replay-flow.js {{KIT}}/workflows/run-replay.js pass | grep -E 'STATUS|AGENTS|TOCHECK|BATCHES|REPORT|WARN|ERR|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "REPORT PASSED;STATUS PASSED | —;AGENTS replay range | replay tests | audit | report;TOCHECK none;"
+      }
+    },
+    {
+      "name": "run-replay: a cycle red on replay and an audit Major — FAILED, each with its correction command under ## Next, nothing fixed",
+      "cmd": "node {{KIT}}/evals/workflows/run-replay-flow.js {{KIT}}/workflows/run-replay.js red | grep -E 'STATUS|AGENTS|TOCHECK|BATCHES|REPORT|WARN|ERR|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "REPORT FAILED;STATUS FAILED | cycles red: C2; audit: 1 Major;AGENTS replay range | replay tests | audit | report;TOCHECK none;"
+      }
+    },
+    {
+      "name": "run-replay --red: the batch's tests run in a worktree without its production code; a cycle still green there is a point to check, not a failure",
+      "cmd": "node {{KIT}}/evals/workflows/run-replay-flow.js {{KIT}}/workflows/run-replay.js redcheck | grep -E 'STATUS|AGENTS|TOCHECK|BATCHES|REPORT|WARN|ERR|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "REPORT PASSED;STATUS PASSED | —;AGENTS replay range | replay tests | replay red | audit | report;TOCHECK Cycle C2;"
+      }
+    },
+    {
+      "name": "run-replay of a batch without Kit-Batch commit: SKIPPED, nothing run, no report",
+      "cmd": "node {{KIT}}/evals/workflows/run-replay-flow.js {{KIT}}/workflows/run-replay.js refused | grep -E 'STATUS|AGENTS|TOCHECK|BATCHES|REPORT|WARN|ERR|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS SKIPPED | no commit carries `Kit-Batch: x/F1`;AGENTS replay range;TOCHECK none;"
+      }
+    },
+    {
+      "name": "run-replay --no-audit: no auditor",
+      "cmd": "node {{KIT}}/evals/workflows/run-replay-flow.js {{KIT}}/workflows/run-replay.js noaudit | grep -E 'STATUS|AGENTS|TOCHECK|BATCHES|REPORT|WARN|ERR|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "REPORT PASSED;STATUS PASSED | —;AGENTS replay range | replay tests | report;TOCHECK none;"
+      }
+    },
+    {
+      "name": "run-replay of a plan: each batch ✅ DONE replayed by the same workflow in plan order, a batch not done left out and listed",
+      "cmd": "node {{KIT}}/evals/workflows/run-replay-flow.js {{KIT}}/workflows/run-replay.js plan | grep -E 'STATUS|AGENTS|TOCHECK|BATCHES|REPORT|WARN|ERR|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS FAILED | failed: F3;AGENTS batches | run-replay F1 | run-replay F3;BATCHES F1 PASSED, F3 FAILED | not replayed F2;"
+      }
+    },
+    {
+      "name": "run-replay refuses an argument that is neither a sheet nor a plan, --base on a plan, --only on a sheet, a --base that is no revision",
+      "cmd": "for a in 'todo/x/notes.md' 'todo/x/X-PLAN.md --base HEAD~1' 'todo/x/X-PLAN-F1.md --only F1' 'todo/x/X-PLAN-F1.md --base ;rm'; do node -e \"const fs=require('fs');const s=fs.readFileSync('{{KIT}}/workflows/run-replay.js','utf8').replace(/^export const meta/m,'const meta');new (Object.getPrototypeOf(async function(){}).constructor)('args','agent','log','phase','parallel','workflow',s)(process.argv[1],()=>null,()=>{},()=>{},null,null).then(()=>console.log('ran'),e=>console.log(e.message.slice(0,25)))\" \"$a\"; done | sort | uniq -c | tr -s ' ' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": " 4 expected argument: `todo/;"
+      }
+    }
+  ]
+}

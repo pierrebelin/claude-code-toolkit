@@ -4,6 +4,11 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.12.0 — 2026-10-31
+
+- `cctoolkit`: `/cctoolkit:run-replay <sheet|plan>` goes over a batch already delivered, or every batch ✅ DONE of a plan (`--only FX` for one), without changing anything. It finds the batch's commits by their `Kit-Batch` trailer, reruns each cycle's tests with the filtered command its GREEN ran, then the suites the batch's files reach, on today's code. With `--red`, the same tests run once more in a worktree where the batch's production files are put back as they were before it: a test still green there proves nothing the batch wrote, and is listed to check. The audit then judges the batch's commits (`--no-audit` to skip it). Nothing is fixed, committed or ticked: `run/batches/FX-replay.md` reports `PASSED` or `FAILED` per cycle, suite and audit gap, and its `## Next` gives one `/cctoolkit:implement-tdd batch FX — correction: …` per finding. `--base <rev>` replays a batch committed without its trailer. `/cctoolkit:implement-tdd replay [batch FX] <plan>` launches it too.
+- `cctoolkit`: `cctoolkit batch-baseline replay` and `red`, `cctoolkit sheet-cycles --tests`, and a `replay` line in `run/.work.jsonl` (dropped by the replay, or by the next purge) support it; `suites-plan`, `audit-capture` and `access-cost` read a replayed batch's diff unchanged.
+
 ## 2.11.3 — 2026-10-31
 
 - `cctoolkit`: `/cctoolkit:business-spec`, `/cctoolkit:verify-ddd-tdd` and the `adversarial-reviewer` agent drop the lines that changed nothing in what the model does (a repeated rule, a summary of a later section, a constraint the agent's tools already enforce). Same behaviour, less loaded at each run.

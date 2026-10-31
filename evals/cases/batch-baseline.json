@@ -96,6 +96,46 @@
         "exit": 0,
         "stdout": "0|preexisting F1=1"
       }
+    },
+    {
+      "name": "batch baseline replay: the commits of F1 read off their whole Kit-Batch line (F10 left out), diff from the parent of the first to the last as delivered (later changes left out), base at that parent, one replay line kept when replayed twice",
+      "cmd": "R={{FIX}}/replay-{{SID}}; W=$R/todo/x/run/.work.jsonl; rm -rf $R; mkdir -p $R/src/A $R/tests/T $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/a.cs && git add -A && git commit -qm init && printf 'v1\\n' >> src/A/a.cs && printf 'new\\n' > src/A/n.cs && printf 't\\n' > tests/T/t.cs && printf '# s\\n' > todo/x/X-PLAN-F1.md && git add -A && git commit -qm 'feat(x): batch F1 — a' -m 'Kit-Batch: x/F1' && printf 'v2\\n' >> src/A/a.cs && git commit -qam 'feat(x): batch F10 — b' -m 'Kit-Batch: x/F10' && printf 'later\\n' >> src/A/a.cs && git commit -qam other && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py replay $W F1 --root $R >/dev/null && python3 {{KIT}}/scripts/batch-baseline.py replay $W F1 --root $R | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d[\"commits\"]), \",\".join(d[\"files\"]))' && echo \"$(python3 {{KIT}}/scripts/batch-baseline.py diff $W F1 --root $R --name-only --code | tr '\\n' ',')|$(python3 {{KIT}}/scripts/batch-baseline.py diff $W F1 --root $R | grep -c '^+v2\\|^+later')|$(python3 {{KIT}}/scripts/batch-baseline.py diff $W F1 --root $R | grep -c '^+v1')|$(python3 {{KIT}}/scripts/batch-baseline.py base $W F1 src/A/a.cs --root $R)|$(grep -c '\"replay\"' $W)\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "1 src/A/a.cs,src/A/n.cs,tests/T/t.cs\nsrc/A/a.cs,src/A/n.cs,tests/T/t.cs,|0|1|v0|1"
+      }
+    },
+    {
+      "name": "batch baseline replay --base <rev>: the batch is <rev>..HEAD, for a batch committed without its trailer",
+      "cmd": "R={{FIX}}/replay-{{SID}}; W=$R/todo/x/run/.work.jsonl; rm -rf $R; mkdir -p $R/src/A $R/tests/T $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/a.cs && git add -A && git commit -qm init && printf 'v1\\n' >> src/A/a.cs && printf 'new\\n' > src/A/n.cs && printf 't\\n' > tests/T/t.cs && printf '# s\\n' > todo/x/X-PLAN-F1.md && git add -A && git commit -qm 'feat(x): batch F1 — a' -m 'Kit-Batch: x/F1' && printf 'v2\\n' >> src/A/a.cs && git commit -qam 'feat(x): batch F10 — b' -m 'Kit-Batch: x/F10' && printf 'later\\n' >> src/A/a.cs && git commit -qam other && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py replay $W F2 --root $R --base HEAD~2 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d[\"commits\"]), \",\".join(d[\"files\"]))'",
+      "expect": {
+        "exit": 0,
+        "stdout": "2 src/A/a.cs"
+      }
+    },
+    {
+      "name": "batch baseline replay refused, exit 1 and one JSON line: no commit carries the batch's trailer, or the batch holds a snapshot (still open)",
+      "cmd": "R={{FIX}}/replay-{{SID}}; W=$R/todo/x/run/.work.jsonl; rm -rf $R; mkdir -p $R/src/A $R/tests/T $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/a.cs && git add -A && git commit -qm init && printf 'v1\\n' >> src/A/a.cs && printf 'new\\n' > src/A/n.cs && printf 't\\n' > tests/T/t.cs && printf '# s\\n' > todo/x/X-PLAN-F1.md && git add -A && git commit -qm 'feat(x): batch F1 — a' -m 'Kit-Batch: x/F1' && printf 'v2\\n' >> src/A/a.cs && git commit -qam 'feat(x): batch F10 — b' -m 'Kit-Batch: x/F10' && printf 'later\\n' >> src/A/a.cs && git commit -qam other && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py replay $W F2 --root $R; echo \"exit=$?\"; python3 {{KIT}}/scripts/batch-baseline.py snapshot $W F1 --root $R >/dev/null && python3 {{KIT}}/scripts/batch-baseline.py replay $W F1 --root $R; echo \"exit=$?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "{\"refused\": \"no commit carries `Kit-Batch: x/F2` — pass --base <rev> for a batch committed without it\"}\nexit=1\n{\"refused\": \"F1 has a snapshot"
+      }
+    },
+    {
+      "name": "batch baseline red: in a worktree, the replayed batch's production files back to its base, those it created deleted, its tests left as they are; no replay line → exit 2",
+      "cmd": "R={{FIX}}/replay-{{SID}}; W=$R/todo/x/run/.work.jsonl; rm -rf $R; mkdir -p $R/src/A $R/tests/T $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/a.cs && git add -A && git commit -qm init && printf 'v1\\n' >> src/A/a.cs && printf 'new\\n' > src/A/n.cs && printf 't\\n' > tests/T/t.cs && printf '# s\\n' > todo/x/X-PLAN-F1.md && git add -A && git commit -qm 'feat(x): batch F1 — a' -m 'Kit-Batch: x/F1' && printf 'v2\\n' >> src/A/a.cs && git commit -qam 'feat(x): batch F10 — b' -m 'Kit-Batch: x/F10' && printf 'later\\n' >> src/A/a.cs && git commit -qam other && cd {{ROOT}} && T=$R-wt && git -C $R worktree add -q --detach $T HEAD && python3 {{KIT}}/scripts/batch-baseline.py replay $W F1 --root $R >/dev/null && out=$(python3 {{KIT}}/scripts/batch-baseline.py red $W F1 --root $T) && echo \"$(cat $T/src/A/a.cs | tr '\\n' ,)|$(test -e $T/src/A/n.cs && echo kept || echo deleted)|$(cat $T/tests/T/t.cs)|$out\"; git -C $R worktree remove --force $T; python3 {{KIT}}/scripts/batch-baseline.py red $W F9 --root $R; echo \"exit=$?\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "v0,|deleted|t|red: 1 production file(s) back to"
+      }
+    },
+    {
+      "name": "batch baseline red without a replay of the batch exits 2",
+      "cmd": "R={{FIX}}/replay-{{SID}}; W=$R/todo/x/run/.work.jsonl; rm -rf $R; mkdir -p $R/src/A $R/tests/T $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/a.cs && git add -A && git commit -qm init && printf 'v1\\n' >> src/A/a.cs && printf 'new\\n' > src/A/n.cs && printf 't\\n' > tests/T/t.cs && printf '# s\\n' > todo/x/X-PLAN-F1.md && git add -A && git commit -qm 'feat(x): batch F1 — a' -m 'Kit-Batch: x/F1' && printf 'v2\\n' >> src/A/a.cs && git commit -qam 'feat(x): batch F10 — b' -m 'Kit-Batch: x/F10' && printf 'later\\n' >> src/A/a.cs && git commit -qam other && cd {{ROOT}} && python3 {{KIT}}/scripts/batch-baseline.py red $W F1 --root $R",
+      "expect": {
+        "exit": 2,
+        "stderr": "no replay of F1"
+      }
     }
   ]
 }

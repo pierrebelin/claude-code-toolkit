@@ -425,6 +425,22 @@
         "exit": 0,
         "stdout": "Scenarios: one per method, as its name states"
       }
+    },
+    {
+      "name": "--tests for run-replay: a saved cycle gives its RED table and the command its GREEN ran, an unsaved one its contract methods under its test class, one whose RED wrote no test none",
+      "cmd": "printf '%s\\n' '{\"kind\":\"cycle\",\"batch\":\"\",\"slug\":\"une-creation-refusee\",\"state\":{\"behaviour\":\"Une création refusée\",\"red\":{\"status\":\"RED\",\"exit\":1,\"command\":\"red-cmd\",\"tests\":[\"tests/T.cs\"],\"table\":[{\"test\":\"ATests.ShouldRefuse_WhenNameIsEmpty\",\"case\":\"c\"}]},\"green\":{\"status\":\"GREEN\",\"exit\":0,\"command\":\"green-cmd\"}}}' > {{FIX}}/sc-tests-{{SID}}.jsonl && for w in sc-tests-{{SID}}.jsonl sc-none-{{SID}}.jsonl; do python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --tests {{FIX}}/$w --root {{FIX}}/sc | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d[\"cycles\"][0]; print(d[\"count\"], c[\"saved\"], c[\"tests\"], c[\"files\"], c[\"command\"] or \"-\")'; done; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/anchored.md --tests {{FIX}}/sc/st-gone.jsonl --root {{FIX}}/sc | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"cycles\"][0][\"tests\"])'",
+      "expect": {
+        "exit": 0,
+        "stdout": "1 True ['ATests.ShouldRefuse_WhenNameIsEmpty'] ['tests/T.cs'] green-cmd\n1 False ['ATests.ShouldRefuse_WhenNameIsEmpty'] [] -\n[]"
+      }
+    },
+    {
+      "name": "--tests needs WORK",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --tests",
+      "expect": {
+        "exit": 1,
+        "stderr": "--tests needs WORK"
+      }
     }
   ]
 }
