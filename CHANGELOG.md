@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.11.3 — 2026-10-31
+
+- `cctoolkit`: `/cctoolkit:business-spec`, `/cctoolkit:verify-ddd-tdd` and the `adversarial-reviewer` agent drop the lines that changed nothing in what the model does (a repeated rule, a summary of a later section, a constraint the agent's tools already enforce). Same behaviour, less loaded at each run.
+
 ## 2.11.2 — 2026-10-30
 
 - `run-lot-pane`: a Tests view, `t` on a batch or a plan. It lists every test the batch sheets plan (their `## Cycles` block), one line each, with the behaviour it verifies: the use case its RED table gives once written, its method name read as words before. Each test shows whether it is still to write, written and red, green, or left unwritten as unreachable, followed live during the run; on a plan every batch is listed, those still to come and those an earlier run finished included, so the view is the record of what the plan proved once it ends. `r` regroups the tests by business rule and use case. The pointer on a row shows the test's full name, the cycle's rules, level and observation, a line the pane's width cut, and `copy test` / `copy behaviour` buttons. The same information was only in the `## Test recap` of each batch report, written at the end of the batch.

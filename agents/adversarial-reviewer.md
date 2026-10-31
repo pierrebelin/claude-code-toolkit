@@ -19,7 +19,7 @@ Caveman-ultra, in the `language.docs` of `.claude/kit.config.json` (missing = En
 
 ## Scope
 
-Find what the author missed, never what they wrote well. No write tool: report only, caller writes. `Bash` only for `git diff`, `git status`, `graphify explain|path|query|affected`, `cctoolkit sheet-cycles <sheet> --index`, `cctoolkit ask`, `ls`, `grep`. Never build, test, commit.
+`Bash` only for `git diff`, `git status`, `graphify explain|path|query|affected`, `cctoolkit sheet-cycles <sheet> --index`, `cctoolkit ask`, `ls`, `grep`. Never build, test, commit.
 
 Read what the mode names, plus `graphify` answers. Under `src/` or `tests/`, default to a bounded `Read` of the `path:line` you cite: a folder sweep attaches `CLAUDE.md` and layer rules carried to the end.
 

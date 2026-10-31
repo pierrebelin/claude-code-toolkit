@@ -10,8 +10,6 @@ background: false
 
 Audit, never modify. Covers a batch implemented by `/implement-tdd`, never a feature without plan. Validations run the repo's configured commands (`commands.build`, `commands.test`), resolved as in `skills/implement-tdd/references/test-scope.md` § Runner.
 
-One table (§2): code axes first — correctness, reuse, simplification, cost, placement, comments — judging delivered code as is; then the axes tying code to the sheet — test policy, plan traceability, scope. The plan is not the ultimate reference: it may change mid-batch, so a code/plan gap gets classified (§2).
-
 $ARGUMENTS
 
 ## Modes
@@ -53,7 +51,7 @@ Locating the existing element behind a `Reuse` or `Placement` deviation: `graphi
 
 **`Worsened`** — pre-existing defect the batch makes measurably worse, judged as if batch introduced it: severity of its axis, `Gap` cell prefixed `(worsened)`. Worse means one more of the same thing: one more repository call in an already looping path, one more branch in an already defensive chain, one more copy of an already duplicated block, one more caller of a pre-existing unbounded read. Evidence: pre-existing state (context line of hunk, or `path:line` at base) **and** batch line adding to it. Untouched pre-existing defect, or one batch merely sits next to, stays Minor. Fix expected: only what batch added, never pre-existing part — outside scope.
 
-No evidence → finding not reported. Symmetrically, missing evidence never a favourable assumption: cite file and line where deviation observed, or say point could not be verified.
+Missing evidence never a favourable assumption: cite file and line where deviation observed, or say point could not be verified.
 
 Don't propose adding a comment, XML doc, anticipatory abstraction or isolated aggregate test: they are deviations, not fixes.
 
@@ -63,7 +61,7 @@ Classify every code/plan divergence before reporting it, one explicit line:
 - **Stale plan** — implementation better, or decision settled mid-batch. Fix: sheet, plus source spec if RM/CU moves. Severity **Minor** — the code is the reference, the sheet a plan; **Major** only when an RM/CU moves and the spec must follow.
 - **Unsettleable divergence** — both readings hold. Report both, arbitration to user. Never decide in plan's place.
 
-RM/CU with no code owner stays blocking in all three cases: hole, not divergence. Traceability reads both ways: RM → code, code → RM.
+RM/CU with no code owner stays blocking in all three cases: hole, not divergence.
 
 ### 3. Run the minimal validations
 
@@ -133,5 +131,3 @@ The correction may contest a gap instead of applying it, only by naming a concre
 - **Counter** — another closure reaches the gap without the harm: state it; the next round applies it.
 - **Refute** — the harm does not hold: why, with evidence `path:line`; the next round applies the gap.
 - **Escalate** — both readings hold and the choice is the user's: it goes to the user's review, nothing waits on it.
-
-Fix nothing here; fixing belongs to `/implement-tdd`.

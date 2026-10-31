@@ -34,14 +34,12 @@ $ARGUMENTS
    - Complexity: worth the business value?
    Skip when obvious from the interview.
 4. **Ids**, once, just before writing — the spec is written once, and two calls before it would return the same id. With a base: per context and kind, `cctoolkit next-id <Context> CU --count <n>`, then `RM`, then `D`, n = the new objects of that kind; an object of the base keeps its id. A context absent from `knowledge.contexts` → `next-id` refuses it: AskUserQuestion for its prefix (2 to 5 capitals, recommended first), add it to `knowledge.contexts` of `.claude/kit.config.json`, then take the ids. No base: local ids `CU-01`, `RM-01`, `D-01`, no delta anchor.
-5. Write following the structure. Concision before exhaustiveness.
+5. Write following the structure.
 6. Write into `todo/` (not `docs/`): `todo/<code-kebab-case>/SPEC-<code-kebab-case>.md`. One folder per feature: `/plan-implementation` later drops `-PLAN.md` + batch sheets there. Slug = kebab-case of feature code/name. `next-id` reads `todo/`: the ids the spec holds stay taken until the merge writes them into the base.
 
 Document must make later DDD design possible without doing it: every business rule states subject, condition, observable outcome, use case concerned. Aggregate, technical invariant, event, consistency model → `/plan-implementation`.
 
 ## Writing rules
-
-The spec is a produced artefact, proofread by a business expert.
 
 - Empty section → delete it (heading included). No `_Not applicable._`.
 - Table over prose. No intro paragraph: straight to content.
@@ -59,7 +57,7 @@ The spec is a produced artefact, proofread by a business expert.
 
 ## Verbosity budget (produced document)
 
-- Target: few minutes' read, ~1-3 pages. Half of exhaustive spec.
+- Target: ~1-3 pages.
 - Use cases: nominal scenario ≤7 steps. Expected outcome only when not obvious from scenario.
 - Business rules: statement 1 line. No justification: origin is enough.
 - Inline fields: `Applies to`, severity, origin on one line, never exploded into bullets.
@@ -68,7 +66,7 @@ The spec is a produced artefact, proofread by a business expert.
 
 ## Writing style
 
-Short, professional. Table or fragment for context; full sentence for business rule, condition, error, transition. Cut filler, not precision: business terms, thresholds, values, states, expected outcome stay exact. Uncertain rule → `TBD`, never hedging.
+Table or fragment for context; full sentence for business rule, condition, error, transition. Cut filler, not precision: business terms, thresholds, values, states, expected outcome stay exact. Uncertain rule → `TBD`, never hedging.
 
 ## Output structure
 
@@ -159,7 +157,6 @@ Base consistency (with a base):
 
 Completeness:
 - Use cases cover lifecycle (creation, read, update, deletion/withdrawal as relevant).
-- Errors + edge cases where they matter. Non-trivial data listed.
 - Every `TBD` in body appears in section `kit:open-questions`.
 - Every technical, temporal or resource constraint met in the interview is a line of section `kit:technical-points`.
 - Rules, variants, errors readable without inferring a condition from a telegraphic fragment.
@@ -169,11 +166,11 @@ Codebase alignment (signal, not veto):
 - Without: key business concepts → look for equivalent in `Domain/`, `Application/`. Cite file:line.
 - Functional duplicate where capability already exists → flag it.
 
-Deviation → fix spec. Doubt about business intent → ask user.
+Doubt about business intent → ask user.
 
 ## Adversarial review (mandatory, after self-validation)
 
-You wrote the spec, so you read what you meant. Delegate one fresh reading: `Agent` with `subagent_type: cctoolkit:adversarial-reviewer`, a `description`, prompt starting `mode: spec <path>`.
+Delegate one fresh reading: `Agent` with `subagent_type: cctoolkit:adversarial-reviewer`, a `description`, prompt starting `mode: spec <path>`.
 
 - `## Review — CLEAR` → next step.
 - `## Review — GAPS` → each row into section `kit:open-questions` with its severity (`Blocking` / `Major`), merged with a row already asking the same thing.
