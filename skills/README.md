@@ -4,7 +4,7 @@ Installed, each skill is typed with the plugin's prefix — `/cctoolkit:implemen
 
 ## Skills
 
-Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-plan <plan>` for the whole plan, or `/cctoolkit:run-lot <sheet>` per batch (Workflow scripts, `workflows/`). With `run.parallelBatches` 2, `run-plan` runs two independent batches at once, the second in a worktree of its own (`run-lot`'s `root`), and lands it on the checkout ([`presets/README.md`](../presets/README.md)). `implement-tdd` only launches that chain from a plan path (and applies a `— correction:` to a sheet); `verify-ddd-tdd` audits a batch on demand; `/cctoolkit:run-replay <sheet|plan>` replays what a batch, or every batch ✅ DONE of a plan, delivered — its cycles' tests and the suites its commits reach rerun, its REDs re-observed without its production code on `--red`, its audit — read-only, into `run/batches/FX-replay.md`. Around it, the knowledge base: `knowledge-sync` builds it and catches up with changes made outside the chain, `business-spec` reads it, `knowledge-merge` writes a delivered plan into it, `ask` answers from it.
+Main chain: `business-spec` → `plan-implementation` → `/cctoolkit:run-plan <plan>` for the whole plan, or `/cctoolkit:run-lot <sheet>` per batch (Workflow scripts, `workflows/`). With `run.parallelBatches` 2, `run-plan` runs two independent batches at once, the second in a worktree of its own (`run-lot`'s `root`), and lands it on the checkout ([`presets/README.md`](../presets/README.md)). `implement-tdd` only launches that chain from a plan path (and applies a `— correction:` to a sheet); `verify-ddd-tdd` audits a batch on demand; `/cctoolkit:run-replay <sheet|plan>` goes over a batch already delivered, read-only (§ How `run-replay` rechecks a delivered batch). Around it, the knowledge base: `knowledge-sync` builds it and catches up with changes made outside the chain, `business-spec` reads it, `knowledge-merge` writes a delivered plan into it, `ask` answers from it.
 
 | Skill | When |
 |-------|------|
@@ -44,6 +44,25 @@ The test-authoring skills — `tests-unit-tests` (handlers/services: business ru
 - **`/verify-ddd-tdd` runs before the next batch**, in a fork and with no write access. It audits the delivered code as it is first, and only then its conformance to the plan — the plan is not the ultimate reference, it gets corrected mid-batch. The orchestrator hands it a capture produced by `cctoolkit audit-capture` (status, diff, coverage, `build` and `ArchitectureTests` exit codes) and the sheet's FX section: the audit opens that once instead of rebuilding it over thirty turns. On a re-audit after correction, `resume` narrows the scope to the previous verdict's deviation table plus the diff produced since — what already carries a verdict is not re-established.
 
 **Progressive disclosure inside a skill** — what only one branch or one phase needs lives in its own reference file, read at that point and not before: `design.md` and `parallelism.md` open only when a sheet has no valid `## Cycles` block, `closing.md` only at GREEN and when the pre-audit gate or the audit asks for a fix. A reference loaded at the top of a skill is carried by every turn of the batch.
+
+## How `run-replay` rechecks a delivered batch
+
+`run-replay` goes over what a batch delivered, long after its run, without changing anything: no fix, no commit, no `✅` ticked or removed. For a batch whose code has since been touched by later batches, a refactor or a dependency upgrade, and the question is whether what it proved still holds.
+
+```
+/cctoolkit:run-replay todo/<code>/<CODE>-PLAN-FX.md [--red] [--no-audit] [--base <rev>]
+/cctoolkit:run-replay todo/<code>/<CODE>-PLAN.md [--only FX] [--red] [--no-audit]
+```
+
+`/cctoolkit:implement-tdd replay [batch FX] <plan>` launches it too. On a plan, every batch `✅ DONE` is replayed in plan order, one after the other (their suites build the same projects); the others are listed, not replayed.
+
+- **The batch is its commits.** `cctoolkit batch-baseline replay` finds them by their trailer `Kit-Batch: <plan folder>/FX`, a whole line (`F1` never takes `F10`): from the parent of the first to the last, as the batch delivered them, whatever came after. A `replay` line in `run/.work.jsonl` carries that range, so `suites-plan`, `audit-capture` and `access-cost` read the batch's diff as they read an open batch's. A batch committed without the trailer: `--base <rev>` takes `<rev>..HEAD`. No commit found, or the batch still open (a snapshot in the work file): `SKIPPED`, nothing run.
+- **Tests, on today's code.** The solution build, the suites `cctoolkit suites-plan` resolves for the batch's files, then each cycle's own filtered command — the one its GREEN ran, read off its `cycle` line by `cctoolkit sheet-cycles --tests`; a cycle without saved state gets the command written from its contract (test class and methods). A red suite or cycle is reported, never fixed.
+- **`--red`: the RED again, without the batch's code.** In a batch worktree, `cctoolkit batch-baseline red` puts the batch's files under the source roots back as they were before it, created files deleted, tests left as they are; each cycle's tests must fail there. A test still green proves nothing the batch wrote: listed under `## To check`, not a failure. Refactor and guard cycles have no RED to re-observe. On .NET, a batch that created types leaves its tests unable to compile without them: the RED is then re-observed as a compile error only, and the report says so.
+- **Audit without fix.** `ddd-tdd-auditor` judges the capture of the batch's commits, fast mode, the suites already run passed on; `--no-audit` skips it.
+- **Report.** `run/batches/FX-replay.md`: `## REPLAY — PASSED` or `FAILED`, the range, one row per cycle (its tests, green or red on replay, with `--red` red observed, `NOT RED` or does not compile), the suites, the audit gaps, `## To check`, and `## Next` — one `/cctoolkit:implement-tdd batch FX — correction: …` per red cycle and per Blocking or Major gap, to launch on the user's word through the correction flow. `FAILED` = build, suite or cycle red, or an audit Blocking or Major. The `replay` line is dropped at the end, or by the next purge.
+
+Limit: the diff runs from the batch's first commit to its last; another batch that touched the same files in between shows in it.
 
 ## What the kit imposes on the repo
 
