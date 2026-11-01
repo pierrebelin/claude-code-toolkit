@@ -31,6 +31,22 @@
         "exit": 0,
         "stdout": "Acme|Acme,Acme.Tool"
       }
+    },
+    {
+      "name": "a Rust crate at the root beside a frontend/ package: the crate leads, its name is the product, the rust tag, hexagonal recognises the use case",
+      "cmd": "R={{FIX}}/ds-{{SID}}\nmkdir -p $R/src/application/catalog $R/frontend\nprintf '[package]\\nname = \"shop\"\\nversion = \"0.1.0\"\\n\\n[dependencies]\\nserde = \"1\"\\n' > $R/Cargo.toml\nprintf '{\"name\":\"shop-web\",\"devDependencies\":{\"vitest\":\"1\"}}' > $R/frontend/package.json\nprintf 'pub struct CreateProduct;\\nimpl CreateProduct {\\n    pub async fn execute(&self) {}\\n}\\n' > $R/src/application/catalog/create_product.rs\npython3 {{KIT}}/scripts/detect-stack.py $R | jq -r '[.product, .testTag, ([.stacks[].stack]|join(\",\")), .presets[0].preset, (.presets[0].useCaseFolders|tostring)] | join(\"|\")'",
+      "expect": {
+        "exit": 0,
+        "stdout": "shop|rust|rust,node|hexagonal|1"
+      }
+    },
+    {
+      "name": "a Cargo.toml only below a root package.json (a Tauri shell): node keeps the lead",
+      "cmd": "R={{FIX}}/ds-{{SID}}\nmkdir -p $R/app $R/app/src-tauri\nprintf '{\"name\":\"desk\",\"devDependencies\":{\"vitest\":\"1\"}}' > $R/package.json\nprintf '[package]\\nname = \"desk-shell\"\\n' > $R/app/src-tauri/Cargo.toml\npython3 {{KIT}}/scripts/detect-stack.py $R | jq -r '[.product, .testTag, ([.stacks[].stack]|join(\",\"))] | join(\"|\")'",
+      "expect": {
+        "exit": 0,
+        "stdout": "desk|jest|node,rust"
+      }
     }
   ]
 }

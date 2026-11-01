@@ -89,6 +89,14 @@
         "exit": 0,
         "stdout": "FAIL commands.suites.IntegrationTests.requires expects a list among docker"
       }
+    },
+    {
+      "name": "cargo test output: the failed tests read off their ---- stdout ---- blocks, todo!() is a stub failure, an assertion is not",
+      "cmd": "R={{FIX}}/sp-{{SID}}\nmkdir -p $R/.claude\nprintf '{\"preset\": \"hexagonal\"}\\n' > $R/.claude/kit.config.json\ncat > $R/out.txt <<'OUTEOF'\nrunning 3 tests\ntest catalog::accepts_a_fresh_name ... ok\ntest catalog::rejects_a_name_already_used ... FAILED\ntest catalog::rejects_a_closed_catalog ... FAILED\n\nfailures:\n\n---- catalog::rejects_a_name_already_used stdout ----\nthread 'catalog::rejects_a_name_already_used' panicked at src/application/create_product.rs:4:9:\nnot yet implemented\n\n---- catalog::rejects_a_closed_catalog stdout ----\nthread 'catalog::rejects_a_closed_catalog' panicked at tests/unit/catalog.rs:12:5:\nassertion `left == right` failed\n\nfailures:\n    catalog::rejects_a_closed_catalog\n    catalog::rejects_a_name_already_used\n\ntest result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out\nOUTEOF\ncd $R && CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/suites-plan.py --failed out.txt | tr '\\n' ' '\nCLAUDE_PROJECT_DIR=$R python3 -c \"import sys; sys.path.insert(0, '{{KIT}}/lib'); import kit_config, tdd_scope; print('stub:', ','.join(tdd_scope.failures_on_stub(kit_config.load(), open('out.txt').read())[1]))\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "catalog::rejects_a_closed_catalog catalog::rejects_a_name_already_used stub: catalog::rejects_a_name_already_used"
+      }
     }
   ]
 }

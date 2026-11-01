@@ -1,5 +1,5 @@
 {
-  "description": "One folder per feature holding command, handler, endpoint and its unit tests; the domain model in a shared folder. Stack-neutral markers: C#, Python, Java/Kotlin, TypeScript.",
+  "description": "One folder per feature holding command, handler, endpoint and its unit tests; the domain model in a shared folder. Stack-neutral markers: C#, Python, Java/Kotlin, TypeScript, Rust.",
   "layout": {
     "sources": {
       "roots": [
@@ -12,7 +12,8 @@
         ".kt",
         ".ts",
         ".tsx",
-        ".js"
+        ".js",
+        ".rs"
       ],
       "comment": {
         ".cs": "//",
@@ -21,7 +22,8 @@
         ".kt": "//",
         ".ts": "//",
         ".tsx": "//",
-        ".js": "//"
+        ".js": "//",
+        ".rs": "//"
       },
       "imports": {
         ".cs": "^\\s*(?:global\\s+)?using\\s+(?:static\\s+)?[\\w.]+(?:\\s*=\\s*[\\w.<>, ]+)?\\s*;\\s*$",
@@ -30,7 +32,8 @@
         ".kt": "^\\s*import\\s+[\\w.*]+(?:\\s+as\\s+\\w+)?\\s*$",
         ".ts": "^\\s*import\\s.*\\bfrom\\s+['\"]|^\\s*import\\s+['\"]|^\\s*export\\s.*\\bfrom\\s+['\"]",
         ".tsx": "^\\s*import\\s.*\\bfrom\\s+['\"]|^\\s*import\\s+['\"]|^\\s*export\\s.*\\bfrom\\s+['\"]",
-        ".js": "^\\s*import\\s.*\\bfrom\\s+['\"]|^\\s*import\\s+['\"]|^\\s*export\\s.*\\bfrom\\s+['\"]|^\\s*(?:const|let|var)\\s+[\\w{}\\s,]+=\\s*require\\("
+        ".js": "^\\s*import\\s.*\\bfrom\\s+['\"]|^\\s*import\\s+['\"]|^\\s*export\\s.*\\bfrom\\s+['\"]|^\\s*(?:const|let|var)\\s+[\\w{}\\s,]+=\\s*require\\(",
+        ".rs": "^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?(?:use\\s+[\\w:{}*, ]+;|use\\s+[\\w:]+::\\{|mod\\s+\\w+\\s*;|extern\\s+crate\\s+[\\w ]+;)\\s*$"
       }
     },
     "aggregate": [
@@ -67,6 +70,10 @@
         {
           "file": "*[hH]andler.ts",
           "contains": "\\bclass\\s+\\w*Handler\\b|\\bfunction\\s+handle\\w*\\b|\\bconst\\s+handle\\w*\\s*="
+        },
+        {
+          "file": "*handler.rs",
+          "contains": "^\\s*pub\\s+(?:async\\s+)?fn\\s+handle\\w*\\b"
         }
       ]
     },
@@ -123,9 +130,9 @@
     ]
   },
   "tdd": {
-    "failedTest": "^\\s*(?:failed|Failed|FAILED|FAIL|\\[FAIL\\]|✗|×)\\s+(\\S+)",
-    "stubFailure": "NotImplemented(?:Exception|Error)|UnsupportedOperationException|[Nn]ot implemented",
-    "stubLogic": "^\\s*(?:if|elif|else|switch|case|match|for|foreach|while|catch|except)\\b",
+    "failedTest": "^\\s*(?:(?:failed|Failed|FAILED|FAIL|\\[FAIL\\]|✗|×)\\s+|---- (?=\\S+ stdout ----))(\\S+)",
+    "stubFailure": "NotImplemented(?:Exception|Error)|UnsupportedOperationException|[Nn]ot implemented|not yet implemented",
+    "stubLogic": "^\\s*(?:if|elif|else|switch|case|match|for|foreach|while|loop|catch|except)\\b",
     "assertion": "\\b(Assert\\.|assert\\w*\\b|Should(\\(|\\.)|should\\w*\\(|expect\\(|verify\\w*\\(|Verify(Async)?\\(|\\.Received\\(|pytest\\.raises)"
   }
 }

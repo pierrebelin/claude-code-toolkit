@@ -211,14 +211,53 @@ class Jest(Adapter):
         return out
 
 
-ADAPTERS = {a.name: a for a in (XUnit, Pytest, JUnit, Jest)}
+class Rust(Adapter):
+    name = "rust"
+    default_regex = r"\[RM ([^\]\s]+)\]"
+    default_files = ["*.rs"]
+    test_label = "`#[test]` functions"
+    tag_label = "`[RM …]` comment tags"
+    example = "/// [RM CreateProduct/RM-01]"
+    MOD = re.compile(r"^(\s*)(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*\{")
+    MARKER = re.compile(r"^\s*#\[(?:\w+::)*(?:test|rstest)\b")
+    FN = re.compile(r"^(\s*)(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)")
+
+    def scan(self, path):
+        # A tag sits in the comments and attributes above the function; anything else between drops it.
+        out, mods, armed, pending = [], [], False, []
+        module = stem(path)
+        for i, line in enumerate(_read_lines(path)):
+            s = line.strip()
+            mm = self.MOD.match(line)
+            if mm:
+                ind = len(mm.group(1))
+                mods = [m for m in mods if m[0] < ind] + [(ind, mm.group(2))]
+                armed, pending = False, []
+                continue
+            if s.startswith("#[") or s.startswith("//"):
+                pending.extend(self.values_in(line))
+                armed = armed or bool(self.MARKER.match(line))
+                continue
+            if not s:
+                continue
+            fm = self.FN.match(line)
+            if fm:
+                ind = len(fm.group(1))
+                mods = [m for m in mods if m[0] < ind]
+                if armed:
+                    out.append(Test(path, mods[-1][1] if mods else module, fm.group(2), i + 1, pending))
+            armed, pending = False, []
+        return out
+
+
+ADAPTERS = {a.name: a for a in (XUnit, Pytest, JUnit, Jest, Rust)}
 
 
 def adapter(config):
     """The adapter `config.test_tag` selects (a kit_config.Config)."""
     t = config.test_tag or {}
     if not isinstance(t, dict):
-        raise TestTagError("testTag expects {\"framework\": \"xunit|pytest|junit|jest\"}")
+        raise TestTagError("testTag expects {\"framework\": \"xunit|pytest|junit|jest|rust\"}")
     name = t.get("framework", "xunit")
     if name not in ADAPTERS:
         raise TestTagError(f"unknown testTag.framework '{name}' — {', '.join(sorted(ADAPTERS))}")

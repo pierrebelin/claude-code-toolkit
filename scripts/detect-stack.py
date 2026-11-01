@@ -21,13 +21,13 @@ SKIP = {".git", "node_modules", "bin", "obj", "dist", "build", "target", ".venv"
         ".claude", ".idea", ".vs", "coverage", ".next", "out", "graphify-out"}
 MAX_DEPTH = 4
 # testTag frameworks lib/kit_testtag.py carries; vitest shares Jest's `it`/`test` titles.
-TAG_FOR = {"xunit": "xunit", "pytest": "pytest", "junit": "junit", "jest": "jest", "vitest": "jest"}
+TAG_FOR = {"xunit": "xunit", "pytest": "pytest", "junit": "junit", "jest": "jest", "vitest": "jest", "cargo": "rust"}
 
 
 def scan(root):
     """Manifest files by kind, relative paths, depth-bounded."""
     found = {"sln": [], "csproj": [], "package.json": [], "tsconfig.json": [], "pyproject.toml": [],
-             "requirements": [], "pom.xml": [], "gradle": []}
+             "requirements": [], "pom.xml": [], "gradle": [], "Cargo.toml": []}
     for base, dirs, files in os.walk(root):
         depth = os.path.relpath(base, root).count(os.sep) + (base != root)
         dirs[:] = [] if depth >= MAX_DEPTH else sorted(d for d in dirs if d not in SKIP and not d.startswith("."))
@@ -37,7 +37,7 @@ def scan(root):
                 found["sln"].append(rel)
             elif f.endswith(".csproj"):
                 found["csproj"].append(rel)
-            elif f in ("package.json", "tsconfig.json", "pyproject.toml", "pom.xml"):
+            elif f in ("package.json", "tsconfig.json", "pyproject.toml", "pom.xml", "Cargo.toml"):
                 found[f].append(rel)
             elif re.fullmatch(r"requirements.*\.txt", f):
                 found["requirements"].append(rel)
@@ -103,6 +103,18 @@ def stacks(root, m):
                     "evidence": (m["pom.xml"] + m["gradle"])[:5],
                     "testFramework": "junit" if re.search(r"junit", text, re.I) else None,
                     "product": name, "productCandidates": [name] if name else []})
+    if m["Cargo.toml"]:
+        # The shallowest crate names the product; a workspace root without [package] leaves it unset.
+        names = []
+        for p in sorted(m["Cargo.toml"], key=lambda p: (p.count(os.sep), p)):
+            pkg = re.search(r"^\[package\][^\[]*?^\s*name\s*=\s*\"([^\"]+)\"", read(root, p), re.M | re.S)
+            names.append(pkg.group(1) if pkg else None)
+        top = "Cargo.toml" in m["Cargo.toml"]
+        rust = {"stack": "rust", "language": "Rust", "evidence": m["Cargo.toml"][:5], "testFramework": "cargo",
+                "product": names[0], "productCandidates": [n for n in names if n][:5]}
+        # A Cargo.toml at the root leads a stack found only below it (a frontend/ beside the crate).
+        at = next((i for i, s in enumerate(out) if top and all(os.sep in e for e in s["evidence"])), len(out))
+        out.insert(at, rust)
     return out
 
 

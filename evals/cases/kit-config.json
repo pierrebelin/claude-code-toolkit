@@ -334,6 +334,14 @@
         "exit": 0,
         "stdout": "[]"
       }
+    },
+    {
+      "name": "hexagonal + rust: a /// or // tag above #[test] or #[tokio::test] binds it, the untagged test is named by its module",
+      "cmd": "R={{FIX}}/kc-{{SID}}\nmkdir -p $R/.claude/hooks $R/.claude/lib\ncp {{KIT}}/hooks/handler-claude-md-check.sh $R/.claude/hooks/\ncp {{KIT}}/lib/kit_config.py {{KIT}}/lib/kit_testtag.py {{KIT}}/lib/rule_sheet.py $R/.claude/lib/\ncp -R {{KIT}}/presets $R/.claude/\nprintf '%s' '{\"preset\": \"hexagonal\", \"testTag\": {\"framework\": \"rust\"}}' > $R/.claude/kit.config.json\nF=$R/src/application/create_product\nmkdir -p $F $R/tests/unit/catalog\ncat > $F/mod.rs <<'RSEOF'\npub struct CreateProduct;\n\nimpl CreateProduct {\n    pub async fn execute(&self, name: &str) {}\n}\nRSEOF\ncat > $F/CLAUDE.md <<'MDEOF'\n# CreateProduct — create a product\n\n## Business rules <!-- kit:rules -->\n\n<!-- kit:cols id,rule,outcome -->\n| ID | Rule | Exception / Outcome |\n|----|------|---------------------|\n| RM-01 | The name is unique in the catalog | ProductNameAlreadyUsed |\n| RM-02 | The catalog is open | CatalogClosed |\n\n## Flow <!-- kit:flow -->\n\n1. Load the catalog, create the product, save.\n\n## Emitted events <!-- kit:events -->\n\n- ProductCreated\nMDEOF\ncat > $R/tests/unit/catalog/create_product.rs <<'RSEOF'\nuse shop::application::create_product::CreateProduct;\n\n/// [RM create_product/RM-01]\n#[tokio::test]\nasync fn rejects_a_name_already_used() {}\n\nmod closed_catalog {\n    // [RM create_product/RM-02]\n    #[test]\n    fn rejects_a_closed_catalog() {}\n\n    fn helper() {}\n\n    #[test]\n    fn carries_no_tag() {}\n}\nRSEOF\nCLAUDE_PROJECT_DIR=$R python3 {{KIT}}/scripts/rules-coverage.py | grep -E 'unbound|UNBOUND' | tr '\\n' ' '",
+      "expect": {
+        "exit": 0,
+        "stdout": "dead references: 0 | unbound tests: 1   UNBOUND TEST: closed_catalog.carries_no_tag"
+      }
     }
   ]
 }

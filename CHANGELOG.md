@@ -4,6 +4,13 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.13.0 — 2026-11-01
+
+- `cctoolkit`: Rust repos. `cctoolkit detect-stack` reads `Cargo.toml`: the crate's `[package] name` is the product, a `Cargo.toml` at the root leads a stack found only in a subfolder (a `frontend/` beside the crate), and the `rust` test tag is proposed. Before, a Rust repo with a frontend was taken for a Node repo named after the frontend.
+- `cctoolkit`: `testTag.framework` `rust`: a test cites its rule with `[RM <SheetFolder>/RM-01]` in a `///` or `//` comment above its `#[test]`, `#[tokio::test]` or `#[rstest]`; `rules-coverage` and the traceability hook read it, an untagged test is named `<module>.<function>`.
+- `cctoolkit`: the `hexagonal` and `vertical-slices` presets know `.rs` files: `use`/`mod`/`extern crate` lines as imports, `//` comments, a use case as a `.rs` file with a `pub fn execute` or `handle` (hexagonal) or a `*handler.rs` with a `pub fn handle…` (vertical slices). The RED check reads cargo's output: each failed test's `---- <test> stdout ----` block, `todo!()`'s `not yet implemented` as a stub failure, `loop` as a branch.
+- `cctoolkit`: `/cctoolkit:kit-init` proposes `cargo build --all-targets` and `cargo test --test {suite}`, one test crate per suite (`tests/unit/main.rs`, the tests in a folder below it).
+
 ## 2.12.0 — 2026-10-31
 
 - `cctoolkit`: `/cctoolkit:run-replay <sheet|plan>` goes over a batch already delivered, or every batch ✅ DONE of a plan (`--only FX` for one), without changing anything. It finds the batch's commits by their `Kit-Batch` trailer, reruns each cycle's tests with the filtered command its GREEN ran, then the suites the batch's files reach, on today's code. With `--red`, the same tests run once more in a worktree where the batch's production files are put back as they were before it: a test still green there proves nothing the batch wrote, and is listed to check. The audit then judges the batch's commits (`--no-audit` to skip it). Nothing is fixed, committed or ticked: `run/batches/FX-replay.md` reports `PASSED` or `FAILED` per cycle, suite and audit gap, and its `## Next` gives one `/cctoolkit:implement-tdd batch FX — correction: …` per finding. `--base <rev>` replays a batch committed without its trailer. `/cctoolkit:implement-tdd replay [batch FX] <plan>` launches it too.
