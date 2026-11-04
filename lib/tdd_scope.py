@@ -4,7 +4,8 @@
 Scope: `agent_type` ending in `tdd-implementer`, `tdd-test-author` or `tdd-cycle`; every other caller
 passes. A `tdd-cycle` agent writes a cycle's RED then its GREEN: an author until its RED checkpoint
 (`cctoolkit tdd-scope red`, the author's final checks run on the tree, then a new snapshot), an
-implementer after it; its structured output carries the checkpointed `red` and its `green`.
+implementer after it; its structured output carries the checkpointed `red` and its `green`. Under run-lot
+the hook saves both as the cycle's `cycle` line of the run work file, from the prompt's `Cycle state:` line.
 
     start    SubagentStart          snapshot (hash and copy) of every dirty file under the roots
     edit     PreToolUse Edit|Write  every write under a root logged
@@ -486,6 +487,8 @@ RED_CONTRACT = re.compile(r"cctoolkit sheet-cycles (\S+) --cycle (\S+) --red")
 WORK_FILE = re.compile(r"Run work file: (\S+?)\.?$", re.M)
 BATCH = re.compile(r"^Workflow run-lot, batch (\S+)\.", re.M)
 CYCLE_OF = re.compile(r"cctoolkit sheet-cycles \S+ --cycle (\S+) --(?:red|green)\b")
+# The `cycle` line of the work file, its RED and GREEN left to save_cycle_state (docs/FROZEN-LITERALS.md).
+CYCLE_STATE = re.compile(r"^Cycle state: (\{.*\})$", re.M)
 
 
 def pending_ripple(cfg, prompt):
@@ -525,6 +528,17 @@ def contract_methods(cfg, prompt):
         return []
     line = METHODS_LINE.search(p.stdout or "") if p.returncode == 0 else None
     return re.findall(r"`([^`]+)`", line.group(1)) if line else None
+
+
+def table_refusal(report):
+    """A RED whose `table` is absent, or empty without saying why: run-lot's schema would refuse the first, and an
+    empty table only means no test written when `removed` or `unreachable` says so (work_file.red_complete)."""
+    if work_file.red_complete(report):
+        return None
+    if not isinstance(report.get("table"), list):
+        return "the report has no `table`: one row per test written or run, `test` and `case`."
+    return ("`table` is empty with nothing in `removed` or `unreachable`: list each test written or run, or say why "
+            "none was written.")
 
 
 def contract_refusal(cfg, prompt, report):
@@ -698,6 +712,21 @@ def red_refusal(cfg, agent_id, record, transcript_path, ti):
             f"with `diagnostic` starting with exactly: {reason}")
 
 
+def save_cycle_state(cfg, prompt, red, green=None):
+    """The RED the checkpoint accepted, then the GREEN that goes with it, as one `cycle` line of the work file: what
+    the resume and the run-lot-pane mod read. Never copied by the agent, which dropped tables (a 27-test batch shown
+    with 7). No such line in the prompt (a cycle agent outside run-lot): nothing to save."""
+    line, work = CYCLE_STATE.search(prompt or ""), WORK_FILE.search(prompt or "")
+    if not line or not work:
+        return
+    try:
+        record = json.loads(line.group(1))
+        record["state"] = {**record["state"], "red": red, **({"green": green} if isinstance(green, dict) else {})}
+        work_file.append(os.path.join(cfg.root, kit_config._native(work.group(1).strip("`"))), record)
+    except (ValueError, KeyError, TypeError, OSError):
+        return
+
+
 def _canon(report):
     return json.dumps(report or {}, sort_keys=True, ensure_ascii=False)
 
@@ -726,6 +755,7 @@ def final(cfg, d, kind):
             deny("`red` differs from the report the RED checkpoint accepted: return that report unchanged, field for field.")
             return
         record_test_edits(cfg, agent_id, record, transcript)
+        save_cycle_state(cfg, prompt_of(transcript, agent_id), red, ti.get("green"))
         return
     if kind == IMPLEMENTER:
         record_test_edits(cfg, agent_id, record, transcript)
@@ -748,12 +778,14 @@ def checkpoint(cfg, agent_id, transcript_path, report):
     if not isinstance(report, dict) or str(report.get("status", "")) not in ("RED", "ALREADY_GREEN"):
         return False, "the checkpoint takes a RED report of status RED or ALREADY_GREEN; a BLOCKED RED goes out as `red` of your structured output"
     transcript = "" if transcript_path == "-" else transcript_path
-    why = red_refusal(cfg, agent_id, record, transcript, report) or contract_refusal(cfg, prompt_of(transcript, agent_id), report)
+    prompt = prompt_of(transcript, agent_id)
+    why = red_refusal(cfg, agent_id, record, transcript, report) or table_refusal(report) or contract_refusal(cfg, prompt, report)
     if why:
         return False, _nested(why, "red")
     copies = os.path.join(state_dir(), f"{agent_id}.green")
     record.update({"phase": "green", "red": report, "start": time.time(), "snapshot": snapshot(cfg, copies), "copies": copies})
     save_record(agent_id, record)
+    save_cycle_state(cfg, prompt, report)
     return True, ("RED checkpoint passed. GREEN phase from now on: the tree is compared to its state at this point, "
                   "each test file you change recorded for the audit; your structured output carries this exact report as `red`.")
 

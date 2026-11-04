@@ -45,4 +45,4 @@ No GREEN after the checkpoint for an `ALREADY_GREEN` with an empty `pendingRippl
 
 ## Output
 
-`red` = the report the checkpoint accepted, unchanged field for field (the hook compares them); `green` = the GREEN report. Both go through the structured output in one call, after the cycle state line your delegation asks for.
+`red` = the report the checkpoint accepted, unchanged field for field (the hook compares them); `green` = the GREEN report. Both go through the structured output in one call. The hook saves the cycle state from them: never append it to the work file.

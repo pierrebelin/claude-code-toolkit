@@ -31,7 +31,12 @@ test, a job stopped at its ceiling shows how far it went; `log` = the job's outp
 twice (two `when` for one suite) runs once.
 `--tests-changed`: {"changed": [{"path", "shared"}]}, the files under the test roots written
 since the plan, `shared` = under `layout.tests.shared`.
-`--failed`: the failed test names `tdd.failedTest` reads in a suite output, one per line.
+`--failed`: the failed test names `tdd.failedTest` reads in a suite output, one per line, whole (a theory
+case with its arguments, no duration), one line per failure even under one name.
+`--failures`: one JSON object for run-plan's final check — `failed` (the runner's number, `tdd.summaryFailed`,
+else what the log lists), `total` (`tdd.summaryTotal`, absent unread), `listed`, `fromRunner`, `setup` and
+`assertion`: [{"message", "tests"}], the failures grouped by message, `setup` = the message matches
+`tdd.setupFailure` (fixture or environment: the test never ran).
 Exit 0; 2 on usage error, missing snapshot or unreadable kit.config.json.
 """
 import hashlib
@@ -197,17 +202,82 @@ def dirty_tests(c, root):
     return out
 
 
+DURATION = re.compile(r"\s+[\[(]\s*\d[\d.,\s]*(?:ms|s|m|h|sec)\b[^\])]*[\])]\s*$")
+REASON = re.compile(r"\s+-\s.*$")
+STREAM_RULE = re.compile(r"\s+(?:stdout|stderr)\s+-+\s*$")
+END_OF_BLOCK = re.compile(r"^\s*(?:passed|Passed|PASSED|skipped|Skipped|SKIPPED|Test run summary|at\s|Stack Trace)\b")
+HEADER = re.compile(r"^\s*(?:Error Message|Standard Output Messages?):?\s*$")
+MESSAGE_LINES = 3
+MESSAGE_CHARS = 400
+
+
+def test_name(line, start):
+    """From where `tdd.failedTest` captures the name to the end of the line: its `\\S+` stops at the first space of
+    a theory case, whose cases then all read the same. The duration goes, and a ` - reason` outside the arguments."""
+    name = STREAM_RULE.sub("", DURATION.sub("", line[start:].rstrip()))
+    bare = REASON.sub("", name)
+    return bare if bare.count("(") == bare.count(")") else name
+
+
+def failed_tests(text, rx):
+    """[(name, message)], one per failure in the log's order, the message being the first lines of its block."""
+    found = []
+    block = None
+    compiled = re.compile(rx)
+    for line in text.splitlines():
+        m = compiled.search(line)
+        if m:
+            block = []
+            found.append((test_name(line, m.start(1)), block))
+        elif block is not None:
+            if END_OF_BLOCK.search(line) or (not line.strip() and block):
+                block = None
+            elif line.strip() and not HEADER.search(line) and len(block) < MESSAGE_LINES:
+                block.append(line.strip())
+    return [(name, " ".join(lines)[:MESSAGE_CHARS]) for name, lines in found]
+
+
+def last_count(rx, text):
+    """The number of the last summary line `rx` matches, in whichever group matched: the summary closes the log."""
+    if not rx:
+        return None
+    last = None
+    for m in re.finditer(rx, text, re.M):
+        last = m
+    return int(last.group(last.lastindex)) if last and last.lastindex else None
+
+
+def failures(text, tdd):
+    tests = failed_tests(text, tdd["failedTest"]) if tdd.get("failedTest") else []
+    setup_rx = re.compile(tdd["setupFailure"]) if tdd.get("setupFailure") else None
+    groups = {"setup": {}, "assertion": {}}
+    for name, message in tests:
+        kind = "setup" if setup_rx and setup_rx.search(message) else "assertion"
+        groups[kind].setdefault(message, []).append(name)
+    runner = last_count(tdd.get("summaryFailed"), text)
+    total = last_count(tdd.get("summaryTotal"), text)
+    out = {"failed": len(tests) if runner is None else runner, "listed": len(tests), "fromRunner": runner is not None}
+    if total is not None:
+        out["total"] = total
+    for kind, by_message in groups.items():
+        out[kind] = [{"message": message, "tests": names} for message, names in by_message.items()]
+    return out
+
+
 def main(argv):
     args = argv[1:]
-    if len(args) == 2 and args[0] == "--failed":
+    if len(args) == 2 and args[0] in ("--failed", "--failures"):
         try:
             text = open(args[1], encoding="utf-8", errors="replace").read()
             c = kit_config.load()
         except (OSError, kit_config.KitConfigError) as e:
             print(f"suites-plan: {e}", file=sys.stderr)
             return 2
-        rx = (c.data.get("tdd") or {}).get("failedTest", "")
-        names = sorted({m.group(1) for m in re.finditer(rx, text, re.M)}) if rx else []
+        tdd = c.data.get("tdd") or {}
+        if args[0] == "--failures":
+            print(json.dumps(failures(text, tdd), ensure_ascii=False))
+            return 0
+        names = sorted(name for name, _ in failed_tests(text, tdd["failedTest"])) if tdd.get("failedTest") else []
         print("\n".join(names))
         return 0
     if len(args) == 2 and args[0] == "--final":

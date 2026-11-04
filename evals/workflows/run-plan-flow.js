@@ -5,13 +5,16 @@
 // given its knowledge-base section, the result its `merge`. nomerge: every batch DONE, nothing to merge.
 // A security pass reads the batch commits after the final check; its findings (merge) go to `## To validate`.
 // A batch set aside keeps its saved cycles: F1's work kept under its ref resumes, F2 without a ref starts over.
-// Usage: node run-plan-flow.js <run-plan.js> common|distinct|merge|nomerge
+// finalred: the final check finds a suite red — one count everywhere, the tests that did not run told apart.
+// Usage: node run-plan-flow.js <run-plan.js> common|distinct|merge|nomerge|finalred
 const fs = require('fs')
 const src = fs.readFileSync(process.argv[2], 'utf8').replace(/^export const meta/m, 'const meta')
 const variant = process.argv[3] || 'common'
 const labels = []
 const order = ['F1', 'F2', 'F3']
 let next = 0
+const THEORY = ['A.Oracle(plan: "one two")', 'A.Oracle(plan: "three four")', 'A.Oracle(plan: "five")']
+const FINAL_RED = { failed: 4, total: 492, listed: 4, fromRunner: true, setup: [{ message: "Class fixture type 'X.LiveFixture' threw in InitializeAsync", tests: THEORY }], assertion: [{ message: 'Assert.Equal() Failure', tests: ['B.Same'] }] }
 const agent = async (prompt, o) => {
   labels.push(o.label)
   const l = o.label
@@ -33,6 +36,8 @@ const agent = async (prompt, o) => {
   if (l.startsWith('gate')) return { statusLine: '## STATUS — DONE', verdictLine: 'Verdict: VALID', planDone: true, build: 0 }
   if (l.startsWith('commit')) return { ok: true, commit: `committed abc12${labels.length % 10}f: 3 file(s)` }
   if (l === 'final check' && (!prompt.includes('`cctoolkit suites-plan --final 2026-10-15-1000`') || !prompt.includes('`cctoolkit bg wait <job> --seconds 540 --silent 600`') || !prompt.includes('`STALLED` → `cctoolkit bg stop <job>`') || !prompt.includes('1500 s or more → `cctoolkit bg stop <job>`') || prompt.includes('sleep 10'))) console.log('WARN final check without the resolved suites, the bounded bg wait or its stop')
+  if (l === 'final check' && !prompt.includes('`cctoolkit suites-plan --failures <log>`')) console.log('WARN final check without the failures read off the log')
+  if (l === 'final check' && variant === 'finalred') return { suites: [{ name: 'IntegrationTests', exit: 2, report: FINAL_RED }] }
   if (l === 'final check') return { suites: [] }
   if (l === 'security') {
     if (!/Batch commits of the plan: abc12\df( abc12\df)*\./.test(prompt)) console.log('WARN security pass without the batch commits')
@@ -51,6 +56,12 @@ const agent = async (prompt, o) => {
     if (variant === 'common' && !prompt.includes('## Plan stopped — common cause')) console.log('WARN report without the common-cause section')
     if (variant === 'merge' && (!prompt.includes('## Knowledge base') || !prompt.includes('"state": "staged"'))) console.log('WARN report without the knowledge-base merge')
     if (variant === 'merge' && (!prompt.includes('### Security') || !prompt.includes('"step": "Security"'))) console.log('WARN report without the security findings')
+    if (variant === 'finalred') {
+      if (!prompt.includes('| IntegrationTests | 2 | 4 of 492 | 3 | 1 |')) console.log('WARN final check table without the runner\'s number')
+      for (const name of [...THEORY, 'B.Same']) if (!prompt.includes(`- \`${name}\``)) console.log('WARN test name lost:', name)
+      if (!/"text": "IntegrationTests exit=2: 4 failed of 492[\s\S]{0,120}3 did not run[\s\S]{0,200}not validated/.test(prompt) || !prompt.includes('X.LiveFixture')) console.log('WARN To validate without the count, the tests not run or their message')
+      if (!prompt.includes('final check red: IntegrationTests (4 failed, 3 did not run)')) console.log('WARN last line without the tests not run')
+    }
     return { path: '/r/todo/x/run/2026-10-15-1000.md', lastLine: 'x' } }
   if (l === 'cleanup') return { ok: true }
   console.log('UNHANDLED', l); return null
@@ -58,11 +69,11 @@ const agent = async (prompt, o) => {
 const workflow = async (name, a) => {
   const b = /-(F\d+)\.md$/.exec(a.sheet)[1]
   labels.push(`run-lot ${b}`)
-  return b === 'F3' || variant === 'merge' || variant === 'nomerge'
+  return b === 'F3' || variant === 'merge' || variant === 'nomerge' || variant === 'finalred'
     ? { status: 'DONE', reason: '—', report: `todo/x/run/batches/${b}.md`, toReview: [], hypotheses: [], minors: [] }
     : { status: 'BLOCKED', reason: b === 'F1' ? 'design ambiguity on archive date' : 'archive date read from the request', report: `todo/x/run/batches/${b}.md`, toReview: [], hypotheses: [], minors: [] }
 }
 const fn = new (Object.getPrototypeOf(async function () {}).constructor)('args', 'agent', 'log', 'phase', 'parallel', 'workflow', src)
 fn('todo/x/X-PLAN.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), workflow)
-  .then(r => { console.log('STATUS', r.status, '|', r.reason); console.log('AGENTS', labels.join(' | ')); if (r.merge) console.log('MERGE', r.merge.state, '|', r.merge.next) })
+  .then(r => { console.log('STATUS', r.status, '|', r.reason); console.log('AGENTS', labels.join(' | ')); if (r.merge) console.log('MERGE', r.merge.state, '|', r.merge.next); for (const x of r.finalCheck || []) console.log('FINAL', x.name, x.exit, `${x.failed} of ${x.total} | ${x.didNotRun} did not run | ${x.onTest} failed`) })
   .catch(e => { console.log('ERR', e.stack); process.exitCode = 1 })

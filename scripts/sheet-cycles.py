@@ -12,7 +12,7 @@
     cctoolkit sheet-cycles <sheet> --methods WORK            method names expected on disk, one per line
     cctoolkit sheet-cycles <sheet> --done WORK               every cycle reached its final state
     cctoolkit sheet-cycles <sheet> --summary WORK            one line per cycle: RED/GREEN exits (audit capture)
-    cctoolkit sheet-cycles <sheet> --states WORK             every saved cycle state, one JSON array (run-lot resume)
+    cctoolkit sheet-cycles <sheet> --states WORK             every saved cycle state whose RED a resume may trust, one JSON array (run-lot resume)
     cctoolkit sheet-cycles <sheet> --tests WORK              {"count", "cycles"}: per cycle its `id`, `behaviour`, `rmcu`,
                                                              `refactor`, `guard`, `level`, `testClass`, `saved` (a state is
                                                              saved), `tests` (`Class.Method`, the RED table when saved, the
@@ -374,6 +374,8 @@ def finished(c, state):
     if not state or not isinstance(state.get("red"), dict):
         return False
     red, green = state["red"], state.get("green")
+    if not work_file.red_complete(red):
+        return False
     if (red.get("status") == "ALREADY_GREEN" and not red.get("pendingRipple")) or c.get("guard") or not red.get("table"):
         return True
     return isinstance(green, dict) and green.get("status") == "GREEN" and green.get("exit") == 0
@@ -435,7 +437,8 @@ def main(argv):
             print("--states needs WORK", file=sys.stderr)
             return 1
         found = states(arg, BATCH[0])
-        print(json.dumps([found[name] for name in sorted(found)], ensure_ascii=False))
+        kept = [found[name] for name in sorted(found) if work_file.red_complete(found[name].get("red"))]
+        print(json.dumps(kept, ensure_ascii=False))
         return 0
     data, errors = load(sheet)
     if data is None:
@@ -507,7 +510,7 @@ def main(argv):
             s = state_of(arg, c)
             red = (s or {}).get("red") or {}
             green = (s or {}).get("green") or {}
-            if s and isinstance(s.get("red"), dict):
+            if s and work_file.red_complete(s.get("red")):
                 tests = [row["test"] for row in red.get("table", []) if isinstance(row, dict) and row.get("test")]
             else:
                 tests = [f"{c.get('testClass', '')}.{m.split('.')[-1]}" for m in c.get("methods", [])]

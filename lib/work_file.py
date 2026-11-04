@@ -177,6 +177,14 @@ def cycle_states(records, batch: str) -> dict:
     return found
 
 
+def red_complete(red) -> bool:
+    """A saved RED a resume may trust: its table is there, and empty only when `removed` or `unreachable` says why
+    (no test written on purpose). The same rule as `checkRed` of run-lot and the RED checkpoint of lib/tdd_scope.py."""
+    if not isinstance(red, dict) or not isinstance(red.get("table"), list):
+        return False
+    return bool(red["table"] or red.get("removed") or red.get("unreachable"))
+
+
 def preexisting(records, batch: str) -> dict | None:
     """Files dirty at the batch start: the FIRST snapshot of the batch, a resumed batch keeps it."""
     lines = of(records, "preexisting", batch)

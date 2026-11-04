@@ -271,7 +271,9 @@ function greenContract(c, ripple = [], locked = false) {
   ].filter(l => l !== '').join('\n')
 }
 
-const cycleState = (c, red, green = false) => `\`cctoolkit run-work append ${workFile} <<'CYCLE_STATE'\` then the line \`{"kind": "cycle", "batch": "${batch}", "slug": "${slug(c.behaviour)}", "state": {"behaviour": ${JSON.stringify(c.behaviour)}, "rmcu": ${JSON.stringify(c.rmcu)}, "steps": ${JSON.stringify(c.steps)}, "red": ${red ? JSON.stringify(red) : '<the RED report>'}${green ? ', "green": <your GREEN report>' : ''}}}\` then \`CYCLE_STATE\``
+// The `cycle` line of the work file, its `red` and `green` added by the TDD scope hook (lib/tdd_scope.py
+// save_cycle_state) from the report it checked: an agent copying them dropped tables, read back as tests never written.
+const cycleStateLine = c => `Cycle state: ${JSON.stringify({ kind: 'cycle', batch, slug: slug(c.behaviour), state: { behaviour: c.behaviour, rmcu: c.rmcu, steps: c.steps } })}`
 
 // One tdd-cycle agent per cycle, every closing: its RED, the checkpoint the TDD scope hook checks on the
 // tree (agents/tdd-cycle.md), then its GREEN. `red`: a RED already accepted (saved by an earlier run, or by
@@ -295,7 +297,7 @@ function cycleContract(c, red = null, together = false) {
     ...(red ? [] : [
       redContract(c, lotIndex.declaratives),
       '',
-      `RED checkpoint, before any production beyond the stubs: \`cctoolkit tdd-scope red <<'RED_JSON'\` then your RED report as one JSON line, then \`RED_JSON\`. Refused → fix what it names and run it again. Passed → one call, ${cycleState(c, null)}.`,
+      `RED checkpoint, before any production beyond the stubs: \`cctoolkit tdd-scope red <<'RED_JSON'\` then your RED report as one JSON line, then \`RED_JSON\`. Refused → fix what it names and run it again.`,
       noGreenAfter,
     ]),
     '',
@@ -303,7 +305,8 @@ function cycleContract(c, red = null, together = false) {
     ...(lock || together ? [LOCKED_FAST, ''] : []),
     AMBIGUITY,
     'Structured output: `red` = the report the checkpoint accepted, unchanged; `green` = your `## GREEN` report (`production`, `command`, `exit`, `testsDiff`, `cost`, `independentOf`, `removed`, `flagged`); `decisions` = your ambiguity lines, empty when none.',
-    `Last step before the structured output, after a GREEN: one call, ${cycleState(c, red, true)}${red ? '' : ', `<the RED report>` = the one the checkpoint accepted'}.`,
+    'The cycle state is saved for you, from the checkpoint and the structured output: never append it to the work file.',
+    cycleStateLine(c),
   ].filter(l => l !== '').join('\n')
 }
 
@@ -312,10 +315,19 @@ function cycleContract(c, red = null, together = false) {
 // the reason it found. That reason is returned as is, so the retry reads the hook's words, never the agent's.
 const mechanical = r => (r && r.status === 'BLOCKED' && String(r.diagnostic || '').startsWith(RED_ON_STUB) ? r.diagnostic.trim() : null)
 
+// A RED report saved by a run before the hook wrote the state can lack its lists: reread, it is a RED to redo.
+const redIncomplete = r => {
+  const absent = ['table', 'removed', 'stubs'].filter(k => !Array.isArray(r[k]))
+  return absent.length ? `RED report without ${absent.join(', ')}` : null
+}
+// An empty `table` means no test written only when `removed` or `unreachable` says why: never the mere loss of a table.
+const noTestWritten = r => !r.table.length && (r.removed.length > 0 || (r.unreachable || []).length > 0)
+
 function checkRed(c, r) {
   if (!r) return 'RED agent without result'
   if (mechanical(r)) return mechanical(r)
   if (r.status === 'BLOCKED') return `BLOCKED — ${r.diagnostic || r.expectedFailure}`
+  if (redIncomplete(r)) return redIncomplete(r)
   if (r.status === 'ALREADY_GREEN') {
     if (c.refactor || c.guard) return `ALREADY_GREEN on a ${c.refactor ? 'refactor' : 'guard'} cycle`
     if (r.exit !== 0) return `ALREADY_GREEN with exit ${r.exit} on \`${r.command}\``
@@ -324,7 +336,8 @@ function checkRed(c, r) {
     return null
   }
   const unreachable = (r.unreachable || []).map(u => u.method)
-  if (!r.table.length && (r.removed.length || unreachable.length)) return null
+  if (noTestWritten(r)) return null
+  if (!r.table.length) return 'RED table empty, with nothing in `removed` or `unreachable`'
   if (c.refactor && r.exit !== 0) return `safety net red: exit ${r.exit} on \`${r.command}\``
   if (c.guard && r.exit !== 0) return `guard red on the current code: exit ${r.exit} on \`${r.command}\``
   if (c.guard && r.stubs.length) return `guard with stubs: ${r.stubs.join(', ')}`
@@ -687,7 +700,8 @@ if (!lotIndex || !lotIndex.ok) {
 }
 
 const settledGreen = r => r.status === 'ALREADY_GREEN' && !(r.pendingRipple || []).length
-const finishedAtStart = (c, s) => !!(s && s.red && (settledGreen(s.red) || c.guard || !s.red.table.length ||
+const redTrusted = r => !redIncomplete(r) && (r.table.length > 0 || noTestWritten(r))
+const finishedAtStart = (c, s) => !!(s && s.red && redTrusted(s.red) && (settledGreen(s.red) || c.guard || noTestWritten(s.red) ||
   (s.green && s.green.status === 'GREEN' && s.green.exit === 0)))
 const pending = []
 for (const c of lotIndex.cycles) {

@@ -1222,7 +1222,9 @@ export const cycleProgressOf = (cycle: SheetCycle, saved: string | null): SheetC
     return test === '' ? [] : [{ test, case: textOf(fieldsOf(one)?.case)?.trim() ?? '' }]
   })
   const isGreen = green?.status === 'GREEN' && green.exit === 0
-  const needsNoGreen = red.status === 'ALREADY_GREEN' || cycle.guard || (Array.isArray(red.table) && red.table.length === 0)
+  // An empty table means no test written only when `removed` or `unreachable` says why (checkRed of run-lot).
+  const noTestWritten = Array.isArray(red.table) && red.table.length === 0 && (unreachable.length > 0 || (Array.isArray(red.removed) && red.removed.length > 0))
+  const needsNoGreen = red.status === 'ALREADY_GREEN' || cycle.guard || noTestWritten
   return { ...cycle, state: isGreen || needsNoGreen ? 'done' : 'red', unreachable, written }
 }
 

@@ -28,6 +28,9 @@ const two = { ...c, methods: ['A.B', 'A.Dead'] }
 assert(checkRed(two, red('RED', 1)).includes('A.Dead'), 'contract method missing from the table refused')
 assert(checkRed(two, red('RED', 1, { unreachable: [{ method: 'A.Dead', site: 'src/X.cs:3', why: 'w' }] })) === null, 'unreachable contract method accepted, no retry loop')
 assert(checkRed(two, red('RED', 1, { table: [], unreachable: [{ method: 'A.B', site: 's', why: 'w' }, { method: 'A.Dead', site: 's', why: 'w' }] })) === null, 'every method unreachable: no test, no GREEN')
+assert(checkRed(c, { status: 'RED', tests: ['t.cs'], exit: 1 }).includes('without'), 'RED without its table refused, never a crash')
+assert(checkRed({ ...c, methods: [] }, red('RED', 1, { table: [] })).includes('empty'), 'empty table without a reason refused, never read as no test written')
+assert(checkRed(c, red('RED', 1, { table: [], removed: ['A.B'] })) === null && !needsGreen(c, red('RED', 1, { table: [], removed: ['A.B'] })), 'empty table with a reason: no test written, no GREEN')
 assert(!needsGreen(c, red('ALREADY_GREEN', 0)) && needsGreen(c, red('ALREADY_GREEN', 0, { pendingRipple: ['src/R.cs'] })) && !needsGreen({ ...c, guard: true }, red('RED', 0)), 'GREEN only for a ripple left, never for a guard')
 assert(contractCommand({ id: 'X1' }, '--red') === 'cctoolkit sheet-cycles todo/x/X-PLAN-F3.md --cycle X1 --red', 'RED reads its contract from the sheet block')
 assert(workFile === 'todo/x/run/.work.jsonl' && reportPath === 'todo/x/run/batches/F3.md' && commitAtEnd, 'one work file run/.work.jsonl, report in run/batches/FX.md, standalone batch commits itself')
@@ -50,6 +53,8 @@ const run = async () => {
   assert(!cycleContract({ ...c, guard: true }).includes('--cycle C1 --green'), 'a guard has no GREEN contract')
   assert(cycleContract(c, null, true).includes('starts with \`cctoolkit build-lock -- \`') && !contract.includes('cctoolkit build-lock'), 'cycles of a wave run side by side build under build-lock, a cycle alone does not')
   assert(contract.includes('the solution build: \`cctoolkit config command build\`') && cycleContract(c, null, true).includes('run it literally as \`cctoolkit build-lock -- <printed command>\`') && !cycleContract({ ...c, guard: true }).includes('cctoolkit config command build'), 'a GREEN ends on the solution build, under build-lock beside other builds; a guard builds nothing')
+  const state = /^Cycle state: (\{.*\})$/m.exec(contract)
+  assert(state && JSON.parse(state[1]).slug === 'one' && JSON.parse(state[1]).state.behaviour === 'One' && !contract.includes('run-work append') && !rearm.includes('run-work append'), 'cycle state: named in the prompt for the hook, no append left to the agent')
   const calls = []
   const out = await withRetry('Design', (suffix, options) => (calls.push({ suffix, options }), Promise.resolve(null)), r => (r ? null : 'design agent without result'))
   assert(out.reason && calls.length === 2 && calls.every(x => !x.options.model), 'a step outside the cycles is retried once, never on opus')

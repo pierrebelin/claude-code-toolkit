@@ -1594,6 +1594,15 @@ describe('sheet-driven cycles', () => {
     expect(wordsOf('ShouldReturn204_WhenIDIsValid')).toBe('Should return204 when id is valid')
   })
 
+  test('an empty RED table means no test written only with a reason: without one, or with no table at all, the cycle is not done on that account', () => {
+    const [plain] = parseCycles(CYCLES_SHEET)!
+    const cycle = { ...plain!, methods: ['A.Create'] }
+    expect(cycleProgressOf(cycle, cycleState('x', { status: 'RED', exit: 1, tests: ['t.cs'] })).state).toBe('red')
+    expect(cycleProgressOf(cycle, cycleState('x', { status: 'RED', exit: 1, table: [], removed: [] })).state).toBe('red')
+    expect(cycleProgressOf(cycle, cycleState('x', { status: 'RED', exit: 1, table: [], removed: ['A.Create'] })).state).toBe('done')
+    expect(cycleProgressOf(cycle, cycleState('x', { status: 'RED', exit: 1, table: [], unreachable: [{ method: 'A.Create' }] })).state).toBe('done')
+  })
+
   test('tests by rule: each rule or use case its cycles cite, rules before use cases, a cycle citing none under —', () => {
     expect(rulesOf('CAT-RM-003, CAT-RM-001 / CAT-CU-02')).toEqual(['CAT-RM-003', 'CAT-RM-001', 'CAT-CU-02'])
     expect(rulesOf('RM-01, RM-01 / CU-2 — the TERM-1 note')).toEqual(['RM-01', 'CU-2'])

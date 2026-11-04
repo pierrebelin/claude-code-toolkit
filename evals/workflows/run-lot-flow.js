@@ -8,6 +8,7 @@
 // stop: C1's RED is rejected three times — the batch stops BLOCKED. guardout: the guard C2 stays red — left
 // out, listed to validate, the batch goes on. greenretry: C1's GREEN is rejected — the retry re-arms the
 // accepted RED and writes the GREEN only. resumered: C1 saved with its RED only — one agent re-arms it.
+// resumenotable, resumeempty: C1 saved with a RED whose table is absent, or empty for no reason — its RED runs again.
 // triage: a fixture changed at GREEN, a plain decision and Majors the fix closed go to `## Decided alone`; a snapshot
 // changed and a `visible:` decision stay under `## To validate`.
 // testsdiff: a GREEN changed a test, took a decision and reported a flagged cost — each to validate, the
@@ -134,6 +135,8 @@ const agent = async (prompt, o) => {
   if (l === 'resume state' && !/batch-baseline resume \S+\.work\.jsonl F3; cctoolkit batch-baseline snapshot /.test(prompt)) console.log('WARN work set aside not put back before the snapshot')
   if (l === 'resume state') {
     const saved = variant === 'resume' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { ...REDOK, unreachable: [] }, green: { status: 'GREEN', exit: 0 } }]
+      : variant === 'resumenotable' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { status: 'RED', tests: ['t.cs'], exit: 1 }, green: { status: 'GREEN', exit: 0 } }]
+      : variant === 'resumeempty' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { ...REDOK, table: [], unreachable: [] }, green: { status: 'GREEN', exit: 0 } }]
       : variant === 'resumered' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: REDOK }]
       : []
     return { cycles: saved, index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : variant.startsWith('shortindex') ? { ...idx, count: 2, cycles: [] } : idx, ...(variant === 'asideconflict' ? { resume: 'resume: conflict on src/X.cs — batch starts over, its saved cycles dropped; partial work: /p.patch' } : {}) }

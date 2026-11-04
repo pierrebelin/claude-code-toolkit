@@ -63,6 +63,9 @@
   },
   "tdd": {
     "failedTest": "^\\s*(?:failed|Failed|FAILED|\\[FAIL\\]|✗|×)\\s+(\\S+)",
+    "setupFailure": "\\b(?:Class|Collection|Assembly) fixture type\\b|\\bthrew in (?:InitializeAsync|DisposeAsync)\\b|\\bTest Class Cleanup Failure\\b|\\benvironment variables?\\b",
+    "summaryFailed": "(?:^|[\\s,])[Ff]ailed:\\s*(\\d+)",
+    "summaryTotal": "(?:^|[\\s,])[Tt]otal:\\s*(\\d+)",
     "stubFailure": "NotImplementedException",
     "stubLogic": "^\\s*(?:if|else|switch|case|for|foreach|while|catch)\\b|\\?\\?",
     "assertion": "\\b(Assert\\.|Should(\\(|\\.)|Verify(Async)?\\(|\\.Received\\()"

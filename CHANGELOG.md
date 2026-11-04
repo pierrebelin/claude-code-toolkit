@@ -4,6 +4,15 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.13.1 — 2026-11-04
+
+- `cctoolkit`: `run/.work.jsonl` holds the RED the checkpoint accepted, whole. The cycle agent copied it by hand into its state line, and on a real run left the table empty on one cycle and out on another, while the batch report had all 27 tests. The TDD scope hook now writes that line, from the checkpoint and from the checked structured output: the prompt names it, the agent no longer appends it. The `run-lot-pane` Tests view reads the same line, so it no longer shows written and green tests as `to write`.
+- `cctoolkit`: `run-lot` resumes on a saved RED it can trust. A saved RED without its table crashed the resume (`finishedAtStart`), and one with an empty table passed for a finished cycle. An empty table now means no test written only when `removed` or `unreachable` says why: otherwise the RED is refused at the checkpoint, not handed to a resume by `sheet-cycles --states`, not counted by `--done`, and rerun. Applies to the lines of a run already in `.work.jsonl`.
+- `run-lot-pane`: an empty RED table without a reason no longer marks a cycle done.
+- `cctoolkit`: `run-plan`'s final check states one number, the runner's, in `## To validate`, in the `## Final check` table, in the closing line and in the result. The workflow computes the text instead of leaving a count to the report agent, and new `cctoolkit suites-plan --failures <log>` reads the summary (new `tdd.summaryFailed`, `tdd.summaryTotal`). A list shorter than that number is said.
+- `cctoolkit`: `suites-plan --failed` no longer cuts a test name at its first space nor merges what remains: the cases of a theory keep their arguments, one line per failure (26 failures read as 16).
+- `cctoolkit`: the final check tells the tests that never ran, on a failed fixture or environment setup (new `tdd.setupFailure`), from those failing on an assertion, each group with its message. It says that the batches' code is not validated on the first, whatever status a batch shows; only the second stay `not attributed`.
+
 ## 2.13.0 — 2026-11-01
 
 - `cctoolkit`: Rust repos. `cctoolkit detect-stack` reads `Cargo.toml`: the crate's `[package] name` is the product, a `Cargo.toml` at the root leads a stack found only in a subfolder (a `frontend/` beside the crate), and the `rust` test tag is proposed. Before, a Rust repo with a frontend was taken for a Node repo named after the frontend.

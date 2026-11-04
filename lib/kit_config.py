@@ -503,9 +503,9 @@ def validate(root):
     out += validate_run(c.data.get("run"))
     tdd = c.data.get("tdd", {})
     if not isinstance(tdd, dict):
-        out.append(("FAIL", "tdd", "expects {\"failedTest\": \"<regex>\", \"stubFailure\": \"<regex>\", \"stubLogic\": \"<regex>\", \"assertion\": \"<regex>\"}"))
+        out.append(("FAIL", "tdd", "expects {\"failedTest\": \"<regex>\", \"setupFailure\": \"<regex>\", \"summaryFailed\": \"<regex>\", \"summaryTotal\": \"<regex>\", \"stubFailure\": \"<regex>\", \"stubLogic\": \"<regex>\", \"assertion\": \"<regex>\"}"))
     else:
-        for k in ("failedTest", "stubFailure", "stubLogic", "assertion"):
+        for k in ("failedTest", "setupFailure", "summaryFailed", "summaryTotal", "stubFailure", "stubLogic", "assertion"):
             if tdd.get(k):
                 try:
                     re.compile(tdd[k])

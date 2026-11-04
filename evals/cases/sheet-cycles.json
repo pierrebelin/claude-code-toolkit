@@ -441,6 +441,7 @@
         "exit": 1,
         "stderr": "--tests needs WORK"
       }
-    }
+    },
+    {"name": "a saved RED without its table, or with one empty and no reason, is no finished cycle and is not handed to a resume; empty with `removed` or `unreachable` stays finished", "cmd": "W=$(mktemp); C(){ printf '%s\\n' \"$1\" > $W; python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --done $W --root {{FIX}}/sc >/dev/null; d=$?; n=$(python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/ok.md --states $W | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))'); printf 'done=%s states=%s;' \"$d\" \"$n\"; }; C '{\"kind\":\"cycle\",\"batch\":\"\",\"slug\":\"une-creation-refusee\",\"state\":{\"behaviour\":\"Une création refusée\",\"red\":{\"status\":\"RED\",\"exit\":1},\"green\":{\"status\":\"GREEN\",\"exit\":0}}}'; C '{\"kind\":\"cycle\",\"batch\":\"\",\"slug\":\"une-creation-refusee\",\"state\":{\"behaviour\":\"Une création refusée\",\"red\":{\"status\":\"RED\",\"exit\":1,\"table\":[]},\"green\":{\"status\":\"GREEN\",\"exit\":0}}}'; C '{\"kind\":\"cycle\",\"batch\":\"\",\"slug\":\"une-creation-refusee\",\"state\":{\"behaviour\":\"Une création refusée\",\"red\":{\"status\":\"RED\",\"exit\":1,\"table\":[],\"removed\":[\"ATests.ShouldRefuse_WhenNameIsEmpty\"]},\"green\":{\"status\":\"GREEN\",\"exit\":0}}}'", "expect": {"exit": 0, "stdout": "done=1 states=0;done=1 states=0;done=0 states=1;"}}
   ]
 }
