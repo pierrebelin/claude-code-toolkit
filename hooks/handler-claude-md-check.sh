@@ -51,6 +51,7 @@ if not wt:
 ROOT = C.root
 SHEET = C.rule_sheet
 
+raw = kit_config._native(raw)
 target = raw if os.path.isabs(raw) else os.path.join(ROOT, raw)
 target = os.path.normpath(target)
 
@@ -122,7 +123,7 @@ elif not is_test:
     if md in all_md:
         focus.add(md)
     elif is_handler_dir(d):
-        rel = os.path.relpath(d, C.root_of(d, C.use_case_roots))
+        rel = os.path.relpath(d, C.root_of(d, C.use_case_roots)).replace(os.sep, "/")
         tell(f"Reminder: no {SHEET} in {rel} — create one ({SHAPE}).")
         sys.exit(0)
     else:
@@ -146,7 +147,7 @@ if not focus:
 # --- Report ------------------------------------------------------------------
 out = []
 for md in sorted(focus):
-    rel_md = os.path.relpath(md, ROOT)
+    rel_md = os.path.relpath(md, ROOT).replace(os.sep, "/")
     if md not in rules:
         issues = shape_issues(read(md))
         detail = (" — " + " ; ".join(issues)) if issues else ""

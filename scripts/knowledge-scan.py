@@ -28,6 +28,7 @@ Exit 2 on usage, 3 on a config defect.
 import fnmatch
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -120,11 +121,11 @@ def code_inventory():
             continue
         rel = C.rel(base)
         for f in found:
-            ctx = context_of_use_case(os.path.join(rel, f))
+            ctx = context_of_use_case(posixpath.join(rel, f))
             if ctx is None:
-                none.append(os.path.join(rel, f))
+                none.append(posixpath.join(rel, f))
                 continue
-            out.setdefault(ctx, []).append(Handler(os.path.splitext(f)[0].split(".")[0], os.path.join(rel, f), rel, ctx))
+            out.setdefault(ctx, []).append(Handler(os.path.splitext(f)[0].split(".")[0], posixpath.join(rel, f), rel, ctx))
     return out, none
 
 
@@ -204,7 +205,7 @@ def walk_sources():
     for base, files in C.walk(C.source_roots):
         for f in files:
             if C.is_source(f):
-                yield os.path.join(C.rel(base), f)
+                yield posixpath.join(C.rel(base), f)
 
 
 def proposed_prefix(name, taken):
@@ -220,7 +221,7 @@ def inventory(ctx, handlers, known, ad, sources):
     counts = tests_by_handler(handlers, ad)
     hs, sheets, rules = [], 0, 0
     for h in sorted(handlers, key=lambda h: h.path):
-        sheet = os.path.join(h.folder, C.rule_sheet)
+        sheet = posixpath.join(h.folder, C.rule_sheet)
         n = None
         if os.path.isfile(os.path.join(C.root, sheet)):
             sheets += 1
@@ -286,7 +287,7 @@ def commits_since(marks):
 
 
 def adds_sync_row(full, ctx):
-    hist = os.path.join(C.knowledge_root, ctx, "HISTORY.md")
+    hist = posixpath.join(C.knowledge_root, ctx, "HISTORY.md")
     diff = git("show", "--format=", "-U0", full, "--", hist) or ""
     return any(SYNC_ROW.match(l) for l in diff.splitlines())
 
@@ -437,14 +438,14 @@ def route(rel, stem, old_stem, by_folder, handlers, ad, base_ids, base_uc, renam
     for name in (stem, old_stem):
         if name and name in base_uc:
             hs.add(name)
-    d = os.path.dirname(rel)
+    d = posixpath.dirname(rel)
     while d and not hs:
         if d in by_folder:
             hs.update(by_folder[d])
             break
         if C.under(d, C.use_case_roots) is None:
             break
-        d = os.path.dirname(d)
+        d = posixpath.dirname(d)
     if any(fnmatch.fnmatchcase(rel, p) for p in C.aggregate):
         word = re.compile(rf"\b{re.escape(stem)}\b")
         for h in handlers:
@@ -472,7 +473,7 @@ def reminder(paths, staged):
         paths = out.splitlines()
         synced = {ctx for ctx in known
                   if any(SYNC_ROW.match(l) for l in (git("diff", "--cached", "-U0", "--",
-                         os.path.join(C.knowledge_root, ctx, "HISTORY.md")) or "").splitlines())}
+                         posixpath.join(C.knowledge_root, ctx, "HISTORY.md")) or "").splitlines())}
     else:
         paths = [C.rel(p) for p in paths]
         synced = set()
@@ -492,7 +493,7 @@ def reminder(paths, staged):
             for cu in sorted(cus):
                 hits.setdefault(ctx, []).append(f"{cu} ← {os.path.basename(rel)}")
             continue
-        d = os.path.dirname(rel)
+        d = posixpath.dirname(rel)
         found = marker_files(os.path.join(C.root, d)) if os.path.isdir(os.path.join(C.root, d)) else []
         names = [os.path.splitext(f)[0].split(".")[0] for f in found] or [os.path.splitext(os.path.basename(rel))[0]]
         for n in names:

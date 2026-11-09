@@ -29,6 +29,7 @@ import glob
 import importlib.util
 import json
 import os
+import posixpath
 import re
 import shutil
 import sys
@@ -203,7 +204,7 @@ def appliers(oid, spec_objs, base):
     out = [i for i in knowledge.ID_RE.findall(rule.body) if knowledge.kind_of(i) == "CU"] if rule else []
     out += [o.id for o, _ in spec_objs if o.kind == "CU" and knowledge.cites(o.body, oid) and o.id not in out]
     for rel, text in base.items():
-        parts = rel.split(os.sep)
+        parts = rel.split("/")
         if len(parts) == 3 and parts[1] == "usecases" and knowledge.cites(text, oid):
             cu = next((o.id for o in knowledge.objects(text) if o.kind == "CU"), None)
             if cu and cu not in out:
@@ -468,7 +469,7 @@ def stage(f):
             errors.append(f"{drel}: context {ctx} absent from knowledge.contexts")
             continue
         if name == "OVERVIEW.md":
-            work[os.path.join(ctx, "OVERVIEW.md")] = text
+            work[posixpath.join(ctx, "OVERVIEW.md")] = text
             continue
         m = DRAFT_FILE.match(name)
         top = knowledge.objects(text)
@@ -477,9 +478,9 @@ def stage(f):
             continue
         oid, kind = m.group(1), knowledge.kind_of(m.group(1))
         if kind == "CU":
-            dst = base_def[oid][0] if oid in base_def else os.path.join(ctx, "usecases", name)
+            dst = base_def[oid][0] if oid in base_def else posixpath.join(ctx, "usecases", name)
         elif kind == "ADR":
-            dst = base_def[oid][0] if oid in base_def else os.path.join(knowledge.ADR_DIR, name)
+            dst = base_def[oid][0] if oid in base_def else posixpath.join(knowledge.ADR_DIR, name)
         else:
             blocks.append((oid, kind, ctx, text, drel))
             continue
@@ -498,7 +499,7 @@ def stage(f):
             rel, o = at
             work[rel] = splice(work[rel], o, text)
         else:
-            rel = os.path.join(ctx, "rules.md" if kind == "RM" else "decisions.md")
+            rel = posixpath.join(ctx, "rules.md" if kind == "RM" else "decisions.md")
             work[rel] = append(work.get(rel) or HEADS[kind].format(ctx=ctx), text)
         owner.setdefault(rel, ctx)
     for oid, p in objs.items():
@@ -566,8 +567,8 @@ def stage(f):
                 print(f"WARN {oid}: rewritten without a line removed — say what is no longer true")
     changed = sorted(r for r in work if work[r] != base.get(r, None) and (work[r].strip() or r in base))
     for rel in changed:
-        ctx = owner.get(rel) or rel.split(os.sep)[0]
-        dst = os.path.join(f.staging, ctx, rel) if rel.split(os.sep)[0] == knowledge.ADR_DIR else os.path.join(f.staging, rel)
+        ctx = owner.get(rel) or rel.split("/")[0]
+        dst = os.path.join(f.staging, ctx, rel) if rel.split("/")[0] == knowledge.ADR_DIR else os.path.join(f.staging, rel)
         write(dst, work[rel])
         if not work[rel].strip():
             print(f"−{len(base[rel].splitlines())} deleted {C.knowledge_root}/{rel}")

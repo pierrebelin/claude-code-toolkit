@@ -18,7 +18,7 @@ INPUT=$(cat)
 [ -s "$RAW" ] || printf '%s\n' "$INPUT" > "$RAW"
 
 printf '%s' "$INPUT" | LOG="$LOG" python3 -c '
-import json, sys, os, datetime
+import json, sys, os, re, datetime
 
 try:
     d = json.load(sys.stdin)
@@ -54,7 +54,9 @@ with open(log, "a", encoding="utf-8") as f:
         f.write(f"{ts}\t{reason}\t0\t0\t(no path in the payload — see context-log.raw.json)\t{sid}\t{agent}\n")
     for p in paths:
         if not p: continue
-        try:    n = os.path.getsize(p)
+        # A Git Bash path `/c/x` is `C:/x` to Python on Windows.
+        native = re.sub(r"^/([A-Za-z])(?=/|$)", lambda m: m.group(1).upper() + ":", p) if os.name == "nt" else p
+        try:    n = os.path.getsize(native)
         except OSError: n = 0
         f.write(f"{ts}\t{reason}\t{n}\t{n//4}\t{p}\t{sid}\t{agent}\n")
 ' 2>/dev/null || true

@@ -2,7 +2,7 @@
   "cases": [
     {
       "name": "posix: kit_path leaves a path as it is, python3 and jq stay the binaries",
-      "cmd": "bash -c '. {{KIT}}/lib/platform.sh; v=\"C:\\\\a\\\\b\"; kit_path v; printf \"%s %s %s\" \"$v\" \"$(type -t python3)\" \"$(type -t jq)\"'",
+      "cmd": "bash -c 'OSTYPE=linux-gnu; unset -f python3 jq kit_path; . {{KIT}}/lib/platform.sh; v=\"C:\\\\a\\\\b\"; kit_path v; printf \"%s %s %s\" \"$v\" \"$(type -t python3)\" \"$(type -t jq)\"'",
       "expect": {
         "stdout": "C:\\a\\b file file",
         "exit": 0
@@ -42,7 +42,7 @@
     },
     {
       "name": "windows-env: nothing written outside Windows",
-      "cmd": "f=$(mktemp); CLAUDE_ENV_FILE=$f bash {{KIT}}/hooks/windows-env.sh </dev/null; printf 'exit=%s size=%s' $? $(wc -c <$f | tr -d ' '); rm -f $f",
+      "cmd": "f=$(mktemp); CLAUDE_ENV_FILE=$f bash -c 'OSTYPE=linux-gnu; . {{KIT}}/hooks/windows-env.sh' </dev/null; printf 'exit=%s size=%s' $? $(wc -c <$f | tr -d ' '); rm -f $f",
       "expect": {
         "stdout": "exit=0 size=0",
         "exit": 0

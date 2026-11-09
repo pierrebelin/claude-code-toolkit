@@ -253,7 +253,7 @@ def prompt_of(transcript_path, agent_id):
     `<session>/subagents/[workflows/<run>/]agent-<id>.jsonl`."""
     if not transcript_path or not agent_id:
         return ""
-    base = os.path.splitext(transcript_path)[0]
+    base = os.path.splitext(kit_config._native(transcript_path))[0]
     for path in glob.glob(os.path.join(base, "subagents", "**", f"agent-{agent_id}.jsonl"), recursive=True):
         texts = []
         try:

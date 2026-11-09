@@ -7,6 +7,7 @@ Reads ids in headings, `kit:` anchors and code in backticks only
     python3 lib/knowledge.py guarded <path>   exit 0 when guarded, 1 otherwise
 """
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -98,6 +99,11 @@ def base_dir(c):
     return os.path.join(c.root, c.knowledge_root)
 
 
+def rel(path, top):
+    """`path` relative to `top`, `/`-separated on Windows too: how the kit keys, prints and writes it."""
+    return os.path.relpath(path, top).replace(os.sep, "/")
+
+
 def contexts(c):
     """Context folders present in the base, sorted."""
     base = base_dir(c)
@@ -173,7 +179,7 @@ def write(path, text):
 def base_texts(c):
     """{rel: text} of the base's files but HISTORY.md and INDEX.md."""
     top = base_dir(c)
-    return {os.path.relpath(p, top): read(p) for p in markdown_files(top)
+    return {rel(p, top): read(p) for p in markdown_files(top)
             if os.path.basename(p) not in ("HISTORY.md", "INDEX.md")}
 
 
@@ -236,15 +242,15 @@ def misplaced(texts):
     a rule two use cases apply belongs in `rules.md`, one applied by a single use case in its file."""
     by_ctx = {}
     for rel, text in texts.items():
-        parts = rel.split(os.sep)
+        parts = rel.split("/")
         if len(parts) >= 2 and parts[0] != ADR_DIR and text.strip():
             by_ctx.setdefault(parts[0], {})[rel] = text
     out = []
     for ctx, files in sorted(by_ctx.items()):
-        shared = os.path.join(ctx, "rules.md")
+        shared = posixpath.join(ctx, "rules.md")
         ucs = {}
         for rel, text in sorted(files.items()):
-            parts = rel.split(os.sep)
+            parts = rel.split("/")
             if len(parts) == 3 and parts[1] == "usecases":
                 cu = next((o.id for o in objects(text) if o.kind == "CU"), None)
                 if cu:

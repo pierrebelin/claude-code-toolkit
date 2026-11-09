@@ -4,6 +4,13 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.14.1 — 2026-11-09
+
+- `cctoolkit`: on Windows, `knowledge-write`, `knowledge-merge` and `knowledge-scan` name the base's files with `/` (`Catalog/rules.md`, not `Catalog\rules.md`), in what they print and in the deltas they compare. A staged draft whose `?` Git Bash wrote into the file name (stored as U+F03F) is read as provisional, like one spelling it `~`.
+- `cctoolkit`: on Windows, the traceability hook (`handler-claude-md-check`) names rule sheets with `/`, and reads a file path given in Git Bash form (`/c/…`), as the TDD scope hook now reads a transcript path and the context log a loaded file's path.
+- `cctoolkit`: on Windows, `lib/platform.sh` keeps the Python interpreter by absolute path: a command run with a narrower `PATH` still reaches it.
+- `cctoolkit`: `cctoolkit evals` passes on Windows. The runner uses this kit's own platform layer, not the one an installed plugin left in the session, and hands `{{KIT}}` as `C:/…`. Your Claude settings and Git for Windows' `core.autocrlf` no longer reach the fixtures. Two posix cases declare their host, and two cases avoid a Git Bash rewrite (`/tmp/x` argument, 🔴 matched by Git Bash's `grep`).
+
 ## 2.14.0 — 2026-11-09
 
 - `cctoolkit`: `/cctoolkit:fix-bug <ticket>`, a short bug-fix chain. It checks that the bug is not already fixed (`git log`) and has a read-only agent find the cause, its `path:line`, the rules binding the handler and the test contract. Then it asks you one question: bug, rule to correct, spec gap (routed to `/business-spec`) or not a bug. It then writes a one-batch fix plan (fix spec, plan, sheet with its `## Cycles`, `skills/fix-bug/references/fix-template.md`) and launches the new `run-fix` workflow. Nothing is asked after the decision. A bug already fixed only gets its regression test.

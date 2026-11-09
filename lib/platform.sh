@@ -1,6 +1,6 @@
 # Sourced, never run: lets the rest of the kit run unchanged under Git Bash on
 # native Windows. On macOS and Linux it defines `kit_path` as a no-op and returns.
-# Windows: `python3` → the first interpreter running Python >= 3.10 (cached in /tmp;
+# Windows: `python3` → the first interpreter running Python >= 3.10, by absolute path (cached in /tmp;
 # the Store stub exits 9009); Python in UTF-8 writing LF (windows/sitecustomize.py);
 # `jq -b` (no CRLF); `kit_path VAR` rewrites a path in place to `C:/x/repo` form
 # (no fork: `printf -v`), CLAUDE_PROJECT_DIR and CLAUDE_PLUGIN_ROOT on load.
@@ -30,6 +30,7 @@ kit_path() {
   printf -v "$1" '%s' "$p"
 }
 
+_kit_py_cache=
 if [ -z "${CCTOOLKIT_PYTHON:-}" ]; then
   _kit_py_cache="/tmp/cctoolkit-python"
   [ -r "$_kit_py_cache" ] && read -r CCTOOLKIT_PYTHON <"$_kit_py_cache"
@@ -38,13 +39,20 @@ if [ -z "${CCTOOLKIT_PYTHON:-}" ]; then
     for _kit_py in python3 python py; do
       if "$_kit_py" -c 'import sys; sys.exit(sys.version_info < (3, 10))' >/dev/null 2>&1; then
         CCTOOLKIT_PYTHON=$_kit_py
-        printf '%s\n' "$_kit_py" >"$_kit_py_cache" 2>/dev/null
         break
       fi
     done
   fi
-  unset _kit_py _kit_py_cache
 fi
+# Absolute, so a command run with a narrower PATH still reaches it; cached so when it was looked up.
+case "$CCTOOLKIT_PYTHON" in
+  "" | */*) ;;
+  *)
+    _kit_py=$(type -P "$CCTOOLKIT_PYTHON") && CCTOOLKIT_PYTHON=$_kit_py
+    [ -z "$_kit_py_cache" ] || printf '%s\n' "$CCTOOLKIT_PYTHON" >"$_kit_py_cache" 2>/dev/null
+    ;;
+esac
+unset _kit_py _kit_py_cache
 export CCTOOLKIT_PYTHON
 
 if [ -n "$CCTOOLKIT_PYTHON" ]; then

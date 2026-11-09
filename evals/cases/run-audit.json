@@ -113,7 +113,7 @@
     },
     {
       "name": "audit-worktree: create detached at the main branch, untracked kit config copied, remove refuses a path that is no audit worktree",
-      "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && echo '{}' > .claude/kit.config.json && python3 {{KIT}}/scripts/audit-worktree.py create | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[\"branch\"], d[\"copied\"])'; git worktree list | wc -l | tr -d ' '; python3 {{KIT}}/scripts/audit-worktree.py remove /tmp/x 2>&1; python3 {{KIT}}/scripts/audit-worktree.py remove; git worktree list | wc -l | tr -d ' '",
+      "cmd": "R={{FIX}}/repo-{{SID}}; rm -rf $R; mkdir -p $R/src/P.Domain $R/tests/P.UnitTests $R/.claude && cd $R && git init -q -b main . && printf '#pragma warning disable CS1\\n// NOSONAR\\npublic class A {}\\n' > src/P.Domain/A.cs && printf '// NOSONAR\\npublic class T {}\\n' > tests/P.UnitTests/T.cs && git add -A && git -c user.email=a@b -c user.name=a commit -qm 'feat: a' && export CLAUDE_PROJECT_DIR=$R && echo '{}' > .claude/kit.config.json && python3 {{KIT}}/scripts/audit-worktree.py create | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[\"branch\"], d[\"copied\"])'; git worktree list | wc -l | tr -d ' '; MSYS_NO_PATHCONV=1 python3 {{KIT}}/scripts/audit-worktree.py remove /tmp/x 2>&1; python3 {{KIT}}/scripts/audit-worktree.py remove; git worktree list | wc -l | tr -d ' '",
       "expect": {
         "exit": 0,
         "stdout": "main ['.claude/kit.config.json']\n2\nrefused: /tmp/x is not an audit worktree\nremoved: 1\n1"
@@ -169,7 +169,7 @@
     },
     {
       "name": "quality-report-check: skipped needs a reason, codebase sums checked, a not_configured block holding a number is red",
-      "cmd": "python3 {{KIT}}/scripts/quality-report-check.py {{FIX}}/check/report.json | grep -c '🔴' ; python3 {{KIT}}/scripts/quality-report-check.py {{FIX}}/check/report.json | grep -o 'skipped without a reason\\|by_kind: parts sum to 2, total 3\\|loop_calls: status not_configured' | tr '\\n' ';'",
+      "cmd": "python3 {{KIT}}/scripts/quality-report-check.py {{FIX}}/check/report.json | LC_ALL=C grep -c '🔴' ; python3 {{KIT}}/scripts/quality-report-check.py {{FIX}}/check/report.json | grep -o 'skipped without a reason\\|by_kind: parts sum to 2, total 3\\|loop_calls: status not_configured' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
         "stdout": "4\nskipped without a reason;by_kind: parts sum to 2, total 3;loop_calls: status not_configured;"

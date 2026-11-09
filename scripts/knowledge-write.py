@@ -39,6 +39,7 @@ Exit 0, 1 refused (nothing written), 2 usage, 3 config defect.
 import datetime
 import hashlib
 import os
+import posixpath
 import re
 import shutil
 import sys
@@ -52,8 +53,9 @@ import knowledge_index  # noqa: E402
 STAGING = ".sync"
 LEVELS = ("high", "medium", "low")
 PROVISIONAL = knowledge.PROVISIONAL
-# Windows forbids `?` in a file name: a staged file spells it `~`, read back as `?`.
-FILE_MARK = re.compile(r"(?<![A-Za-z0-9-])((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D))|ADR)-~(\d+)(?![0-9A-Za-z])")
+# Windows forbids `?` in a file name: a staged file spells it `~`, read back as `?`. Git Bash
+# writes a `?` it is handed as U+F03F (Cygwin's mapping), read back as `?` too.
+FILE_MARK = re.compile(r"(?<![A-Za-z0-9-])((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D))|ADR)-[~](\d+)(?![0-9A-Za-z])")
 PROV_HEADING = re.compile(r"^(#{1,6})\s+((?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D)|ADR)-\?\d+)\s+—\s")
 WIDTH = {"CU": 2, "RM": 3, "D": 3, "ADR": 3}
 IGNORE = (".index/", ".sync/", ".merge/")
@@ -97,21 +99,21 @@ def staged_files():
         for f in files:
             if f.endswith(".md"):
                 p = os.path.join(d, f)
-                head = os.path.dirname(os.path.relpath(p, top))
-                out[os.path.join(head, FILE_MARK.sub(r"\1-?\2", f))] = p
+                head = posixpath.dirname(knowledge.rel(p, top))
+                out[posixpath.join(head,FILE_MARK.sub(r"\1-?\2", f))] = p
     return out
 
 
 def context_of_rel(rel):
     """First folder of a path under the base or the staging; none for `adr/` or a loose file."""
-    parts = rel.split(os.sep)
+    parts = rel.split("/")
     return parts[0] if len(parts) > 1 and parts[0] != knowledge.ADR_DIR else None
 
 
 def base_rel(rel):
     """Where a staged file lands: `<Context>/adr/<f>` in `adr/<f>`, any other at the same path."""
-    parts = rel.split(os.sep)
-    return os.path.join(*parts[1:]) if len(parts) > 2 and parts[1] == knowledge.ADR_DIR else rel
+    parts = rel.split("/")
+    return posixpath.join(*parts[1:]) if len(parts) > 2 and parts[1] == knowledge.ADR_DIR else rel
 
 
 def staged_contexts():
@@ -265,7 +267,7 @@ def stage_copy(rel):
 
 def handler_file(ctx, name):
     for path in knowledge.use_case_files(C, ctx):
-        rel = os.path.relpath(path, base())
+        rel = knowledge.rel(path, base())
         staged = os.path.join(staging(), rel)
         text = knowledge.read(staged if os.path.exists(staged) else path)
         if name in knowledge.handlers(text):
@@ -324,7 +326,7 @@ def numbering(texts):
     rank = {"usecases": 0, "rules.md": 1, "decisions.md": 2}
 
     def order(rel):
-        parts = rel.split(os.sep)
+        parts = rel.split("/")
         return (base_rel(rel) != rel, parts[0], rank.get(parts[1] if len(parts) > 1 else "", 3), rel)
 
     for rel, text in sorted(texts.items(), key=lambda kv: order(kv[0])):
@@ -424,7 +426,7 @@ def apply(ctxs):
     was = {(m[0], m[1]) for m in knowledge.misplaced(before_texts)}
     moved, kept = [], []
     for oid, rel, home, cus in knowledge.misplaced(after_texts):
-        if rel.split(os.sep)[0] not in applied:
+        if rel.split("/")[0] not in applied:
             continue
         line = f"{oid} in {rel}, applied by {', '.join(cus)} — belongs in {home}"
         # Refused: a rule in a use case's file several apply. Warned: a rules.md rule one use case applies.
@@ -432,7 +434,7 @@ def apply(ctxs):
     if moved:
         return refuse(moved)
     for ctx in sorted(applied):
-        ov = os.path.join(ctx, "OVERVIEW.md")
+        ov = posixpath.join(ctx, "OVERVIEW.md")
         n = len(after_texts.get(ov, "")) // 4
         if MERGE and ov in final and n > C.overview_budget:
             errors.append(f"{ov} ~{n} tokens, above knowledge.overviewBudget {C.overview_budget} — condense it")

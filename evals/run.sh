@@ -46,11 +46,33 @@ unset CLAUDE_EFFORT
 # The repo's opt-ins (`env` of its settings) reach Bash the same way and would decide
 # the cases written for their absence.
 unset CLAUDE_DOCTOR_BUDGET_LINES CLAUDE_DOTNET_TEST_TIMEOUT
+# On Windows a session's Bash carries the installed kit's lib/platform.sh (hooks/windows-env.sh):
+# its functions, its marker and its lib/windows on PYTHONPATH would answer for this checkout's,
+# and a shell opened outside a session has none. The cases get this kit's own, as the Bash tool
+# would source it; on macOS and Linux it defines nothing.
+unset _KIT_PLATFORM
+unset -f python3 jq kit_path 2>/dev/null
+if [ -n "${PYTHONPATH:-}" ]; then
+  _kit_pp=
+  IFS=';' read -r -a _kit_pps <<<"$PYTHONPATH"
+  for _kit_p in "${_kit_pps[@]}"; do
+    case "$_kit_p" in */lib/windows) ;; *) _kit_pp="${_kit_pp:+$_kit_pp;}$_kit_p" ;; esac
+  done
+  if [ -n "$_kit_pp" ]; then PYTHONPATH=$_kit_pp; else unset PYTHONPATH; fi
+  unset _kit_pp _kit_pps _kit_p
+fi
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/platform.sh"
+# Its functions reach the cases, its marker does not: Claude Code starts a hook outside the Bash
+# tool, and the hook loads lib/platform.sh whole.
+export -n _KIT_PLATFORM 2>/dev/null
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The runner sits in `evals/` of the kit: the toolkit checkout or the plugin cache.
 # A bare `.claude/` there holds the runtime files the hooks write, not the kit.
 ROOT="$(cd "$HERE/.." && pwd)"
+# Windows: `C:/x` form, which bash, Python and node all read — {{KIT}} reaches all three. The
+# fixtures keep their `/c/x` form: a case may put one of their folders on PATH, where `C:` splits.
+kit_path ROOT
 KIT_DIR="$ROOT"
 # A fixture repo is its own project: an inherited CLAUDE_PROJECT_DIR would point
 # every hook and script at the repo the runner was launched from.
@@ -59,6 +81,13 @@ RUN="eval-$$-$(date +%s)"
 # One fixtures folder per run: two runs at once (two sessions, a run left behind) never
 # delete each other's files.
 FIX="$HERE/.fixtures/$RUN"
+# Nor the user's own Claude settings: a plugin they enable would answer the doctor's cases.
+export CLAUDE_CONFIG_DIR="$FIX/.claude-config"
+# Nor their git config's line endings: Git for Windows ships core.autocrlf=true, which rewrites
+# the fixtures' files and warns on stderr. One more `-c core.autocrlf=false` for every git call.
+_kit_n=${GIT_CONFIG_COUNT:-0}
+export GIT_CONFIG_KEY_$_kit_n=core.autocrlf GIT_CONFIG_VALUE_$_kit_n=false GIT_CONFIG_COUNT=$((_kit_n + 1))
+unset _kit_n
 ERRF="/tmp/claude-evalerr-$RUN"
 LATF="/tmp/claude-evallat-$RUN"
 # Duration of every case (ms, file, name), and of every file in PROF.files.
