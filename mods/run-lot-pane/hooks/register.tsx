@@ -879,7 +879,7 @@ const outcomeOf = (result: unknown): Outcome | null => {
   return { label, reason: reason === '—' ? null : reason, report: textOf(fields.rapport) ?? textOf(fields.report), ...(merge === null ? {} : { merge }) }
 }
 
-const MERGE_STATES = ['staged', 'refused', 'blocked', 'failed'] as const
+const MERGE_STATES = ['written', 'staged', 'refused', 'blocked', 'failed'] as const
 
 // `merge` of a run-plan result (workflows/run-plan.js): absent when the plan had nothing to merge.
 export const mergeOf = (value: unknown): KnowledgeMerge | null => {
@@ -892,11 +892,13 @@ export const mergeOf = (value: unknown): KnowledgeMerge | null => {
   return { state, lines: texts(fields.lines), warnings: texts(fields.warnings), next: next === null ? null : (next.split(' — ')[0] ?? next) }
 }
 
-// A staged merge waits for the user: the plan is green, the base is not written yet.
-export const mergeRows = (merge: KnowledgeMerge): { text: string; tone: 'warning' | 'error' | 'inactive' | undefined; bold: boolean }[] => [
-  merge.state === 'staged'
-    ? { text: '◆ Knowledge base — merge staged, not written', tone: 'warning', bold: true }
-    : { text: `✗ Knowledge base — merge ${merge.state}`, tone: 'error', bold: true },
+// Written: the run updated the base itself, reviewed in git with the code. Staged: a merge left for /knowledge-merge.
+export const mergeRows = (merge: KnowledgeMerge): { text: string; tone: 'success' | 'warning' | 'error' | 'inactive' | undefined; bold: boolean }[] => [
+  merge.state === 'written'
+    ? { text: '✓ Knowledge base — updated', tone: 'success', bold: true }
+    : merge.state === 'staged'
+      ? { text: '◆ Knowledge base — merge staged, not written', tone: 'warning', bold: true }
+      : { text: `✗ Knowledge base — merge ${merge.state}`, tone: 'error', bold: true },
   ...merge.lines.map(text => ({ text, tone: 'inactive' as const, bold: false })),
   ...merge.warnings.map(text => ({ text, tone: 'warning' as const, bold: false })),
   ...(merge.next === null ? [] : [{ text: `→ ${merge.next}`, tone: undefined, bold: false }]),

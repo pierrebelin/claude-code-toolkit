@@ -8,8 +8,8 @@ argument-hint: "<todo/<code>/<CODE>-PLAN.md> [--partial]"
 
 Brings a feature into the knowledge base (`knowledge.root` of `.claude/kit.config.json`): the delta of its spec (`kit:new`, `kit:modified`, `kit:retired`) and the ADRs of its sheets. Formats → `../knowledge-sync/references/knowledge-format.md`.
 
-- The base changes here only, once the plan is delivered. Nothing reaches it without the user's confirmation; `cctoolkit knowledge-write` is its one writer — never `Write` or `Edit` under it yourself.
-- `run-plan` stages the merge at the end of a plan with every batch ✅ DONE and writes nothing: this skill shows it and writes it. A plan blocked or partial: its spec stays under `todo/`, its ids stay taken, the run that finishes it stages the merge.
+- The base changes once the plan is delivered. Invoked by hand, nothing reaches it without the user's confirmation; `cctoolkit knowledge-write` is its one writer — never `Write` or `Edit` under it yourself.
+- `run-plan` drafts the merge at the end of a plan with every batch ✅ DONE and writes it itself: the spec was validated before the plan, nothing is left to arbitrate, the user reviews `git diff` with the code. A merge it could not write (`collision:`, `refused:`, `BLOCKED`) stays staged: this skill shows it and writes it. A plan blocked or partial: its spec stays under `todo/`, its ids stay taken, the run that finishes it stages the merge.
 - `--partial` is for a plan abandoned for good: only the objects whose batches are all ✅ DONE enter; the others stay in the spec, their ids taken while `todo/<code>/` stays.
 
 $ARGUMENTS

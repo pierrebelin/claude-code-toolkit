@@ -4,6 +4,14 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.14.0 — 2026-11-09
+
+- `cctoolkit`: `/cctoolkit:fix-bug <ticket>`, a short bug-fix chain. It checks that the bug is not already fixed (`git log`) and has a read-only agent find the cause, its `path:line`, the rules binding the handler and the test contract. Then it asks you one question: bug, rule to correct, spec gap (routed to `/business-spec`) or not a bug. It then writes a one-batch fix plan (fix spec, plan, sheet with its `## Cycles`, `skills/fix-bug/references/fix-template.md`) and launches the new `run-fix` workflow. Nothing is asked after the decision. A bug already fixed only gets its regression test.
+- `cctoolkit`: the `run-fix` workflow runs `run-lot` on the fix's batch (RED, GREEN, global green, diff audit, commit), then merges the fix spec into the knowledge base without asking: a corrected rule (`kit:modified`) is rewritten, and a restored rule needs no merge. The base update stays in the tree for your commit.
+- `cctoolkit`: `/verify-ddd-tdd diff [<base>] [--intent <file>] [--axes <Axis,…>]` audits any change set on its diff alone, with no plan, sheet or capture. It covers every axis but `Plan`, `--axes` narrows them, and it runs no test when exit codes are handed. `run-lot`'s light closing now runs this mode (`--axes Correctness,Scope`).
+- `cctoolkit`: `run-plan` writes the knowledge-base merge itself after a plan delivered whole (`knowledge-write apply --merge`), instead of staging it for `/cctoolkit:knowledge-merge`. The spec was validated before the plan, so nothing is left to arbitrate: you review the base's diff with the code. A collision, a refusal or a block still leaves the merge staged and listed to validate. Invoked by hand, `/knowledge-merge` keeps its confirmation.
+- `run-lot-pane`: a knowledge-base merge written by the run shows as `✓ Knowledge base — updated`. A `run-fix` run is followed like a `run-plan`: its phases, the `run-lot` it launches, the audit and the merge.
+
 ## 2.13.1 — 2026-11-04
 
 - `cctoolkit`: `run/.work.jsonl` holds the RED the checkpoint accepted, whole. The cycle agent copied it by hand into its state line, and on a real run left the table empty on one cycle and out on another, while the batch report had all 27 tests. The TDD scope hook now writes that line, from the checkpoint and from the checked structured output: the prompt names it, the agent no longer appends it. The `run-lot-pane` Tests view reads the same line, so it no longer shows written and green tests as `to write`.

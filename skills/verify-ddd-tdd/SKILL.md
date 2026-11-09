@@ -1,6 +1,7 @@
 ---
 name: verify-ddd-tdd
-description: "Use after /implement-tdd, before the next batch: audits a .NET batch (correctness, reuse, simplification, cost, plan conformance, test policy, TDD evidence). Fast by default, full on request."
+description: "Use after /implement-tdd, before the next batch: audits a .NET batch (correctness, reuse, simplification, cost, plan conformance, test policy, TDD evidence). Fast by default, full on request; `diff` audits any change set (hotfix, fix, change outside a plan) on its diff alone."
+argument-hint: "[batch FX [full|resume] | diff [<base>] [--intent <file>] [--axes <Axis,…>]]"
 context: fork
 agent: cctoolkit:ddd-tdd-auditor
 background: false
@@ -8,7 +9,7 @@ background: false
 
 # DDD + TDD verification
 
-Audit, never modify. Covers a batch implemented by `/implement-tdd`, never a feature without plan. Validations run the repo's configured commands (`commands.build`, `commands.test`), resolved as in `skills/implement-tdd/references/test-scope.md` § Runner.
+Audit, never modify. Covers a batch implemented by `/implement-tdd`, or — mode `diff` — any change set, with or without plan. Validations run the repo's configured commands (`commands.build`, `commands.test`), resolved as in `skills/implement-tdd/references/test-scope.md` § Runner.
 
 $ARGUMENTS
 
@@ -17,14 +18,21 @@ $ARGUMENTS
 - **Fast**, default: global plan + batch sheet, DDD/APP/PERF coverage, applied ids, diff, modified files, targeted tests.
 - **Full**, with `full` in argument: widens to touched boundaries, adds whole fast suites (§3.4). Never the whole `IntegrationTests` suite.
 - **Resume**, with `resume`: re-audit after correction. Scope = previous verdict's deviation table + the correction's change set, both supplied by the caller — the change set read off the tree (`cctoolkit audit-round`), never the files the correction declared. Read only those files and their diff; re-judge only the axes and suites the deviations reach; nothing already verdicted is re-established. A changed file that is neither cited as a deviation's evidence nor the test of one is a **Scope** Major, unless the correction declared it as an extension whose reason a deviation's closure required. A gap the correction contested gets its answer (§ Contested findings).
+- **Diff**, with `diff`: the change set alone, no plan, no sheet, no capture required. Replaces §1 and §3 below; combines with `resume`.
+  - **Scope** — `git diff <base>` on the source and test roots, untracked files included; `<base>` absent = working tree against `HEAD`. The caller may hand the diff as a file: read it, never rerun it.
+  - **Intent** — `--intent <file>` (a fix sheet, a ticket, a cycle contract) states what the change claims to do: the `Scope` axis ties each hunk to it. No intent → `Scope` not judged, said on the `Scope:` line.
+  - **Axes** — every row of the §2 table except `Plan`: no coverage index, no id, no TDD evidence (unless the caller hands cycles). `--axes` narrows to the axes named. Read only the §2 rows of the axes judged, the bug-class and `Worsened` paragraphs, § Severities, § Verdict — nothing else of this skill.
+  - **Reads** — hunk by hunk; beyond a hunk only what the axis being judged needs, bounded. The diff is the budget: a file the diff does not touch is opened for evidence, never audited.
+  - **Validations** — none run when the caller hands exit codes: read them. None handed → only the test classes the diff adds or changes, narrowest filter (`test-scope.md` § Runner); never a whole suite.
+  - **Verdict** — § Verdict unchanged; the `VALID` table's first column holds the intent's behaviour, or `diff` without intent.
 
-Coverage: read the compact indexes `ddd-rules.md` + `architecture-rules.md` (under 6 kB), then the lines of the ids the sheet applies. `ddd-examples.md` only if an id stays ambiguous.
+Coverage (modes fast, full, resume): read the compact indexes `ddd-rules.md` + `architecture-rules.md` (under 6 kB), then the lines of the ids the sheet applies. `ddd-examples.md` only if an id stays ambiguous.
 
 ## Workflow
 
 ### 1. Establish the scope
 
-1. Require `batch FX`. The caller supplies the sheet's FX section and the capture of `cctoolkit audit-capture`: status, `diff --check`, modified files, diff, `cctoolkit rules-coverage --untested` and `--ids <sheet>`, `cctoolkit access-cost --diff`, build / `ArchitectureTests` exit codes. Use it as is; read the plan or sheet yourself only if missing or contradicting the repo. No capture → produce status, check and diff yourself, one command.
+1. Require `batch FX` (mode `diff`: this section does not apply, § Modes). The caller supplies the sheet's FX section and the capture of `cctoolkit audit-capture`: status, `diff --check`, modified files, diff, `cctoolkit rules-coverage --untested` and `--ids <sheet>`, `cctoolkit access-cost --diff`, build / `ArchitectureTests` exit codes. Use it as is; read the plan or sheet yourself only if missing or contradicting the repo. No capture → produce status, check and diff yourself, one command.
    Read the capture's `## Mechanical audit — FX` section first (`Axis | Check | Result | Evidence`): an `ok` row is never re-established — no rerun, no re-derivation from the diff; a `gap` row is a finding of the verdict, severity of its axis (§ Severities), its `Evidence` cell the evidence; a `not checked` row is yours to judge, the layer-rule axes of §2 always are. No section (older capture): everything above is yours.
 2. No full coverage, or no **Design** section: still audit the code (§2), report the plan gap as **Major**, fix = update sheet. Every id is `applied` on a sheet `kit:applied-rules` row, or `N/A — reason` once on the global plan's `kit:na-rules` line. The capture's `not cited` line settles the mechanical half — an id listed there = **Blocking** unclassified id. Yours: whether a stated `N/A` reason holds. Never infer design from the implementation.
 3. Walk the diff **hunk by hunk**, tie each to an RM/CU or sheet step; untied = **Scope** deviation. Read beyond a hunk only when the axis being judged needs it. Expected diff already committed → require an explicit base in argument.

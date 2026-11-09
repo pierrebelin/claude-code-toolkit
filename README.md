@@ -64,7 +64,9 @@ flowchart LR
 
 The orchestrator writes neither tests nor code: it splits the work, checks the reports and settles the design. One agent per behaviour writes the failing test, passes a checkpoint read off the disk, then makes it pass; a test it changes after that checkpoint is recorded with its assertions and judged by the audit. Another agent audits.
 
-A batch that stops short: fix the cause and run `/cctoolkit:run-lot` on the same sheet again, it resumes from the cycles already done. `/cctoolkit:implement-tdd` launches the chain from a plan path, `/cctoolkit:verify-ddd-tdd` audits a batch on demand.
+A batch that stops short: fix the cause and run `/cctoolkit:run-lot` on the same sheet again, it resumes from the cycles already done. `/cctoolkit:implement-tdd` launches the chain from a plan path, `/cctoolkit:verify-ddd-tdd` audits a batch on demand — `diff` audits any change on its diff alone.
+
+**A bug?** `/cctoolkit:fix-bug <ticket>` checks it is not already fixed, diagnoses the cause in a read-only agent and asks you one thing: bug, rule to correct, or spec gap (→ `/business-spec`). Then the `run-fix` workflow writes the failing test, the fix, audits the diff and updates the knowledge base from the validated cause.
 
 Want to see the files? **[`examples/`](examples/README.md)** walks one small feature from spec to report.
 
@@ -76,14 +78,14 @@ What the product does and why lives in the repo, under `docs/business/` by defau
 flowchart LR
     K[("knowledge base")] -->|read by levels| S["/business-spec<br/>writes a delta"]
     S --> P["plan, build"]
-    P -->|"plan delivered:<br/>merge staged"| M["/knowledge-merge<br/>you confirm"]
-    M --> K
+    P -->|"plan delivered:<br/>delta merged by the run"| K
+    F["/fix-bug"] -->|"rule corrected:<br/>merged by run-fix"| K
     H["code changed<br/>outside the kit"] -->|"/knowledge-sync"| K
 ```
 
 - **`/cctoolkit:knowledge-sync`** builds the base from your code the first time, then catches up with what changed outside the kit. Nothing is written until you confirm.
 - **`/cctoolkit:business-spec`** reads the base first and writes the spec as a delta: what the feature adds, changes or retires.
-- When a whole plan is delivered, `run-plan` stages the merge; **`/cctoolkit:knowledge-merge`** shows the diff and writes it on your word.
+- When a whole plan is delivered, `run-plan` writes the spec's delta into the base itself: the spec was validated before the plan, you review the base's diff with the code before committing. A merge it could not write stays staged for **`/cctoolkit:knowledge-merge`**.
 - **`/cctoolkit:ask`** answers how the product behaves, or why, from the base, each fact cited by its id.
 
 The base is plain Markdown, so you can review and commit it like code. The worked example is under [`examples/docs/business/`](examples/docs/business/INDEX.md).

@@ -213,6 +213,12 @@ describe('reading the run', () => {
     ])
     const refused = mergeOf({ state: 'refused', lines: ['collision: CAT-RM-004'], next })
     expect(refused && mergeRows(refused)[0]).toEqual({ text: '✗ Knowledge base — merge refused', tone: 'error', bold: true })
+    const written = mergeOf({ state: 'written', lines: ['staged: 1 file(s)', 'written: docs/business/Catalog/rules.md'], warnings: [] })
+    expect(written && mergeRows(written).map(row => [row.text, row.tone])).toEqual([
+      ['✓ Knowledge base — updated', 'success'],
+      ['staged: 1 file(s)', 'inactive'],
+      ['written: docs/business/Catalog/rules.md', 'inactive'],
+    ])
     expect([mergeOf({ state: 'nothing', lines: [] }), mergeOf(null), mergeOf('staged')]).toEqual([null, null, null])
     expect(parseJournal(JSON.stringify({ status: 'completed', result: { status: 'DONE', reason: '—', report: 'r.md' } }))?.outcome).toEqual({ label: 'DONE', reason: null, report: 'r.md' })
   })

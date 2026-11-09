@@ -9,7 +9,7 @@ export const meta = {
     { title: 'Aside', detail: 'blocked batch: partial work saved under a git ref (and a patch to read), its saved cycles kept, tree restored to the batch start, dependents skipped — the next run puts the work back and resumes; from the second, an arbiter looks for a cause common to the batches set aside — one stops the plan' },
     { title: 'Final check', detail: 'every test suite run whole once, integration included, after the last batch: reported, never blocking' },
     { title: 'Security', detail: 'one read-only pass over the batch commits of the plan: findings listed for review, never blocking' },
-    { title: 'Merge', detail: 'whole plan delivered, spec written against the knowledge base: its merge drafted and staged by knowledge-merger, never written — /cctoolkit:knowledge-merge shows it and writes it on confirmation' },
+    { title: 'Merge', detail: 'whole plan delivered, spec written against the knowledge base: its merge drafted by knowledge-merger from the spec delta and written by the run — a refusal leaves it staged, /cctoolkit:knowledge-merge shows it and writes it on confirmation' },
     { title: 'Report', detail: 'run/<stamp>.md: every decision taken without the user first, then batches, final check and journal; run lines of run/.work.jsonl removed, notification' },
   ],
 }
@@ -70,6 +70,7 @@ const FAILURE_GROUP = obj({ message: str, tests: arr(str) })
 const FINAL = obj({ suites: arr(obj({ name: str, exit: int, report: obj({ failed: int, total: int, listed: int, fromRunner: bool, setup: arr(FAILURE_GROUP), assertion: arr(FAILURE_GROUP) }, ['total']), last: arr(str), stalled: bool }, ['report', 'last', 'stalled'])) })
 const BREAKER = obj({ commonCause: bool, cause: str, batches: arr(str), fixBeforeRelaunch: str })
 const PREPARED = obj({ exit: int, nothing: str, refused: arr(str) })
+const APPLIED = obj({ exit: int, lines: arr(str) })
 const MERGED = obj({ staged: bool, stagedLine: str, files: arr(str), warnings: arr(str), blocked: str })
 const PAIR = obj({ batches: arr(obj({ batch: str, repo: str, sheet: str })), apart: arr(obj({ batch: str, reason: str })) })
 const WORKTREE = obj({ ok: bool, path: str, detail: str })
@@ -559,8 +560,9 @@ if (committed.length && !security) toReview.push({ batch: '—', step: 'Security
 for (const f of security ? security.findings : []) toReview.push({ batch: '—', step: 'Security', text: `${f.severity} — ${f.finding}`, why: `${f.evidence} ; proposed fix: ${f.fix}` })
 if (security && security.findings.length) log(`security: ${security.findings.length} finding(s) to validate`)
 
-// The base changes once per feature, when its plan is delivered whole: the merge is drafted and
-// staged here, autonomously, and written only by /cctoolkit:knowledge-merge on the user's word.
+// The base changes once per feature, when its plan is delivered whole: the merge is drafted from the
+// spec's delta and written here, autonomously — the spec was validated before the plan, nothing is left
+// to arbitrate. The user reviews it in `git diff` with the code. A refusal or a block leaves it staged.
 // A stop, a batch set aside or a partial scope leaves the spec under todo/ for the run that ends it.
 let merge = null
 if (!reason && !scope && ran.some(r => r.status === DONE)) {
@@ -581,7 +583,7 @@ if (!reason && !scope && ran.some(r => r.status === DONE)) {
   else {
     const m = await agent(
       [
-        'Workflow run-plan, knowledge-base merge after the last batch. Autonomous mode: nobody answers. Never AskUserQuestion, never a Git command that writes, never `cctoolkit knowledge-write`: the user confirms the merge after the run. Return the report fields through the structured output.',
+        'Workflow run-plan, knowledge-base merge after the last batch. Autonomous mode: nobody answers. Never AskUserQuestion, never a Git command that writes, never `cctoolkit knowledge-write`: the workflow writes the staged merge itself after your report. Return the report fields through the structured output.',
         '',
         `plan: ${pre.plan} · partial: no`,
         '`staged` true with `## MERGE STAGED`: `stagedLine` = the `staged:` line, `files` = the `+n −n <file>` lines, `warnings` = the `WARN` lines left, `blocked` empty. `## BLOCKED`: `staged` false, `blocked` = the cause, `files` = its output lines.',
@@ -591,6 +593,21 @@ if (!reason && !scope && ran.some(r => r.status === DONE)) {
     merge = m && m.staged
       ? { state: 'staged', lines: [m.stagedLine, ...m.files], warnings: m.warnings, next: skill }
       : { state: 'blocked', lines: [m ? m.blocked : 'agent without result', ...(m ? m.files : [])], next: skill }
+  }
+  if (merge.state === 'staged') {
+    const code = pre.plan.replace(/^.*[\\/]/, '').replace(/-PLAN\.md$/, '')
+    const ap = await agent(
+      [
+        FRAME,
+        '',
+        `One call: \`cctoolkit knowledge-write apply --merge ${code} 2>&1; echo "exit=$?"\`.`,
+        '`exit` = the code on the last line; `lines` = every other output line, verbatim.',
+      ].join('\n'),
+      { schema: APPLIED, phase: 'Merge', label: 'merge apply', ...SHELL },
+    ).catch(() => null)
+    merge = ap && ap.exit === 0
+      ? { state: 'written', lines: [...merge.lines, ...ap.lines], warnings: merge.warnings, next: null }
+      : { state: 'refused', lines: ap ? ap.lines : ['apply agent without result'], warnings: merge.warnings, next: skill }
   }
   if (merge.state !== 'nothing') {
     log(`knowledge base: merge ${merge.state}${merge.next ? ` — ${merge.next}` : ''}`)
@@ -625,9 +642,9 @@ const rep = await agent(
     `- \`## To validate\` — from the second JSON, everything the run decided without the user (marked \`${TO_REVIEW}\`), to review after the plan, one \`###\` per kind: \`### Stop\` (\`stop\` verbatim, only when not null), \`### Batches set aside\` (\`toReview\` entries of step \`Set aside\`), \`### Start\` (\`toReview\` entries of step \`Start\`), \`### Final check\` (\`toReview\` entries of step \`Final check\`, their numbers verbatim, never recounted), \`### Security\` (\`toReview\` entries of step \`Security\`),\`### Audits to redo\` (\`audit\` = \`to redo\`: batch, report, command \`/verify-ddd-tdd batch FX\`), \`### Audit gaps carried\` (\`toReview\` entries of step \`Audit\`, and \`audit\` = \`GAPS carried\`), \`### Arbiter and design decisions\` (other \`toReview\` entries, step and why kept), \`### Assumptions\` (every \`h\`). One bullet per entry, prefixed by its batch; \`None.\` for an empty section. Last, when \`decidedAlone\` is not empty, one line after the sections: \`Decided alone, nothing to do: <total> — section Decided alone of the batch reports (<FX n, …>).\``,
     '- `## Minor` — every minor of the first JSON, prefixed by its batch; `None.` when none',
     `- \`## Final check\` — this block, its numbers, table and test names verbatim, never recounted, its sentences in the docs language:\n${finalCheck ? finalSection(finalCheck.suites) : 'Not run.'}\n(end of the block)`,
-    '- `## Knowledge base` — from `merge` of the second JSON: `state` staged → its `lines` verbatim one bullet each, then its `warnings`, then the line `Staged, not written: <next> shows the diff and writes it on confirmation.`; refused, blocked or failed → its `lines` verbatim, then `Not staged: <next>.`; nothing → its line verbatim; `merge` null → `Not run.`',
+    '- `## Knowledge base` — from `merge` of the second JSON: `state` written → its `lines` verbatim one bullet each, then its `warnings`, then the line `Written to the base: review \`git diff -- <knowledge root>\` and commit it with the code.`; refused, blocked or failed → its `lines` verbatim, then `Not staged: <next>.`; nothing → its line verbatim; `merge` null → `Not run.`',
     '- `## Journal` — the journal lines verbatim, in order',
-    `\`lastLine\` = \`Plan stopped — <stop>\` when stop is not null, else \`Plan done — review of ${reportFile} required.\`${finalRed.length ? `, followed by \` — final check red: ${finalRedNames(finalRed)}\`` : ''}${merge && merge.state === 'staged' ? ', followed by ` — knowledge base merge staged`' : ''}.`,
+    `\`lastLine\` = \`Plan stopped — <stop>\` when stop is not null, else \`Plan done — review of ${reportFile} required.\`${finalRed.length ? `, followed by \` — final check red: ${finalRedNames(finalRed)}\`` : ''}${merge && merge.state === 'written' ? ', followed by ` — knowledge base updated`' : ''}.`,
     `Then one call: \`cctoolkit run-work drop ${work} --run ${pre.stamp}; ${rmTmp('final')}; ${paired ? 'cctoolkit batch-worktree prune; ' : ''}command -v osascript >/dev/null && osascript -e 'display notification "<lastLine, double quotes removed>" with title "run-plan"' || true\` (the journal of the run, now copied into the report).`,
     '',
     '```json',
@@ -650,5 +667,5 @@ return {
   ...(reason ? { setAside: aside.map(x => ({ batch: x.batch, reason: x.reason, patch: x.patch, dependents: x.dependents })), next: RESTART } : {}),
   batches: ran.map(r => ({ batch: r.batch, status: r.status, hypotheses: r.hypotheses.length, minors: r.minors.length, ...(r.with ? { with: r.with } : {}) })),
   finalCheck: finalCheck ? finalCheck.suites.map(x => { const n = finalCounts(x); return { name: x.name, exit: x.exit, failed: n.failed, ...(n.total === null ? {} : { total: n.total }), didNotRun: n.didNotRun, onTest: n.onTest } }) : null,
-  ...(merge && merge.state !== 'nothing' ? { merge: { state: merge.state, lines: merge.lines, warnings: merge.warnings || [], next: `${merge.next} — the knowledge base is not written yet: it shows the diff and writes it on the user's confirmation` } } : {}),
+  ...(merge && merge.state !== 'nothing' ? { merge: { state: merge.state, lines: merge.lines, warnings: merge.warnings || [], ...(merge.next ? { next: `${merge.next} — the merge is staged, not written: it shows the diff and writes it` } : {}) } } : {}),
 }

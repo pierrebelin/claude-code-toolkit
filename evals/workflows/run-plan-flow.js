@@ -1,7 +1,7 @@
 // Whole run-plan body driven by schema-shaped fake agents: F1 and F2 are set aside, F3 would run.
 // common: the breaker finds a cause shared by F1 and F2 — the plan stops before F3, a `breaker` line
 // written, the report given its common-cause section. distinct: the plan goes on and runs F3.
-// merge: every batch DONE — the merge is prepared, drafted by knowledge-merger and staged, the report
+// merge: every batch DONE — the merge is prepared, drafted by knowledge-merger and written by the run, the report
 // given its knowledge-base section, the result its `merge`. nomerge: every batch DONE, nothing to merge.
 // A security pass reads the batch commits after the final check; its findings (merge) go to `## To validate`.
 // A batch set aside keeps its saved cycles: F1's work kept under its ref resumes, F2 without a ref starts over.
@@ -51,10 +51,14 @@ const agent = async (prompt, o) => {
     if (o.agentType !== 'cctoolkit:knowledge-merger' || !prompt.includes('plan: /r/todo/x/X-PLAN.md · partial: no') || !prompt.includes('never `cctoolkit knowledge-write`')) console.log('WARN merge draft without its agent or its contract')
     return { staged: true, stagedLine: 'staged: 2 file(s) — cctoolkit knowledge-write apply --merge X', files: ['+3 −0 docs/business/Catalog/rules.md'], warnings: [], blocked: '' }
   }
+  if (l === 'merge apply') {
+    if (!prompt.includes('`cctoolkit knowledge-write apply --merge X 2>&1; echo "exit=$?"`')) console.log('WARN merge apply without its command')
+    return { exit: 0, lines: ['written: docs/business/Catalog/rules.md'] }
+  }
   if (l === 'report') {
     if (variant === 'distinct' && !(prompt.includes('partial work kept under `refs/cctoolkit/aside/x/F1`') && prompt.includes('aside-F2.patch` (`git apply` to take it back), the next run starts the batch over'))) console.log('WARN report without where the work set aside waits')
     if (variant === 'common' && !prompt.includes('## Plan stopped — common cause')) console.log('WARN report without the common-cause section')
-    if (variant === 'merge' && (!prompt.includes('## Knowledge base') || !prompt.includes('"state": "staged"'))) console.log('WARN report without the knowledge-base merge')
+    if (variant === 'merge' && (!prompt.includes('## Knowledge base') || !prompt.includes('"state": "written"'))) console.log('WARN report without the knowledge-base merge')
     if (variant === 'merge' && (!prompt.includes('### Security') || !prompt.includes('"step": "Security"'))) console.log('WARN report without the security findings')
     if (variant === 'finalred') {
       if (!prompt.includes('| IntegrationTests | 2 | 4 of 492 | 3 | 1 |')) console.log('WARN final check table without the runner\'s number')
@@ -75,5 +79,5 @@ const workflow = async (name, a) => {
 }
 const fn = new (Object.getPrototypeOf(async function () {}).constructor)('args', 'agent', 'log', 'phase', 'parallel', 'workflow', src)
 fn('todo/x/X-PLAN.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), workflow)
-  .then(r => { console.log('STATUS', r.status, '|', r.reason); console.log('AGENTS', labels.join(' | ')); if (r.merge) console.log('MERGE', r.merge.state, '|', r.merge.next); for (const x of r.finalCheck || []) console.log('FINAL', x.name, x.exit, `${x.failed} of ${x.total} | ${x.didNotRun} did not run | ${x.onTest} failed`) })
+  .then(r => { console.log('STATUS', r.status, '|', r.reason); console.log('AGENTS', labels.join(' | ')); if (r.merge) console.log('MERGE', r.merge.state, '|', r.merge.next || '—'); for (const x of r.finalCheck || []) console.log('FINAL', x.name, x.exit, `${x.failed} of ${x.total} | ${x.didNotRun} did not run | ${x.onTest} failed`) })
   .catch(e => { console.log('ERR', e.stack); process.exitCode = 1 })
