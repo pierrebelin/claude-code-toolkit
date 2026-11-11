@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.15.0 — 2026-11-11
+
+- `cctoolkit`: `git.mutations` in `kit.config.json`, `deny` by default. Set to `ask`, the Git guard no longer refuses a mutating Git command (`worktree add`, `branch`, `switch`, `commit`, `push`…): it asks you, so you approve it in one click instead of retyping it with `!`. A worktree without its own `kit.config.json` reads the main checkout's. `cctoolkit doctor` fails on any other value.
+
 ## 2.14.1 — 2026-11-09
 
 - `cctoolkit`: on Windows, `knowledge-write`, `knowledge-merge` and `knowledge-scan` name the base's files with `/` (`Catalog/rules.md`, not `Catalog\rules.md`), in what they print and in the deltas they compare. A staged draft whose `?` Git Bash wrote into the file name (stored as U+F03F) is read as provisional, like one spelling it `~`.

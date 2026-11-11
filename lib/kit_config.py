@@ -35,7 +35,7 @@ import unicodedata
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRESETS = os.path.join(KIT, "presets")
 DEFAULT_PRESET = "clean-architecture"
-TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd", "knowledge", "closing", "run"}
+TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd", "knowledge", "closing", "run", "git"}
 # The knowledge base is stack-neutral: its defaults live here, not in a preset.
 KNOWLEDGE_DEFAULTS = {"root": "docs/business", "contexts": {}, "overviewBudget": 1500, "syncBudget": 12000, "askBudget": 1500}
 PREFIX_RE = re.compile(r"[A-Z][A-Z0-9]{1,5}")
@@ -444,6 +444,8 @@ def validate(root):
         out.append(("ok", "kit.config.json", f"absent — preset {DEFAULT_PRESET} defaults (/cctoolkit:kit-init writes one)"))
     for k in sorted(set(cfg) - TOP_KEYS):
         out.append(("WARN", "kit.config.json", f"unknown key '{k}' — ignored (typo?); known: {', '.join(sorted(TOP_KEYS))}"))
+    if "git" in cfg and not (isinstance(cfg["git"], dict) and cfg["git"].get("mutations", "deny") in ("deny", "ask")):
+        out.append(("FAIL", "kit.config.json git", "expects {\"mutations\": \"deny\" | \"ask\"}"))
     lang = cfg.get("language", {})
     if not isinstance(lang, dict) or any(not isinstance(lang.get(k, "en"), str) for k in ("docs", "code")):
         out.append(("FAIL", "kit.config.json language", "expects {\"docs\": \"<code>\", \"code\": \"<code>\"}"))

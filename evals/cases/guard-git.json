@@ -89,6 +89,21 @@
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "tool_input": {"command": "echo \"git commit is forbidden here\""}},
       "expect": {"decision": "not_deny"}
+    },
+    {
+      "name": "git.mutations ask in kit.config.json turns the git commit denial into ask",
+      "cmd": "R={{FIX}}/ga-{{SID}}; rm -rf $R $R-wt && mkdir -p $R && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'x\\n' > f && git add -A && git commit -qm init && mkdir -p .claude && printf '{\\\"git\\\": {\\\"mutations\\\": \\\"ask\\\"}}' > .claude/kit.config.json && cd {{ROOT}} && printf '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m x\"}}' | CLAUDE_PROJECT_DIR=$R bash {{KIT}}/hooks/bash-dispatch.sh | jq -r '.hookSpecificOutput | .permissionDecision + \"|\" + .permissionDecisionReason'",
+      "expect": {"exit": 0, "stdout": "ask|git commit modifies the repository: this repo sets git.mutations to ask"}
+    },
+    {
+      "name": "git.mutations deny in kit.config.json keeps the denial",
+      "cmd": "R={{FIX}}/gd-{{SID}}; rm -rf $R $R-wt && mkdir -p $R && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'x\\n' > f && git add -A && git commit -qm init && mkdir -p .claude && printf '{\\\"git\\\": {\\\"mutations\\\": \\\"deny\\\"}}' > .claude/kit.config.json && cd {{ROOT}} && printf '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m x\"}}' | CLAUDE_PROJECT_DIR=$R bash {{KIT}}/hooks/bash-dispatch.sh | jq -r '.hookSpecificOutput | .permissionDecision + \"|\" + .permissionDecisionReason'",
+      "expect": {"exit": 0, "stdout": "deny|git commit blocked"}
+    },
+    {
+      "name": "a worktree without its own kit.config.json reads git.mutations from the main checkout",
+      "cmd": "R={{FIX}}/gw-{{SID}}; rm -rf $R $R-wt && mkdir -p $R && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'x\\n' > f && git add -A && git commit -qm init && mkdir -p .claude && printf '{\\\"git\\\": {\\\"mutations\\\": \\\"ask\\\"}}' > .claude/kit.config.json && git worktree add -q $R-wt && cd {{ROOT}} && printf '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m x\"}}' | CLAUDE_PROJECT_DIR=$R-wt bash {{KIT}}/hooks/bash-dispatch.sh | jq -r '.hookSpecificOutput | .permissionDecision + \"|\" + .permissionDecisionReason'; git -C $R worktree remove --force $R-wt",
+      "expect": {"exit": 0, "stdout": "ask|"}
     }
   ]
 }

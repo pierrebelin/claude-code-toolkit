@@ -28,7 +28,7 @@ A hook on a hot event (`PostToolUse` of every tool, `Edit|Write`, `SubagentStart
 
 What each tool is used for and what is lost without it: [`INSTALL.md`](../INSTALL.md#dependencies).
 
-Every hook exits 0 when its dependency is missing, except `lib/guard-git.sh`, `explore-guard.sh`, `read-bounds.sh` and `implement-tdd-guard.sh` which block by design. Removing the `graphify-*` scripts and `read-bounds.sh` from `hooks.json` (in a fork) leaves a coherent kit; `bash-dispatch.sh` keeps working with any subset of its modules present.
+Every hook exits 0 when its dependency is missing, except `lib/guard-git.sh`, `explore-guard.sh`, `read-bounds.sh` and `implement-tdd-guard.sh` which block by design (`lib/guard-git.sh` asks instead when the repo sets `git.mutations` to `ask`). Removing the `graphify-*` scripts and `read-bounds.sh` from `hooks.json` (in a fork) leaves a coherent kit; `bash-dispatch.sh` keeps working with any subset of its modules present.
 
 ## Adapting
 

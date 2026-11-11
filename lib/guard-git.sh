@@ -51,6 +51,20 @@ MUTATING='add|am|branch|checkout|cherry-pick|clean|commit|filter-branch|merge|mv
 
 if printf '%s' "$norm" | grep -qE "(^|[;&|][[:space:]]*)git[[:space:]]+($MUTATING)([[:space:]]|$)"; then
   verb=$(printf '%s' "$norm" | grep -oE "git[[:space:]]+($MUTATING)([[:space:]]|$)" | head -1 | awk '{print $2}')
+  # `git.mutations` of the repo's kit.config.json: "deny" (default) or "ask". Read with jq on this
+  # path only, never on a passing command. A worktree without its own config (kit.config.json
+  # left unversioned) falls back on the main checkout's.
+  . "${BASH_SOURCE[0]%/*}/project-root.sh"
+  cfg="$PROJECT_ROOT/.claude/kit.config.json"
+  if [ ! -f "$cfg" ]; then
+    common=$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=""
+    [ -z "$common" ] || cfg="${common%/.git}/.claude/kit.config.json"
+  fi
+  mode=$(jq -r '.git.mutations // "deny"' "$cfg" 2>/dev/null) || mode=deny
+  if [ "$mode" = ask ]; then
+    jq -n --arg v "$verb" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: ("git " + $v + " modifies the repository: this repo sets git.mutations to ask in kit.config.json, so the user approves each mutating Git command. Check the target before approving.")}}'
+    exit 0
+  fi
   jq -n --arg v "$verb" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: ("git " + $v + " blocked: this repo forbids any Git mutation by an agent. The user decides when to commit, branch or push. Reading is allowed (status, log, diff, show). If the command is genuinely needed, ask the user to run it themselves with the ! prefix.")}}'
   exit 0
 fi
