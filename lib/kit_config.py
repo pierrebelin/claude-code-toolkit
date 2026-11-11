@@ -444,8 +444,8 @@ def validate(root):
         out.append(("ok", "kit.config.json", f"absent — preset {DEFAULT_PRESET} defaults (/cctoolkit:kit-init writes one)"))
     for k in sorted(set(cfg) - TOP_KEYS):
         out.append(("WARN", "kit.config.json", f"unknown key '{k}' — ignored (typo?); known: {', '.join(sorted(TOP_KEYS))}"))
-    if "git" in cfg and not (isinstance(cfg["git"], dict) and cfg["git"].get("mutations", "deny") in ("deny", "ask")):
-        out.append(("FAIL", "kit.config.json git", "expects {\"mutations\": \"deny\" | \"ask\"}"))
+    if "git" in cfg and not (isinstance(cfg["git"], dict) and cfg["git"].get("mutations", "deny") in ("deny", "ask", "allow")):
+        out.append(("FAIL", "kit.config.json git", "expects {\"mutations\": \"deny\" | \"ask\" | \"allow\"}"))
     lang = cfg.get("language", {})
     if not isinstance(lang, dict) or any(not isinstance(lang.get(k, "en"), str) for k in ("docs", "code")):
         out.append(("FAIL", "kit.config.json language", "expects {\"docs\": \"<code>\", \"code\": \"<code>\"}"))

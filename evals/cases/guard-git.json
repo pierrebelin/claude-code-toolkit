@@ -104,6 +104,11 @@
       "name": "a worktree without its own kit.config.json reads git.mutations from the main checkout",
       "cmd": "R={{FIX}}/gw-{{SID}}; rm -rf $R $R-wt && mkdir -p $R && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'x\\n' > f && git add -A && git commit -qm init && mkdir -p .claude && printf '{\\\"git\\\": {\\\"mutations\\\": \\\"ask\\\"}}' > .claude/kit.config.json && git worktree add -q $R-wt && cd {{ROOT}} && printf '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m x\"}}' | CLAUDE_PROJECT_DIR=$R-wt bash {{KIT}}/hooks/bash-dispatch.sh | jq -r '.hookSpecificOutput | .permissionDecision + \"|\" + .permissionDecisionReason'; git -C $R worktree remove --force $R-wt",
       "expect": {"exit": 0, "stdout": "ask|"}
+    },
+    {
+      "name": "git.mutations allow in kit.config.json lets git commit through, neither denied nor asked",
+      "cmd": "R={{FIX}}/gl-{{SID}}; rm -rf $R $R-wt && mkdir -p $R && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'x\\n' > f && git add -A && git commit -qm init && mkdir -p .claude && printf '{\\\"git\\\": {\\\"mutations\\\": \\\"allow\\\"}}' > .claude/kit.config.json && cd {{ROOT}} && printf '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m x\"}}' | CLAUDE_PROJECT_DIR=$R bash {{KIT}}/hooks/bash-dispatch.sh > $R/out; jq -r '.hookSpecificOutput.permissionDecision // \"none\"' $R/out 2>/dev/null | grep -qxE 'deny|ask' && echo guarded || echo free",
+      "expect": {"exit": 0, "stdout": "free"}
     }
   ]
 }

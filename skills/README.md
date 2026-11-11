@@ -79,7 +79,7 @@ Limit: the diff runs from the batch's first commit to its last; another batch th
 
 **Rules ↔ tests traceability** — every use-case folder carries a rule sheet (`CLAUDE.md`) with a rules table (`kit:rules`), and every handler unit test (and each integration test proving a documented rule) declares the rule it covers on itself — contract and E2E tests carry none — value `{HandlerFolder}/{RM|RL-xx}` in the carrier of its framework (`testTag`; xUnit: `[Trait("RM", "{HandlerFolder}/{RM|RL-xx}")]`). `hooks/handler-claude-md-check.sh` checks both directions; `cctoolkit rules-coverage` gives the repo-wide count.
 
-**Never commit to Git.** The user decides when to commit, except the batch commit the `run-lot`/`run-plan` workflow makes at the end of a `DONE` batch through `cctoolkit batch-baseline commit`. `lib/guard-git.sh` makes the instruction deterministic: a Git commit typed in a Bash command is always denied — unless the repo sets `git.mutations` to `ask` in its `kit.config.json`, which turns the denial into a permission prompt the user answers.
+**Never commit to Git.** The user decides when to commit, except the batch commit the `run-lot`/`run-plan` workflow makes at the end of a `DONE` batch through `cctoolkit batch-baseline commit`. `lib/guard-git.sh` makes the instruction deterministic: a Git commit typed in a Bash command is always denied — unless the repo sets `git.mutations` in its `kit.config.json`: `ask` turns the denial into a permission prompt the user answers, `allow` lets the command through.
 
 **Symbol discovery** — `grep`s for a symbol give way to `graphify explain` when the AST graph actually answers.
 

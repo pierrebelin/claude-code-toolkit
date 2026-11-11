@@ -51,7 +51,7 @@ MUTATING='add|am|branch|checkout|cherry-pick|clean|commit|filter-branch|merge|mv
 
 if printf '%s' "$norm" | grep -qE "(^|[;&|][[:space:]]*)git[[:space:]]+($MUTATING)([[:space:]]|$)"; then
   verb=$(printf '%s' "$norm" | grep -oE "git[[:space:]]+($MUTATING)([[:space:]]|$)" | head -1 | awk '{print $2}')
-  # `git.mutations` of the repo's kit.config.json: "deny" (default) or "ask". Read with jq on this
+  # `git.mutations` of the repo's kit.config.json: "deny" (default), "ask" or "allow". Read with jq on this
   # path only, never on a passing command. A worktree without its own config (kit.config.json
   # left unversioned) falls back on the main checkout's.
   . "${BASH_SOURCE[0]%/*}/project-root.sh"
@@ -61,6 +61,9 @@ if printf '%s' "$norm" | grep -qE "(^|[;&|][[:space:]]*)git[[:space:]]+($MUTATIN
     [ -z "$common" ] || cfg="${common%/.git}/.claude/kit.config.json"
   fi
   mode=$(jq -r '.git.mutations // "deny"' "$cfg" 2>/dev/null) || mode=deny
+  # "allow": the guard steps aside, the command goes on down the chain (RTK rewrite) and Claude
+  # Code's own permissions decide.
+  [ "$mode" != allow ] || exit 0
   if [ "$mode" = ask ]; then
     jq -n --arg v "$verb" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: ("git " + $v + " modifies the repository: this repo sets git.mutations to ask in kit.config.json, so the user approves each mutating Git command. Check the target before approving.")}}'
     exit 0
