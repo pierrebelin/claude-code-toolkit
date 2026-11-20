@@ -58,6 +58,7 @@ It **never overwrites** a file that differs: it shows the difference and asks ke
 | `perl` | `evals/run.sh` timer; `cctoolkit doctor` reports it `FAIL` | no latency budget in the evals |
 | `graphify` | graph autosync — `GRAPHIFY_BIN`, else the PATH, else `~/.local/bin/graphify` (set `GRAPHIFY_BIN` in the repo's settings `env` when Claude Code's PATH lacks it) | `ALERT graphify not found` in `/tmp/graphify-hook.log`, `cctoolkit doctor` reports it `FAIL` |
 | `rtk` | output compression of Bash commands | drop the `rtk ` prefix from `kit.config.json` `commands` |
+| `ast-grep` | `cctoolkit access-cost`: the COST axis read off the syntax tree (`brew install ast-grep`, or `npm install -g @ast-grep/cli`) | `cctoolkit access-cost` exits 3, the cost is stated by hand; `cctoolkit doctor` reports it `WARN` |
 | `caveman` plugin | terse output, per repo through `.caveman.json` when `/cctoolkit:kit-init` writes one; statusline badge | no effect |
 
 ## Windows

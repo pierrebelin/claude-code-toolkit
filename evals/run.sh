@@ -3,7 +3,7 @@
 #
 # Usage:
 #   cctoolkit evals                              # every cases/*.json
-#   bash evals/run.sh -v cases/guard-git.json      # from the toolkit checkout
+#   bash evals/run.sh -v evals/cases/guard-git.json  # from the toolkit checkout
 #   LATENCY_MAX_MS=200 cctoolkit evals             # looser latency budget
 #   cctoolkit evals --profile                      # + the slowest files and cases
 #   cctoolkit evals -j 1                           # one file at a time (default: CPUs, up to 6)

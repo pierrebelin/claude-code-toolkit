@@ -47,7 +47,7 @@ claude plugin install knowledge-pane@cctoolkit --scope project
 claude plugin install run-lot-pane@cctoolkit --scope project
 ```
 
-Take only the ones you want, then restart Claude Code in the repo. Inside a session, `/plugin install <mod>@cctoolkit` does the same.
+Take only the ones you want, then restart Claude Code in the repo. `knowledge-pane` and `run-lot-pane` declare `cctoolkit` as a dependency: installing one installs the kit too (Claude Code 2.1.319 or later), and disabling the kit disables them. Inside a session, `/plugin install <mod>@cctoolkit` does the same.
 
 A repo that installed them from `.claude/mods/` (the former `pierrebelinmods` marketplace): `/cctoolkit:kit-init` removes that marketplace and tells which mods to reinstall.
 

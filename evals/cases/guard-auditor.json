@@ -16,6 +16,12 @@
       "expect": {"decision": "deny", "reason": "git grep -n"}
     },
     {
+      "name": "auditor recursive grep through rtk bypass (rtk 1.0) is denied",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {"tool_name": "Bash", "agent_id": "a1", "agent_type": "cctoolkit:ddd-tdd-auditor", "tool_input": {"command": "rtk bypass grep -rn -e 'InvalidInput' src tests | cut -b1-220"}},
+      "expect": {"decision": "deny", "reason": "git grep -n"}
+    },
+    {
       "name": "auditor git grep passes",
       "hook": "hooks/bash-dispatch.sh",
       "input": {"tool_name": "Bash", "agent_id": "a1", "agent_type": "cctoolkit:ddd-tdd-auditor", "tool_input": {"command": "git grep -n -e InvalidInput -- src tests"}},

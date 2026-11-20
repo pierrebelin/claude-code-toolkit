@@ -108,7 +108,7 @@ def line(cmd, out, lock=False, docker=False):
 
 # `rtk` in command position: it holds a run's whole output until the end, a job stopped at its
 # ceiling would leave an empty log.
-RTK = re.compile(r"(^|&&\s*|\|\|\s*|;\s*)rtk\s+(?:proxy\s+)?")
+RTK = re.compile(r"(^|&&\s*|\|\|\s*|;\s*)rtk\s+(?:(?:proxy|bypass)\s+)?")
 
 
 def final(c, tag):

@@ -16,7 +16,7 @@ command -v rtk >/dev/null 2>&1 || exit 0
 # A command naming none of the words below, needing no path or dotnet normalisation, is left as
 # written — the answer rtk would give. The list is generous (a word rtk ignores costs one fork, a
 # word missing here costs a rewrite): extend it when `rtk rewrite "<word> …"` starts answering.
-rtk_words='ls|tree|cat|head|tail|git|gh|glab|aws|psql|pnpm|find|diff|grep|egrep|fgrep|rg|ast-grep|dotnet|docker|podman|kubectl|oc|wget|wc|curl|jest|vitest|ctest|prisma|tsc|eslint|prettier|playwright|npx|npm|bun|bunx|bundle|rspec|rubocop|rake|gradle|gradlew|mvn|make|helm|biome|turbo|nx|stat|du|df|ps|pytest|mypy|ruff|pip|pip3|uv|uvx|go|golangci-lint|cargo|next|php|composer|python|python3|deno|gcloud|az|ping|jq|pio|swift|terraform|tofu|systemctl|journalctl|yarn|ng|sed|rtk|proxy|err|json|read|smart|summary|log|deps|format|lint|test|env|time|nohup|xargs|sort|uniq|less|ss|lsof|tar|unzip|node|flutter|poetry|mix|cmake|bazel|mise'
+rtk_words='ls|tree|cat|head|tail|git|gh|glab|aws|psql|pnpm|find|diff|grep|egrep|fgrep|rg|ast-grep|dotnet|docker|podman|kubectl|oc|wget|wc|curl|jest|vitest|ctest|prisma|tsc|eslint|prettier|playwright|npx|npm|bun|bunx|bundle|rspec|rubocop|rake|gradle|gradlew|mvn|make|helm|biome|turbo|nx|stat|du|df|ps|pytest|mypy|ruff|pip|pip3|uv|uvx|go|golangci-lint|cargo|next|php|composer|python|python3|deno|gcloud|az|ping|jq|pio|swift|terraform|tofu|systemctl|journalctl|yarn|ng|sed|rtk|proxy|bypass|err|json|read|smart|summary|log|deps|format|lint|test|env|time|nohup|xargs|sort|uniq|less|ss|lsof|tar|unzip|node|flutter|poetry|mix|cmake|bazel|mise'
 rtk_re="(^|[^A-Za-z0-9_-])($rtk_words)([^A-Za-z0-9_-]|$)"
 if ! [[ $cmd =~ $rtk_re ]] && [ "${cmd%$'\n'}" = "$cmd" ]; then
   case "$cmd" in */bin/*) ;; *) exit 0 ;; esac
@@ -45,7 +45,7 @@ esac
 
 # Every expression fires in command position only (line start or after `; & | (`,
 # optionally behind VAR=value assignments): in `ls /usr/bin/grep` the path is an
-# argument. An existing `rtk dotnet` / `proxy dotnet` is parked behind a placeholder so
+# argument. An existing `rtk dotnet` / `proxy dotnet` / `bypass dotnet` (rtk 1.0) is parked behind a placeholder so
 # it is never prefixed twice. A command carrying `<<` is left whole: sed works per line
 # and would rewrite a heredoc body.
 # Opt-in CLAUDE_DOTNET_TEST_TIMEOUT=<duration> (Microsoft Testing Platform): inserts
@@ -60,10 +60,10 @@ case "$test_timeout" in *[!0-9a-z.]*) test_timeout="" ;; esac
 if [ -n "$test_timeout" ]; then
   case "$cmd" in
     *'<<'*|*--timeout*) ;;
-    *) sed_args+=(-e 's#(^|[;&|(])([[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*(rtk[[:space:]]+)?(proxy[[:space:]]+)?dotnet[[:space:]]+test)([[:space:]]|$)#\1\2 --timeout '"$test_timeout"'\6#g') ;;
+    *) sed_args+=(-e 's#(^|[;&|(])([[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*(rtk[[:space:]]+)?((proxy|bypass)[[:space:]]+)?dotnet[[:space:]]+test)([[:space:]]|$)#\1\2 --timeout '"$test_timeout"'\7#g') ;;
   esac
 fi
-sed_args+=(-e 's#(rtk|proxy)[[:space:]]+dotnet#\1 @@RTKDOTNET@@#g')
+sed_args+=(-e 's#(rtk|proxy|bypass)[[:space:]]+dotnet#\1 @@RTKDOTNET@@#g')
 # The final check's line (`KIT_FINAL_CHECK=1`, scripts/suites-plan.py --final) streams its log raw:
 # rtk would hold the output until the end, a suite stopped at its ceiling leaving nothing.
 case "$cmd" in

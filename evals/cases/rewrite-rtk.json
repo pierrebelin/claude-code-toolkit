@@ -149,6 +149,23 @@
       }
     },
     {
+      "name": "rtk bypass dotnet test (rtk 1.0) gets the timeout and is not prefixed again",
+      "hook": "hooks/bash-dispatch.sh",
+      "input": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "rtk bypass dotnet test --project tests/X/X.csproj"
+        }
+      },
+      "expect": {
+        "decision": "none",
+        "command": "rtk bypass dotnet test --timeout 5m --project"
+      },
+      "env": {
+        "CLAUDE_DOTNET_TEST_TIMEOUT": "5m"
+      }
+    },
+    {
       "name": "the timeout goes behind test, so a trailing pipe keeps its place",
       "hook": "hooks/bash-dispatch.sh",
       "input": {

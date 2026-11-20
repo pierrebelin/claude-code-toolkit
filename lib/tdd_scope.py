@@ -384,7 +384,7 @@ def bash_write(cfg, cmd):
                 return m.group(1)
         toks = _tokens(seg)
         if toks and toks[0] == "rtk":
-            toks = toks[2:] if len(toks) > 1 and toks[1] == "proxy" else toks[1:]
+            toks = toks[2:] if len(toks) > 1 and toks[1] in ("proxy", "bypass") else toks[1:]
         if not toks:
             continue
         prog = os.path.basename(toks[0])
@@ -409,7 +409,7 @@ def bash_write(cfg, cmd):
 
 
 def _verb(command):
-    words = [w for w in command.split() if w != "rtk" and w != "proxy"]
+    words = [w for w in command.split() if w not in ("rtk", "proxy", "bypass")]
     return " ".join(words[:2])
 
 
@@ -584,7 +584,7 @@ def rerun(cfg, agent_id):
     verbs = _test_verbs(cfg)
     seg = next((s for s in reversed(_segments(cmds[-1])) if any(v in s for v in verbs)), "")
     seg = re.sub(r"^\s*(?:\S*/)?cctoolkit\s+build-lock\s+(?:--(?:wait|stale)\s+\d+\s+)*--\s+", "", seg)
-    seg = re.sub(r"^\s*rtk\s+(proxy\s+)?", "", seg)
+    seg = re.sub(r"^\s*rtk\s+(?:(?:proxy|bypass)\s+)?", "", seg)
     seg = re.sub(r"\s+[0-9]?>\s*\S+|\s+2>&1", "", seg).strip()
     if not seg:
         return None

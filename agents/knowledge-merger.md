@@ -11,6 +11,7 @@ tools:
 model: sonnet
 effort: medium
 maxTurns: 80
+omitClaudeMd: true
 ---
 
 # Knowledge merger

@@ -4,6 +4,17 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.16.1 — 2026-11-20
+
+- `cctoolkit`: the Git guard judges each command of a chain on its own: `git branch -a && git push --force` or `git worktree list; git commit` no longer pass because one segment only reads, and a worktree hand-back chained with a commit (`git add -N . && git commit`) is denied, not asked.
+- `cctoolkit`: the Git guard recognises more spellings of a mutating command: `git --no-pager` / `-P` / `--paginate` and git's other global options, `(git push)`, `$(git push)`, `bash -c 'git push'`, `sudo -u <user>`, `time`, `nohup`, `timeout`, `/usr/bin/git`. A read-only command redirected to a file (`git branch -a > f`) passes.
+- `cctoolkit`: `git.mutations` set to `allow` lets every Git command through, the worktree hand-back (`git add -N`, `git apply`) included: nothing is asked any more.
+- `cctoolkit`: the `knowledge-merger` agent starts without the repo's `CLAUDE.md` (`omitClaudeMd`): it drafts the knowledge base from the spec and its format reference only. A handler's `CLAUDE.md` still loads when it reads that folder.
+- `cctoolkit`: rtk 1.0 renamed `rtk proxy` to `rtk bypass`: the auditor's guard, the RTK rewrite, the TDD scope and `suites-plan` read both.
+- `cctoolkit`: in a worktree without its own `kit.config.json`, `cctoolkit doctor` names the `git.mutations` the Git guard reads from the main checkout's.
+- `cctoolkit`: `INSTALL.md` lists `ast-grep` among the optional tools.
+- `knowledge-pane`, `run-lot-pane`: declare `cctoolkit` as a dependency — installing the mod installs the kit (Claude Code 2.1.319 or later), disabling the kit disables the mod.
+
 ## 2.16.0 — 2026-11-11
 
 - `cctoolkit`: `git.mutations` takes `allow`: the Git guard lets a mutating Git command through without a question, Claude Code's own permissions decide (in auto mode, nothing is asked).

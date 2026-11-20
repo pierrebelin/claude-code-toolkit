@@ -19,7 +19,7 @@ if [ "${HOOK_BACKGROUND:-}" = "true" ]; then
   deny "Background command refused in the audit: run it in the foreground, the audit has nothing else to do while it runs, and polling its output costs turns (181 s measured)."
 fi
 
-grep_re='(^|[;&|(]|[[:space:]])(rtk[[:space:]]+(proxy[[:space:]]+)?)?e?grep[[:space:]]+(-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive)([[:space:]]|$)'
+grep_re='(^|[;&|(]|[[:space:]])(rtk[[:space:]]+((proxy|bypass)[[:space:]]+)?)?e?grep[[:space:]]+(-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive)([[:space:]]|$)'
 if [[ "$cmd" =~ $grep_re ]]; then
   deny "Recursive grep refused in the audit: it reads every bin/ and obj/ file (121 s measured against 3 s). Use \`git grep -n -e <pattern> -- <paths>\`, same patterns, ignored build output skipped."
 fi

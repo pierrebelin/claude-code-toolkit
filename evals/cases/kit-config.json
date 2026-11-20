@@ -342,6 +342,14 @@
         "exit": 0,
         "stdout": "dead references: 0 | unbound tests: 1   UNBOUND TEST: closed_catalog.carries_no_tag"
       }
+    },
+    {
+      "name": "validate: a worktree without its own kit.config.json names the main checkout's git.mutations",
+      "cmd": "R={{FIX}}/kw-{{SID}}; rm -rf $R $R-wt && mkdir -p $R/.claude && cd $R && git init -q && git -c user.name=eval -c user.email=eval@example.invalid -c commit.gpgsign=false commit -q --allow-empty -m init && printf '%s' '{\"git\": {\"mutations\": \"ask\"}}' > .claude/kit.config.json && git worktree add -q $R-wt && python3 {{KIT}}/lib/kit_config.py validate $R-wt | grep git.mutations; git -C $R worktree remove --force $R-wt",
+      "expect": {
+        "exit": 0,
+        "stdout": "NOTE\tgit.mutations\task — read from the main checkout's kit.config.json"
+      }
     }
   ]
 }

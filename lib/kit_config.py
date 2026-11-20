@@ -433,6 +433,21 @@ def load(root=None):
 
 
 # --- validation (tools/doctor) ---------------------------------------------------
+def _main_checkout_config(root):
+    """The main checkout's kit.config.json when root is a linked worktree that has none, else None."""
+    try:
+        common = subprocess.run(["git", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                                capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if not common or os.path.basename(common.rstrip("/\\")) != ".git":
+        return None
+    path = config_path(os.path.dirname(common.rstrip("/\\")))
+    if os.path.isfile(path) and os.path.normcase(os.path.abspath(path)) != os.path.normcase(os.path.abspath(config_path(root))):
+        return path
+    return None
+
+
 def validate(root):
     """[(level, name, detail)]; level in ok / NOTE / WARN / FAIL."""
     out = []
@@ -442,6 +457,13 @@ def validate(root):
         return [("FAIL", "kit.config.json", str(e))]
     if not os.path.isfile(config_path(root)):
         out.append(("ok", "kit.config.json", f"absent — preset {DEFAULT_PRESET} defaults (/cctoolkit:kit-init writes one)"))
+        main = _main_checkout_config(root)
+        if main:
+            try:
+                mode = json.load(open(main, encoding="utf-8")).get("git", {}).get("mutations", "deny")
+            except (OSError, ValueError, AttributeError):
+                mode = "deny"
+            out.append(("NOTE", "git.mutations", f"{mode} — read from the main checkout's kit.config.json, as lib/guard-git.sh does in a worktree without its own"))
     for k in sorted(set(cfg) - TOP_KEYS):
         out.append(("WARN", "kit.config.json", f"unknown key '{k}' — ignored (typo?); known: {', '.join(sorted(TOP_KEYS))}"))
     if "git" in cfg and not (isinstance(cfg["git"], dict) and cfg["git"].get("mutations", "deny") in ("deny", "ask", "allow")):
