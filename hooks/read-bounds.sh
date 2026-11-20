@@ -79,7 +79,7 @@ reason=$(bounds_reason \
   "Unbounded Read on $file_path ($lines lines, ${bytes:-0} bytes > $max_lines lines / $max_bytes bytes). The whole file stays in context until the session ends." \
   "$file_path" \
   "Read the range you need around one of them" \
-  "Locate the range first (graphify explain/query, grep -n), then Read with offset/limit." \
+  "Locate the range first (grep -n), then Read with offset/limit." \
   "Re-issue this exact Read to force the full read.")
 
 deny "$reason"

@@ -47,7 +47,6 @@ It **never overwrites** a file that differs: it shows the difference and asks ke
 - **Knowledge base location**: `docs/business/` by default; to put it elsewhere, set `knowledge.root` in `.claude/kit.config.json` before the first `/cctoolkit:knowledge-sync` ([`presets/README.md`](presets/README.md)).
 - **Pre-commit reminder**: `cctoolkit install-git-hooks --pre-commit` prints, at each commit, the use cases the staged changes touch and the sync to run; it never blocks ([`scripts/README.md`](scripts/README.md)).
 - **Startup trim**: [`templates/README.md`](templates/README.md#startup-trim).
-- Add `graphify-out/` to the repo's `.gitignore`.
 
 ## Dependencies
 
@@ -56,7 +55,6 @@ It **never overwrites** a file that differs: it shows the difference and asks ke
 | Tool | Used for | If missing |
 |------|----------|------------|
 | `perl` | `evals/run.sh` timer; `cctoolkit doctor` reports it `FAIL` | no latency budget in the evals |
-| `graphify` | graph autosync — `GRAPHIFY_BIN`, else the PATH, else `~/.local/bin/graphify` (set `GRAPHIFY_BIN` in the repo's settings `env` when Claude Code's PATH lacks it) | `ALERT graphify not found` in `/tmp/graphify-hook.log`, `cctoolkit doctor` reports it `FAIL` |
 | `rtk` | output compression of Bash commands | drop the `rtk ` prefix from `kit.config.json` `commands` |
 | `ast-grep` | `cctoolkit access-cost`: the COST axis read off the syntax tree (`brew install ast-grep`, or `npm install -g @ast-grep/cli`) | `cctoolkit access-cost` exits 3, the cost is stated by hand; `cctoolkit doctor` reports it `WARN` |
 | `caveman` plugin | terse output, per repo through `.caveman.json` when `/cctoolkit:kit-init` writes one; statusline badge | no effect |
@@ -67,7 +65,7 @@ Native Windows works through Git Bash, which Claude Code uses for hooks, the sta
 
 - **Python**: the python.org installer (`python`, `py`) or the Store one. The kit takes the first of `python3`, `python`, `py` that really runs Python 3.10+, so the Store's `python3` stub, which only prints an install hint, is skipped.
 - **jq**: `winget install jqlang.jq`, or Scoop or Chocolatey. The kit passes `-b` to it, because a native jq otherwise writes CRLF.
-- **Symlinks** (optional): with Developer Mode on, a worktree gets a real link to `graphify-out/`. With it off, it gets a junction, and `.claude/settings.local.json` is copied instead of linked.
+- **Symlinks** (optional): with Developer Mode on, a worktree gets a real link to `.claude/settings.local.json`. With it off, the file is copied instead of linked.
 - **Line endings**: the plugin and the `.claude/` scripts check out as LF whatever `core.autocrlf` says (`.gitattributes`), so the hooks still run on a CRLF clone.
 - **Git Bash elsewhere**: Claude Code looks for Git Bash where Git for Windows installs it. A portable or custom install → set `CLAUDE_CODE_GIT_BASH_PATH` to its `bash.exe` before starting Claude Code.
 

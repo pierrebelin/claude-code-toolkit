@@ -14,6 +14,6 @@ export type Band = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'context-band': { band: Band; now: number; isRebuilding: boolean; isExpanded: boolean }
+    'context-band': { band: Band; now: number; isExpanded: boolean }
   }
 }

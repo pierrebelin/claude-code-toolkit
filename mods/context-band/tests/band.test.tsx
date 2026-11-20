@@ -84,9 +84,6 @@ describe('pure figures', () => {
 
 const world = (on: On, tokens: number) => {
   const clock = mock.clock(on)
-  // On Windows the band asks TEMP for graphify's lock (its plugin root starts with a drive): no TEMP here.
-  on('fs.exists', () => ({ value: false }))
-  on('env.get', () => ({ value: undefined }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.messages', () => ({ value: [] }))
   on('session.usage', () => ({ value: { startedAt: 1, context: { tokens, window: 1_000_000, percent: 7 }, rateLimits: [{ kind: 'five_hour', percentUsed: 49.6 }], cost: { usd: 4.126 } } }))

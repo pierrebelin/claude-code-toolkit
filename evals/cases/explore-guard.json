@@ -7,7 +7,7 @@
         "tool_name": "Agent",
         "tool_input": {
           "subagent_type": "Explore",
-          "prompt": "graphify first",
+          "prompt": "grep first",
           "model": "haiku"
         }
       },
@@ -17,7 +17,7 @@
       }
     },
     {
-      "name": "Explore without graphify in the prompt is allowed since 2026-09-13, the contract carries the advice",
+      "name": "Explore without a locate hint in the prompt is allowed since 2026-09-13, the contract carries the advice",
       "hook": "hooks/explore-guard.sh",
       "input": {
         "tool_name": "Agent",
@@ -30,7 +30,7 @@
       },
       "expect": {
         "decision": "allow",
-        "prompt": "graphify explain|path|query"
+        "prompt": "grep scoped to one folder"
       }
     },
     {
@@ -41,7 +41,7 @@
         "tool_input": {
           "subagent_type": "Explore",
           "description": "locate X",
-          "prompt": "use graphify explain first"
+          "prompt": "locate with grep first"
         }
       },
       "expect": {
@@ -57,7 +57,7 @@
         "tool_input": {
           "subagent_type": "Explore",
           "description": "map the convention",
-          "prompt": "use graphify explain first",
+          "prompt": "locate with grep first",
           "model": "sonnet"
         }
       },
@@ -74,7 +74,7 @@
         "tool_input": {
           "subagent_type": "Explore",
           "description": "locate X",
-          "prompt": "use graphify explain first",
+          "prompt": "locate with grep first",
           "model": "haiku"
         }
       },
@@ -91,7 +91,7 @@
         "tool_input": {
           "subagent_type": "Explore",
           "description": "locate X",
-          "prompt": "use graphify explain first\n--- Report contract (explore-guard) ---\nalready here",
+          "prompt": "locate with grep first\n--- Report contract (explore-guard) ---\nalready here",
           "model": "haiku"
         }
       },
@@ -107,7 +107,7 @@
         "tool_input": {
           "subagent_type": "general-purpose",
           "description": "search",
-          "prompt": "graphify then grep"
+          "prompt": "grep then read"
         }
       },
       "expect": {
@@ -123,7 +123,7 @@
         "tool_input": {
           "subagent_type": "general-purpose",
           "description": "search",
-          "prompt": "graphify then grep",
+          "prompt": "grep then read",
           "model": "sonnet"
         }
       },
@@ -140,7 +140,7 @@
         "tool_input": {
           "subagent_type": "Plan",
           "description": "plan X",
-          "prompt": "graphify the module first"
+          "prompt": "grep the module first"
         }
       },
       "expect": {

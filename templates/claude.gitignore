@@ -11,8 +11,6 @@ settings.local.json
 __pycache__/
 *.pyc
 evals/.fixtures/
-learn-state.json
-learn-state.json.tmp
 
 # Batch worktrees of a plan run two batches at a time (cctoolkit batch-worktree), and the
 # worktrees Claude Code creates: never part of a commit.

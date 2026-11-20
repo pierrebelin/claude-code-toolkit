@@ -1,6 +1,6 @@
 """A rule sheet (`layout.ruleSheet`): its sections and its `kit:rules` table.
 
-Read by hooks/handler-claude-md-check.sh and scripts/rules-coverage.py. A section is found by its
+Read by scripts/traceability.py and scripts/rules-coverage.py. A section is found by its
 `<!-- kit:… -->` anchor, a sheet written without anchors by its exact folded title, English or French.
 """
 import re

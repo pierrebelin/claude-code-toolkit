@@ -12,9 +12,8 @@ cmd="${HOOK_CMD:-}"
 # Fast bail-out before sourcing bounds-common.sh.
 case "$cmd" in *cat*|*head*|*tail*|*sed*|*awk*) ;; *) exit 0 ;; esac
 
-LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=bounds-common.sh
-. "$LIB/bounds-common.sh"
+. "${BASH_SOURCE[0]%/*}/bounds-common.sh"
 
 # A subagent gets read-bounds' higher bar.
 max_lines=$BOUNDS_THRESHOLD max_bytes=$BOUNDS_BYTES
@@ -71,9 +70,12 @@ as_cat() {
 }
 
 # Redirecting stderr or duplicating a descriptor leaves stdout in the context: those
-# are dropped before the redirect test, and `&>` read as the `>` it is.
-cmd=$(printf '%s' "$cmd" | sed -E -e 's/[0-9]*>&[0-9-]+//g' -e 's/&>/>/g' \
-  -e 's/(^|[[:space:]])2>>?[[:space:]]*[^[:space:];&|]+//g')
+# are dropped before the redirect test, and `&>` read as the `>` it is. Every expression
+# needs a `>`: without one the sed is skipped, a fork saved on most commands.
+case "$cmd" in
+  *'>'*) cmd=$(printf '%s' "$cmd" | sed -E -e 's/[0-9]*>&[0-9-]+//g' -e 's/&>/>/g' \
+    -e 's/(^|[[:space:]])2>>?[[:space:]]*[^[:space:];&|]+//g') ;;
+esac
 
 # Split on `;` and `&` so `cd x; cat big.md` is seen as a bare `cat`.
 oversized=""
@@ -136,8 +138,9 @@ while IFS= read -r segment; do
   for arg in ${files[@]+"${files[@]}"}; do
     [ -f "$arg" ] || continue
     bounds_skip "$arg" && continue
-    n=$(wc -l < "$arg" 2>/dev/null | tr -d ' ')
-    bytes=$(wc -c < "$arg" 2>/dev/null | tr -d ' ')
+    # Lines and bytes in one wc; `read` drops its padding.
+    n="" bytes=""
+    read -r n bytes <<<"$(wc -lc < "$arg" 2>/dev/null)"
     [ -n "$n" ] || continue
     bytes=${bytes:-0}
 
@@ -190,7 +193,7 @@ while IFS= read -r segment; do
     break
   done
   [ -n "$oversized" ] && break
-done <<< "$(printf '%s' "$cmd" | tr ';&' '\n\n')"
+done <<< "${cmd//[;&]/$'\n'}"
 
 [ -n "$oversized" ] || exit 0
 
@@ -209,7 +212,7 @@ else
     "Unbounded $verb_of_hit on $oversized ($lines_of_hit lines, $bytes_of_hit bytes > $max_lines lines / $max_bytes bytes). Everything dumped stays in context until the session ends." \
     "$oversized" \
     "read the range you need with sed -n 'A,Bp' around one of them" \
-    "Locate the range first (grep -n, graphify), then read it with sed -n 'A,Bp' or Read with offset/limit." \
+    "Locate the range first (grep -n), then read it with sed -n 'A,Bp' or Read with offset/limit." \
     "Re-issue this exact command to force the full dump.")
 fi
 

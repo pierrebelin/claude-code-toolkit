@@ -3,12 +3,12 @@
 Two levels, never mixed:
 
 - **Handler folder** (`Application/{Context}/{Feature}/{Action}{Entity}/CLAUDE.md`): the use case's detailed business rules.
-- **Feature folder** (`Application/{Context}/{Feature}/CLAUDE.md`): two or three sentences — the bounded context — and, when a `DESIGN.md` exists beside it, one line naming its sections. **Nothing else**: no use-case table, no counters, no chapter body. `ls` lists the handlers, `graphify explain` finds them, and the file is auto-loaded by every `Read` under the folder, agents included.
+- **Feature folder** (`Application/{Context}/{Feature}/CLAUDE.md`): two or three sentences — the bounded context — and, when a `DESIGN.md` exists beside it, one line naming its sections. **Nothing else**: no use-case table, no counters, no chapter body. `ls` lists the handlers, `grep` finds them, and the file is auto-loaded by every `Read` under the folder, agents included.
 - **Feature design** (`Application/{Context}/{Feature}/DESIGN.md`): cross-cutting chapters (lifecycle, group scope, external contracts). Never auto-loaded; a delegation contract names the section to read, bounded.
 
 **Documentary tone** — these files are a produced artefact, read by the team. Name the exact types (`ProductItemEntity`, `ReadLimits.MAX_UNPAGINATED_RESULTS`): this is developer documentation, not a business spec.
 
-The three `##` headings are found by their anchor (`<!-- kit:rules -->`, `<!-- kit:flow -->`, `<!-- kit:events -->`) by `hooks/handler-claude-md-check.sh` and `cctoolkit rules-coverage`. The title is prose in `language.docs`; the anchor never moves.
+The three `##` headings are found by their anchor (`<!-- kit:rules -->`, `<!-- kit:flow -->`, `<!-- kit:events -->`) by `cctoolkit traceability` and `cctoolkit rules-coverage`. The title is prose in `language.docs`; the anchor never moves.
 
 ---
 

@@ -45,7 +45,7 @@ Only what differs from the chosen preset's `preset.json`, plus `language`, `pres
 }
 ```
 
-- `testTag.framework` — from `detect-stack` `testTag` when it differs from the preset's. `testTagUnsupported` set (nunit, mstest…) → keep the preset's, warn: the traceability hook will find no tag until an adapter exists in `lib/kit_testtag.py`.
+- `testTag.framework` — from `detect-stack` `testTag` when it differs from the preset's. `testTagUnsupported` set (nunit, mstest…) → keep the preset's, warn: `traceability` and `rules-coverage` will find no tag until an adapter exists in `lib/kit_testtag.py`.
 - `commands.build` — preset's empty and a stack known → propose one in the summary (§6): `dotnet build <sln> --no-restore`, `npm run build --if-present`, `mvn -q compile`, `./gradlew compileJava`, `cargo build --all-targets`; Python: none. Rust, `commands.test` → `cargo test --test {suite}`, one test crate per suite (`tests/unit/main.rs`).
 - `layout` overrides — only from §4, or when a `presets[].sourceRoots` / `testRoots` of the chosen preset is empty while the tree has the equivalent folder: name it, override that key alone.
 
@@ -82,7 +82,7 @@ Source: `$(cctoolkit root)/templates/`. Edit with the Edit tool, never a script:
 
 ## 6. Doctor and report
 
-First, the mechanical fixes doctor asked for in §1, one message: `FAIL git post-checkout hook` → `cctoolkit install-git-hooks`; `FAIL graphify graph` with `binary graphify` ok → `graphify update .` (~60 s, `run_in_background`; the graph is written only when `graphify-out/graph.json` exists afterwards). A call refused → its `!` line in the report, no retry.
+First, the mechanical fixes doctor asked for in §1, one message: `FAIL git post-checkout hook` → `cctoolkit install-git-hooks`. A call refused → its `!` line in the report, no retry.
 
 Then `cctoolkit doctor`. Then one summary:
 

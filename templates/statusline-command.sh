@@ -49,32 +49,7 @@ if [ ! -L "$FLAG" ] && [ -f "$FLAG" ]; then
   esac
 fi
 
-# --- Graphify freshness badge ---
-# Cached read (20s TTL on the helper side), ~10ms warm.
-graphify_badge=""
-# The helper ships in the cctoolkit plugin, whose cache directory changes with each
-# version: take the newest one. A copy predating the plugin kept it in .claude/lib/.
-project=$(echo "$input" | jq -r '.workspace.project_dir // empty')
-[ -n "$project" ] || project="$cwd"
-FRESH_SCRIPT=$(ls -t "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/cctoolkit/*/lib/graphify-freshness.sh 2>/dev/null | head -1)
-[ -n "$FRESH_SCRIPT" ] || FRESH_SCRIPT="$project/.claude/lib/graphify-freshness.sh"
-if [ -f "$FRESH_SCRIPT" ]; then
-  stale=$(GRAPHIFY_REPO="$project" bash "$FRESH_SCRIPT" --count 2>/dev/null)
-  case "$stale" in
-    ''|*[!0-9-]*) ;;
-    -1) graphify_badge=$(printf '\033[31m[graph missing]\033[0m') ;;
-    0)  ;;
-    *)
-      if [ "$stale" -ge 25 ]; then
-        graphify_badge=$(printf '\033[31m[graph +%s]\033[0m' "$stale")
-      else
-        graphify_badge=$(printf '\033[33m[graph +%s]\033[0m' "$stale")
-      fi
-      ;;
-  esac
-fi
-
-# --- Line 1: git branch | model | caveman badge | graphify badge ---
+# --- Line 1: git branch | model | caveman badge ---
 line1=""
 if [ -n "$git_branch" ]; then
   line1=$(printf '(%s)' "$git_branch")
@@ -87,8 +62,5 @@ if [ -n "$effort" ]; then
 fi
 if [ -n "$caveman_badge" ]; then
   line1="${line1} ${caveman_badge}"
-fi
-if [ -n "$graphify_badge" ]; then
-  line1="${line1} ${graphify_badge}"
 fi
 printf '%s' "$line1"

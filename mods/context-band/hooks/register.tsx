@@ -25,8 +25,6 @@ const FIVE_HOUR = 'five_hour'
 const HINT_INDENT = 4
 const CHARS_PER_TOKEN = 4
 const TICK_MS = 15_000
-const GRAPHIFY_LOCK = '/tmp/graphify-autosync.lock'
-const GRAPHIFY_LOCK_NAME = 'graphify-autosync.lock'
 const HOOKS_LABEL = 'hook reminders'
 const TEXT_LABEL = 'text'
 
@@ -44,7 +42,6 @@ const EMPTY: Band = {
 
 const band = atom({ plugin: 'context-band', key: 'band' } as const, EMPTY)
 const now = atom({ plugin: 'context-band', key: 'now' } as const, 0)
-const isRebuilding = atom({ plugin: 'context-band', key: 'isRebuilding' } as const, false)
 const isExpanded = atom({ plugin: 'context-band', key: 'isExpanded' } as const, false)
 
 const complete = (stored: Band): Band => ({ ...EMPTY, ...stored })
@@ -229,15 +226,9 @@ export const register: Register = on => {
   let pending: { label: string; tokens: number }[] = []
 
   on('session.start', async ($, e, next) => {
-    // graphify-autosync.sh takes its lock in Git Bash's /tmp, which on Windows is
-    // %TEMP%: the engine would read `/tmp` as `C:\tmp`.
-    const temp = /^[A-Za-z]:/.test($.plugin.root) ? await $.env.get('TEMP') : undefined
-    const lock = temp === undefined ? GRAPHIFY_LOCK : `${temp}\\${GRAPHIFY_LOCK_NAME}`
     const tick = async () => {
       const at = await $.clock.now()
       await update($, now, () => at)
-      const isLocked = await $.fs.exists(lock)
-      await update($, isRebuilding, () => isLocked)
     }
     $.clock.every(TICK_MS, () => void tick())
     await tick()
@@ -390,7 +381,6 @@ async function desktopView(
   const percent = state.window > 0 ? Math.round((tokens * 100) / state.window) : null
   const stepTone = tokenTone(tokens)
   const cache = isWorking ? null : cacheState(state.lastTurnAt, at, tokens)
-  const rebuilding = await read($, isRebuilding)
   const grouping = state.streak >= STREAK_SHOWN
   const limit = state.fiveHour
   const resetIn = limit?.resetsAt == null || limit.resetsAt <= at ? null : span(limit.resetsAt - at)
@@ -436,7 +426,6 @@ async function desktopView(
       <Text key="cache" size="footnote" tabular color={cacheTone} dimColor={cacheTone === undefined}>{cache.label}</Text>,
     ])]),
     ...(grouping ? [metric('streak', [<Text key="streak" size="footnote" color="warning">{`${state.streak} single-call turns`}</Text>])] : []),
-    ...(rebuilding ? [metric('graph', [<Text key="graph" size="footnote" dimColor>graph rebuilding</Text>])] : []),
     metric('session', [
       <Text key="session" size="footnote" tabular dimColor>
         {`${span(at - state.startedAt)} · ${state.turn} turn${state.turn > 1 ? 's' : ''}`}
@@ -503,7 +492,6 @@ async function contextView(
   const color = tokenColor(tokens)
   const cache = isWorking ? null : cacheState(state.lastTurnAt, at, tokens)
   const cacheColor = cache?.color === undefined ? undefined : THEMED[cache.color]
-  const rebuilding = await read($, isRebuilding)
   const grouping = state.streak >= STREAK_SHOWN
   const limit = state.fiveHour
   const resetIn = limit?.resetsAt == null || limit.resetsAt <= at ? null : span(limit.resetsAt - at)
@@ -557,7 +545,6 @@ async function contextView(
                 </Text>
               )}
               {grouping && <Text key="grouping" color="warning">{`${GROUP}${state.streak} single calls`}</Text>}
-              {rebuilding && <Text key="graph" dimColor>{`${GROUP}graph rebuilding`}</Text>}
               <Text dimColor>{GROUP}{span(at - state.startedAt)} · {state.turn} turn{state.turn > 1 ? 's' : ''}</Text>
               {state.cost !== null && <Text dimColor> · </Text>}
               {state.cost !== null && <Text>{dollars(state.cost)}</Text>}

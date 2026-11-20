@@ -1,7 +1,8 @@
 #!/bin/bash
 # SessionStart hook — reset the per-session escape hatches, purge the leftovers.
 # Drops this session's files (glob: per-agent names carry a suffix) and purges
-# anything older than 2 days.
+# anything older than 2 days. SessionStart also fires on compact and resume of the
+# same session: the batching reminder's mark (KEEP) stays, one reminder per session.
 set -u
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
@@ -9,7 +10,9 @@ case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;;
 sid=$(cat 2>/dev/null | jq -r '.session_id // "unknown"' 2>/dev/null || echo unknown)
 
 # Every family a hook or the statusline writes under claude-<prefix>-<session>.
-PREFIXES="readbounds-seen catbounds-seen diffbounds-seen knowledge-seen batching-nudge batching-tick clearnudge runnotes implement-tdd-guard implement-tdd-effort effort"
+# tools/doctor reads this line: its /tmp check counts these families only.
+PREFIXES="readbounds-seen catbounds-seen diffbounds-seen knowledge-seen batching-nudge batching-tick runnotes implement-tdd-guard implement-tdd-effort effort"
+KEEP="batching-nudge"
 
 # Also ${TMPDIR} (macOS: /var/folders/...), where the effort state is written; deduplicated.
 DIRS="/tmp"
@@ -17,6 +20,7 @@ DIRS="/tmp"
 
 for dir in $DIRS; do
   for prefix in $PREFIXES; do
+    case " $KEEP " in *" $prefix "*) continue ;; esac
     rm -f "$dir/claude-${prefix}-$sid"* 2>/dev/null
   done
 done

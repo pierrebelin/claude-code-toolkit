@@ -24,7 +24,15 @@ if [[ "$cmd" =~ $grep_re ]]; then
   deny "Recursive grep refused in the audit: it reads every bin/ and obj/ file (121 s measured against 3 s). Use \`git grep -n -e <pattern> -- <paths>\`, same patterns, ignored build output skipped."
 fi
 
-. "$(dirname "${BASH_SOURCE[0]}")/project-root.sh"
+# No marker of any repository: nothing below can deny. A bash glob, no fork, before the
+# project root, the worktree and the hash of the marker's own folder are worked out.
+if [ -z "${HOOK_SUITES_MARKER:-}" ]; then
+  tmp="${TMPDIR:-/tmp}"
+  any=("${tmp%/}"/cctoolkit-run/*/*/suites-green)
+  [ -e "${any[0]}" ] || exit 0
+fi
+
+. "${BASH_SOURCE[0]%/*}/project-root.sh"
 root="$(cd "$PROJECT_ROOT" 2>/dev/null && pwd -P)" || exit 0
 # An auditor of a batch run in a linked worktree (run-lot's `root`) opens each call with `cd <worktree> &&`:
 # its marker and its tree are that worktree's, when its `.git` file points into this repository.

@@ -1,19 +1,60 @@
 {
-  "hooks": ["hooks/bash-dispatch.sh"],
+  "hooks": [
+    "hooks/bash-dispatch.sh"
+  ],
   "agents": {
     "main": {},
-    "implementer": {"agent_id": "a1", "agent_type": "cctoolkit:tdd-implementer"},
-    "auditor": {"agent_id": "a2", "agent_type": "cctoolkit:ddd-tdd-auditor"}
+    "implementer": {
+      "agent_id": "a1",
+      "agent_type": "cctoolkit:tdd-implementer"
+    },
+    "auditor": {
+      "agent_id": "a2",
+      "agent_type": "cctoolkit:ddd-tdd-auditor"
+    }
   },
   "payloads": {
-    "ls-src": {"command": "ls src"},
-    "echo-hi": {"command": "echo hi"},
-    "bash-script": {"command": "cd src && bash build.sh \"x y\""},
-    "git-status": {"command": "git status"},
-    "cat-readme": {"command": "cat README.md"},
-    "dotnet-test": {"command": "dotnet test x.csproj"},
-    "graphify-query": {"command": "graphify query \"x\""},
-    "git-grep": {"command": "git grep -n foo"}
+    "ls-src": {
+      "command": "ls src"
+    },
+    "echo-hi": {
+      "command": "echo hi"
+    },
+    "bash-script": {
+      "command": "cd src && bash build.sh \"x y\""
+    },
+    "git-status": {
+      "command": "git status"
+    },
+    "cat-readme": {
+      "command": "cat README.md"
+    },
+    "dotnet-test": {
+      "command": "dotnet test x.csproj"
+    },
+    "git-grep": {
+      "command": "git grep -n foo"
+    },
+    "cat-big": {
+      "command": "cat src/Big.cs"
+    },
+    "sed-range": {
+      "command": "sed -n '1,50p' src/Big.cs"
+    },
+    "head-pipe": {
+      "command": "git log --oneline 2>&1 | head -5"
+    },
+    "cd-tail": {
+      "command": "cd src && tail -n 20 Big.cs"
+    },
+    "git-diff": {
+      "command": "git diff"
+    }
   },
-  "shape": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": "{{ROOT}}", "transcript_path": "{{ROOT}}/.transcript.jsonl"}
+  "shape": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "cwd": "{{ROOT}}",
+    "transcript_path": "{{ROOT}}/.transcript.jsonl"
+  }
 }

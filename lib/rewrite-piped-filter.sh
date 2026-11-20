@@ -1,7 +1,6 @@
 #!/bin/bash
 # bash-dispatch module — append a local stdout filter to a command RTK does not
-# know how to shrink. Profiles, tested in this order: `graphify query` (graphify-query-filter.sh),
-# `git grep` (git-grep-filter.sh). Fires when the LAST segment of a line of the command is
+# know how to shrink. Profile: `git grep` (git-grep-filter.sh). Fires when the LAST segment of a line of the command is
 # a bare match; any pipe, redirect or substitution leaves it alone (raw output: `| cat`).
 # Reads HOOK_INPUT / HOOK_CMD, prints the hook JSON when it rewrites. No fork before it decides.
 set -u
@@ -25,13 +24,8 @@ last_segment_matches() {
   return 1
 }
 
-for profile in graphify-query git-grep; do
+for profile in git-grep; do
   case "$profile" in
-    graphify-query)
-      trigger='^[[:space:]]*graphify[[:space:]]+query[[:space:]]'
-      filter=graphify-query-filter.sh
-      label="graphify query filter"
-      ;;
     git-grep)
       trigger='^[[:space:]]*git[[:space:]]+grep[[:space:]]'
       filter=git-grep-filter.sh

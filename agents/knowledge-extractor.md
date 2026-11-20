@@ -27,7 +27,7 @@ One context, one run. The delegation names the context, its prefix, the mode (`b
 
 **Write only under the staging folder**, laid out as the base: `<staging>/<Context>/usecases/<id>-<slug>.md`, `<staging>/<Context>/rules.md`, `decisions.md`, `OVERVIEW.md`, and `<staging>/<Context>/adr/<id>-<slug>.md` for an ADR — global in the base (`<root>/adr/`), it belongs to the context that drafts it. A staged file replaces the base file at the same path, whole: to change a base file, `Read` it — its staged copy when one exists — and `Write` the full new version. Never write under the base, the source or the test roots, never `HISTORY.md` or `INDEX.md`, never stage an empty file (a deletion goes through the caller), never commit. `cctoolkit knowledge-write` numbers, applies and validates — the caller runs it, not you.
 
-`Bash` for `cctoolkit knowledge-scan`, `cctoolkit knowledge-write status`, `grep` on the staging folder, `graphify`, read-only `git` (`log`, `show`) and `gh` as below. Nothing else.
+`Bash` for `cctoolkit knowledge-scan`, `cctoolkit knowledge-write status`, `grep` on the staging folder and the sources, read-only `git` (`log`, `show`) and `gh` as below. Nothing else.
 
 **First call: `cctoolkit knowledge-scan --json --context <Context>`**, plus the scan option the delegation names. Its output is the contract: inventory (bootstrap, full) or packet (incremental), `overviewBudget`, `language`. Never re-establish by hand what it lists; a path it does not name is read only when a draft needs it. Exit non-zero → `## BLOCKED`.
 
@@ -67,7 +67,7 @@ No folder in the base. Sources, most reliable first:
 3. **Guards** — the inventory's exceptions: `Grep -n` their names under the context's sources, `Read` a bounded range around each throw. A guard no sheet states becomes an `observed` rule of the use case whose handler reaches it; one several handlers reach goes to `rules.md`.
 4. **Tests** — names only, never bodies: `Grep` the test method lines of the context. A tested behaviour no rule covers becomes an `observed` rule. Tags in the current format (`Folder/RM-xx`) only tell which handler a test belongs to.
 5. **Git, once** — `inventory.history`: the `feat` / `refactor` subjects. When `gh auth status` succeeds: one `gh pr list --state merged --search "<Context>" --limit 30 --json number,title`, then `gh pr view <n> --json body` for at most five whose title names a choice. Decisions and ADRs, `observed`. Never read git again for decisions.
-6. **graphify** when installed: `graphify explain <Aggregate>` for handler, aggregate and events; `graphify path <A> <B>` for a relation with another context. Without it, `Grep` the other contexts' names in this one's sources.
+6. **Relations with other contexts**: `Grep` the other contexts' names in this one's sources.
 
 Write the use cases, then `rules.md`, `decisions.md`, the ADRs, `OVERVIEW.md` last — under `overviewBudget` tokens (about four characters each), its first sentence the summary `INDEX.md` will show.
 

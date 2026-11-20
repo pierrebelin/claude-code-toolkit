@@ -22,7 +22,15 @@ while IFS= read -r seg; do
     *) continue ;;
   esac
 
-  sub=$(printf '%s' "$seg" | awk '{for (i=2; i<=NF; i++) if ($i !~ /^-/) {print $i; exit}}')
+  # The first word after `git` that is not an option, without a fork: set -f, no glob expansion.
+  sub=""
+  set -f
+  set -- $seg
+  set +f
+  shift
+  for w in "$@"; do
+    case "$w" in -*) ;; *) sub=$w; break ;; esac
+  done
   case "$sub" in
     diff|show|log) ;;
     *) continue ;;
@@ -44,7 +52,7 @@ while IFS= read -r seg; do
   hit="$seg"
   hit_lines="$changed"
   break
-done <<< "$(printf '%s' "$cmd" | tr ';&' '\n\n')"
+done <<< "${cmd//[;&]/$'\n'}"
 
 [ -n "$hit" ] || exit 0
 

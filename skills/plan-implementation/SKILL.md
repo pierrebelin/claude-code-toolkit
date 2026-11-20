@@ -33,7 +33,6 @@ Plan split by feature, not layer:
    The section is found by its anchor, or by the title of a spec written before the anchors (`## 12. Questions ouvertes`, severity `Bloquant`). Any line before `--- headings` → **stop**: list them, end with `→ Open blocking questions: /business-spec to settle them.` No plan while a `Blocking` is open — same contract as `## BLOCKED` in a batch, moved before design. The headings give step 1 the bounded context, the aggregate and the `kit:modified` ids.
 1. **Inventory in the background, reads beside it.** A `Read` under `src/` or `tests/` attaches layer rules to every later turn: the bounded context is inventoried by delegation. Gate passed → one message holding:
    - one `Explore` subagent, `model: sonnet`, `run_in_background: true`, the prompt below (the inventory includes local conventions);
-   - `graphify explain "<Aggregate>"`;
    - with a knowledge base, `cctoolkit ask --id <id>,<id>…` on the spec's `kit:modified` ids;
    - `Read` of the spec, `references/ddd-rules.md`, `references/architecture-rules.md`, `references/plan-template.md`;
    - the `Naming` and `Folder layout` tables — bounded extract, never a full rule file, never a file under `src/`, a few dozen lines:
@@ -59,7 +58,7 @@ Plan split by feature, not layer:
 
    Its result comes back as a notification: never wait on it, never search under `src/` or `tests/` for what it returns. Meanwhile, the spec against the rules. Its business decisions (`kit:decisions`) are inputs: a technical choice that would contradict one → AskUserQuestion. Its technical points (`kit:technical-points`) are the questions this plan answers, each in a sheet (step 3.4). Each rule id → applied in the owning batch sheet (`## Design`), or listed once in global plan `1. Scope` as `N/A — reason`; `references/ddd-examples.md` only if an id is ambiguous. Inventory back → a search only for an item it leaves empty, one call per gap.
 2. You open only the folder `CLAUDE.md` of the handler owning the same business act, its `kit:rules` table — rewrite vs twin = your call. Inventory → "1. Scope > Reuse"; its items 5 and 6 → the `full` and `ripple` of the cycles that change those literals and methods.
-3. Blast radius per existing type modified: one `graphify affected "<Type>"` per aggregate, VO, domain interface already in `src/`; new type: skip. Roll up per project (`grep -oE '(src|tests)/[^/]+' | sort | uniq -c | sort -rn`), never paste file:line. Rollup → "1. Scope" as measured cost; drives split (step 2) — radius over four test projects = own batch.
+3. Blast radius per existing type modified: one `grep -rlw "<Type>" <src roots> <test roots>` per aggregate, VO, domain interface already in `src/`; new type: skip. Roll up per project (`grep -oE '(src|tests)/[^/]+' | sort | uniq -c | sort -rn`), never paste file:line. Rollup → "1. Scope" as measured cost; drives split (step 2) — radius over four test projects = own batch.
 4. Blocking technical ambiguity → AskUserQuestion before planning (≤4 decisions/call, recommended answer first).
 5. Technical challenge — ≤3 AskUserQuestion questions, only if answer removes work:
    - Ship without new type, service, endpoint, table?

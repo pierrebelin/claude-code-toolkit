@@ -94,8 +94,8 @@ def after_denial(name, command, payload, refused):
         return "whole Read of another file"
     if name == "Bash":
         head = command.strip()
-        if re.match(r"^(sed -n|head |tail |grep |rg |git grep|graphify |rtk )", head):
-            return "bounded Bash (sed -n, head, grep, graphify)"
+        if re.match(r"^(sed -n|head |tail |grep |rg |git grep|rtk )", head):
+            return "bounded Bash (sed -n, head, grep)"
         if head.startswith("cat "):
             return "cat"
         return "other Bash"

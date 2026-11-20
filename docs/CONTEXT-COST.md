@@ -19,7 +19,7 @@ bounded. Re-measure per repo with `dev/turn-batching-check.py` before quoting th
   the **same** `Read` verbatim lets it through: that is how you force a full read when you
   genuinely want one. The pass belongs to the agent that asked for it — a subagent's forcing no
   longer exempts its siblings or the main chain.
-- Locate first (`graphify`, `grep -n`), then read the range.
+- Locate first (`grep -n`), then read the range.
 - 3 files or more to go through → subagent: its reads stay in its own context, only the
   conclusion comes back.
 
@@ -65,7 +65,9 @@ budget.
 other, in two turns, pay the accumulation twice. A turn = one billed round trip, not one call.
 Measured on one .NET batch: 110 of 124 tool-carrying turns held a single call, and the three
 heaviest cost lines of that session all scale with the turn count — hence the nudge of
-`lib/batching-nudge.sh` after 6 mono-call turns in a row.
+`lib/batching-nudge.sh` after 6 mono-call turns in a row. Once per session: `hooks/session-cleanup.sh` keeps its
+mark when `SessionStart` fires again on a compact or a resume (2026-11-20, two repos, 60 days:
+235 reminders, 21 of 193 sessions reminded twice or more, 1.07 to 1.19 calls per turn).
 
 Since 2026-10-09 the generic line ("one turn = one billed round trip") is gone from
 `context-discipline.md` and the agents: the harness system prompt already asks for it. What
@@ -123,6 +125,8 @@ regression.
 - `/clear` on a phase change — the only mechanism that throws away the accumulated tail. Within
   the hour, the head (system prompt, tools, CLAUDE.md) is read back from cache instead of being
   rewritten.
+  No hook reminds of it: `clear-nudge.sh` went in 2.17.0 (113 reminders over 60 days, not one
+  `/clear` in the two actions that followed).
 - `/branch` before an uncertain exploration: a 30-turn dead end abandoned in a branch is never
   carried by the trunk.
 - `/fork` reduces nothing — it copies the conversation into a background session. A throughput

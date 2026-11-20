@@ -53,7 +53,7 @@ One table, one pass, over the batch diff. A green test proves nothing here. Ids 
 | Plan | RM/CU with no code owner. Unit test without its `[Trait("RM", "{HandlerFolder}/{RM\|RL-xx}")]`, integration test proving a documented rule without it, trait citing rule absent from handler table, or a contract or E2E test carrying one. Id missing from coverage; `N/A` without reason; id applied with no owner. TDD evidence: a cycle of the capture's `TDD cycles` section without an observed RED (exit ≠ 0) before its GREEN, or a sheet without `## Cycles` whose `TDD:` ticks claim what nothing observed — **except** declarative artifacts listed in `common-rules.md` §4.5, written by orchestrator with no red before them (assumed, not deviation, as long as they carry no branch, validation or mapping decision), and methods a RED listed as unreachable. A `stubs with logic` line of the capture is a stub the RED check saw carrying a branch: code written before its test unless the line is pure declaration — judge it, Blocking when it is. A decision the run took without the user is listed by the caller for the user to validate (`TO-VALIDATE.md`): never a deviation for being absent from the sheet. | RM/CU or id, and where evidence is missing. |
 | Scope | Diff hunk with no RM/CU nor sheet step carrying it. Refactor, renaming, reformatting, reorganisation of working code batch had no reason to touch. Adjacent bug fixed outside batch RM/CU. Unrequested removal of pre-existing dead code or comment outside touched lines. Flexibility, configurability or abstraction with no expressed need. | Hunk as `path:line` + missing RM/CU or sheet step. Line required by delivered behaviour — propagated signature, DI registration, newly necessary `using` — is traced: not deviation. |
 
-Locating the existing element behind a `Reuse` or `Placement` deviation: `graphify explain|affected "X"` first, `grep -rn` scoped to the layer folder otherwise.
+Locating the existing element behind a `Reuse` or `Placement` deviation: `grep -rnw "X"` scoped to the layer folder.
 
 **Bug class** — a Correctness, Cost or Placement deviation is a pattern, not a line. Before reporting it, `git grep -n` that pattern over the files the batch changed: every instance goes in the same gap, `Evidence` listing each `path:line`, `Closure` covering them all. Fixed one instance at a time, the class comes back each round.
 
@@ -92,7 +92,7 @@ Verdict `GAPS` as soon as Blocking or Major exists. Minors listed under `VALID` 
 
 ## Verdict
 
-Verdict block alone, no preamble, no recap of plan, files or logs; on failure ≤6 useful lines of the command output. Ceiling **1.5 kB for `VALID`, 3 kB for `GAPS`** — the calling session carries it every later turn. Headings, severities and axis labels are frozen literals (`learn-candidates.py` parses them). End with one of these two formats, verbatim:
+Verdict block alone, no preamble, no recap of plan, files or logs; on failure ≤6 useful lines of the command output. Ceiling **1.5 kB for `VALID`, 3 kB for `GAPS`** — the calling session carries it every later turn. Headings, severities and axis labels are frozen literals (`run-lot` parses them). End with one of these two formats, verbatim:
 
 ```markdown
 ## Verdict — VALID

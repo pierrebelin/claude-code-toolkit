@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# PostToolUse hook (Edit|Write): checks the business-rule <-> test traceability.
-# Rules table (`kit:rules`) of each rule sheet vs the `<SheetFolder>/<RM|RL-xx>` tags the
-# tests carry (`testTag` adapter): reports untested rules and orphan tests. A tag counts
-# in every suite; only `layout.tests.bound` suites must tag every test.
-# Missing python3, lib or broken config: silent, exit 0. Warning only, through
-# additionalContext: plain stdout on PostToolUse never reaches the model.
+# PostToolUse hook (Edit|Write): the reminder of a use-case folder without its rule sheet.
+# A source file edited under a use-case root, in a folder the layout marks as a use case
+# (`layout.useCase.marker`) holding no rule sheet (`layout.ruleSheet`): one line of
+# additionalContext asking for the sheet. The rules <-> tests report runs at the end of a
+# batch instead (`cctoolkit traceability`, called by `cctoolkit pre-audit`).
+# Missing python3, lib or broken config: silent, exit 0. Plain stdout on PostToolUse never
+# reaches the model: the reminder goes through additionalContext.
 
 case "${BASH_SOURCE[0]}" in *\\*) exec "$BASH" "${BASH_SOURCE[0]//\\//}" "$@" ;; esac # Windows: lib/platform.sh
 INPUT=$(cat)
@@ -13,14 +14,17 @@ INPUT=$(cat)
 case "$INPUT" in *'"file_path"'*) ;; *) exit 0 ;; esac
 . "${BASH_SOURCE[0]%/*}/../lib/platform.sh"
 
-# Outside every use-case and test root, per the scope cache: no Python.
+# Per the scope cache, no Python: a file outside every use-case root, or one whose folder
+# already holds its rule sheet (the sheet itself included), leaves nothing to remind.
 . "${BASH_SOURCE[0]%/*}/../lib/scope-cache.sh" 2>/dev/null || { scope_file_of() { return 1; }; scope_outside() { return 1; }; }
-scope_file_of "$INPUT" && scope_outside "$SCOPE_FILE" uc test && exit 0
+if scope_file_of "$INPUT"; then
+  scope_outside "$SCOPE_FILE" uc && exit 0
+  [ -n "${SCOPE_SHEET:-}" ] && [ -f "${SCOPE_FILE%/*}/$SCOPE_SHEET" ] && exit 0
+fi
 
 KIT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)"
 [ -n "$KIT_LIB" ] || exit 0
 
-# One python for parse + check.
 HOOK_INPUT="$INPUT" KIT_LIB="$KIT_LIB" python3 <<'PYEOF' 2>/dev/null
 import json, os, sys
 
@@ -34,12 +38,11 @@ if not raw:
 
 sys.path.insert(0, os.environ["KIT_LIB"])
 try:
-    import kit_config, kit_testtag
-    from rule_sheet import SHAPE, rule_rows, shape_issues
+    import kit_config
+    from rule_sheet import SHAPE
     # A file of a linked worktree (a batch run beside another) is judged against that worktree.
     wt = kit_config.worktree_of(raw)
     C = kit_config.load(wt or kit_config.project_root())
-    AD = kit_testtag.adapter(C)
 except Exception:
     sys.exit(0)
 if not wt:
@@ -48,147 +51,26 @@ if not wt:
     except Exception:
         pass
 
-ROOT = C.root
-SHEET = C.rule_sheet
-
 raw = kit_config._native(raw)
-target = raw if os.path.isabs(raw) else os.path.join(ROOT, raw)
-target = os.path.normpath(target)
-
-in_app = C.under(target, C.use_case_roots) is not None
-in_tests = C.under(target, C.test_roots) is not None
-if not (in_app or in_tests):
+target = os.path.normpath(raw if os.path.isabs(raw) else os.path.join(C.root, raw))
+if C.under(target, C.use_case_roots) is None or not C.is_source(target):
     sys.exit(0)
-is_sheet = os.path.basename(target) == SHEET
-is_test = in_tests and AD.is_test_file(target)
-if not (is_sheet or is_test or (in_app and C.is_source(target))):
+if os.path.basename(target) == C.rule_sheet:
     sys.exit(0)
-
-
-def read(path):
-    with open(path, encoding="utf-8", errors="ignore") as fh:
-        return fh.read()
-
-
-is_handler_dir = C.is_use_case_dir
-
-
-# --- Index 1: rules declared in the rule sheets -------------------------------
-# rules[sheet] = [(rule_id, label), ...]  ;  prefix_of[sheet] = folder name
-rules, prefix_of = {}, {}
-all_md = set()
-for base, files in C.walk(C.use_case_roots):
-    if SHEET not in files:
-        continue
-    md = os.path.join(base, SHEET)
-    rows, empty_ok = rule_rows(read(md))
-    if rows or empty_ok:
-        rules[md] = rows
-        prefix_of[md] = os.path.basename(base)
-    # A feature or root CLAUDE.md is an index: no fixed structure to check.
-    # Keep a handler folder, plus any shared folder declaring rules.
-    if md in rules or is_handler_dir(base):
-        all_md.add(md)
-        prefix_of.setdefault(md, os.path.basename(base))
-
-declared = {f"{prefix_of[md]}/{rid}" for md, rows in rules.items() for rid, _ in rows}
-
-# --- Index 2: tags placed on the tests --------------------------------------
-# methods[Class.Method] = (path, class, [values], binding required)
-# traits[value] = [Class.Method, ...]
-methods, traits = {}, {}
-for t, bound in kit_testtag.scan_tree(C, AD):
-    methods[t.key] = (t.path, t.cls, t.tags, bound)
-    for v in t.tags:
-        traits.setdefault(v, []).append(t.key)
-
-# Windows: payload and walked paths may differ by case; compare the walked spelling.
-if os.name == "nt":
-    walked = {os.path.normcase(p): p for p in all_md} | {os.path.normcase(p): p for p, _, _, _ in methods.values()}
-    target = walked.get(os.path.normcase(target), target)
-
-def tell(text):
-    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}},
-                     ensure_ascii=False))
-
-
-# --- Report scope ------------------------------------------------------------
-focus = set()
-if is_sheet:
-    if target in all_md:
-        focus.add(target)
-elif not is_test:
-    d = os.path.dirname(target)
-    md = os.path.join(d, SHEET)
-    if md in all_md:
-        focus.add(md)
-    elif is_handler_dir(d):
-        rel = os.path.relpath(d, C.root_of(d, C.use_case_roots)).replace(os.sep, "/")
-        tell(f"Reminder: no {SHEET} in {rel} — create one ({SHAPE}).")
+if C.under(target, C.test_roots) is not None:
+    try:
+        import kit_testtag
+        if kit_testtag.adapter(C).is_test_file(target):
+            sys.exit(0)
+    except Exception:
         sys.exit(0)
-    else:
-        sys.exit(0)
-else:
-    # test file: walk up to the CLAUDE.md files whose prefix a trait of this file carries
-    prefixes = {v.split("/")[0] for k, (p, _, carried, _) in methods.items() if p == target for v in carried}
-    for md in rules:
-        if prefix_of[md] in prefixes:
-            focus.add(md)
-    if not focus:
-        untagged = sorted(k for k, (p, _, carried, bound) in methods.items()
-                          if p == target and bound and not carried)
-        if untagged:
-            tell("Tests with no `RM` trait: " + ", ".join(untagged[:5]))
-        sys.exit(0)
-
-if not focus:
+d = os.path.dirname(target)
+if os.path.isfile(os.path.join(d, C.rule_sheet)) or not C.is_use_case_dir(d):
     sys.exit(0)
-
-# --- Report ------------------------------------------------------------------
-out = []
-for md in sorted(focus):
-    rel_md = os.path.relpath(md, ROOT).replace(os.sep, "/")
-    if md not in rules:
-        issues = shape_issues(read(md))
-        detail = (" — " + " ; ".join(issues)) if issues else ""
-        out.append(f"{rel_md}: no rules table — fixed shape: title + description, {SHAPE}{detail}.")
-        continue
-
-    prefix = prefix_of[md]
-    untested = [rid for rid, _ in rules[md] if f"{prefix}/{rid}" not in traits]
-    stale = sorted(v for v in traits if v.split("/")[0] == prefix and v not in declared)
-
-    shared = sorted(f"{k} ({', '.join(carried)})" for k, (_, _, carried, _) in methods.items()
-                    if len([v for v in carried if v.split("/")[0] == prefix]) > 1)
-
-    # A test bound to another handler is not an orphan here.
-    md_classes = {methods[k][1] for v in traits if v.split("/")[0] == prefix for k in traits[v]}
-    orphans = sorted(k for k, (_, cls, carried, bound) in methods.items()
-                     if bound and cls in md_classes and not carried)
-
-    # The fixed shape only applies to a handler folder, not a shared one.
-    lines = shape_issues(read(md)) if is_handler_dir(os.path.dirname(md)) else []
-    lines = [f"  {i}" for i in lines]
-    if untested:
-        lines.append(f"  rules with no test: {', '.join(untested)}")
-    if stale:
-        lines.append(f"  traits citing a rule absent from the table: {', '.join(stale[:5])}")
-    if orphans:
-        lines.append(f"  tests with no `RM` trait: {', '.join(orphans[:5])}" + (f" (+{len(orphans)-5})" if len(orphans) > 5 else ""))
-    if shared:
-        lines.append(f"  test shared by several rules: {'; '.join(shared[:3])}")
-    if lines:
-        out.append(f"{rel_md}\n" + "\n".join(lines))
-    elif not is_sheet:
-        out.append(f"{rel_md}: rules/tests traceability up to date.")
-
-if out:
-    msg = ["Rules ↔ tests traceability", "\n".join(out)]
-    total_untested = sum(1 for md, rows in rules.items() for rid, _ in rows
-                         if f"{prefix_of[md]}/{rid}" not in traits)
-    if total_untested:
-        msg.append(f"({total_untested} rules with no test across {C.use_case_label})")
-    tell("\n".join(msg))
+rel = os.path.relpath(d, C.root_of(d, C.use_case_roots)).replace(os.sep, "/")
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
+                  "additionalContext": f"Reminder: no {C.rule_sheet} in {rel} — create one ({SHAPE})."}},
+                 ensure_ascii=False))
 PYEOF
 
 exit 0

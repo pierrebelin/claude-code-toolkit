@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(HERE, "lib"))
 import kit_config  # noqa: E402
 
 SKIP = {".git", "node_modules", "bin", "obj", "dist", "build", "target", ".venv", "venv", "__pycache__",
-        ".claude", ".idea", ".vs", "coverage", ".next", "out", "graphify-out"}
+        ".claude", ".idea", ".vs", "coverage", ".next", "out"}
 MAX_DEPTH = 4
 # testTag frameworks lib/kit_testtag.py carries; vitest shares Jest's `it`/`test` titles.
 TAG_FOR = {"xunit": "xunit", "pytest": "pytest", "junit": "junit", "jest": "jest", "vitest": "jest", "cargo": "rust"}

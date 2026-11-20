@@ -7,6 +7,8 @@
 # a stale one (a watched config or preset file newer, created or deleted), another kit's cache, a path
 # outside the root or not normalised, a `.git` between the file and the root (a linked worktree is
 # judged against its own config), a root segment matched. No fork.
+# Once the cache is judged fresh and FILE the root's own, `scope_outside` also sets SCOPE_SHEET to the
+# rule sheet's name (`layout.ruleSheet`, the cache's `sheet` line); empty before that point.
 # `scope_file_of INPUT` sets SCOPE_FILE to the payload's `file_path`, in kit_path's form, when a regex
 # can read it: the key held once, no JSON escape but `\\`. Returns 1 otherwise (jq or Python reads it).
 # A fast exit only ever drops a warning the hook would not have given: a wrong pick of the key (top
@@ -21,9 +23,10 @@ scope_file_of() {
 }
 
 scope_outside() {
-  local file=$1 root=${CLAUDE_PROJECT_DIR:-} tmp kit cache key val rest flag rel d part seg p left want found=""
+  local file=$1 root=${CLAUDE_PROJECT_DIR:-} tmp kit cache key val rest flag rel d part seg p left want found="" sheet=""
   local -a uc=() test=() agg=()
   local kb="" kb_seen=""
+  SCOPE_SHEET=""
   shift
   [ -n "$root" ] && [ -n "$file" ] || return 1
   kit_path root
@@ -49,6 +52,7 @@ scope_outside() {
       test) test+=("$val") ;;
       agg) agg+=("$val") ;;
       kb) kb=$val; kb_seen=1 ;;
+      sheet) sheet=$val ;;
     esac
   done <"$cache"
   case "$file" in "$root"/*) ;; *) return 1 ;; esac
@@ -61,6 +65,8 @@ scope_outside() {
     d=${d%/*}
     case "$d" in "$root"/* | "$root") ;; *) return 1 ;; esac
   done
+  # The cache is fresh and the path the root's own: its rule sheet name holds for FILE.
+  SCOPE_SHEET=$sheet
   for want in "$@"; do
     case "$want" in
       kb)

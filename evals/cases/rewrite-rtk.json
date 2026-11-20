@@ -73,7 +73,7 @@
       }
     },
     {
-      "name": "grep on a symbol absent from the graph goes to rtk, not to graphify (upstream emits updatedInput without a decision)",
+      "name": "grep on a symbol goes to rtk (upstream emits updatedInput without a decision)",
       "hook": "hooks/bash-dispatch.sh",
       "input": {
         "tool_name": "Bash",
@@ -284,6 +284,10 @@
     {"name": "git in a linked worktree is left as written: the isolation check refuses rtk git", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "git status"}, "cwd": "{{FIX}}/wt/src"}, "expect": {"decision": "none", "command_absent": "rtk git"}},
     {"name": "a command rtk never rewrites leaves the module without a fork and without a rewrite", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "echo hi && mkdir -p build"}}, "expect": {"decision": "none", "command_absent": "rtk"}},
     {"name": "a quoted command (JSON escapes) is read whole: its rewrite keeps the quotes", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "/usr/bin/grep -n \"a b\" f.txt"}}, "expect": {"decision": "none", "command": "rtk grep -n \"a b\" f.txt"}},
-    {"name": "a command with a unicode escape falls back to jq and is still rewritten", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "dotnet test caf\u00e9.csproj"}}, "expect": {"decision": "none", "command": "rtk dotnet test"}}
-  ]
+    {"name": "a command with a unicode escape falls back to jq and is still rewritten", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "dotnet test caf\u00e9.csproj"}}, "expect": {"decision": "none", "command": "rtk dotnet test"}},
+    {"name": "a bare head is left as written: no rtk read (0.5 % saved over 4 085 calls)", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "head -n 5 no-such-file.txt"}}, "expect": {"decision": "none", "command_absent": "rtk read", "no_context": true}},
+    {"name": "cat in a chain keeps its verb while the rest is rewritten", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "cat no-such-file.txt && git status"}}, "expect": {"decision": "none", "command": "cat no-such-file.txt && rtk git status", "command_absent": "rtk read"}},
+    {"name": "cat behind || keeps its verb too", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "git status || cat no-such-file.txt"}}, "expect": {"decision": "none", "command": "rtk git status || cat no-such-file.txt"}},
+    {"name": "head behind a pipe is not parked: rtk still rewrites the command it bounds", "hook": "hooks/bash-dispatch.sh", "input": {"tool_name": "Bash", "tool_input": {"command": "git log --oneline | head -5"}}, "expect": {"decision": "none", "command": "rtk git log --oneline | head -5"}}
+]
 }

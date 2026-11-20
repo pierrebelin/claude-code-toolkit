@@ -181,6 +181,12 @@ def index_md(c, rows):
     return "\n".join(out)
 
 
+def index_stale(c):
+    """`INDEX.md` lags the base; writes nothing. Read by `knowledge-index --check` and `cctoolkit doctor`."""
+    rows, _, _ = refresh(c, save=False)
+    return knowledge.read(os.path.join(knowledge.base_dir(c), "INDEX.md")) != index_md(c, rows)
+
+
 def write_index_md(c, rows):
     path = os.path.join(knowledge.base_dir(c), "INDEX.md")
     text = index_md(c, rows)

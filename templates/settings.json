@@ -14,10 +14,7 @@
       "Bash(gh pr *)",
       "Bash(xargs *)",
       "Bash(python3 *)",
-      "Bash(git check-ignore *)",
-      "Bash(graphify query *)",
-      "Bash(graphify explain *)",
-      "Bash(graphify path *)"
+      "Bash(git check-ignore *)"
     ],
     "deny": [
       "Read(./node_modules/**)",

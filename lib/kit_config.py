@@ -550,7 +550,7 @@ def validate(root):
         out.append(("FAIL", "layout.integrationGuard", "expects {\"sources\": [\"<glob>\"], \"tests\": [\"<glob>\"]}"))
     uc = c.dirs(c.use_case_roots)
     if not uc:
-        out.append(("WARN", "layout.useCase.roots", f"{', '.join(c.use_case_roots)} matches no directory — the traceability hook and rules-coverage see nothing"))
+        out.append(("WARN", "layout.useCase.roots", f"{', '.join(c.use_case_roots)} matches no directory — traceability, its edit reminder and rules-coverage see nothing"))
     elif not c.product and any("{product}" in p for p in c.layout["useCase"]["roots"]) and len(uc) > 1:
         out.append(("WARN", "product", f"unset and {{product}} matches {len(uc)} directories — set \"product\""))
     else:
@@ -700,6 +700,8 @@ def write_scope_cache(c):
     lines += [f"agg\t{x}" for x in c.aggregate]
     if isinstance(c.knowledge_root, str) and "\t" not in c.knowledge_root and "\n" not in c.knowledge_root:
         lines.append(f"kb\t{_slashed(os.path.join(c.root, c.knowledge_root))}")
+    if isinstance(c.rule_sheet, str) and c.rule_sheet and not set(c.rule_sheet) & set("\t\n/\\"):
+        lines.append(f"sheet\t{c.rule_sheet}")
     path = scope_cache_path(c.root)
     tmp = f"{path}.{os.getpid()}"
     with open(tmp, "w", encoding="utf-8", newline="\n") as fh:

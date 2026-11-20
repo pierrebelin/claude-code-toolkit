@@ -28,13 +28,12 @@ def main(argv):
     if not os.path.isdir(knowledge.base_dir(c)):
         print(f"no knowledge base under {c.knowledge_root} — /cctoolkit:knowledge-sync builds it", file=sys.stderr)
         return 1
-    rows, parsed, unchanged = knowledge_index.refresh(c, save=argv != ["--check"])
     if argv == ["--check"]:
-        path = os.path.join(knowledge.base_dir(c), "INDEX.md")
-        if knowledge.read(path) != knowledge_index.index_md(c, rows):
+        if knowledge_index.index_stale(c):
             print(f"INDEX.md stale — cctoolkit knowledge-index")
             return 1
         return 0
+    rows, parsed, unchanged = knowledge_index.refresh(c)
     written = knowledge_index.write_index_md(c, rows)
     print(f"indexed: {len(rows)} object(s) — {parsed} file(s) parsed, {unchanged} unchanged; "
           f"INDEX.md {'written' if written else 'unchanged'}")

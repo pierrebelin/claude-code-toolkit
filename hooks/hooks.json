@@ -86,10 +86,6 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/implement-tdd-guard.sh\""
-          },
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/clear-nudge.sh\""
           }
         ]
       }
@@ -107,15 +103,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/tools/doctor\" --quiet || true"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-graphify-link.sh\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/tools/doctor\" --quick --quiet || true"
           }
         ]
       },
@@ -124,17 +112,6 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/windows-env.sh\""
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/graphify-autosync.sh\"",
-            "async": true
           }
         ]
       }

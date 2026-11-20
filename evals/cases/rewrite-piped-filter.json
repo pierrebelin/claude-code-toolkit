@@ -1,10 +1,10 @@
 {
   "cases": [
     {
-      "name": "a bare graphify query is piped through graphify-query-filter.sh",
+      "name": "a bare git grep is piped through git-grep-filter.sh",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "tool_input": {"command": "graphify query \"Product\""}},
-      "expect": {"decision": "allow", "reason": "graphify query filter", "command": "graphify query \"Product\" | bash "}
+      "input": {"tool_name": "Bash", "tool_input": {"command": "git grep -n Product"}},
+      "expect": {"decision": "allow", "reason": "git grep filter", "command": "git-grep-filter.sh"}
     },
     {
       "name": "git grep as the last segment behind `cd x &&` is piped through git-grep-filter.sh",
@@ -13,10 +13,10 @@
       "expect": {"decision": "allow", "reason": "git grep filter", "command": "git-grep-filter.sh"}
     },
     {
-      "name": "a graphify query on the last line of a multi-line command is piped (the match is per line)",
+      "name": "a git grep on the last line of a multi-line command is piped (the match is per line)",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "tool_input": {"command": "echo start\ngraphify query \"x\""}},
-      "expect": {"decision": "allow", "command": "graphify-query-filter.sh"}
+      "input": {"tool_name": "Bash", "tool_input": {"command": "echo start\ngit grep -n x"}},
+      "expect": {"decision": "allow", "command": "git-grep-filter.sh"}
     },
     {
       "name": "git grep followed by another segment is not the last segment: untouched",
@@ -25,31 +25,26 @@
       "expect": {"command_absent": "git-grep-filter.sh"}
     },
     {
-      "name": "an already piped graphify query is left alone (the escape hatch)",
+      "name": "an already piped git grep is left alone (the escape hatch)",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "tool_input": {"command": "graphify query \"x\" | cat"}},
-      "expect": {"command_absent": "graphify-query-filter.sh"}
+      "input": {"tool_name": "Bash", "tool_input": {"command": "git grep -n x | cat"}},
+      "expect": {"command_absent": "git-grep-filter.sh"}
     },
     {
       "name": "a command already carrying the filter is not filtered twice",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "tool_input": {"command": "echo graphify-query-filter.sh; graphify query \"x\" "}},
+      "input": {"tool_name": "Bash", "tool_input": {"command": "echo git-grep-filter.sh; git grep -n x "}},
       "expect": {"command_absent": "| bash"}
     },
     {
-      "name": "graphify explain has no filter",
+      "name": "graphify query is no longer filtered (profile archived in 2.17.0)",
       "hook": "hooks/bash-dispatch.sh",
-      "input": {"tool_name": "Bash", "tool_input": {"command": "graphify explain \"Product\""}},
+      "input": {"tool_name": "Bash", "tool_input": {"command": "graphify query \"Product\""}},
       "expect": {"command_absent": "filter.sh"}
     },
     {
-      "name": "module alone: graphify query then git grep on two lines, graphify wins",
-      "cmd": "HOOK_INPUT='{}' HOOK_CMD=$'git grep -n x\\ngraphify query y' bash {{KIT}}/lib/rewrite-piped-filter.sh",
-      "expect": {"exit": 0, "stdout": "graphify-query-filter.sh"}
-    },
-    {
       "name": "module alone: no payload, no answer",
-      "cmd": "out=$(HOOK_CMD='graphify query y' bash {{KIT}}/lib/rewrite-piped-filter.sh); echo \"rc=$? [$out]\"",
+      "cmd": "out=$(HOOK_CMD='git grep y' bash {{KIT}}/lib/rewrite-piped-filter.sh); echo \"rc=$? [$out]\"",
       "expect": {"exit": 0, "stdout": "rc=0 []"}
     }
   ]

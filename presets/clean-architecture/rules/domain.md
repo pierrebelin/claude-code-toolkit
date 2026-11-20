@@ -5,7 +5,7 @@ paths:
 
 # Domain rules
 
-Code pattern: an existing file of the same kind in this repo — `graphify query`, or a sibling folder. The repo is the example.
+Code pattern: an existing file of the same kind in this repo — a sibling folder. The repo is the example.
 
 **Domain depends on nothing** — no HTTP, EF, SQL, DTO, Infrastructure (DDD-10). Enforced by ArchitectureTests, which also checks API contracts live in `Abstractions`, leak no internals.
 

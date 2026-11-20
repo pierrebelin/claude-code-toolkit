@@ -99,7 +99,7 @@ MODULES=(
   "guard-diff-bounds.sh         cmd=git"
   "guard-integration-filter.sh  cmd=dotnet test|IntegrationTests[.](dll|exe)"
   "guard-auditor.sh             agent=ddd-tdd-auditor$"
-  "rewrite-piped-filter.sh      cmd=graphify|git.*grep"
+  "rewrite-piped-filter.sh      cmd=git.*grep"
   "rewrite-rtk.sh               -"
 )
 

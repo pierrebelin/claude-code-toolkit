@@ -1,8 +1,8 @@
 {
   "cases": [
     {
-      "name": "every family this session left in /tmp is dropped, not just the two that were listed",
-      "cmd": "for p in readbounds-seen catbounds-seen diffbounds-seen knowledge-seen batching-nudge batching-tick clearnudge; do : > /tmp/claude-$p-{{SID}}; done; printf '{\"session_id\":\"{{SID}}\"}' | bash {{KIT}}/hooks/session-cleanup.sh; printf 'left=%s' \"$(ls /tmp/claude-*-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"",
+      "name": "every family this session left in /tmp is dropped, not just the two that were listed — the batching mark aside",
+      "cmd": "for p in readbounds-seen catbounds-seen diffbounds-seen knowledge-seen batching-tick runnotes implement-tdd-guard; do : > /tmp/claude-$p-{{SID}}; done; printf '{\"session_id\":\"{{SID}}\"}' | bash {{KIT}}/hooks/session-cleanup.sh; printf 'left=%s' \"$(ls /tmp/claude-*-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"",
       "expect": {
         "stdout": "left=0",
         "exit": 0
@@ -17,6 +17,14 @@
       }
     },
     {
+      "name": "the batching reminder's mark survives a SessionStart of the same session (compact, resume): one reminder per session",
+      "cmd": ": > /tmp/claude-batching-nudge-{{SID}}; printf '{\"session_id\":\"{{SID}}\",\"source\":\"compact\"}' | bash {{KIT}}/hooks/session-cleanup.sh; printf 'kept=%s' \"$(ls /tmp/claude-batching-nudge-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"; rm -f /tmp/claude-batching-nudge-{{SID}}",
+      "expect": {
+        "stdout": "kept=1",
+        "exit": 0
+      }
+    },
+    {
       "name": "another session's fresh leftovers are left alone",
       "cmd": ": > /tmp/claude-batching-nudge-other-{{SID}}; printf '{\"session_id\":\"{{SID}}\"}' | bash {{KIT}}/hooks/session-cleanup.sh; printf 'kept=%s' \"$(ls /tmp/claude-batching-nudge-other-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"",
       "expect": {
@@ -26,7 +34,7 @@
     },
     {
       "name": "a leftover older than two days is purged whatever session wrote it",
-      "cmd": ": > /tmp/claude-clearnudge-old-{{SID}}; touch -t 202001010000 /tmp/claude-clearnudge-old-{{SID}}; printf '{\"session_id\":\"{{SID}}\"}' | bash {{KIT}}/hooks/session-cleanup.sh; printf 'left=%s' \"$(ls /tmp/claude-clearnudge-old-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"",
+      "cmd": ": > /tmp/claude-readbounds-seen-old-{{SID}}; touch -t 202001010000 /tmp/claude-readbounds-seen-old-{{SID}}; printf '{\"session_id\":\"{{SID}}\"}' | bash {{KIT}}/hooks/session-cleanup.sh; printf 'left=%s' \"$(ls /tmp/claude-readbounds-seen-old-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"",
       "expect": {
         "stdout": "left=0",
         "exit": 0
@@ -42,7 +50,7 @@
     },
     {
       "name": "a payload with no session id falls back on unknown, and cleans under that name",
-      "cmd": ": > /tmp/claude-clearnudge-unknown-{{SID}}; printf '{}' | bash {{KIT}}/hooks/session-cleanup.sh; printf 'exit=%s kept=%s' \"$?\" \"$(ls /tmp/claude-clearnudge-unknown-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"",
+      "cmd": ": > /tmp/claude-readbounds-seen-unknown-{{SID}}; printf '{}' | bash {{KIT}}/hooks/session-cleanup.sh; printf 'exit=%s kept=%s' \"$?\" \"$(ls /tmp/claude-readbounds-seen-unknown-{{SID}} 2>/dev/null | wc -l | tr -d ' ')\"",
       "expect": {
         "stdout": "exit=0 kept=0",
         "exit": 0

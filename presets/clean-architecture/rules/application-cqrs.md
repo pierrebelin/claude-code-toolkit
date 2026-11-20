@@ -5,7 +5,7 @@ paths:
 
 # Application layer rules
 
-Code pattern: an existing file of the same kind in this repo — `graphify query`, or a sibling folder. The repo is the example.
+Code pattern: an existing file of the same kind in this repo — a sibling folder. The repo is the example.
 
 Layer technical conventions live here. Folder `CLAUDE.md` under `src/` = business rules, handler/feature intent — never technical convention: only sessions opening that folder see it.
 
@@ -118,7 +118,7 @@ Authoring rules:
 | Cost line | Mandatory under flow. Only durable trace of decision no test locks |
 | Sections | Those three, no other. Hook matches anchors, reports forbidden, missing, out-of-order section |
 
-`handler-claude-md-check.sh` (PostToolUse) reports untested rules, traits citing rule absent from table, tests with no trait. Warning only.
+`cctoolkit traceability`, run by the pre-audit at the end of a batch, reports untested rules, traits citing rule absent from table, tests with no trait. Warning only. `handler-claude-md-check.sh` (PostToolUse) reminds of a handler folder without `CLAUDE.md`.
 
 Repo report: `cctoolkit rules-coverage [--untested]`.
 

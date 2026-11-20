@@ -73,7 +73,7 @@ def report():
     out.append("## 1. Tests with no trait inside a class that carries some")
     out.append("")
     out.append(f"**{len(strict)} methods.** This is the `UNBOUND TEST` signal of `rules-coverage.py` and of "
-               "`handler-claude-md-check.sh`: the class documents its rules, this test cites none. Either it covers "
+               "`traceability.py`: the class documents its rules, this test cites none. Either it covers "
                "a rule missing from the table, or it covers no rule and the class is not the right place. Both "
                f"scanners raise this signal on {bound} only — an `IntegrationTests` class "
                "covers persistence, not a row of a table.")

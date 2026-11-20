@@ -16,10 +16,11 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `presets/`, `rules/` | layouts, `kit.config.json`, layer and universal rules, the preset's test skills |
 | `templates/` | settings, statusline, `.gitignore` merged into the repo |
 | `evals/` | recorded hook cases |
-| `workflows/` | `run-lot` (one batch), `run-plan` (whole plan), `run-fix` (a bug fix: `run-lot` on its one batch, then its knowledge-base merge), `run-replay` (a delivered batch or plan rechecked, read-only) and `run-audit` (the quality report), as Workflow scripts |
+| `workflows/` | `run-lot` (one batch), `run-plan` (whole plan), `run-fix` (a bug fix: `run-lot` on its one batch, then its knowledge-base merge) and `run-audit` (the quality report), as Workflow scripts |
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
 | `docs/` | context cost, the frozen literals registry, the README screenshots |
+| `archives/` | retired bricks (`graphify/`, `learn/`, `run-replay/`), unwired and unmaintained, kept for the record with their README |
 | `dev/` | maintainer tools: `bump.sh`, `release-check.sh`, `turn-batching-check.py` (batching and context fill measured from the transcripts), `workflow-timing.py` (duration per phase and per agent of a workflow run, reads and greps per agent), `hook-timing.sh` (median wall time of the hot hooks on the payloads of `dev/hook-timing/*.json`, two kit copies compared), `knowledge-pane-demo.sh` (the mod's demo copy of `examples/docs/business/`) |
 
 ## Anonymisation — do not break it
@@ -62,7 +63,6 @@ Two sources that drift make the choice random: a fact lives in exactly one place
 - A new hook, tool or shell script sources `lib/platform.sh` first (`. "${BASH_SOURCE[0]%/*}/../lib/platform.sh"`), and runs any path from a payload through `kit_path`. A hook wired in `hooks.json` opens, before that and before reading stdin, with the line rerunning it from a `/` path (copy it from any hook; `evals/cases/platform.json` checks it). Python prints and writes paths with `/` (`Config.rel`, `.as_posix()`), and a mod or workflow parses paths with `[\\/]`: on Windows the kit runs under Git Bash with native tools (`INSTALL.md` § Windows).
 - Must exit 0 on empty JSON input and when its dependency is missing, save the guards that block by design (`hooks/README.md` § Dependencies).
 - Test after editing: `echo '{}' | bash hooks/<name>.sh`. Recorded cases live in `evals/cases/*.json` and `bash evals/run.sh` replays them from this checkout (`{{KIT}}` in a case = the kit directory): a hook change without a case is not finished. A hook or script resolves the repo through `lib/project-root.sh` / `kit_config.project_root()`, never from its own location: installed, the kit sits in the plugin cache, outside the repo. A `lib/` module reads `HOOK_CMD` / `HOOK_INPUT` / `HOOK_SESSION_ID` / `HOOK_AGENT_ID` / `HOOK_AGENT_TYPE` / `HOOK_BACKGROUND` / `HOOK_TRANSCRIPT_PATH` from the environment instead of stdin: `HOOK_CMD='ls' bash lib/<name>.sh`. A module that decides prints hook JSON; `lib/batching-nudge.sh` prints plain text, which the dispatcher grafts onto the decision.
-- Do not run `graphify-autosync.sh` idly: it rebuilds the graph and blocks for several minutes.
 
 ## Releasing
 

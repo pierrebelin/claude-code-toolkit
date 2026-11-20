@@ -17,7 +17,7 @@
       }
     },
     {
-      "name": "the full report names the registrations, the graph and the git hook",
+      "name": "the full report names the registrations and the git hook",
       "cmd": "bash {{KIT}}/tools/doctor",
       "expect": {
         "stdout": "hook registrations"
@@ -61,6 +61,36 @@
       "expect": {
         "exit": 1,
         "stdout": "/cctoolkit:kit-init"
+      }
+    },
+    {
+      "name": "--quick runs the session-start checks only: the rules and the config, no binaries, registrations, staged merge nor /tmp line",
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude $R/docs/business/.merge/ABC\nout=$(bash {{KIT}}/tools/doctor --quick)\nprintf 'rules=%s other=%s' \"$(printf '%s\n' \"$out\" | grep -c '^FAIL rules')\" \"$(printf '%s\n' \"$out\" | grep -cE '^(ok|WARN|FAIL|NOTE) +(binary|rtk|hook registrations|dispatch modules|knowledge merge|/tmp state|executable|git post-checkout)')\"",
+      "env": {
+        "CLAUDE_DOCTOR_ROOT": "{{FIX}}/doc-{{SID}}"
+      },
+      "expect": {
+        "stdout": "rules=1 other=0"
+      }
+    },
+    {
+      "name": "the full run still names a merge left staged",
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude $R/docs/business/.merge/ABC\nbash {{KIT}}/tools/doctor --quiet",
+      "env": {
+        "CLAUDE_DOCTOR_ROOT": "{{FIX}}/doc-{{SID}}"
+      },
+      "expect": {
+        "stdout": "WARN knowledge merge              staged, not written: ABC"
+      }
+    },
+    {
+      "name": "/tmp state counts session-cleanup.sh's families only: an old claude-* file of no kit family is not a leftover",
+      "cmd": "R={{FIX}}/doc-{{SID}}\nmkdir -p $R/.claude\nf=/tmp/claude-evalforeign-{{SID}}; : > $f; touch -t 202001010000 $f\nbash {{KIT}}/tools/doctor | grep '/tmp state' | grep -c 'evalforeign\\|claude-\\* file'; rm -f $f",
+      "env": {
+        "CLAUDE_DOCTOR_ROOT": "{{FIX}}/doc-{{SID}}"
+      },
+      "expect": {
+        "stdout": "0"
       }
     },
     {

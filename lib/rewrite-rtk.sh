@@ -16,7 +16,7 @@ command -v rtk >/dev/null 2>&1 || exit 0
 # A command naming none of the words below, needing no path or dotnet normalisation, is left as
 # written — the answer rtk would give. The list is generous (a word rtk ignores costs one fork, a
 # word missing here costs a rewrite): extend it when `rtk rewrite "<word> …"` starts answering.
-rtk_words='ls|tree|cat|head|tail|git|gh|glab|aws|psql|pnpm|find|diff|grep|egrep|fgrep|rg|ast-grep|dotnet|docker|podman|kubectl|oc|wget|wc|curl|jest|vitest|ctest|prisma|tsc|eslint|prettier|playwright|npx|npm|bun|bunx|bundle|rspec|rubocop|rake|gradle|gradlew|mvn|make|helm|biome|turbo|nx|stat|du|df|ps|pytest|mypy|ruff|pip|pip3|uv|uvx|go|golangci-lint|cargo|next|php|composer|python|python3|deno|gcloud|az|ping|jq|pio|swift|terraform|tofu|systemctl|journalctl|yarn|ng|sed|rtk|proxy|bypass|err|json|read|smart|summary|log|deps|format|lint|test|env|time|nohup|xargs|sort|uniq|less|ss|lsof|tar|unzip|node|flutter|poetry|mix|cmake|bazel|mise'
+rtk_words='ls|tree|git|gh|glab|aws|psql|pnpm|find|diff|grep|egrep|fgrep|rg|ast-grep|dotnet|docker|podman|kubectl|oc|wget|wc|curl|jest|vitest|ctest|prisma|tsc|eslint|prettier|playwright|npx|npm|bun|bunx|bundle|rspec|rubocop|rake|gradle|gradlew|mvn|make|helm|biome|turbo|nx|stat|du|df|ps|pytest|mypy|ruff|pip|pip3|uv|uvx|go|golangci-lint|cargo|next|php|composer|python|python3|deno|gcloud|az|ping|jq|pio|swift|terraform|tofu|systemctl|journalctl|yarn|ng|sed|rtk|proxy|bypass|err|json|read|smart|summary|log|deps|format|lint|test|env|time|nohup|xargs|sort|uniq|less|ss|lsof|tar|unzip|node|flutter|poetry|mix|cmake|bazel|mise'
 rtk_re="(^|[^A-Za-z0-9_-])($rtk_words)([^A-Za-z0-9_-]|$)"
 if ! [[ $cmd =~ $rtk_re ]] && [ "${cmd%$'\n'}" = "$cmd" ]; then
   case "$cmd" in */bin/*) ;; *) exit 0 ;; esac
@@ -80,11 +80,30 @@ case "$cmd" in
     while [ "${normalized%$'\n'}" != "$normalized" ]; do normalized=${normalized%$'\n'}; done ;;
 esac
 
-if [ "$normalized" != "$cmd" ]; then
-  input=$(printf '%s' "$input" | jq --arg c "$normalized" '.tool_input.command = $c')
+# cat, head and tail stay as written: `rtk read` saved 0.5 % on 4 085 calls, and a bare one is
+# already bounded by guard-cat-bounds. They are parked behind a placeholder in command position
+# (rtk leaves an unknown word alone), so `cat a && git status` still gets `rtk git status`, and
+# put back in rtk's answer. Not behind a single `|`: rtk rewrites `git log | head` only while it
+# reads `head` there, and never turns a pipe's `head` into `rtk read`. Absent from rtk_words:
+# a bare `cat x` never reaches rtk.
+parked=$normalized
+if [[ $normalized =~ (^|[^A-Za-z0-9_-])(cat|head|tail)([^A-Za-z0-9_-]|$) ]]; then
+  case "$normalized" in
+    *'<<'*) ;;
+    *) parked=$(printf '%s' "$normalized" | sed -E 's#(^|[;&(]|[|][|])([[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*)(cat|head|tail)([[:space:]]|$)#\1\2@@KIT\4@@\5#g') ;;
+  esac
+fi
+
+if [ "$parked" != "$cmd" ]; then
+  input=$(printf '%s' "$input" | jq --arg c "$parked" '.tool_input.command = $c')
 fi
 
 out=$(printf '%s' "$input" | rtk hook claude)
+if [ "$parked" != "$normalized" ]; then
+  out=${out//@@KITcat@@/cat}
+  out=${out//@@KIThead@@/head}
+  out=${out//@@KITtail@@/tail}
+fi
 
 if [ -n "$out" ]; then
   printf '%s' "$out"

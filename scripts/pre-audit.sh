@@ -176,6 +176,19 @@ else
     fi
 fi
 
+# ── 4b. Rule sheets the batch's files reach — reported, never failed ──────────
+# What the edit hook used to tell on every edit (scripts/traceability.py): a handler
+# sheet's fixed shape, its rules with no test, its orphan tests, a use-case folder
+# without a sheet. Said once here, before the audit reads it.
+TRACE_FILES=()
+while IFS= read -r f; do [[ -n "$f" && -f "$f" ]] && TRACE_FILES+=("$ROOT/$f"); done <<<"$CHANGED"
+TRACE=""
+(( ${#TRACE_FILES[@]} )) && TRACE="$(python3 "$SCRIPTS"/traceability.py "${TRACE_FILES[@]}" 2>/dev/null)"
+if [[ -n "$TRACE" ]]; then
+    printf '  · %s\n' "rules ↔ tests traceability of the batch's sheets — reported, never failed"
+    while IFS= read -r l; do [[ -n "$l" ]] && note "$l"; done <<<"$TRACE"
+fi
+
 # ── 5. Every cycle reached its final state ───────────────────────────────────
 # A `## Cycles` sheet: the `cycle` lines of the run work file, and every method it names on disk.
 # An older sheet: its `TDD:` ticks.

@@ -7,7 +7,7 @@ paths:
 
 # Infrastructure rules
 
-Code pattern: an existing file of the same kind in this repo — `graphify query`, or a sibling folder. The repo is the example.
+Code pattern: an existing file of the same kind in this repo — a sibling folder. The repo is the example.
 
 Infrastructure translates IO. No business rule (APP-04).
 
