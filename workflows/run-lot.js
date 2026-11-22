@@ -4,7 +4,7 @@ export const meta = {
   whenToUse: 'Implement a plan batch without human intervention. Argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`; plan, batch and run folder are derived from it.',
   phases: [
     { title: 'Design', detail: 'cycle index of the sheet; design writes the `## Cycles` block only when absent or invalid; declaratives' },
-    { title: 'RED', detail: 'one tdd-cycle agent per cycle writes its RED, passes the checkpoint the hook checks, then its GREEN and the handler CLAUDE.md; waves in sequence, disjoint cycles of a wave in parallel; rejected → one retry, then one on opus, then stop' },
+    { title: 'RED · GREEN', detail: 'one tdd-cycle agent per cycle writes its RED, passes the checkpoint the hook checks, then its GREEN and the handler CLAUDE.md; a cycle starts once every earlier cycle it meets is done, run.parallelCycles at once; rejected → one retry, then a diagnosis and one on opus, then stop' },
     { title: 'Global green', detail: 'beside the pre-audit gate: suites run on haiku as cctoolkit suites-plan resolves them; red → suites repair, its writes under the test roots checked against testEdits; closing level full or light read off the batch diff' },
     { title: 'Closing', detail: 'cctoolkit pre-audit and what it lists, one pass beside global green; what stays red goes to the audit' },
     { title: 'Audit', detail: 'full: cctoolkit audit-capture, ddd-tdd-auditor; light: one review of the diff on Correctness and Scope; GAPS → one fix, a second review only after a Blocking on Correctness' },
@@ -65,7 +65,8 @@ const CYCLE = obj({
   decisions: str,
   files: arr(str),
   tests: arr(str),
-}, ['files', 'tests'])
+  reads: arr(str),
+}, ['files', 'tests', 'reads'])
 
 // The closing level, `full` or `light` (lib/closing_level.py): planned by `sheet-cycles --index`,
 // read off the batch diff by `cctoolkit closing-level` once the suites are green.
@@ -73,7 +74,9 @@ const FULL = 'full'
 const LIGHT = 'light'
 const LEVEL = obj({ level: { type: 'string', enum: [FULL, LIGHT] }, reasons: arr(str), production: int }, ['production'])
 
-const INDEX = obj({ ok: bool, missing: bool, errors: arr(str), declaratives: arr(str), closing: LEVEL, count: int, cycles: arr(CYCLE) }, ['closing', 'count'])
+const INDEX = obj({ ok: bool, missing: bool, errors: arr(str), declaratives: arr(str), closing: LEVEL, count: int, parallel: int, cycles: arr(CYCLE) }, ['closing', 'count', 'parallel'])
+
+const DIAGNOSIS = obj({ cause: str, fix: str })
 
 const DESIGN = obj({ blocked: bool, reason: str, review: arr(str) }, ['review'])
 
@@ -369,15 +372,32 @@ const retryText = reason => (reason.endsWith('without result') || reason.endsWit
   ? `\n\n${RETRY_EMPTY}`
   : `\n\nPrevious attempt rejected by the orchestrator: ${reason}. Fix this point and return a new report.`)
 
-function escalation(reasons) {
+function escalation(reasons, diagnosis = null) {
   return [
     '',
     '',
     `Last attempt at this step, after ${reasons.length} rejected one(s). Earlier attempts may have left files on disk: Read the contract paths in one message first, keep what is right, never rewrite from scratch.`,
     `Why each earlier attempt was rejected, in order: ${reasons.map((r, i) => `${i + 1}. ${r}`).join(' ; ')}.`,
-    'Diagnose the common cause of these rejections before writing, then fix that cause. Same contract, same report.',
+    diagnosis
+      ? `A read-only diagnosis of these rejections, made on the tree they left: cause — ${diagnosis.cause} ; what to do differently — ${diagnosis.fix}. Check it against the code, then fix that cause. Same contract, same report.`
+      : 'Diagnose the common cause of these rejections before writing, then fix that cause. Same contract, same report.',
   ].join('\n')
 }
+
+// Before the last attempt of a cycle (2026-11: one RED rejected three times in a row, ~17 min, twice): one
+// agent reads the two rejections and the tree they left, writes nothing, and hands the cause to the last attempt.
+const diagnose = (c, reasons) => agent(
+  [
+    FRAME,
+    '',
+    `Diagnosis of cycle ${c.id} (${c.behaviour}), rejected twice by the orchestrator. Read only, write nothing, no build: the next attempt fixes.`,
+    `Rejections, in order: ${reasons.map((r, i) => `${i + 1}. ${r}`).join(' ; ')}.`,
+    `In one message: \`${contractCommand(c, '--red')}\` and \`${contractCommand(c, '--green')}\`, then the test and production files they name, as the tree holds them now (the attempts left their writes).`,
+    'Find the cause the two rejections share, or why the second repeated the first: a contract the code cannot meet, a test asserting the wrong thing, a file the attempts never touched, a command failing for another reason.',
+    '`cause` = that cause in at most two sentences, citing `path:line`; `fix` = what the last attempt must do differently, at most two sentences.',
+  ].join('\n'),
+  { schema: DIAGNOSIS, phase: 'RED · GREEN', label: `diagnose ${c.id}`, model: 'sonnet', effort: 'medium' },
+).catch(() => null)
 
 // A step attempted once, retried once with the reason; still rejected, the run stops on it.
 async function withRetry(step, launch, check) {
@@ -405,8 +425,10 @@ async function runCycle(c, together = false) {
     const step = `${red ? 'GREEN' : 'RED'} ${short(c.behaviour, 60)}`
     const model = n === 3 ? LAST_MODEL : null
     if (model) log(`${step}: last attempt on ${LAST_MODEL} — ${short(reasons[reasons.length - 1], 60)}`)
-    const suffix = n === 1 ? '' : retryHead(step, n, reasons[reasons.length - 1]) + (model ? escalation(reasons) : retryText(reasons[reasons.length - 1]))
-    const x = await agent(cycleContract(c, red, together) + suffix, { agentType: 'cctoolkit:tdd-cycle', schema: CYCLE_RESULT, phase: 'RED', label: cycleLabel(c, model), ...(model ? { model } : {}) }).catch(() => null)
+    const diagnosis = model ? await diagnose(c, reasons) : null
+    if (diagnosis) log(`${step}: diagnosis — ${short(diagnosis.cause, 80)}`)
+    const suffix = n === 1 ? '' : retryHead(step, n, reasons[reasons.length - 1]) + (model ? escalation(reasons, diagnosis) : retryText(reasons[reasons.length - 1]))
+    const x = await agent(cycleContract(c, red, together) + suffix, { agentType: 'cctoolkit:tdd-cycle', schema: CYCLE_RESULT, phase: 'RED · GREEN', label: cycleLabel(c, model), ...(model ? { model } : {}) }).catch(() => null)
     const redWhy = red ? null : x ? checkRed(c, x.red) : 'cycle agent without result'
     if (redWhy) {
       reasons.push(redWhy)
@@ -712,8 +734,8 @@ for (const c of lotIndex.cycles) {
   }
   pending.push(s && s.red ? { ...c, resume: true } : c)
 }
-const waves = [...new Set(pending.map(c => c.wave))].sort((a, b) => a - b).map(w => pending.filter(c => c.wave === w))
-log(`${waves.length} wave(s), ${pending.length} behaviour(s)${history.cycles.length ? `, ${history.cycles.length} already done` : ''}`)
+log(`${new Set(pending.map(c => c.wave)).size} wave(s), ${pending.length} behaviour(s)${history.cycles.length ? `, ${history.cycles.length} already done` : ''}`)
+if ((lotIndex.parallel || 1) > 1) log(`up to ${lotIndex.parallel} cycles at once`)
 
 if (lotIndex.declaratives.length) {
   const { reason } = await withRetry(
@@ -734,26 +756,44 @@ if (lotIndex.declaratives.length) {
   if (reason) return await finish(BLOCKED, `declaratives — ${reason}`)
 }
 
-/// Cycles whose code files (tests, production, ripple) do not meet run side by side; the others wait.
-function disjoint(wave) {
-  const groups = []
-  for (const c of wave) {
-    const files = new Set(c.files || [])
-    const g = groups.find(x => (c.files || []).length && x.every(o => (o.files || []).length && !o.files.some(f => files.has(f))))
-    g ? g.push(c) : groups.push([c])
+// Two cycles meet when one writes a file the other writes, or a file a later wave reads bounded; a cycle
+// without `files` meets every other. A cycle starts once every earlier cycle it meets is done, `parallel`
+// at most side by side (run.parallelCycles through `sheet-cycles --index`, 1 when the index has none): no
+// barrier between waves, `wave` only orders them. A stop lets the cycles already running end, starts no other.
+const meets = (p, c) => {
+  const [pf, cf] = [p.files || [], c.files || []]
+  if (!pf.length || !cf.length) return true
+  return pf.some(f => cf.includes(f)) || (p.wave < c.wave && pf.some(f => (c.reads || []).includes(f)))
+}
+
+async function runCycles(cycles, cap) {
+  const order = [...cycles].sort((a, b) => a.wave - b.wave)
+  const after = new Map(order.map((c, i) => [c.id, order.slice(0, i).filter(p => meets(p, c)).map(p => p.id)]))
+  const together = cap > 1 && order.length > 1
+  const done = new Set()
+  const running = new Map()
+  let stop = null
+  for (;;) {
+    for (const c of stop ? [] : order) {
+      if (running.size >= cap) break
+      if (done.has(c.id) || running.has(c.id) || !after.get(c.id).every(id => done.has(id))) continue
+      if (running.size) log(`${c.id} starts beside ${[...running.keys()].join(', ')}`)
+      running.set(c.id, runCycle(c, together).then(reason => ({ id: c.id, reason })))
+    }
+    if (!running.size) return stop
+    const { id, reason } = await Promise.race(running.values())
+    running.delete(id)
+    done.add(id)
+    if (reason && !stop) stop = reason
   }
-  return groups
 }
 
 const planned = lotIndex.closing && lotIndex.closing.level === LIGHT ? LIGHT : FULL
 log(`closing planned ${planned}${lotIndex.closing && lotIndex.closing.reasons.length ? ` — ${short(lotIndex.closing.reasons.join(' ; '), 100)}` : ''}`)
 
-for (const wave of waves) {
-  for (const group of disjoint(wave)) {
-    const stops = await parallel(group.map(c => () => runCycle(c, group.length > 1)))
-    const stop = stops.find(Boolean)
-    if (stop) return await finish(BLOCKED, stop)
-  }
+{
+  const stop = await runCycles(pending, Math.max(1, Math.min(3, lotIndex.parallel || 1)))
+  if (stop) return await finish(BLOCKED, stop)
 }
 
 phase('Global green')

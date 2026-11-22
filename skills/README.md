@@ -35,7 +35,7 @@ The test-authoring skills — `tests-unit-tests` (handlers/services: business ru
 
 ## How `run-lot` delegates
 
-`run-lot` is not a step but a loop: one full turn per business behaviour, in the order Domain → Application → Infrastructure → WebAPI. Behaviours whose target test files are disjoint are grouped into a **wave**: their REDs go out as several `Agent` calls in a single message. GREEN never parallelises — two implementers on the same layer collide.
+`run-lot` is not a step but a loop: one full turn per business behaviour, in the order Domain → Application → Infrastructure → WebAPI. One `tdd-cycle` agent writes a behaviour's RED then its GREEN; a behaviour starts once every earlier one it shares a file with is done, `run.parallelCycles` side by side (`implement-tdd/references/parallelism.md`).
 
 - **`run-lot` writes neither its tests nor its code.** Each cycle is one `tdd-cycle` agent: its RED touches test files and signature stubs only, a checkpoint the TDD scope hook checks on the tree closes it, then its GREEN writes the production. A test it changes after the checkpoint is not refused: the hook records the file and its assertion lines, the audit judges it — a fixture fixed passes, an assertion removed is a gap (`hooks/README.md` § `tdd-scope-guard.sh`). The workflow produces nothing — it reads each contract off the sheet's `## Cycles` block, checks the reports, retries a rejected cycle once then once on opus, and stops the batch on what still fails; nobody is asked during the run.
 - **Subagents produce and declare, the orchestrator judges.** That is also what keeps the main context usable over a long batch: build and test logs stay with whoever caused them.

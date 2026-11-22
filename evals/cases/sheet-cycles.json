@@ -16,6 +16,11 @@
       "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
     },
     {
+      "path": "sc/reads.md",
+      "kind": "text",
+      "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [\"src/P/H.cs — the handler shape\"], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
+    },
+    {
       "path": "sc/guard.md",
       "kind": "text",
       "content": "# S\n\n## Cycles\n\n```json\n{\"declaratives\": [], \"cycles\": [{\"id\": \"C1\", \"wave\": 1, \"guard\": true, \"behaviour\": \"Une création refusée\", \"rmcu\": \"RM-01\", \"steps\": [\"1. Step\"], \"level\": \"UT\", \"skill\": \"tests-unit-tests\", \"testClass\": \"ATests\", \"fixture\": \"AFixture\", \"methods\": [\"ATests.ShouldRefuse_WhenNameIsEmpty\"], \"full\": [\"tests/Shop.UnitTests/A/ATests.cs\"], \"bounded\": [], \"scenarios\": \"s\", \"observation\": \"o\", \"outOfScope\": \"\", \"toCreate\": [\"src/P/New.cs\"], \"production\": [\"src/P/H.cs\", \"src/P/New.cs\"], \"ripple\": [], \"boundedGreen\": [], \"elements\": \"e\", \"appliedIds\": \"DDD-01\", \"invariants\": \"i\", \"expectedCost\": \"0\"}]}\n```\n\n## Assumptions\n"
@@ -220,11 +225,11 @@
       }
     },
     {
-      "name": "a test file shared by waves 1 and 2 refused: RED(2) runs beside GREEN(1)",
+      "name": "a test file shared by waves 1 and 2 accepted: run-lot starts the later cycle once the earlier one is done",
       "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/adjacent.md --index --root {{FIX}}/sc",
       "expect": {
-        "exit": 1,
-        "stdout": "waves 1 and 2: C1 and C2 share tests/Shop.UnitTests/A/ATests.cs — successive waves overlap RED(n+1) with GREEN(n): move C2 one wave later or split the test file"
+        "exit": 0,
+        "stdout": "\"ok\": true"
       }
     },
     {
@@ -376,6 +381,14 @@
       "expect": {
         "exit": 0,
         "stdout": "[\"light\",[],[\"src/P/H.cs\",\"src/P/New.cs\",\"tests/Shop.UnitTests/A/ATests.cs\"]]"
+      }
+    },
+    {
+      "name": "--index hands run-lot run.parallelCycles (2 by default) and, per cycle, the code its contracts read bounded",
+      "cmd": "python3 {{KIT}}/scripts/sheet-cycles.py {{FIX}}/sc/reads.md --index --root {{FIX}}/sc | jq -c '[.parallel, .cycles[0].reads]'",
+      "expect": {
+        "exit": 0,
+        "stdout": "[2,[\"src/P/H.cs\"]]"
       }
     },
     {

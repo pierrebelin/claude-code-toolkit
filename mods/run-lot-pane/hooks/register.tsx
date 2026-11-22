@@ -26,6 +26,9 @@ const ALERT_REASON = 110
 const PARALLEL_PHASES = [['Global green', 'Closing'], ['Audit', 'Review']]
 const INTERLEAVED_PHASES = [['RED', 'GREEN']]
 const CONDITIONAL_PHASES = ['Arbiter', 'Question']
+// run-lot titles its cycle phase `RED · GREEN` since 2.18.0, `RED` before: read as one, `RED` inside the pane.
+const CYCLE_TITLE = 'RED · GREEN'
+export const canonicalPhase = (title: string): string => (title === CYCLE_TITLE ? 'RED' : title)
 const KEPT_JOURNALS = 8
 const SCANNED_SESSIONS = 200
 const DONE = '✅'
@@ -57,7 +60,7 @@ const CYCLES_SECTION = '## Cycles'
 // The tests view's grouping, kept in the navigation's toggles: by rule when present, by batch otherwise.
 const BY_RULE = 'tests:by-rule'
 const PANE_FILE = '.pane.jsonl'
-const FEED_KINDS = ['question', 'answer', 'audit-round', 'attempt', 'breaker', 'ack', 'journal']
+const FEED_KINDS = ['audit-round', 'attempt', 'breaker', 'ack', 'journal']
 const STEP_PHASES = ['Global green', 'Closing']
 const ASIDE_LINE = /^(F\d+) ✗ — set aside — (.*?)(?: — patch (\S+))?$/
 // A section heading and its French aliases (docs/FROZEN-LITERALS.md § French aliases).
@@ -94,8 +97,8 @@ export const statusGlyph = (status: RunStatus): string =>
 
 const USER_WAITING = ['BLOQUÉ', 'BLOCKED']
 
-export const headlineOf = (status: RunStatus, outcome: Outcome | null, asking = 0): { glyph: string; text: string; tone: string } =>
-  (status === 'running' && asking > 0) || (status !== 'running' && outcome !== null && USER_WAITING.includes(outcome.label))
+export const headlineOf = (status: RunStatus, outcome: Outcome | null): { glyph: string; text: string; tone: string } =>
+  status !== 'running' && outcome !== null && USER_WAITING.includes(outcome.label)
     ? { glyph: '?', text: 'waiting for user', tone: WAITING_TONE }
     : { glyph: statusGlyph(status), text: status, tone: statusTone(status) }
 
@@ -443,7 +446,7 @@ export const parsePhases = (script: string): PhaseDeclaration[] => {
     if (title === undefined) return []
     const segment = block.slice(found.index, titles[index + 1]?.index)
     const detail = /\bdetail\s*:\s*(['"`])((?:(?!\1).)+)\1/.exec(segment)?.[2] ?? null
-    return [{ title, detail }]
+    return [{ title: canonicalPhase(title), detail }]
   })
 }
 
@@ -540,10 +543,10 @@ const phasesOf = (script: string, lines: string[], at: number, expression: strin
   const branches = branchesOf(expression.trim())
   if (branches !== null) {
     const phases = branches.map(literalOf)
-    return phases.every((one): one is string => one !== null) ? phases : []
+    return phases.every((one): one is string => one !== null) ? phases.map(canonicalPhase) : []
   }
   const literal = literalOf(expression)
-  if (literal !== null) return [literal]
+  if (literal !== null) return [canonicalPhase(literal)]
   const parameter = identifierOf(expression)
   const forwarded = parameter === null ? [] : [...new Set(forwardedValuesOf(script, lines, at, parameter))]
   return forwarded.length === 1 ? forwarded : []
@@ -721,25 +724,7 @@ export const cycleStatesOf = (lines: WorkLine[], lot: string): Record<string, st
   )
 
 
-export type PendingQuestion = { batch: string; id: string; count: number; endsAt: number }
-
 const numberOf = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
-
-// A question waits `waitSeconds` before the run applies its
-// recommendation; an answer line of the same id, written at or after it, answers it.
-export const openQuestionsOf = (lines: WorkLine[]): PendingQuestion[] => {
-  const records = lines as Record<string, unknown>[]
-  return records.flatMap(line => {
-    if (line.kind !== 'question') return []
-    const at = numberOf(line.at) ?? 0
-    if (records.some(other => other.kind === 'answer' && String(other.id) === String(line.id) && (numberOf(other.at) ?? Infinity) >= at)) return []
-    const payload = fieldsOf(line.payload)
-    const asked = Array.isArray(payload?.questions) ? payload.questions.length : 1
-    return [{ batch: String(line.batch ?? payload?.batch ?? ''), id: String(line.id), count: Math.max(1, asked), endsAt: (at + (numberOf(payload?.waitSeconds) ?? 0)) * 1000 }]
-  })
-}
-
-export const pendingQuestionsOf = (lines: WorkLine[], lot: string): string[] => openQuestionsOf(lines).filter(one => one.batch === lot).map(one => one.id)
 
 export const reportOutcomeOf = (text: string, path: string): Outcome | null => {
   const status = REPORT_STATUS.exec(text.split('\n')[0] ?? '')?.[1]
@@ -765,7 +750,6 @@ export const waveOf = (run: WorkflowRun): Wave | null => {
 
 export const lotStateOf = (run: WorkflowRun, entry: PlanLot): LotState => {
   const agents = run.agents.filter(agent => agent.lot === entry.lot)
-  if ((entry.asking ?? 0) > 0 && entry.outcome === null) return 'waiting'
   if (entry.outcome !== null && USER_WAITING.includes(entry.outcome.label)) {
     return agents.some(agent => agent.state === 'running') ? 'running' : 'waiting'
   }
@@ -789,7 +773,6 @@ export const lotDetailOf = (run: WorkflowRun, entry: PlanLot, state: LotState, a
     const step = rows.slice(reached + 1).find(row => !CONDITIONAL_PHASES.includes(row.title))
     return step === undefined ? 'running' : step.title
   }
-  if (state === 'waiting') return 'question awaiting an answer'
   if (state === 'done') return 'done before this run'
   if (state === 'pending') return entry.deps.length > 0 ? `after ${entry.deps.join(', ')}` : 'pending'
   return state
@@ -817,8 +800,7 @@ export const lotRun = (run: WorkflowRun, lot: string): WorkflowRun => {
     .map(agent => ({ ...agent, phase: nestedPhaseOf(run.child, agent.label, agent.phase) }))
   const agents = placedInPhases(resolved, phases)
   const state = lotStateOf(run, entry)
-  const asking = entry.outcome === null ? (entry.asking ?? 0) : 0
-  const status: RunStatus = state === 'waiting' && asking > 0 ? 'running' : state === 'pending' || state === 'done' || state === 'waiting' ? 'completed' : state
+  const status: RunStatus = state === 'pending' || state === 'done' || state === 'waiting' ? 'completed' : state
   const startedAt = agents.length > 0 ? Math.min(...agents.map(agent => agent.startedAt)) : run.startedAt
   const endedAt = agents.length > 0 ? Math.max(...agents.map(agent => agent.endedAt ?? agent.lastActiveAt)) : startedAt
   return {
@@ -839,7 +821,6 @@ export const lotRun = (run: WorkflowRun, lot: string): WorkflowRun => {
     child: null,
     plan: null,
     lots: [],
-    asking,
   }
 }
 
@@ -921,12 +902,12 @@ export const parseJournal = (text: string): Journal | null => {
   if (raw === null) return null
   const status = STATUSES.find(one => one === raw.status) ?? (raw.status === 'running' ? 'running' : 'failed')
   const declared = Array.isArray(raw.phases)
-    ? raw.phases.flatMap(one => (typeof one?.title === 'string' ? [{ title: one.title as string, detail: textOf(one.detail) }] : []))
+    ? raw.phases.flatMap(one => (typeof one?.title === 'string' ? [{ title: canonicalPhase(one.title as string), detail: textOf(one.detail) }] : []))
     : []
   const agentPhases: Record<string, string> = {}
   for (const entry of Array.isArray(raw.workflowProgress) ? raw.workflowProgress : []) {
     if (entry?.type === 'workflow_agent' && typeof entry.agentId === 'string' && typeof entry.phaseTitle === 'string') {
-      agentPhases[entry.agentId] = entry.phaseTitle
+      agentPhases[entry.agentId] = canonicalPhase(entry.phaseTitle)
     }
   }
   const failure = typeof raw.error === 'string' ? { label: status, reason: raw.error, report: null } : null
@@ -952,8 +933,8 @@ export const samplesOf = (text: string, labels: Record<string, string> = {}): Sa
     entry?.type === 'workflow_agent' && entry.state === 'done' && typeof entry.phaseTitle === 'string' && typeof entry.durationMs === 'number'
       ? [
           {
-            phase: labelledPhaseOf(labels, typeof entry.label === 'string' ? entry.label : '', entry.phaseTitle as string) ?? (entry.phaseTitle as string),
-            scope: entry.phaseTitle as string,
+            phase: labelledPhaseOf(labels, typeof entry.label === 'string' ? entry.label : '', canonicalPhase(entry.phaseTitle as string)) ?? canonicalPhase(entry.phaseTitle as string),
+            scope: canonicalPhase(entry.phaseTitle as string),
             label: typeof entry.label === 'string' ? entry.label : '',
             ms: entry.durationMs as number,
             tools: typeof entry.toolCalls === 'number' ? entry.toolCalls : null,
@@ -1702,11 +1683,6 @@ export const runRootOfRun = (run: WorkflowRun): string | null => {
   return sheet === null ? null : runRootOf(sheet)
 }
 
-export const questionBanner = (questions: PendingQuestion[], at: number): string | null => {
-  const first = questions.filter(one => one.endsAt > at).sort((a, b) => a.endsAt - b.endsAt)[0]
-  return first === undefined ? null : `? ${first.batch} — ${counted(first.count, 'question')} — recommendation applied in ${clockOf(first.endsAt - at)}`
-}
-
 export type Contest = { gap: string; harm: string; answer: string | null; text: string | null }
 
 export type AuditRound = { round: number; open: number; after: number | null; files: number; contested: Contest[]; diverged: boolean }
@@ -1766,7 +1742,8 @@ export const isAttemptOf = (step: string, agent: WorkflowAgent): boolean => {
   const cycle = /^(RED|GREEN) (.+)$/.exec(step)
   const label = CYCLE_LABEL.exec(agent.label)
   if (cycle === null) return label === null && (agent.label.toLowerCase() === step.toLowerCase() || (STEP_PHASES.includes(step) && agent.phase === step))
-  if (label === null || !agent.label.toUpperCase().startsWith(`${cycle[1]} `)) return false
+  // A cycle agent (`RED <id> … +GREEN`) runs both stages: a GREEN step is its retry too.
+  if (label === null || !(agent.label.toUpperCase().startsWith(`${cycle[1]} `) || BOTH_STAGES.test(agent.label))) return false
   const wanted = bare(cycle[2] ?? '')
   const named = bare(label[2] ?? '')
   return wanted !== '' && named !== '' && (wanted.startsWith(named) || named.startsWith(wanted))
@@ -1904,7 +1881,6 @@ export const reportLotOf = (path: string): string | null => /[\\/](F\d+)(?:-[\w]
 export type FeedView = {
   work: WorkLine[]
   pane: Fields[]
-  questions: PendingQuestion[]
   breaker: Breaker | null
   asides: Record<string, Aside>
   notes: Note[]
@@ -1915,7 +1891,7 @@ export const feedViewOf = (feed: RunFeed | null): FeedView => {
   const work = workLinesOf(feed?.work ?? '')
   const pane = paneLinesOf(feed?.pane ?? '')
   return {
-    work, pane, questions: openQuestionsOf(work), breaker: breakerOf(work), asides: asidesOf(work),
+    work, pane, breaker: breakerOf(work), asides: asidesOf(work),
     notes: notesOf(pane, work), answers: answersOf(pane, work),
   }
 }
@@ -1947,19 +1923,19 @@ export const withPaneLine = (text: string, record: Fields): string => {
   return `${kept === '' ? '' : `${kept}\n`}${JSON.stringify(record)}\n`
 }
 
-export type GraphState = 'done' | 'running' | 'waiting' | 'question' | 'aside' | 'blocked' | 'failed'
+export type GraphState = 'done' | 'running' | 'waiting' | 'aside' | 'blocked' | 'failed'
 
 export type GraphNode = { lot: string; name: string; deps: string[]; state: GraphState; layer: number; hover: string[] }
 
 const GRAPH_WORDS: Record<GraphState, string> = {
-  done: 'done', running: 'running', waiting: 'waiting', question: 'question', aside: 'set aside', blocked: 'blocked', failed: 'failed',
+  done: 'done', running: 'running', waiting: 'waiting', aside: 'set aside', blocked: 'blocked', failed: 'failed',
 }
 
 export const graphGlyph = (state: GraphState): string =>
-  state === 'done' ? '✓' : state === 'running' ? '●' : state === 'waiting' ? '○' : state === 'question' ? '?' : state === 'blocked' ? '⊘' : '✗'
+  state === 'done' ? '✓' : state === 'running' ? '●' : state === 'waiting' ? '○' : state === 'blocked' ? '⊘' : '✗'
 
 const graphFill = (state: GraphState): string =>
-  state === 'done' ? STATUS.good : state === 'running' ? NEUTRAL : state === 'question' ? STATUS.warning : state === 'blocked' ? STATUS.serious : state === 'waiting' ? '#8c8b85' : STATUS.critical
+  state === 'done' ? STATUS.good : state === 'running' ? NEUTRAL : state === 'blocked' ? STATUS.serious : state === 'waiting' ? '#8c8b85' : STATUS.critical
 
 // One node per batch of the plan table, placed one column past its deepest dependency.
 export const graphNodesOf = (run: WorkflowRun, view: FeedView, at: number): GraphNode[] => {
@@ -1971,7 +1947,7 @@ export const graphNodesOf = (run: WorkflowRun, view: FeedView, at: number): Grap
     base[entry.lot] =
       entry.lot in view.asides || (run.child !== null && isBlockedOutcome && state !== 'running')
         ? 'aside'
-        : state === 'completed' || state === 'done' ? 'done' : state === 'running' ? 'running' : state === 'waiting' ? 'question' : state === 'pending' ? 'waiting' : 'failed'
+        : state === 'completed' || state === 'done' ? 'done' : state === 'running' ? 'running' : state === 'waiting' ? 'aside' : state === 'pending' ? 'waiting' : 'failed'
   }
   const asideAbove = (lot: string, seen: Set<string> = new Set()): string | null => {
     for (const dep of run.lots.find(entry => entry.lot === lot)?.deps ?? []) {
@@ -2206,7 +2182,7 @@ const demoSheet = (isFinished: boolean): Sheet => {
         written: [{ test: 'CreateProductTests.ShouldThrowCatalogArchivedException_WhenCatalogIsArchived', case: 'Archived catalog refused' }],
       },
       {
-        ...cycle('X3', 1, 'Publication lock', isFinished ? 'done' : 'red'),
+        ...cycle('X3', 2, 'Publication lock', isFinished ? 'done' : 'red'),
         rmcu: 'CAT-RM-003 / CAT-CU-02', level: 'UT', testClass: 'PublishProductTests', observation: 'ProductLockedException; the product keeps its status',
         methods: ['PublishProductTests.ShouldThrowProductLockedException_WhenProductIsLocked', 'PublishProductTests.ShouldSaveProductPublishedEvent_WhenProductIsUnlocked'],
         written: [
@@ -2215,13 +2191,13 @@ const demoSheet = (isFinished: boolean): Sheet => {
         ],
       },
       {
-        ...cycle('X4', 2, 'Remove a deleted item', isFinished ? 'done' : 'pending'),
+        ...cycle('X4', 3, 'Remove a deleted item', isFinished ? 'done' : 'pending'),
         rmcu: 'CAT-RM-004 / CAT-CU-03', level: 'IT', testClass: 'SaveTests', observation: 'the stored product no longer holds the item',
         methods: ['SaveTests.ShouldDeleteProductItem_WhenProductItemRemovedEventIsSaved'],
         written: isFinished ? [{ test: 'SaveTests.ShouldDeleteProductItem_WhenProductItemRemovedEventIsSaved', case: 'Removed item deleted from the store' }] : [],
       },
       {
-        ...cycle('X5', 2, 'Product audit', isFinished ? 'done' : 'pending'), guard: true,
+        ...cycle('X5', 3, 'Product audit', isFinished ? 'done' : 'pending'), guard: true,
         rmcu: 'CAT-RM-005', level: 'architecture', testClass: 'AuditTests',
         methods: ['AuditTests.ShouldAuditEveryProductCommand'],
         written: isFinished ? [{ test: 'AuditTests.ShouldAuditEveryProductCommand', case: 'Every product command audited' }] : [],
@@ -2238,28 +2214,25 @@ const sampled = (agentMs: number, tools: number, spanMs: number): PhaseSample =>
 
 export const demoHistory = (): PhaseSamples => ({
   Design: sampled(inMs(1, 10), 8, inMs(2)),
-  RED: sampled(inMs(1, 30), 14, inMs(2)),
-  GREEN: sampled(inMs(1, 30), 14, inMs(8)),
+  RED: sampled(inMs(2, 50), 60, inMs(10)),
   'Global green': sampled(inMs(1), 8, inMs(1, 10)),
   Closing: sampled(inMs(0, 50), 6, inMs(0, 50)),
-  Audit: sampled(inMs(2), 16, inMs(5)),
-  Review: sampled(inMs(2), 18, inMs(2, 30)),
+  Audit: sampled(inMs(2), 16, inMs(4)),
   Report: sampled(inMs(0, 30), 4, inMs(0, 30)),
 })
 
 export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
   const t = inMs
   const total = t(19, 35)
-  const begin = isFinished ? at - total : at - t(12, 40)
-  const phases = ['Design', 'RED', 'GREEN', 'Global green', 'Closing', 'Audit', 'Review', 'Report']
+  const begin = isFinished ? at - total : at - t(15, 40)
+  // The phases run-lot declares (workflows/run-lot.js), each detail shortened; `RED` is shown `RED · GREEN`.
+  const phases = ['Design', 'RED', 'Global green', 'Closing', 'Audit', 'Report']
   const details = {
     Design: 'cycle index of the sheet; design writes the `## Cycles` block only when absent or invalid; declaratives',
-    RED: 'tdd-test-author, waves in sequence, cycles of a wave in parallel',
-    GREEN: 'tdd-implementer, serial, writes the cycle state',
-    'Global green': 'whole or filtered suites per test-scope.md, beside the pre-audit gate',
-    Closing: 'pre-audit.sh and what it lists, beside global green',
-    Audit: 'audit-capture.sh, ddd-tdd-auditor, two retries at most',
-    Review: 'adversarial-reviewer on the next sheet, beside the audit',
+    RED: 'one tdd-cycle agent per cycle, its RED then its GREEN; disjoint cycles of a wave in parallel; rejected → one retry, then one on opus',
+    'Global green': 'suites as cctoolkit suites-plan resolves them; red → suites repair',
+    Closing: 'cctoolkit pre-audit and what it lists, beside global green',
+    Audit: 'ddd-tdd-auditor; GAPS → one fix',
     Report: 'run/batches/FX.md, written even on stop',
   }
   const agent = (
@@ -2270,29 +2243,29 @@ export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
       ...options,
       ...(options.activeAt === undefined ? {} : { activeAt: begin + options.activeAt }),
     })
+  const cycle = { type: 'tdd-cycle' }
   const build = [
-    agent('d', 1, 'index CAT-LIFECYCLE-PLAN-F4.md', 'Design', 0, t(0, 40), 'done', 'Haiku'),
-    agent('dc', 15, 'declaratives', 'Design', t(0, 40), t(4, 30), 'done', 'Sonnet'),
-    agent('r1', 2, 'RED X1 w1 create', 'RED', t(4, 30), t(6, 18), 'done'),
-    agent('r2', 3, 'RED X2 w1 refusal', 'RED', t(4, 30), t(6, 10), 'done'),
-    agent('r3', 14, 'RED X3 w1 lock', 'RED', t(4, 30), t(5, 20), 'interrupted', 'Sonnet'),
-    agent('g1', 4, 'GREEN X1 create', 'GREEN', t(6, 20), t(7, 14), 'done', 'Sonnet', { type: 'tdd-implementer' }),
-    agent('g2', 5, 'GREEN X3 lock', 'GREEN', t(7, 20), t(8, 32), 'error', 'Sonnet', { type: 'tdd-implementer' }),
+    agent('rs', 1, 'resume state', 'Design', 0, t(0, 12), 'done', 'Haiku', { type: 'general-purpose' }),
+    agent('d', 2, 'index CAT-LIFECYCLE-PLAN-F4.md', 'Design', t(0, 12), t(0, 40), 'done', 'Haiku', { type: 'general-purpose' }),
+    agent('dc', 3, 'declaratives', 'Design', t(0, 40), t(1, 30), 'done', 'Sonnet', { type: 'general-purpose' }),
+    agent('x1', 4, 'RED X1 w1 Create the product +GREEN', 'RED', t(1, 30), t(5, 20), 'done', 'Sonnet', cycle),
+    agent('x2', 5, 'RED X2 w1 Refuse without catalog +GREEN', 'RED', t(1, 30), t(5, 35), 'done', 'Sonnet', cycle),
+    agent('x3', 6, 'RED X3 w2 Publication lock +GREEN', 'RED', t(5, 40), t(6, 25), 'error', 'Sonnet', cycle),
     isFinished
-      ? agent('g2b', 6, 'GREEN X3 lock', 'GREEN', t(8, 40), t(12), 'done', 'Sonnet', { type: 'tdd-implementer' })
-      : agent('g2b', 6, 'GREEN X3 lock', 'GREEN', t(8, 40), null, 'running', 'Sonnet', {
-          type: 'tdd-implementer', lastTool: 'Edit', tools: 48, activeAt: t(12, 35),
+      ? agent('x3b', 7, 'RED X3 w2 Publication lock +GREEN', 'RED', t(6, 30), t(12, 20), 'done', 'Sonnet', cycle)
+      : agent('x3b', 7, 'RED X3 w2 Publication lock +GREEN', 'RED', t(6, 30), null, 'running', 'Sonnet', {
+          ...cycle, lastTool: 'Edit', tools: 130, activeAt: t(15, 35),
           live: { streamKind: 'thinking', streamChars: 4_200, firstChunkAt: at - 7_560, lastChunkAt: at - 1_000 },
         }),
   ]
   const closing = [
-    agent('s', 7, 'suites', 'Global green', t(12, 5), t(13, 15), 'done', 'Haiku'),
-    agent('c', 8, 'pre-audit', 'Closing', t(12, 5), t(13), 'done', 'Sonnet'),
-    agent('a1', 9, 'audit', 'Audit', t(13, 50), t(15, 40), 'done', 'Opus', { type: 'ddd-tdd-auditor' }),
-    agent('rv', 10, 'next batch review', 'Review', t(13, 50), t(16, 20), 'done', 'Opus', { type: 'adversarial-reviewer' }),
-    agent('f1', 11, 'fix 1', 'Audit', t(15, 45), t(17, 45), 'done', 'Sonnet', { type: 'tdd-implementer' }),
-    agent('a2', 12, 'audit retry 1', 'Audit', t(17, 50), t(19), 'done', 'Opus', { type: 'ddd-tdd-auditor' }),
-    agent('rp', 13, 'report', 'Report', t(19, 5), total, 'done', 'Haiku'),
+    agent('x4', 8, 'RED X4 w3 Remove a deleted item +GREEN', 'RED', t(12, 25), t(14, 30), 'done', 'Sonnet', cycle),
+    agent('x5', 9, 'RED X5 w3 Product audit +GREEN', 'RED', t(12, 25), t(13, 10), 'done', 'Sonnet', cycle),
+    agent('s', 10, 'suites run', 'Global green', t(14, 35), t(15, 40), 'done', 'Haiku', { type: 'general-purpose' }),
+    agent('c', 11, 'pre-audit', 'Closing', t(14, 35), t(15, 5), 'done', 'Sonnet', { type: 'general-purpose' }),
+    agent('a1', 12, 'audit', 'Audit', t(15, 45), t(17, 20), 'done', 'Sonnet', { type: 'ddd-tdd-auditor' }),
+    agent('f1', 13, 'fix', 'Audit', t(17, 25), t(19), 'done', 'Sonnet', { type: 'general-purpose' }),
+    agent('rp', 14, 'report', 'Report', t(19, 5), total, 'done', 'Haiku', { type: 'general-purpose' }),
   ]
   return [
     {
@@ -2301,14 +2274,13 @@ export const demoRuns = (at: number, isFinished = false): WorkflowRun[] => {
       outcome: isFinished
         ? {
             label: 'GAPS',
-            reason: 'two fix rounds done, one blocking gap remains on the organization lock',
+            reason: 'one fix done, one major gap left on the organization lock',
             report: 'todo/catalog-lifecycle/run/batches/F4.md',
           }
         : null,
-      audit: isFinished ? { verdict: 'GAPS', blocking: 1, major: 2 } : null,
+      audit: isFinished ? { verdict: 'GAPS', blocking: 0, major: 1 } : null,
       sheet: demoSheet(isFinished),
       agents: isFinished ? [...build, ...closing] : build,
-      ...(isFinished ? {} : { asking: 1 }),
     },
   ]
 }
@@ -2573,15 +2545,14 @@ const DEMO_LOT_SHEET = 'todo/catalog-lifecycle/CAT-LIFECYCLE-PLAN-F4.md'
 
 const DEMO_LOT_REPORT = `## STATUS — GAPS
 
-Reason: two fix rounds done, one blocking gap remains on the organization lock
+Reason: one fix done, one major gap left on the organization lock
 
 ## To validate
 
 - Design — the publication lock is set on the catalog, not on each product (no rule names the owner)
 - RED Publication lock — unreachable guard, test not written, removal proposed: \`Product.EnsureCatalogOpen\` (the catalog check refuses the call first)
-- Question design — unanswered, recommendation applied: lock on publication or on first sale? → on publication (RM-04 reads published)
-- Audit — contest accepted, trade-off (round 1): duplicated guard in the aggregate — harm: none → the guard stays in the aggregate
-- Audit — audit rounds stopped, diverging: round 2 changed 5 file(s) for 2 finding(s), 2 still open (Product.cs, DeleteProductCommandHandler.cs)
+- Global green — test file written to reach green, snapshot promoted: tests/Acme.UnitTests/Catalog/Products/ProductSnapshots.cs
+- Audit — major gap left after the fix: organization lock not checked before deletion (DeleteProductCommandHandler.cs)
 - Assumptions — H2: archived items keep their audit trail (tech lead)
 `
 
@@ -2606,7 +2577,7 @@ const DEMO_RUN_TEXT = `## To validate
 
 - F5 — Set aside — ${DEMO_ASIDE} — patch run/${DEMO_STAMP}-aside-F5.patch
 
-### Arbiter and design decisions
+### Design decisions
 
 - F3 — Design — restoring keeps the archive date in the history (the audit trail is never rewritten)
 `
@@ -2639,35 +2610,14 @@ export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFini
     const id = (index: number) => entries[index]?.id ?? ''
     const entry = (index: number) => ({ batch: 'F4', step: entries[index]?.step ?? '', text: entries[index]?.text ?? '', sheet: DEMO_LOT_SHEET })
     const work = [
-      jsonLine({ kind: 'attempt', batch: 'F4', step: 'GREEN lock', n: 2, reason: 'tests modified at GREEN: tests/Acme.UnitTests/Catalog/Products/ProductTests.cs — granted: none', at: s - 300 }),
+      jsonLine({ kind: 'attempt', batch: 'F4', step: 'GREEN Publication lock', n: 2, reason: 'GREEN left ProductTests.Lock_WhenPublished_RefusesEdit red (exit 1)', at: s - 300 }),
       ...(isFinished
         ? [
-            jsonLine({ kind: 'audit-round', batch: 'F4', round: 1, open: 3, files: ['Product.cs', 'ProductTests.cs', 'DeleteProductCommandHandler.cs', 'DeleteProductTests.cs'], contested: [{ gap: 'duplicated guard in the aggregate', harm: 'none, the guard runs once per command' }], responses: [], at: s - 280 }),
-            jsonLine({
-              kind: 'audit-round', batch: 'F4', round: 1, open: 3, files: ['Product.cs', 'ProductTests.cs', 'DeleteProductCommandHandler.cs', 'DeleteProductTests.cs'],
-              contested: [{ gap: 'duplicated guard in the aggregate', harm: 'none, the guard runs once per command' }],
-              responses: [{ gap: 'duplicated guard in the aggregate', answer: 'Accept', text: 'trade-off kept, the guard stays in the aggregate' }], after: 2, at: s - 250,
-            }),
-            jsonLine({
-              kind: 'audit-round', batch: 'F4', round: 2, open: 2, files: ['Product.cs', 'ProductTests.cs', 'DeleteProductCommandHandler.cs', 'DeleteProductTests.cs', 'Catalog.cs'],
-              contested: [{ gap: 'organization lock not checked before deletion', harm: 'a member of another organization deletes the product' }],
-              responses: [{ gap: 'organization lock not checked before deletion', answer: 'Escalate', text: 'needs the owner of the organization rule' }], after: 2, diverged: true, at: s - 120,
-            }),
             jsonLine({ kind: 'ack', batch: 'F4', ref: 'n-demo-1', what: 'note-taken', at: s - 900 }),
             jsonLine({ kind: 'ack', batch: 'F4', ref: id(0), what: 'applied', at: s - 60 }),
             jsonLine({ kind: 'ack', batch: 'F4', ref: id(1), what: 'applied', relaunch: `/run-lot ${DEMO_LOT_SHEET}`, hn: 'H3', cycles: ['X3'], at: s - 60 }),
           ]
         : [
-            jsonLine({
-              kind: 'question', batch: 'F4', id: 'F4-design-1', at: s - 148,
-              payload: {
-                batch: 'F4', sheet: DEMO_LOT_SHEET, kind: 'design', context: 'publication lock owner', waitSeconds: 600,
-                questions: [
-                  { id: 'q1', severity: 'Major', question: 'Lock on publication or on first sale?', evidence: 'RM-04', options: ['publication', 'first sale'], recommendation: 'publication' },
-                  { id: 'q2', severity: 'Minor', question: 'Archived catalog read-only?', evidence: 'RM-07', options: ['yes', 'no'], recommendation: 'yes' },
-                ],
-              },
-            }),
             jsonLine({ kind: 'ack', batch: 'F4', ref: 'n-demo-1', what: 'note-taken', at: s - 600 }),
           ]),
     ]
@@ -2678,7 +2628,7 @@ export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFini
         ? [
             jsonLine({ kind: 'validation', id: id(0), entry: entry(0), decision: 'keep', text: '', at: s - 200 }),
             jsonLine({ kind: 'validation', id: id(1), entry: entry(1), decision: 'amend', text: 'write the test, the guard stays', at: s - 190 }),
-            jsonLine({ kind: 'validation', id: id(2), entry: entry(2), decision: 'reject', text: 'lock on first sale, the spec is wrong here', at: s - 30 }),
+            jsonLine({ kind: 'validation', id: id(2), entry: entry(2), decision: 'reject', text: 'restore the snapshot, the change hides a regression', at: s - 30 }),
           ]
         : []),
     ]
@@ -2800,26 +2750,12 @@ async function changedText($: EngineInterface, path: string): Promise<string | n
   return text
 }
 
-async function askingOf($: EngineInterface, sheet: string, lot: string): Promise<number> {
-  return pendingQuestionsOf(workLinesOf((await readText($, workFileOf(sheet))) ?? ''), lot).length
-}
-
-async function refreshAsking($: EngineInterface, run: WorkflowRun): Promise<void> {
-  const sheet = sheetPathOf(run.argument)
-  const lot = lotOf(run.argument)
-  if (sheet === null || lot === null || run.runId.startsWith(DEMO)) return
-  const asking = await askingOf($, sheet, lot.lot)
-  if (asking === (run.asking ?? 0)) return
-  await update($, runs, stored => stored.map(one => (one.runId === run.runId ? { ...one, asking } : one)))
-}
-
 async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> {
   if (run.child === null || run.runId.startsWith(DEMO)) return
   const planText = run.plan === null ? null : await changedText($, run.plan)
   const planned = planText === null ? null : parsePlanLots(planText)
   const views: Record<string, Sheet> = {}
   const outcomes: Record<string, Outcome> = {}
-  const askings: Record<string, number> = {}
   const pasts: Record<string, LotFigures | null> = {}
   for (const entry of run.lots) {
     const agents = run.agents.filter(agent => agent.lot === entry.lot)
@@ -2834,8 +2770,6 @@ async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> 
       if (view !== null) views[entry.lot] = view
     }
     if (entry.sheet === null || agents.length === 0) continue
-    const asking = await askingOf($, entry.sheet, entry.lot)
-    if (asking !== (entry.asking ?? 0)) askings[entry.lot] = asking
     const text = await changedText($, entry.sheet)
     const parsed = text === null ? null : parseSheet(text, entry.sheet)
     const base = parsed ?? entry.view
@@ -2853,13 +2787,13 @@ async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> 
       }
     }
   }
-  if (planned === null && [views, outcomes, askings, pasts].every(found => Object.keys(found).length === 0)) return
+  if (planned === null && [views, outcomes, pasts].every(found => Object.keys(found).length === 0)) return
   await update($, runs, stored =>
     stored.map(one => {
       if (one.runId !== run.runId) return one
       const kept = completeRun(one)
       const lots = planned === null ? kept.lots : mergeLots(kept.lots, planned)
-      return { ...kept, lots: lots.map(entry => ({ ...entry, view: views[entry.lot] ?? entry.view, outcome: outcomes[entry.lot] ?? entry.outcome, asking: askings[entry.lot] ?? entry.asking, past: entry.lot in pasts ? pasts[entry.lot] : entry.past })) }
+      return { ...kept, lots: lots.map(entry => ({ ...entry, view: views[entry.lot] ?? entry.view, outcome: outcomes[entry.lot] ?? entry.outcome, past: entry.lot in pasts ? pasts[entry.lot] : entry.past })) }
     }),
   )
 }
@@ -2888,7 +2822,7 @@ async function keepFigures($: EngineInterface, run: WorkflowRun, sheet: string |
 async function poll($: EngineInterface): Promise<void> {
   const list = (await read($, runs)).map(completeRun)
   for (const run of list) {
-    if (run.status === 'running') await (run.child === null ? refreshAsking($, run) : refreshLots($, run))
+    if (run.status === 'running' && run.child !== null) await refreshLots($, run)
     if (run.status !== 'running' || run.transcriptDir === null) continue
     const dir = run.transcriptDir
     const journalPath = journalPathOf(dir, run.runId)
@@ -3069,13 +3003,6 @@ async function writePane($: EngineInterface, record: Record<string, unknown>, at
   await refreshFeed($, run)
 }
 
-async function bannerNow($: EngineInterface): Promise<string | null> {
-  const last = (await read($, runs)).map(completeRun).pop()
-  const kept = await read($, feed)
-  if (last === undefined || last.status !== 'running' || kept === null || kept.runId !== last.runId) return null
-  return questionBanner(feedViewOf(kept).questions, await read($, now))
-}
-
 async function refreshUsage($: EngineInterface): Promise<void> {
   const figures = await $.session.usage().catch(() => null)
   if (figures === null) return
@@ -3174,23 +3101,14 @@ export const register: Register = on => {
 
   // On a desktop, a button above the prompt opens and closes the pane: its tab has no way back
   // once closed but the command. The surface stacks each plugin's band: this one draws its own alone.
-  // On every surface, a question of the run waiting for its answer shows there with its countdown.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const banner = await bannerNow($)
     const hasToggle = e.surface === 'desktop' && (await read($, runs)).length > 0
-    if (!hasToggle && banner === null) return next(e)
+    if (!hasToggle) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const shown = await read($, isShown)
     return (
       <Box flexDirection="column">
-        {banner !== null && (
-          <Box key="question-banner">
-            <Text bold color={WAITING_TONE} wrap="truncate-end">
-              {banner}
-            </Text>
-          </Box>
-        )}
         {hasToggle && (
           <Box key="toggle-row">
             <Button
@@ -3506,16 +3424,6 @@ export const register: Register = on => {
     const last = list[list.length - 1]
     const runFeed = kept !== null && last !== undefined && kept.runId === last.runId ? kept : null
     const steer = feedViewOf(runFeed)
-    const banner = last?.status === 'running' ? questionBanner(steer.questions, at) : null
-    const bannerRow =
-      banner === null ? null : (
-        <Box key="question-banner" height={1}>
-          <Text bold color={WAITING_TONE} wrap="truncate-end">
-            {'  '}
-            {banner}
-          </Text>
-        </Box>
-      )
     const planRun = last !== undefined && last.child !== null ? last : null
     const lotInView = planRun !== null && where.lot !== null && planRun.lots.some(one => one.lot === where.lot) ? where.lot : null
     const current = planRun !== null && lotInView !== null ? lotRun(planRun, lotInView) : last
@@ -4131,7 +4039,6 @@ export const register: Register = on => {
           {crumbs(isPlanView ? planRun!.name : `${current.name}${batchInView === null ? '' : ` ${batchInView}`}`, 'to validate')}
           {backBar('run')}
           {lotBar}
-          {bannerRow}
           {!isDesktop && <Box key="validate-gap" height={1} />}
           {workPath !== null && line('apply-hint', `Applied at the next /run-plan or /run-lot start, or now with cctoolkit run-validate apply ${absolute(workPath)}`, 'inactive', 'wrap')}
           {entries.length === 0 && line('no-entry', 'Nothing to validate.', 'inactive')}
@@ -4275,7 +4182,6 @@ export const register: Register = on => {
             </Box>
           )}
           {lotBar}
-          {bannerRow}
           {!isDesktop && <Box key="tests-gap" height={1} />}
           {testSheets.length === 0 ? line('no-tests', 'No sheet with a ## Cycles block: no test listed.', 'inactive') : line('tests-summary', `${all.length} tests · ${summary}`, 'inactive')}
           {sections}
@@ -4287,13 +4193,12 @@ export const register: Register = on => {
       const nodes = graphNodesOf(planRun, steer, at)
       const source = planGraph(nodes)
       const graphTone = (state: GraphState) =>
-        state === 'done' ? 'success' : state === 'running' ? 'claude' : state === 'question' ? WAITING_TONE : state === 'aside' || state === 'failed' ? 'error' : state === 'blocked' ? 'warning' : 'inactive'
+        state === 'done' ? 'success' : state === 'running' ? 'claude' : state === 'aside' || state === 'failed' ? 'error' : state === 'blocked' ? 'warning' : 'inactive'
       return (
         <Box flexDirection="column" marginTop={1} {...frame}>
           {crumbs(planRun.name, 'graph')}
           {backBar('run')}
           {lotBar}
-          {bannerRow}
           {Svg !== undefined && source !== '' ? (
             <Box key="graph" marginTop={1}>
               <Svg key="graph-svg" source={source} alt={planGraphAlt(nodes)} width={svgWidth(source)} height={svgHeight(source)} isInteractive />
@@ -4348,7 +4253,6 @@ export const register: Register = on => {
           {crumbs(`${current.name} › ${agent.phase ?? NO_PHASE}`, `agent ${agent.index}`)}
           {backBar(where.back)}
           {lotBar}
-          {bannerRow}
           <Box marginTop={1} {...(isDesktop ? {} : { paddingLeft: 2 })}>
             <Text bold wrap="wrap">
               {agent.label}
@@ -4435,7 +4339,6 @@ export const register: Register = on => {
           {crumbs(current.name, phase.title)}
           {backBar('run')}
           {lotBar}
-          {bannerRow}
           {!isDesktop && <Box key="phase-gap" height={1} />}
           <Text wrap="truncate-end">
             {'  '}
@@ -4479,7 +4382,7 @@ export const register: Register = on => {
     const counted = current.agents.filter(isLive)
     const done = counted.filter(agent => agent.state !== 'running').length
     const remaining = remainingMs(current, rows, known)
-    const headline = headlineOf(current.status, current.outcome, current.asking ?? 0)
+    const headline = headlineOf(current.status, current.outcome)
     const reached = rows.filter(one => one.mark === 'done').length
     const step = currentStep(current, rows)
     const passes = passesOf(current)
@@ -4908,7 +4811,7 @@ export const register: Register = on => {
     if (planRun !== null && lotInView === null) {
       const states = planRun.lots.map(entry => ({ entry, state: lotStateOf(planRun, entry) }))
       const finished = states.filter(one => one.state === 'completed' || one.state === 'done').length
-      const planHeadline = headlineOf(planRun.status, planRun.outcome, planRun.lots.reduce((sum, entry) => sum + (entry.outcome === null ? (entry.asking ?? 0) : 0), 0))
+      const planHeadline = headlineOf(planRun.status, planRun.outcome)
       const supervisors = planRun.agents.filter(agent => agent.lot === null)
       const code = planRun.plan === null ? null : (planRun.plan.split(/[\\/]/).pop() ?? '').replace(/\.md$/, '')
       const planOutcome = planRun.outcome
@@ -4925,7 +4828,6 @@ export const register: Register = on => {
           {statusLine(planRun, planHeadline, [finished, '/', states.length, ' batches'], false, false, earlierMsOf(planRun))}
           {progressRow(finished, states.length, planHeadline.tone)}
           {lotBar}
-          {bannerRow}
           {steerBar}
           {steerLines}
           {steer.breaker !== null && (
@@ -5019,7 +4921,6 @@ export const register: Register = on => {
         )}
         {progressRow(reached, rows.length, headline.tone, [reached, '/', rows.length, ' phases'])}
         {lotBar}
-        {bannerRow}
         {steerBar}
         {steerLines}
         {outcomeBlock(current.outcome, current.status, current.outcome?.reason ?? null, '')}

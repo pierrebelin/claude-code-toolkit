@@ -4,8 +4,10 @@
 // the next sheet is never reviewed, amended nor designed by this batch; past 12 cycles one capture
 // feeds two auditors in parallel, the green suites marked for the rerun guard. No agent is ever an arbiter,
 // a question or a wait, and every cycle is one tdd-cycle agent.
-// retry: C1's RED is rejected twice — a retry carrying the reason, then a last attempt on opus that passes.
-// stop: C1's RED is rejected three times — the batch stops BLOCKED. guardout: the guard C2 stays red — left
+// retry: C1's RED is rejected twice — a retry carrying the reason, a read-only diagnosis, then a last attempt on
+// opus handed that diagnosis, which passes. stop: C1's RED is rejected three times — the batch stops BLOCKED.
+// dag: run.parallelCycles 2 — a cycle starts once every earlier cycle it meets is done (a file written by both,
+// or one it reads bounded written by an earlier wave), never more than two at once, no barrier between waves. guardout: the guard C2 stays red — left
 // out, listed to validate, the batch goes on. greenretry: C1's GREEN is rejected — the retry re-arms the
 // accepted RED and writes the GREEN only. resumered: C1 saved with its RED only — one agent re-arms it.
 // resumenotable, resumeempty: C1 saved with a RED whose table is absent, or empty for no reason — its RED runs again.
@@ -42,6 +44,21 @@ const WRONGV = { ...GAPV, gaps: [{ severity: 'Blocking', axis: 'Correctness', ga
 const cyc = (id, wave, b) => ({ id, wave, behaviour: b, rmcu: 'RM-01', steps: ['1. Step'], refactor: false, guard: false, methods: ['A.ShouldX_WhenY', 'A.ShouldDead_WhenZ'], decisions: '' })
 const idx = { ok: true, missing: false, errors: [], declaratives: variant === 'block' ? ['src/X.cs — mirrors Y'] : [], cycles: variant === 'split' ? Array.from({ length: 13 }, (_, i) => cyc(`C${i + 1}`, 1, `B${i + 1}`)) : [cyc('C1', 1, 'One'), cyc('C2', 2, 'Two')] }
 if (variant === 'guardout') idx.cycles[1] = { ...idx.cycles[1], guard: true }
+if (variant === 'dag') {
+  const at = (c, files, reads = []) => ({ ...c, files, reads })
+  idx.parallel = 2
+  idx.cycles = [
+    at(cyc('C1', 1, 'One'), ['src/A.cs']), at(cyc('C2', 1, 'Two'), ['src/B.cs']), at(cyc('C3', 2, 'Three'), ['src/C.cs']),
+    at(cyc('C4', 2, 'Four'), ['src/A.cs']), at(cyc('C5', 2, 'Five'), ['src/D.cs'], ['src/B.cs']),
+  ]
+  idx.count = 5
+}
+// dag: how long each cycle agent takes (ms), the order they start and end in, how many at once.
+const SPAN = { C1: 60, C2: 500, C3: 30, C4: 30, C5: 30 }
+const sched = []
+let live = 0
+let most = 0
+const DIAGNOSIS = { cause: 'the test asserts 204, RM-01 answers 201 — tests/A/ATests.cs:12', fix: 'assert 201, keep the handler' }
 if (isLight) Object.assign(idx, { closing: { level: 'light', reasons: [], production: 3 }, cycles: idx.cycles.map((c, i) => ({ ...c, files: [`src/C${i}.cs`, `tests/C${i}Tests.cs`] })) })
 const REDOK = { status: 'RED', exit: 1, command: 'x', tests: ['t.cs'], stubs: [], productionDiff: [], table: [{ test: 'A.ShouldX_WhenY', case: '' }], removed: [], unreachable: [{ method: 'A.ShouldDead_WhenZ', site: 'src/X.cs:3', why: 'never reached' }], expectedFailure: '' }
 const GREENOK = { status: 'GREEN', exit: 0, command: 'x', production: ['src/X.cs'], testsDiff: [], cost: 'Cost: 0 read + 0 write outside loop; Infrastructure in loop or in-memory filter: none', independentOf: 'x', removed: '', flagged: '' }
@@ -64,6 +81,7 @@ function cycleAgent(prompt, o, l) {
   if (n > 1 && !prompt.includes('Before anything else, one call: `cctoolkit run-work append')) console.log('WARN retry without its attempt line:', l)
   if ((n === 3) !== (o.model === 'opus')) console.log('WARN opus not on the last attempt only:', l, o.model || 'default')
   if (n === 3 && !prompt.includes('Why each earlier attempt was rejected')) console.log('WARN last attempt without the reasons:', l)
+  if (n === 3 && !prompt.includes(`cause — ${DIAGNOSIS.cause} ; what to do differently — ${DIAGNOSIS.fix}`)) console.log('WARN last attempt without the diagnosis:', l)
   const shouldRearm = (variant === 'greenretry' && own === 'C1' && n === 2) || (variant === 'resumered' && own === 'C1')
   if (shouldRearm !== rearmed) console.log('WARN re-arm prompt', rearmed ? 'unexpected' : 'missing', l)
   if (rearmed && !prompt.includes(JSON.stringify(REDOK))) console.log('WARN re-armed RED not handed verbatim:', l)
@@ -88,6 +106,22 @@ const agent = async (prompt, o) => {
   if (variant === 'root' && !(prompt.includes('Batch worktree: `/w/F3`') && prompt.includes("`cd '/w/F3' && export CLAUDE_PROJECT_DIR='/w/F3' &&`"))) console.log('WARN agent without its worktree:', l)
   if (variant === 'root' && prompt.includes('Run work file:') && !prompt.includes('Run work file: /m/todo/x/run/.work.jsonl.')) console.log('WARN work file outside the session run folder:', l)
   if (variant === 'root' && l === 'suites run' && !prompt.includes('cctoolkit suites-plan /m/todo/x/run/.work.jsonl F3 --lock')) console.log('WARN suites run without the build lock')
+  if (/^diagnose \S+$/.test(l)) {
+    const own = l.split(' ')[1]
+    if (!prompt.includes(`--cycle ${own} --red`) || !prompt.includes(`--cycle ${own} --green`) || !prompt.includes('write nothing') || o.model !== 'sonnet') console.log('WARN diagnosis without its contracts, read-only rule or model:', l)
+    if (!prompt.includes('Rejections, in order: 1. ')) console.log('WARN diagnosis without the rejections:', l)
+    return DIAGNOSIS
+  }
+  if (/^RED \S+ w\d+ .* \+GREEN( opus)?$/.test(l) && variant === 'dag') {
+    const own = /^RED (\S+)/.exec(l)[1]
+    sched.push(`+${own}`)
+    most = Math.max(most, (live += 1))
+    await new Promise(done => setTimeout(done, SPAN[own] || 1))
+    live -= 1
+    sched.push(`-${own}`)
+    if (!prompt.includes('Other builds run beside this one')) console.log('WARN cycle beside others not told to take the build lock:', l)
+    return cycleAgent(prompt, o, l)
+  }
   if (/^RED \S+ w\d+ .* \+GREEN( opus)?$/.test(l)) return cycleAgent(prompt, o, l)
   if (o.phase === 'Global green') green.push(`${l} ${o.model || 'default'}`)
   if (isLight && l === 'suites run') {
@@ -169,6 +203,7 @@ fn(variant === 'root' ? { sheet: 'todo/x/X-PLAN-F3.md', root: '/w/F3/', run: '/m
     console.log('REVIEW', r.toReview.map(x => `${x.step}: ${x.text.slice(0, 60)}`).join(' ; '))
     console.log('AGENTS', labels.join(' | '))
     console.log('GLOBAL GREEN', green.join(' | '))
+    if (variant === 'dag') console.log('SCHED', sched.join(' '), '| at most', most)
     if (GREENTRAP.includes(variant) || ['stop', 'wrong'].includes(variant)) console.log('REASON', r.reason, '| TO VALIDATE', r.toReview.filter(x => x.step === 'Global green').map(x => x.text).join(' ; '))
   })
   .catch(e => { console.log('ERR', e.stack); process.exitCode = 1 })

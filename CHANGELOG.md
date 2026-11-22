@@ -4,6 +4,18 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.18.0 — 2026-11-22
+
+- `cctoolkit`: `run-lot` runs a batch's cycles side by side. A cycle starts as soon as every earlier cycle it meets is done, no longer when its whole wave ends. Two cycles meet when they write the same code file, or when a later cycle reads bounded a file an earlier wave writes; a cycle without code files waits for all the others. `run.parallelCycles` in `kit.config.json` sets how many run at once (2 by default, 1 to 3, checked by `cctoolkit doctor`); side by side, their builds go through `cctoolkit build-lock`. Measured over 20 runs, one cycle took about 4 min and almost every wave held a single cycle.
+- `cctoolkit`: `sheet-cycles --index` no longer refuses a test file shared by two successive waves. The rule dated from REDs of wave n+1 running beside GREENs of wave n, which has not happened since 2.6.0. The index now prints `parallel` and, per cycle, `reads`, the code its contracts read bounded.
+- `cctoolkit`: before the last attempt of a cycle rejected twice, a read-only agent (`diagnose <id>`, sonnet) reads both rejections and the tree they left, and hands their cause to the attempt on opus. Two runs had spent about 17 min each on three identical rejections.
+- `cctoolkit`: `implement-tdd/references/parallelism.md`, which the design reads, asks for one test file per behaviour where the layer allows it, and for any file an earlier cycle creates to be listed under `bounded`, so the later cycle waits for it.
+- `cctoolkit`: `run-lot` titles its cycle phase `RED · GREEN`, the name of what one `tdd-cycle` agent does there. Agent labels are unchanged (`RED <id> w<n> … +GREEN`).
+- `run-lot-pane`: reads `RED · GREEN` and the former `RED` as one phase, so a run launched before this version still shows.
+- `run-lot-pane`: the pending-question banner and countdown are gone, above the prompt and on every view, with the `?` state of a batch and of its graph node: `run-lot` has asked no question since 2.6.0.
+- `run-lot-pane`: a rejected GREEN attempt now shows its reason under the cycle agent's `↻ n`. The pane looked for a `GREEN …` label, but a cycle agent is labelled `RED … +GREEN` for both stages.
+- `run-lot-pane`: `/run-lot-pane demo` and `demo end` follow today's `run-lot`: six phases, one agent per cycle, a GREEN retry with its reason, no GREEN or Review phase, no question, no audit rounds.
+
 ## 2.17.0 — 2026-11-20
 
 - `cctoolkit`: Graphify is no longer part of the kit. It answered about 0.2 % of tool calls on two .NET repos over 60 days, for a graph rebuilt on every `Stop`, a binary to install and a worktree link. The `Stop` hook `graphify-autosync.sh`, the `SessionStart` hook `worktree-graphify-link.sh`, `lib/graphify-bin.sh`, `lib/graphify-freshness.sh` and the `graphify query` output filter move to `archives/graphify/`, unwired. `cctoolkit doctor` no longer checks the binary nor the graph. Agents and skills (`adversarial-reviewer`, `ddd-tdd-auditor`, `knowledge-extractor`, `/plan-implementation`, `/verify-ddd-tdd`, `/implement-tdd`, `/learn`) locate symbols with a scoped `grep`; the blast radius of `/plan-implementation` is a `grep -rlw` per modified type. The `Explore` report contract and the read-bounds messages say the same.

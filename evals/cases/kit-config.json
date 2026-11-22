@@ -312,6 +312,14 @@
       }
     },
     {
+      "name": "run.parallelCycles: 0 is a FAIL, 4 a WARN (capped at 3), 3 or 1 say nothing; `parallel-cycles` prints the capped value, 2 when unset",
+      "cmd": "R={{FIX}}/kcc-{{SID}}; rm -rf $R; mkdir -p $R/.claude && cd $R && for n in 0 4 3 1; do printf '{\"run\": {\"parallelCycles\": %s}}' $n > .claude/kit.config.json; printf '%s:%s:' $n \"$(CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py parallel-cycles)\"; python3 {{KIT}}/lib/kit_config.py validate $R | grep -E '^[A-Za-z]+\trun' | cut -f1,2 | tr '\t\n' ' ,'; printf '|'; done; printf '{\"product\": \"Shop\"}' > .claude/kit.config.json; printf '%s|' \"$(CLAUDE_PROJECT_DIR=$R python3 {{KIT}}/lib/kit_config.py parallel-cycles)\"; rm -rf $R",
+      "expect": {
+        "exit": 0,
+        "stdout": "0:1:FAIL run.parallelCycles,|4:3:WARN run.parallelCycles,|3:3:|1:1:|2|"
+      }
+    },
+    {
       "name": "scope-cache: writes the roots, the aggregate globs, the knowledge base, the rule sheet's name and the watched files, its mtime 1 s past the newest of them",
       "cmd": ". {{KIT}}/lib/platform.sh; R={{FIX}}/sc-{{SID}}; kit_path R; A=$R/src/Acme.Application/Catalog/CreateProduct; rm -rf $R; mkdir -p $R/.claude $A $R/tests && cd $R && git init -q\nprintf '%s' '{\"preset\": \"clean-architecture\", \"product\": \"Acme\"}' > .claude/kit.config.json\nperl -e 'utime(time - 60, time - 60, @ARGV)' .claude/kit.config.json\nprintf 'public sealed class CreateProductCommandHandler { }\\n' > $A/CreateProductCommandHandler.cs\nprintf 'readme\\n' > README.md\nexport CLAUDE_PROJECT_DIR=$R\nC=$(bash {{KIT}}/bin/cctoolkit config scope-cache); cut -f1 \"$C\" | tr '\\n' ' '; grep -c '^watch' \"$C\"; grep '^uc' \"$C\"; [ \"$C\" -nt .claude/kit.config.json ] && echo newer; rm -f \"$C\"",
       "expect": {

@@ -6,9 +6,9 @@ import type { WorkflowAgent, WorkflowRun } from '../types'
 import {
   earlierMsOf, figuresKeyOf, lotFiguresFrom, lotFiguresOf, cycleStatesOf, lotDetailOf, waveOf, cycleProgressOf, workFileOf, workLinesOf, cycleSlugOf, isSheetDone, withLiveCycles, stageLabelOf, phaseTitleOf, parseCycles,
   cycleTestsOf, methodNameOf, rulesOf, testsByRuleOf, testTally, wordsOf,
-  alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, pendingQuestionsOf, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
+  alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, relativePath, samePath, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
-  mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
+  canonicalPhase, mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
   activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples, washOf } from '../hooks/register'
 import { PANE, paneAt, paneCommand, world, indented } from './world'
 import type { Directory, Stamps, World } from './world'
@@ -20,7 +20,7 @@ const DIR = `${SESSION}/subagents/workflows/${RUN}`
 const SHEET_PATH = 'todo/cycle-vie-produit-catalogue/CAT-CYCLE-PLAN-F4.md'
 const REPORT_PATH = 'todo/cycle-vie-produit-catalogue/run/F4/F4-rapport.md'
 const DEMO_REPORT = 'todo/catalog-lifecycle/run/batches/F4.md'
-const DEMO_REASON = 'two fix rounds done, one blocking gap remains on the organization lock'
+const DEMO_REASON = 'one fix done, one major gap left on the organization lock'
 const REASON = 'la relecture du lot suivant porte au moins un Bloquant sur le verrou d’organisation de l’archivage'
 
 const SCRIPT = `export const meta = {
@@ -185,6 +185,21 @@ describe('reading the run', () => {
     expect(detailsOf(bracketed)).toEqual({ A: 'liste [x] ici' })
   })
 
+  test('cycle phase: `RED · GREEN` (run-lot since 2.18.0) and `RED` read as one, shown `RED · GREEN` without a GREEN phase', () => {
+    expect([canonicalPhase('RED · GREEN'), canonicalPhase('RED'), canonicalPhase('Audit')]).toEqual(['RED', 'RED', 'Audit'])
+    const script = "export const meta = { phases: [{ title: 'Design' }, { title: 'RED · GREEN', detail: 'one agent per cycle' }] }\nawait agent(p, { phase: 'RED · GREEN', label: `RED ${c.id} w${c.wave} x +GREEN` })"
+    expect(parsePhases(script)).toEqual([{ title: 'Design', detail: null }, { title: 'RED', detail: 'one agent per cycle' }])
+    expect(Object.values(labelPhasesOf(script))).toEqual(['RED'])
+    const journal = parseJournal(JSON.stringify({
+      status: 'running', phases: [{ title: 'RED · GREEN' }],
+      workflowProgress: [{ type: 'workflow_agent', agentId: 'a1', phaseTitle: 'RED · GREEN', label: 'RED C1 w1 x +GREEN', state: 'done', durationMs: 5 }],
+    }))
+    expect([journal?.phases, journal?.agentPhases]).toEqual([['RED'], { a1: 'RED' }])
+    expect(samplesOf(JSON.stringify({ workflowProgress: [{ type: 'workflow_agent', phaseTitle: 'RED · GREEN', label: 'RED C1 w1 x +GREEN', state: 'done', durationMs: 5 }] }))[0]?.phase).toBe('RED')
+    const run = { ...completeRun({ runId: 'wf', startedAt: 0 } as WorkflowRun), phases: ['Design', 'RED', 'Report'] }
+    expect(phaseTitleOf(run, 'RED')).toBe('RED · GREEN')
+  })
+
   test('final journal: path, status, duration, argument, full outcome, verdict, phase per agent', () => {
     expect(journalPathOf(DIR, RUN)).toBe(`${SESSION}/workflows/${RUN}.json`)
     const journal = parseJournal(JOURNAL)
@@ -303,23 +318,16 @@ describe('reading the run', () => {
     ])
   })
 
-  test('stop or pending question: header reads waiting for user, not failed', () => {
+  test('a stop: header reads waiting for user, not failed', () => {
     const outcome = (label: string) => ({ label, reason: null, report: null })
     expect(['BLOQUÉ', 'BLOCKED'].map(label => headlineOf('failed', outcome(label)).text)).toEqual(Array(2).fill('waiting for user'))
     expect(['REVIEW-BLOCKING', 'RELECTURE-BLOQUANTE'].map(label => headlineOf('completed', outcome(label)).text)).toEqual(['completed', 'completed'])
-    expect(headlineOf('running', null, 1)).toEqual({ glyph: '?', text: 'waiting for user', tone: 'cyan' })
-    expect([headlineOf('running', null, 0).text, headlineOf('completed', outcome('AWAITING-ANSWER')).text]).toEqual(['running', 'completed'])
+    expect([headlineOf('running', null).text, headlineOf('completed', outcome('AWAITING-ANSWER')).text]).toEqual(['running', 'completed'])
     expect([headlineOf('failed', null).text, headlineOf('completed', outcome('TERMINÉ')).text, headlineOf('running', outcome('BLOQUÉ')).text]).toEqual(['failed', 'completed', 'running'])
   })
 
-  test('pending questions: question lines of the batch in the run work file without their answer line', () => {
+  test('work file: next to the batch sheet, under run/', () => {
     expect(workFileOf('todo/x/X-PLAN-F2.md')).toBe('todo/x/run/.work.jsonl')
-    const lines = workLinesOf([
-      { kind: 'question', batch: 'F2', id: 'F2-1' }, { kind: 'answer', batch: 'F2', id: 'F2-1' }, { kind: 'question', batch: 'F2', id: 'F2-2' },
-      { kind: 'question', batch: 'F3', id: 'F3-1' }, { kind: 'cycle', batch: 'F2', slug: 's' },
-    ].map(line => JSON.stringify(line)).join('\n') + '\nnot json\n')
-    expect(pendingQuestionsOf(lines, 'F2')).toEqual(['F2-2'])
-    expect(pendingQuestionsOf([], 'F2')).toEqual([])
   })
 
   test('current step: last running phase, else first pending, none once the run ends', () => {
@@ -483,7 +491,7 @@ describe('history, estimated end, stall, cost and alert', () => {
     const at = 1_000_000
     const demo = demoRuns(at)[0]!
     const rows = phaseRows(demo, at)
-    expect(remainingMs(demo, rows, demoHistory())).toBe(500_000)
+    expect(remainingMs(demo, rows, demoHistory())).toBe(340_000)
     expect(coarse(500_000)).toBe('8m')
     expect(remainingMs(demo, rows, {})).toBeNull()
     expect(remainingMs({ ...demo, status: 'completed' }, rows, demoHistory())).toBeNull()
@@ -804,7 +812,7 @@ test('empty pane without a run, calls outside a workflow ignored, close button p
   expect(closed).toEqual(['run-lot-pane', 'run-lot-pane'])
 })
 
-test('running demo: columns, model, retry, slow agent, stalled, interrupted, estimated end, all phases shown, sheet, narrow width', async ($, on) => {
+test('running demo: the six phases of run-lot, the cycle phase titled RED · GREEN, model, retry with its reason, slow agent, stalled, estimated end, sheet, narrow width', async ($, on) => {
   const toasts: string[] = []
   runWorld(on, {}, { toasts })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -812,22 +820,24 @@ test('running demo: columns, model, retry, slow agent, stalled, interrupted, est
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
     expect(await ui.find({ type: 'Text', text: /✻ run-lot · F4 · CAT-LIFECYCLE/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /waiting for user\s+12m40\s+6\/7 agents\s+ETA ~8m/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /running\s+15m40\s+6\/7 agents\s+ETA ~6m/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /waiting for user/ })).toBeUndefined()
     // The desktop draws the progress as an SVG bar beside its count; the terminal as glyphs.
-    if (surface === 'desktop') expect((await ui.findAll({ type: 'Svg' })).map(one => one.props.alt)).toContain('progress 2/8')
-    expect(await ui.find({ type: 'Text', text: surface === 'desktop' ? /^2\/8 phases$/ : /━+─+\s+2\/8 phases/ })).toBeDefined()
-    expect(await ui.find({ type: pressType(surface), text: /GREEN X3 lock ↻ 2/ })).toBeDefined()
-    expect((await ui.find({ key: 'model-demo-g1' }))?.text).toBe('Sonnet · high')
-    expect(await colorOf(ui, 'agent-demo-g2b-time')).toBe('warning')
-    expect(await colorOf(ui, 'agent-demo-g1-time')).toBe('inactive')
-    expect(await ui.find({ type: 'Text', text: indented(surface, /^ {6}● thinking · 4.2k chars · 160 tok\/s · Edit \(48\) · ctx 36k · ⚠ 48 tools$/) })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /tdd-implementer, ser/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: indented(surface, /^ {2}wave 1\/2$/) })).toBeDefined()
+    if (surface === 'desktop') expect((await ui.findAll({ type: 'Svg' })).map(one => one.props.alt)).toContain('progress 1/6')
+    expect(await ui.find({ type: 'Text', text: surface === 'desktop' ? /^1\/6 phases$/ : /━+─+\s+1\/6 phases/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^RED · GREEN$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: /GREEN X3 w2 P.*… ↻ 2/ })).toBeDefined()
+    expect((await ui.find({ key: 'model-demo-x1' }))?.text).toBe('Sonnet · high')
+    expect(await colorOf(ui, 'agent-demo-x3b-time')).toBe('warning')
+    expect(await colorOf(ui, 'agent-demo-x1-time')).toBe('inactive')
+    expect(await ui.find({ type: 'Text', text: indented(surface, /^ {6}● thinking · 4.2k chars · 160 tok\/s · Edit \(130\) · ctx 39k · ⚠ 130 tools$/) })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /attempt 1 rejected: GREEN left ProductTests.Lock_WhenPublished_RefusesEdit red/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: indented(surface, /^ {2}wave 2\/3/) })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /○ Global green/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /whole or filtered suites/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /suites as cctoolkit suites-plan/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /○ Audit/ })).toBeDefined()
     expect(await ui.find({ type: pressType(surface), text: /○ Report/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /○ Audit · Review · Report/ })).toBeUndefined()
+    for (const gone of [/tdd-implementer/, /Review/, /Arbiter/, /question/]) expect(await ui.find({ type: 'Text', text: gone })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: surface === 'desktop' ? /SHEET F4 · 2 hypotheses/ : /^ {2}Sheet F4 · 2 hypotheses ─+$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^2\/5 cycles$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /↳ unreachable, not written: ProductTests/ })).toBeDefined()
@@ -836,19 +846,16 @@ test('running demo: columns, model, retry, slow agent, stalled, interrupted, est
   }
 
   const narrow = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...paneAt(40) })
-  expect(await narrow.find({ key: 'model-demo-g1' })).toBeUndefined()
+  expect(await narrow.find({ key: 'model-demo-x1' })).toBeUndefined()
   expect(await narrow.find({ type: 'Button', text: /GREEN X3… ↻ 2/ })).toBeDefined()
   expect((await narrow.find({ key: 'cycle-marks-X1' }))?.text).toMatch(/^✓ +✓$/)
   await narrow.unmount()
 
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Button', text: /⊘ RED X3 w1 lock/ })).toBeDefined()
-  expect(await ui.find({ type: 'Button', text: /⊘ RED X3 w1 lock ↻/ })).toBeUndefined()
-  expect(await colorOf(ui, 'open-demo-r3')).toBe('inactive')
-  expect(await ui.find({ type: 'Text', text: /^ · ⚠ 48 tools$/ })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /^ · ⚠ 48 tools$/ }))?.props.color).toBe('warning')
-  await ui.press({ key: 'open-demo-g2b' })
-  expect((await ui.find({ type: 'Text', text: /^ {2}⚠ 48 tools$/ }))?.props.color).toBe('warning')
+  expect(await ui.find({ type: 'Button', text: /^✗ RED X3 w2 Publi/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^ · ⚠ 130 tools$/ }))?.props.color).toBe('warning')
+  await ui.press({ key: 'open-demo-x3b' })
+  expect((await ui.find({ type: 'Text', text: /^ {2}⚠ 130 tools$/ }))?.props.color).toBe('warning')
   await ui.unmount()
   expect(toasts).toEqual([])
 })
@@ -861,8 +868,8 @@ test('finished demo: verdict on the Audit row, outcome in a coloured box, slow a
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...paneAt(62) })
     expect(await ui.find({ type: 'Text', text: /✓ completed\s+19m35\s+14\/14 agents/ })).toBeDefined()
-    const verdict = await ui.find({ type: 'Text', text: /GAPS · 1 blocking · 2 major/ })
-    expect(verdict?.props.color).toBe('error')
+    const verdict = await ui.find({ type: 'Text', text: /GAPS · 1 major/ })
+    expect(verdict?.props.color).toBe('warning')
     const outcome = await ui.find({ key: 'outcome' })
     // The terminal frames the outcome in its tone; the desktop washes it in that tone.
     if (surface === 'desktop') expect(outcome?.props.backgroundColor).toBe(washOf('warning'))
@@ -873,10 +880,9 @@ test('finished demo: verdict on the Audit row, outcome in a coloured box, slow a
     expect((await ui.find({ type: 'Text', text: /^GAPS$/ }))?.props.color).toBe('warning')
     for (const line of wrapWords(DEMO_REASON, 53)) expect((await ui.find({ type: 'Text', text: line }))?.text).toBe(line)
     expect((await ui.find({ type: 'Text', text: /Report:/ }))?.text).toBe(`Report: ${DEMO_REPORT}`)
-    expect(await colorOf(ui, 'agent-demo-g2b-time')).toBe('warning')
-    expect(await ui.find({ type: pressType(surface), text: /GREEN X3 lock ↻ 2/ })).toBeDefined()
+    expect(await colorOf(ui, 'agent-demo-x3b-time')).toBe('warning')
+    expect(await ui.find({ type: pressType(surface), text: /RED X3 w2 Publi.* ↻ 2/ })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: /^5\/5 cycles$/ }))?.props.color).toBe('success')
-    expect(await ui.find({ type: 'Text', text: /○ Audit · Review · Report/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /ETA/ })).toBeUndefined()
     await ui.unmount()
   }
@@ -1392,10 +1398,6 @@ describe('batch plan through run-plan', () => {
     const unlabelled = lotRun({ ...run, agents: [agent('u1', 4, 'F3', 'done', '▸ run-lot'), agent('u2', 5, 'F3', 'done', 'RED'), agent('u3', 6, 'F3', 'running', '▸ run-lot')] }, 'F3')
     expect(unlabelled.agents.map(one => one.phase)).toEqual(['Design', 'RED', 'RED'])
     expect(lotStateOf({ ...run, status: 'failed', agents: run.agents.map(one => ({ ...one, state: 'done' as const })) }, run.lots[1]!)).toBe('failed')
-    const asking = (lot: (typeof run.lots)[number]) => ({ ...lot, asking: 1 })
-    expect([lotStateOf(run, asking(run.lots[2]!)), lotStateOf(run, asking(run.lots[1]!))]).toEqual(['waiting', 'waiting'])
-    const askingView = lotRun({ ...run, lots: [run.lots[0]!, asking(run.lots[1]!), run.lots[2]!] }, 'F2')
-    expect([askingView.status, askingView.asking, headlineOf(askingView.status, askingView.outcome, askingView.asking).text]).toEqual(['running', 1, 'waiting for user'])
     const blocked = { ...run.lots[2]!, outcome: { label: 'BLOQUÉ', reason: null, report: null } }
     expect([lotStateOf(run, blocked), lotRun({ ...run, lots: [run.lots[0]!, run.lots[1]!, blocked] }, 'F3').status]).toEqual(['waiting', 'completed'])
   })
@@ -1821,7 +1823,7 @@ test('desktop: every view of the demo draws a tree the surface accepts, with a d
   expect(labels.length).toBeGreaterThan(0)
   expect(labels.filter(one => one.props.color === 'success' || one.props.color === 'error')).toEqual([])
   expect((await ui.find({ key: 'note' }))?.props.label).toBe('Note')
-  await ui.press({ key: 'open-demo-g2b' })
+  await ui.press({ key: 'open-demo-x3b' })
   await ui.drawn()
   expect((await ui.find({ key: 'back' }))?.props.label).toBe('← Back')
   await ui.press({ key: 'back' })
@@ -1850,9 +1852,9 @@ test('terminal at 40, 60 and 100 columns: block titles ruled to the figures, age
     const right = 20 + (columns >= 56 ? 14 : 0)
     expect((await ui.find({ type: 'Text', text: /^ {2}Phases ─+$/ }))?.text).toHaveLength(columns - 21)
     expect((await ui.find({ type: 'Text', text: /^ {2}Notes · 2 ─+$/ }))?.text).toHaveLength(columns)
-    expect(await ui.find({ key: 'model-demo-g1' })).toEqual(columns >= 56 ? expect.anything() : undefined)
+    expect(await ui.find({ key: 'model-demo-x1' })).toEqual(columns >= 56 ? expect.anything() : undefined)
     const agents = (await ui.findAll({ type: 'Button' })).filter(one => /^open-demo-/.test(one.key ?? ''))
-    expect(agents.length).toBeGreaterThanOrEqual(8)
+    expect(agents.length).toBeGreaterThanOrEqual(7)
     for (const agent of agents) {
       expect(4 + agent.text.length).toBeLessThanOrEqual(columns - right)
       const id = (agent.key ?? '').slice('open-'.length)

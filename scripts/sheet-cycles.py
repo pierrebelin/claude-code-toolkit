@@ -5,7 +5,9 @@
                                                              (`closing`: the run-lot closing level the block plans,
                                                              lib/closing_level.py; `files` per cycle: the code it writes,
                                                              `tests`: the test files its RED rewrites, shared ones left out;
-                                                             `count`: the number of cycles, so a relayed copy can be checked)
+                                                             `reads`: the code its contracts read bounded;
+                                                             `count`: the number of cycles, so a relayed copy can be checked;
+                                                             `parallel`: run.parallelCycles, how many cycles run at once)
     cctoolkit sheet-cycles <sheet> --cycle ID --red|--green  print the RED or GREEN contract of one cycle
     cctoolkit sheet-cycles <sheet> --cycle ID --pending WORK files of its `ripple` and `toCreate` absent from the batch
                                                              diff, one per line: an ALREADY_GREEN that leaves any is no GREEN
@@ -206,14 +208,6 @@ def validate(data, layout):
                         ids += [i for i in (methods[a][0], methods[b][0]) if i not in ids]
     for m, ids in shared_methods.items():
         errors.append(f"`{m}`: in the `methods` of {', '.join(ids)} — split the theory into one method per cycle (e.g. one per route family), or group the cycles")
-    # Wave n+1's REDs run beside wave n's GREENs (run-lot): a test file both rewrite keeps those GREENs red.
-    waves = sorted(by_wave)
-    for w, nxt in zip(waves, waves[1:]):
-        for a in by_wave[w]:
-            for b in by_wave[nxt]:
-                shared = a[1] & b[1]
-                if shared:
-                    errors.append(f"waves {w} and {nxt}: {a[0]} and {b[0]} share {', '.join(sorted(shared))} — successive waves overlap RED(n+1) with GREEN(n): move {b[0]} one wave later or split the test file")
     if "declaratives" in data and not isinstance(data["declaratives"], list):
         errors.append("`declaratives` must be a list")
     if "closing" in data and data["closing"] not in CLOSING_FORCED:
@@ -237,6 +231,21 @@ def files_of(c, layout):
     return sorted({p for p in paths if p and layout.is_code(p)})
 
 
+def reads_of(c, layout):
+    """Code paths a cycle's contracts read bounded (`bounded`, `boundedGreen`): a cycle writing one runs before it."""
+    paths = (path_of(e) for k in ("bounded", "boundedGreen") for e in c.get(k, []))
+    return sorted({p for p in paths if p and layout.is_code(p)})
+
+
+def parallel_cycles(root):
+    """`run.parallelCycles` of kit.config.json, 1 when unreadable."""
+    try:
+        import kit_config
+        return kit_config.load(root).parallel_cycles
+    except Exception:
+        return 1
+
+
 def planned_closing(data, root):
     """Closing level of run-lot read off the block: the files it plans, its ripples, its `closing`."""
     try:
@@ -256,10 +265,11 @@ def index(data, layout):
         "declaratives": data.get("declaratives", []),
         "closing": planned_closing(data, layout.root),
         "count": len(data["cycles"]),
+        "parallel": parallel_cycles(layout.root),
         "cycles": [
             {**{k: c.get(k, False if k in ("refactor", "guard") else "") for k in
                 ("id", "wave", "behaviour", "rmcu", "steps", "refactor", "guard", "methods", "decisions")},
-             "files": files_of(c, layout), "tests": tests_of(c, layout)}
+             "files": files_of(c, layout), "tests": tests_of(c, layout), "reads": reads_of(c, layout)}
             for c in sorted(data["cycles"], key=lambda c: (c["wave"], data["cycles"].index(c)))
         ],
     }

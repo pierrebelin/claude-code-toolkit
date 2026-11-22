@@ -26,7 +26,7 @@ import sys
 # Label prefix → run-lot / run-plan phase, first match wins.
 PHASES = [
     (r"^(resume state|design|index |declaratives|closing level)", "Design"),
-    (r"^(RED \S+ w\d+ .*\+GREEN|CYCLE\b)", "CYCLE"),
+    (r"^(RED \S+ w\d+ .*\+GREEN|CYCLE\b|diagnose \S+$)", "CYCLE"),
     (r"^RED\b", "RED"),
     (r"^GREEN\b", "GREEN"),
     (r"^suites", "Global green"),

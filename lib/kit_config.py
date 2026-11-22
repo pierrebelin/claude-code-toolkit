@@ -14,6 +14,7 @@ CLI (hooks, shell scripts, and the skills through `cctoolkit root`):
     kit_config.py shell <root>             # shell assignments for scripts/pre-audit.sh, audit-capture.sh
     kit_config.py command <name> [<suite>] # commands.<name>, {product} and {suite} expanded; empty = unset
     kit_config.py parallel-batches         # run.parallelBatches, 1 to 2 (1 when unset or malformed)
+    kit_config.py parallel-cycles          # run.parallelCycles, 1 to 3 (2 when unset, 1 when malformed)
     kit_config.py scope-cache [<root>]     # writes the scope cache lib/scope-cache.sh reads, prints its path
     kit_config.py diff-comments <root>     # added comment lines under the source roots (diff on stdin)
     kit_config.py diff-interaction <root>  # added lines of the interaction suites (diff on stdin)
@@ -46,8 +47,11 @@ CLOSING_CHANGES = re.compile(r"[AMD]+")
 SUITE_REQUIRES = {"docker"}
 # `run` is stack-neutral: its defaults live here. One batch at a time; two at most share a checkout, the
 # second in a worktree of its own (`cctoolkit batch-worktree`), their long builds one at a time (`build-lock`).
-RUN_DEFAULTS = {"parallelBatches": 1}
+# Inside a batch, cycles whose files do not meet run side by side, `parallelCycles` at most: past 3 the
+# builds of one checkout queue behind each other (`build-lock`) and the gain is gone.
+RUN_DEFAULTS = {"parallelBatches": 1, "parallelCycles": 2}
 MAX_PARALLEL_BATCHES = 2
+MAX_PARALLEL_CYCLES = 3
 CONTEXT_RE = re.compile(r"[A-Z][A-Za-z0-9]*")
 
 
@@ -400,6 +404,12 @@ class Config:
         n = self.run.get("parallelBatches", 1)
         return min(max(n, 1), MAX_PARALLEL_BATCHES) if isinstance(n, int) and not isinstance(n, bool) else 1
 
+    @property
+    def parallel_cycles(self):
+        """`run.parallelCycles` within 1..MAX_PARALLEL_CYCLES; 2 when unset, 1 when malformed."""
+        n = self.run.get("parallelCycles", RUN_DEFAULTS["parallelCycles"])
+        return min(max(n, 1), MAX_PARALLEL_CYCLES) if isinstance(n, int) and not isinstance(n, bool) else 1
+
     def command(self, name, suite=None):
         if name == "testFast" and not self.commands.get("testFast"):
             # Unset: the solution build then the suite command, the run it stands for.
@@ -588,13 +598,19 @@ def validate_run(raw):
     if raw is None:
         return []
     if not isinstance(raw, dict):
-        return [("FAIL", "run", "expects {\"parallelBatches\": <n>}")]
+        return [("FAIL", "run", "expects {\"parallelBatches\": <n>, \"parallelCycles\": <n>}")]
+    out = []
     n = raw.get("parallelBatches", 1)
     if not isinstance(n, int) or isinstance(n, bool) or n < 1:
-        return [("FAIL", "run.parallelBatches", "expects a count, 1 for one batch at a time")]
-    if n > MAX_PARALLEL_BATCHES:
-        return [("WARN", "run.parallelBatches", f"{n} capped at {MAX_PARALLEL_BATCHES}: two batches per checkout at most")]
-    return []
+        out.append(("FAIL", "run.parallelBatches", "expects a count, 1 for one batch at a time"))
+    elif n > MAX_PARALLEL_BATCHES:
+        out.append(("WARN", "run.parallelBatches", f"{n} capped at {MAX_PARALLEL_BATCHES}: two batches per checkout at most"))
+    n = raw.get("parallelCycles", RUN_DEFAULTS["parallelCycles"])
+    if not isinstance(n, int) or isinstance(n, bool) or n < 1:
+        out.append(("FAIL", "run.parallelCycles", "expects a count, 1 for one cycle at a time"))
+    elif n > MAX_PARALLEL_CYCLES:
+        out.append(("WARN", "run.parallelCycles", f"{n} capped at {MAX_PARALLEL_CYCLES}: past it the builds of one checkout queue"))
+    return out
 
 
 def validate_closing(raw):
@@ -745,6 +761,12 @@ def _cli(argv):
     if cmd == "parallel-batches":
         try:
             print(load().parallel_batches)
+        except KitConfigError:
+            print(1)
+        return 0
+    if cmd == "parallel-cycles":
+        try:
+            print(load().parallel_cycles)
         except KitConfigError:
             print(1)
         return 0

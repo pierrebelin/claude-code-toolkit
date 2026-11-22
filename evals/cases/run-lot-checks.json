@@ -93,11 +93,19 @@
       }
     },
     {
-      "name": "run-lot flow: a cycle's RED rejected twice — a retry carrying the reason with its attempt line, then a last attempt on opus with every reason",
+      "name": "run-lot flow: a cycle's RED rejected twice — a retry carrying the reason with its attempt line, a read-only diagnosis on sonnet, then a last attempt on opus handed every reason and that diagnosis",
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js retry | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN opus | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,RED Two | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | diagnose C1 | RED C1 w1 One +GREEN opus | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: run.parallelCycles 2 — a cycle starts once every earlier cycle it meets is done (C4 writes C1's file, C5 reads bounded the file C2 writes), never more than two at once, no barrier between waves (C3 of wave 2 starts while C2 of wave 1 runs), each told to take the build lock",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js dag | grep -E 'STATUS|SCHED|ERR|WARN|UNHANDLED' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 5 RED One,RED Three,RED Four,RED Two,RED Five | audits 1;SCHED +C1 +C2 -C1 +C3 -C3 +C4 -C4 -C2 +C5 -C5 | at most 2;"
       }
     },
     {
@@ -105,7 +113,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js stop | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|REASON' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS BLOCKED | toReview 0 ;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN opus | report;REASON RED One — RED not observed: exit 0 on `x` — already in place on disk → status ALREADY_GREEN | TO VALIDATE ;"
+        "stdout": "STATUS BLOCKED | toReview 0 ;AGENTS resume state | RED C1 w1 One +GREEN | RED C1 w1 One +GREEN | diagnose C1 | RED C1 w1 One +GREEN opus | report;REASON RED One — RED not observed: exit 0 on `x` — already in place on disk → status ALREADY_GREEN | TO VALIDATE ;"
       }
     },
     {
@@ -113,7 +121,7 @@
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js guardout | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
       "expect": {
         "exit": 0,
-        "stdout": "STATUS DONE | toReview 2 RED One,Cycle C2 | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | RED C2 w2 Two +GREEN | RED C2 w2 Two +GREEN opus | suites run | pre-audit | audit | report;"
+        "stdout": "STATUS DONE | toReview 2 RED One,Cycle C2 | audits 1;AGENTS resume state | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | RED C2 w2 Two +GREEN | diagnose C2 | RED C2 w2 Two +GREEN opus | suites run | pre-audit | audit | report;"
       }
     },
     {

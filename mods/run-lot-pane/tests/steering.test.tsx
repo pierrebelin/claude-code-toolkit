@@ -4,8 +4,8 @@ import type { On } from 'claude-code'
 import type { PlanLot, WorkflowAgent, WorkflowRun } from '../types'
 import {
   answersOf, asidesOf, attemptLinesOf, auditRoundsOf, blankAgent, breakerOf, completeRun, contestLine, demoPlanRuns, entryIdOf, feedPathsOf, feedViewOf, feedWorkOf,
-  graphNodesOf, graphTreeLines, isAttemptOf, keptSections, notesOf, openQuestionsOf, paneLinesOf, parsePlanLots, pendingQuestionsOf, planGraph, planGraphAlt,
-  questionBanner, retryOf, roundLine, sentencesOf, svgHeight, svgWidth, toValidateOf, validateEntriesOf, withPaneLine, workLinesOf,
+  graphNodesOf, graphTreeLines, isAttemptOf, keptSections, notesOf, paneLinesOf, parsePlanLots, planGraph, planGraphAlt,
+  retryOf, roundLine, sentencesOf, svgHeight, svgWidth, toValidateOf, validateEntriesOf, withPaneLine, workLinesOf,
 } from '../hooks/register'
 import { BAND, paneAt, paneCommand, world, indented } from './world'
 
@@ -18,17 +18,6 @@ const agentOf = (id: string, label: string, phase: string, startedAt: number, st
 })
 
 describe('run files', () => {
-  test('pending question: count, countdown from its waitSeconds, gone on an answer at or after it or once over', () => {
-    const asked = (id: string, at: number, extra: object = {}) => ({ kind: 'question', batch: 'F3', id, at, payload: { batch: 'F3', questions: [{ id: 'q1' }, { id: 'q2' }], ...extra } })
-    const work = lines(asked('F3-1', S - 148, { waitSeconds: 600 }), { kind: 'answer', batch: 'F3', id: 'F3-0', at: S }, asked('F3-0', S - 10, { waitSeconds: 300 }))
-    expect(openQuestionsOf(work)).toEqual([{ batch: 'F3', id: 'F3-1', count: 2, endsAt: (S - 148 + 600) * 1000 }])
-    expect(questionBanner(openQuestionsOf(work), NOW)).toBe('? F3 — 2 questions — recommendation applied in 7:32')
-    expect(questionBanner(openQuestionsOf(work), NOW + 452_000)).toBeNull()
-    const early = lines(asked('F3-1', S), { kind: 'answer', id: 'F3-1', at: S - 5 })
-    expect(pendingQuestionsOf(early, 'F3')).toEqual(['F3-1'])
-    expect(questionBanner(openQuestionsOf(lines(asked('F4-1', S, { waitSeconds: 90, questions: [{ id: 'q1' }] }))), NOW)).toBe('? F3 — 1 question — recommendation applied in 1:30')
-  })
-
   test('audit rounds: the last line of a round wins, open → after, contests with their answer, divergence', () => {
     const work = lines(
       { kind: 'audit-round', batch: 'F2', round: 1, open: 5, files: ['a', 'b', 'c', 'd'], contested: [], at: 1 },
@@ -166,7 +155,7 @@ describe('run files', () => {
   })
 
   test('feed: the work lines the views read, the reports of the batches and of the run', () => {
-    expect(feedWorkOf(['{"kind":"cycle","slug":"a"}', '{"kind":"question","id":"q"}', 'oops', '{"kind":"ack","ref":"n-1"}'].join('\n'))).toBe('{"kind":"question","id":"q"}\n{"kind":"ack","ref":"n-1"}')
+    expect(feedWorkOf(['{"kind":"cycle","slug":"a"}', '{"kind":"attempt","step":"RED x","n":2}', '{"kind":"question","id":"q"}', 'oops', '{"kind":"ack","ref":"n-1"}'].join('\n'))).toBe('{"kind":"attempt","step":"RED x","n":2}\n{"kind":"ack","ref":"n-1"}')
     const lot = (id: string): PlanLot => ({ lot: id, sheet: null, deps: [], isDone: false, outcome: null, audit: null, view: null })
     const plan = completeRun({ runId: 'r', name: 'run-plan', startedAt: 0, child: { name: 'run-lot', phases: [], details: {}, labels: {} }, plan: 'todo/cat/CAT-PLAN.md', lots: [lot('F1')] } as unknown as WorkflowRun)
     expect(feedPathsOf(plan, 'todo/cat/run', lines({ kind: 'journal', run: '2026-10-10-0912', text: 'x' }))).toEqual([
@@ -228,18 +217,17 @@ type Found = { find: (query: { type: string; text: RegExp }) => Promise<{ props:
 
 // A line the terminal wraps hangs in a box: its indent is the box's padding, its text starts where the line does.
 const hung = async (ui: Found, text: RegExp) => (await ui.find({ type: 'Box', text }))?.props.paddingLeft
-test('demo: the pending question above the prompt and on every view, ticking; retry reasons; notes', async ($, on) => {
+test('demo: no banner above the prompt on the terminal, the desktop toggle; retry reasons; notes', async ($, on) => {
   const { clock } = planWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await paneCommand($, 'demo')
   for (const surface of ['terminal', 'desktop'] as const) {
     const band = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...BAND })
-    expect((await band.find({ key: 'question-banner' }))?.text).toBe('? F4 — 2 questions — recommendation applied in 7:32')
+    expect(await band.find({ key: 'question-banner' })).toBeUndefined()
     expect(await band.find({ key: 'toggle-run-lot-pane' })).toEqual(surface === 'desktop' ? expect.anything() : undefined)
     await band.unmount()
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
-    expect(await ui.find({ type: 'Text', text: indented(surface, /^ {2}\? F4 — 2 questions — recommendation applied in 7:32$/) })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /↻ attempt 1 rejected: tests modified at GREEN: tests\/Acme/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /↻ attempt 1 rejected: GREEN left ProductTests.Lock_WhenPublished_RefusesEdit red/ })).toBeDefined()
     if (surface === 'desktop') {
       expect(await ui.find({ type: 'Text', text: /✓ F4 · an archived catalog is read-only · consumed/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /✎ F4 · keep the lock check in the aggregate, not the handler · pending/ })).toBeDefined()
@@ -255,54 +243,39 @@ test('demo: the pending question above the prompt and on every view, ticking; re
   }
   await clock.advance(2_000)
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /recommendation applied in 7:30$/ })).toBeDefined()
   expect(await ui.find({ key: 'open-graph' })).toBeUndefined()
-  await ui.press({ key: 'open-demo-g2b' })
+  await ui.press({ key: 'open-demo-x3b' })
   expect(await ui.find({ type: 'Text', text: /^Retries · ↻ 2$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {2}\? F4 — 2 questions/ })).toBeDefined()
   await ui.press({ key: 'back' })
   await ui.press({ key: 'note' })
   await ui.input({ key: 'note-input', text: 'the lock is on the catalog' })
   expect(await ui.find({ type: 'Text', text: /✎ F4 {2}the lock is on the catalog · pending/ })).toBeDefined()
   expect(await ui.find({ key: 'note-input' })).toBeUndefined()
-  await clock.advance(452_000)
-  expect(await ui.find({ key: 'question-banner' })).toBeUndefined()
   await ui.unmount()
 })
 
-test('demo end: audit rounds under the Audit phase, to validate in each state, answers written to the pane file', async ($, on) => {
+test('demo end: to validate in each state, answers written to the pane file', async ($, on) => {
   planWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await paneCommand($, 'demo end')
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
-  // A round at the agents' level, its contests one level in, each answer on its own line beneath.
-  expect(await ui.find({ type: 'Text', text: /^ {4}R1 findings 3 → 2 · files 4$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {4}R2 findings 2 → 2 · files 5 · diverging, rounds stopped$/ })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /^ · diverging, rounds stopped$/ }))?.props.color).toBe('error')
-  expect((await ui.find({ type: 'Text', text: /^R2 findings 2 → 2 · files 5$/ }))?.props.color).toBe('inactive')
-  expect(await ui.find({ type: 'Text', text: /^ {6}↳ contested: duplicated guard in the aggregate — harm: none, the guard runs once per command$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {8}→ Accept: trade-off kept, the guard stays in the aggregate$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {6}↳ contested: organization lock not checked before deletion — harm: / })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {8}→ Escalate: / })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /R1 findings/ })).toBeUndefined()
   expect(await ui.find({ key: 'question-banner' })).toBeUndefined()
-  expect((await ui.find({ key: 'open-validate' }))?.text).toBe('to validate 4')
-  await ui.press({ key: 'phase-Audit' })
-  expect(await ui.find({ type: 'Text', text: /^Rounds · 2$/ })).toBeDefined()
-  await ui.press({ key: 'back' })
+  expect((await ui.find({ key: 'open-validate' }))?.text).toBe('to validate 3')
 
   await ui.press({ key: 'open-validate' })
   expect(await ui.find({ type: 'Text', text: /cctoolkit run-validate apply \/repo\/todo\/catalog-lifecycle\/run\/\.work\.jsonl$/ })).toBeDefined()
   expect(await hung(ui, /^✓ kept · applied$/)).toBe(4)
   expect(await hung(ui, /^✓ amended: write the test, the guard stays · applied$/)).toBe(4)
   expect(await hung(ui, /^ {2}relaunch: \/run-lot todo\/catalog-lifecycle\/CAT-LIFECYCLE-PLAN-F4\.md$/)).toBe(2)
-  expect(await hung(ui, /^● rejected: lock on first sale, the spec is wrong here · answered, not applied yet$/)).toBe(4)
+  expect(await hung(ui, /^● rejected: restore the snapshot, the change hides a regression · answered, not applied yet$/)).toBe(4)
   expect((await ui.find({ type: 'Text', text: /^● $/ }))?.props.color).toBe('warning')
-  expect((await ui.findAll({ type: 'Box', text: /^○ pending answer$/ })).map(one => one.props.paddingLeft)).toEqual([4, 4, 4, 4])
+  expect((await ui.findAll({ type: 'Box', text: /^○ pending answer$/ })).map(one => one.props.paddingLeft)).toEqual([4, 4, 4])
   expect(await hung(ui, /^an archived catalog is read-only$/)).toBe(4)
 
   const entry = toValidateOf('## To validate\n\n- Assumptions — H2: archived items keep their audit trail (tech lead)\n', 'F4')[0]!
   await ui.press({ key: `keep-${entry.id}` })
-  expect((await ui.findAll({ type: 'Box', text: /^○ pending answer$/ })).length).toBe(3)
+  expect((await ui.findAll({ type: 'Box', text: /^○ pending answer$/ })).length).toBe(2)
   expect(await ui.find({ key: `keep-${entry.id}` })).toBeDefined()
   const design = { id: (await ui.findAll({ type: 'Button' })).map(one => one.key ?? '').find(key => key.startsWith('amend-'))!.slice('amend-'.length) }
   await ui.press({ key: `amend-${design.id}` })
@@ -310,7 +283,7 @@ test('demo end: audit rounds under the Audit phase, to validate in each state, a
   expect(await hung(ui, /^● amended: the lock is per product · answered, not applied yet$/)).toBe(4)
   expect(await ui.find({ key: `answer-${design.id}` })).toBeUndefined()
   await ui.press({ key: 'back' })
-  expect((await ui.find({ key: 'open-validate' }))?.text).toBe('to validate 3')
+  expect((await ui.find({ key: 'open-validate' }))?.text).toBe('to validate 2')
   await ui.unmount()
 
   const desktop = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'desktop', ...PANE })
@@ -485,7 +458,8 @@ test('a real run-plan: run files read from disk, the breaker stop, answers and n
   await clock.advance(10_000)
 
   const band = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...BAND })
-  expect((await band.find({ key: 'question-banner' }))?.text).toBe('? F2 — 1 question — recommendation applied in 5:00')
+  // A question line an older run left is read as nothing: run-lot asks none since 2.6.0.
+  expect(await band.find({ key: 'question-banner' })).toBeUndefined()
   await band.unmount()
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /⛔ Plan stopped — common cause/ })).toBeDefined()
