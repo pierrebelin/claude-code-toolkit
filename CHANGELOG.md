@@ -4,6 +4,12 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.18.1 — 2026-11-22
+
+- `run-lot-pane`: on a run-plan, a running batch's line names its phase as the batch view does, `RED · GREEN` for today's run-lot, no longer the bare `RED`.
+- `run-lot-pane`: `/run-lot-pane demo plan` shows batches as today's run-lot runs them: one cycle agent per cycle under `RED · GREEN`, then Global green, Closing, Audit and Report; no separate GREEN phase.
+- `run-lot-pane`, `knowledge-pane`: README screenshots retaken after 2.18.0 (run-lot demo, plan, plan merge, spec view).
+
 ## 2.18.0 — 2026-11-22
 
 - `cctoolkit`: `run-lot` runs a batch's cycles side by side. A cycle starts as soon as every earlier cycle it meets is done, no longer when its whole wave ends. Two cycles meet when they write the same code file, or when a later cycle reads bounded a file an earlier wave writes; a cycle without code files waits for all the others. `run.parallelCycles` in `kit.config.json` sets how many run at once (2 by default, 1 to 3, checked by `cctoolkit doctor`); side by side, their builds go through `cctoolkit build-lock`. Measured over 20 runs, one cycle took about 4 min and almost every wave held a single cycle.

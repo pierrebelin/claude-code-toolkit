@@ -21,7 +21,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
 | `docs/` | context cost, the frozen literals registry, the README screenshots |
 | `archives/` | retired bricks (`graphify/`, `learn/`, `run-replay/`), unwired and unmaintained, kept for the record with their README |
-| `dev/` | maintainer tools: `bump.sh`, `release-check.sh`, `turn-batching-check.py` (batching and context fill measured from the transcripts), `workflow-timing.py` (duration per phase and per agent of a workflow run, reads and greps per agent), `hook-timing.sh` (median wall time of the hot hooks on the payloads of `dev/hook-timing/*.json`, two kit copies compared), `knowledge-pane-demo.sh` (the mod's demo copy of `examples/docs/business/`) |
+| `dev/` | maintainer tools: `bump.sh`, `release-check.sh`, `turn-batching-check.py` (batching and context fill measured from the transcripts), `workflow-timing.py` (duration per phase and per agent of a workflow run, reads and greps per agent), `hook-timing.sh` (median wall time of the hot hooks on the payloads of `dev/hook-timing/*.json`, two kit copies compared), `knowledge-pane-demo.sh` (the mod's demo copy of `examples/docs/business/`), `screenshots.py` (the mods' README screenshots retaken from the real panes) |
 
 ## Anonymisation — do not break it
 

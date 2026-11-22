@@ -1503,7 +1503,7 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
   await paneCommand($, 'demo plan')
   const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /1\/6 batches/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: / GREEN · GREEN C3 hide$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / RED · GREEN · RED C3/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / after F2, F3$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Supervisor$/ })).toBeDefined()
   await ui.press({ key: 'open-lot-F2' })

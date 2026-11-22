@@ -767,11 +767,12 @@ export const lotDetailOf = (run: WorkflowRun, entry: PlanLot, state: LotState, a
     const active = [...run.agents]
       .filter(agent => agent.lot === entry.lot && agent.state === 'running')
       .sort((a, b) => b.index - a.index)[0]
-    if (active !== undefined) return `${active.phase ?? NO_PHASE} · ${active.label}`
-    const rows = phaseRows(lotRun(run, entry.lot), at)
+    const child = lotRun(run, entry.lot)
+    if (active !== undefined) return `${active.phase === null ? NO_PHASE : phaseTitleOf(child, active.phase)} · ${active.label}`
+    const rows = phaseRows(child, at)
     const reached = rows.map(row => row.mark !== 'pending').lastIndexOf(true)
     const step = rows.slice(reached + 1).find(row => !CONDITIONAL_PHASES.includes(row.title))
-    return step === undefined ? 'running' : step.title
+    return step === undefined ? 'running' : phaseTitleOf(child, step.title)
   }
   if (state === 'done') return 'done before this run'
   if (state === 'pending') return entry.deps.length > 0 ? `after ${entry.deps.join(', ')}` : 'pending'
@@ -2323,9 +2324,10 @@ const demoPlanCast = (begin: number, loadedAt: number) => {
     const at = (minutes: number, seconds = 0) => Math.round(t(minutes, seconds) * pace)
     const steps: [string, string, number, string, string?][] = [
       ['design', 'Design', at(3, 40), 'Opus'],
-      ...behaviours.map((one, index): [string, string, number, string] => [`RED C${index + 1} w1 ${one}`, 'RED', at(1, 20 + index * 10), 'Sonnet']),
-      ...behaviours.map((one, index): [string, string, number, string, string] => [`GREEN C${index + 1} ${one}`, 'GREEN', at(1, 10 + index * 30), 'Sonnet', 'tdd-implementer']),
+      // One tdd-cycle agent per cycle, its RED then its GREEN, the cycles of a wave side by side.
+      ...behaviours.map((one, index): [string, string, number, string, string] => [`RED C${index + 1} w${index < 2 ? 1 : 2} ${one} +GREEN`, 'RED', at(2, 30 + index * 40), 'Sonnet', 'tdd-cycle']),
       ['suites', 'Global green', at(1, 10), 'Haiku'],
+      ['pre-audit', 'Closing', at(0, 40), 'Sonnet'],
       ['audit', 'Audit', at(2, 20), 'Opus', 'ddd-tdd-auditor'],
       ['report', 'Report', at(0, 30), 'Haiku'],
     ]
@@ -2395,7 +2397,7 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
   ]
   const f5End = f5Start + t(2, 20)
   const f2Start = f5End + t(1, 40)
-  const f2 = lotAgents('F2', 20, f2Start, isFinished ? null : 'GREEN C3 hide', ['archive', 'twice', 'hide'], 1.15)
+  const f2 = lotAgents('F2', 20, f2Start, isFinished ? null : 'RED C3 w2 hide +GREEN', ['archive', 'twice', 'hide'], 1.15)
   const f2End = endOf(f2)
   const f3 = isFinished ? lotAgents('F3', 40, f2End + t(1, 40), null, ['restore', 'deleted'], 0.8) : []
   const f3End = endOf(f3)
