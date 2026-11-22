@@ -26,6 +26,8 @@ export type WorkflowAgent = {
   lastActiveAt: number
   openCalls: number
   toolSince: number | null
+  // The `timeout` the first open call declared (a Bash wait of 9 min): it is not long before that.
+  toolBudget?: number | null
   waitingSince: number | null
   firstChunkAt: number | null
   lastChunkAt: number | null
@@ -121,6 +123,8 @@ export type LotFigures = { agents: number; durationMs: number; tokens: number; e
 export type PlanLot = {
   lot: string
   sheet: string | null
+  // The work file the batch's prompts name: its run folder, in the checkout even when its sheet lies in a worktree.
+  work?: string
   deps: string[]
   isDone: boolean
   outcome: Outcome | null
@@ -167,6 +171,9 @@ export type PhaseSample = { total: number; count: number; tools: number; toolCou
 
 export type PhaseSamples = Record<string, PhaseSample>
 
+// By workflow name: two workflows share phase titles (`Preflight`, `Report`) that last nothing alike.
+export type WorkflowSamples = Record<string, PhaseSamples>
+
 export type SessionFigures = {
   context: number | null
   percent: number | null
@@ -190,6 +197,6 @@ export type Navigation = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'run-lot-pane': { runs: WorkflowRun[]; now: number; usage: SessionFigures; nav: Navigation; history: PhaseSamples; isShown: boolean; feed: RunFeed | null }
+    'run-lot-pane': { runs: WorkflowRun[]; now: number; usage: SessionFigures; nav: Navigation; history: WorkflowSamples; isShown: boolean; feed: RunFeed | null }
   }
 }

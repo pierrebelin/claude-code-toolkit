@@ -161,6 +161,9 @@ describe('run files', () => {
     expect(feedPathsOf(plan, 'todo/cat/run', lines({ kind: 'journal', run: '2026-10-10-0912', text: 'x' }))).toEqual([
       'todo/cat/run/batches/F1.md', 'todo/cat/run/2026-10-10-0912.md',
     ])
+    // A batch run beside another in a worktree: its sheet lies there, its report in the plan's run folder.
+    const paired = { ...plan, lots: [{ ...lot('F2'), sheet: '/tmp/wt-F2/todo/cat/CAT-PLAN-F2.md', work: 'todo/cat/run/.work.jsonl' }] }
+    expect(feedPathsOf(paired, 'todo/cat/run', [])).toEqual(['todo/cat/run/batches/F2.md'])
     const lotRunOnly = completeRun({ runId: 'r', name: 'run-lot', startedAt: 0, argument: 'todo/cat/CAT-PLAN-F2.md' } as WorkflowRun)
     expect(feedPathsOf(lotRunOnly, 'todo/cat/run', [])[0]).toBe('todo/cat/run/batches/F2.md')
   })

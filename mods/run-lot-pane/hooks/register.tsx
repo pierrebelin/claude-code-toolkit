@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, FsEntry, ModelUsage, Register, TurnStepChunk } from 'claude-code'
 
 import type {
-  AuditVerdict, ChildWorkflow, Journal, KnowledgeMerge, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet,
+  AuditVerdict, ChildWorkflow, Journal, KnowledgeMerge, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet, WorkflowSamples,
   LotFigures, PlanLot, Prompted, RunFeed, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun, WrittenTest,
 } from '../types'
 
@@ -46,7 +46,7 @@ const SHEET_PATTERN = /-PLAN-(F\d+)\.md$/
 const LOT_PATTERN = /(?:^|[\\/])([^\\/]+?)-PLAN-(F\d+)\.md$/
 const CHILD_PLUGIN = /\bworkflow\(\s*['"]([\w-]+):[\w.-]+['"]/
 const CHILD_CALL = /\bworkflow\(\s*(?:['"](?:[\w-]+:)?([\w.-]+)['"]|\{\s*scriptPath:[^)]*?[\\/]([\w.-]+)\.js)/
-const PROMPT_LOT = /Workflow run-lot, batch (F\d+)\.[\s\S]*?Batch sheet: (\S+?\.md)\./
+const PROMPT_LOT = /Workflow run-lot, batch (F\d+)\.[\s\S]*?Batch sheet: (\S+?\.md)\.(?: Run work file: (\S+?\.jsonl)\.)?/
 const REVIEW_LOT = /^mode: next-batch \S+ (\S*?-PLAN-(F\d+)\.md)/
 const PLAN_SECTIONS = ['### Execution des lots', '### Batch execution']
 const PLAN_DONE = /^### (?:Lot|Batch) (F\d+)\b.*✅ DONE/gm
@@ -75,7 +75,7 @@ const HOME: Navigation = { screen: 'run', phase: null, agentId: null, back: 'run
 const nav = atom({ plugin: 'run-lot-pane', key: 'nav' } as const, HOME)
 const isShown = atom({ plugin: 'run-lot-pane', key: 'isShown' } as const, false)
 const usage = atom({ plugin: 'run-lot-pane', key: 'usage' } as const, { context: null, percent: null } as SessionFigures)
-const history = atom({ plugin: 'run-lot-pane', key: 'history' } as const, {} as PhaseSamples)
+const history = atom({ plugin: 'run-lot-pane', key: 'history' } as const, {} as WorkflowSamples)
 const feed = atom({ plugin: 'run-lot-pane', key: 'feed' } as const, null as RunFeed | null)
 
 export const duration = (ms: number): string => {
@@ -652,9 +652,9 @@ export const planPathOf = (argument: string | null): string | null => {
   return /-PLAN\.md$/.test(path) ? path.replace(/^@/, '') : null
 }
 
-export const promptLotOf = (prompt: string): { lot: string; sheet: string } | null => {
+export const promptLotOf = (prompt: string): { lot: string; sheet: string; work?: string } | null => {
   const framed = PROMPT_LOT.exec(prompt)
-  if (framed?.[1] !== undefined && framed[2] !== undefined) return { lot: framed[1], sheet: framed[2] }
+  if (framed?.[1] !== undefined && framed[2] !== undefined) return { lot: framed[1], sheet: framed[2], ...(framed[3] === undefined ? {} : { work: framed[3] }) }
   const review = REVIEW_LOT.exec(prompt)
   return review?.[1] !== undefined && review[2] !== undefined ? { lot: review[2], sheet: review[1] } : null
 }
@@ -709,6 +709,12 @@ const runRootOf = (sheet: string): string => `${sheet.slice(0, lastSeparator(she
 export const reportPathsOf = (sheet: string, lot: string): string[] => [`${runRootOf(sheet)}/batches/${lot}.md`]
 
 export const workFileOf = (sheet: string): string => `${runRootOf(sheet)}/.work.jsonl`
+
+// The run folder a batch writes its report and work lines in: the one of the work file its prompt names, else beside
+// its sheet. A batch run beside another in a worktree has its sheet there, its run folder in the checkout
+// (workflows/run-plan.js hands it `run`).
+export const lotRunRootOf = (entry: { sheet: string; work?: string }): string =>
+  entry.work === undefined ? runRootOf(entry.sheet) : entry.work.slice(0, lastSeparator(entry.work))
 
 type WorkLine = { kind?: unknown; batch?: unknown; id?: unknown; slug?: unknown; state?: unknown }
 
@@ -924,7 +930,14 @@ export const parseJournal = (text: string): Journal | null => {
   }
 }
 
-export type Sample = { phase: string; ms: number; tools: number | null; startedAt: number | null; scope?: string; label?: string }
+export type Sample = { phase: string; ms: number; tools: number | null; startedAt: number | null; scope?: string; label?: string; workflow?: string }
+
+// `cctoolkit:run-lot` and `run-lot` name one workflow.
+export const workflowKey = (name: string): string => name.replace(/^[\w-]+:/, '')
+
+// The workflow an agent of a journal worked for: the journal's own, or the child whose `▸ <name>` phase it ran under.
+const ownerOf = (raw: Record<string, unknown>, phaseTitle: string): string =>
+  workflowKey(phaseTitle.startsWith('▸ ') ? (phaseTitle.slice(2).trim().split(/\s+/)[0] ?? '') : (textOf(raw.workflowName) ?? ''))
 
 export const samplesOf = (text: string, labels: Record<string, string> = {}): Sample[] => {
   const raw = recordOf(text)
@@ -934,6 +947,7 @@ export const samplesOf = (text: string, labels: Record<string, string> = {}): Sa
     entry?.type === 'workflow_agent' && entry.state === 'done' && typeof entry.phaseTitle === 'string' && typeof entry.durationMs === 'number'
       ? [
           {
+            workflow: ownerOf(raw, entry.phaseTitle as string),
             phase: labelledPhaseOf(labels, typeof entry.label === 'string' ? entry.label : '', canonicalPhase(entry.phaseTitle as string)) ?? canonicalPhase(entry.phaseTitle as string),
             scope: canonicalPhase(entry.phaseTitle as string),
             label: typeof entry.label === 'string' ? entry.label : '',
@@ -961,6 +975,13 @@ const spansOf = (samples: Sample[]): { phase: string; ms: number }[] => {
 const NO_SAMPLE: PhaseSample = { total: 0, count: 0, tools: 0, toolCount: 0, span: 0, spanCount: 0 }
 
 export const statsOf = (known: PhaseSamples, phase: string): PhaseSample => ({ ...NO_SAMPLE, ...known[phase] })
+
+// One journal's samples at a time, filed under the workflow each agent worked for: a span is measured within a journal.
+export const withJournalSamples = (known: WorkflowSamples, samples: Sample[]): WorkflowSamples => {
+  const grouped: Record<string, Sample[]> = {}
+  for (const sample of samples) (grouped[sample.workflow ?? ''] ??= []).push(sample)
+  return { ...known, ...Object.fromEntries(Object.entries(grouped).map(([name, list]) => [name, withSamples(known[name] ?? {}, list)])) }
+}
 
 export const withSamples = (known: PhaseSamples, samples: Sample[]): PhaseSamples => {
   const merged: PhaseSamples = { ...known }
@@ -1014,7 +1035,7 @@ export const throughputOf = (agent: WorkflowAgent): number | null => {
 
 export const liveSignalOf = (agent: WorkflowAgent, at: number): string | null => {
   if (agent.state !== 'running') return null
-  if (agent.openCalls > 0) return agent.toolSince !== null && at - agent.toolSince > STALL_TOOL_MS ? 'long tool' : null
+  if (agent.openCalls > 0) return agent.toolSince !== null && at - agent.toolSince > Math.max(STALL_TOOL_MS, agent.toolBudget ?? 0) ? 'long tool' : null
   if (agent.waitingSince !== null) return at - agent.waitingSince > STALL_WAIT_MS ? 'waiting' : null
   const idle = at - Math.max(agent.lastActiveAt, agent.lastChunkAt ?? 0)
   if (idle > STALL_IDLE_MS) return `idle ${Math.floor(idle / 60_000)}m`
@@ -2293,14 +2314,15 @@ const demoStep = (number: string, title: string, tdd: TddMarks): Step => ({ numb
 const demoPlanSheet = (lot: string, name: string, steps: Step[], isDone: boolean): Sheet => ({ lot, name, isDone, hypotheses: 0, steps })
 
 // The phases run-plan declares (workflows/run-plan.js), each detail shortened.
-const DEMO_PLAN_PHASES = ['Preflight', 'Batch', 'Gate', 'Aside', 'Final check', 'Merge', 'Report']
+const DEMO_PLAN_PHASES = ['Preflight', 'Batch', 'Gate', 'Aside', 'Final check', 'Security', 'Merge', 'Report']
 const DEMO_PLAN_DETAILS: Record<string, string> = {
   Preflight: 'plan check, doctor, docker, kit root, run folder',
   Batch: 'next batch, out-of-batch check, run-lot',
   Gate: 'report status, plan heading, fast suites, out-of-batch, snapshot',
   Aside: 'blocked batch: patch, tree restored, dependents skipped',
   'Final check': 'every suite run whole once after the last batch: reported, never blocking',
-  Merge: 'whole plan delivered: knowledge-merger drafts and stages the merge, never writes it',
+  Security: 'one read-only pass over the batch commits: findings listed for review, never blocking',
+  Merge: 'whole plan delivered: knowledge-merger drafts the merge, the run writes it — a refusal leaves it staged',
   Report: 'run report and notification',
 }
 
@@ -2438,10 +2460,10 @@ export const demoPlanRuns = (at: number, isFinished = false): WorkflowRun[] => {
   ]
 }
 
-// The `merge` a run-plan result carries once `stage` laid the drafts (scripts/knowledge-merge.py,
-// agents/knowledge-merger.md): the `staged:` line, a `+n −n <file>` line per file, the WARN left.
+// The `merge` a run-plan result carries once the run wrote it (workflows/run-plan.js § Merge): the `staged:` line
+// and a `+n −n <file>` line per file (agents/knowledge-merger.md), then what `knowledge-write apply` printed, the WARN left.
 const DEMO_MERGE = {
-  state: 'staged',
+  state: 'written',
   lines: [
     'staged: 7 file(s) — cctoolkit knowledge-write apply --merge PRD-ARCH',
     '+6 −2 docs/business/Catalog/OVERVIEW.md',
@@ -2451,13 +2473,15 @@ const DEMO_MERGE = {
     '+14 −0 docs/business/Catalog/usecases/CAT-CU-02-archive-product.md (new)',
     '+14 −0 docs/business/Catalog/usecases/CAT-CU-03-restore-product.md (new)',
     '+7 −0 docs/business/adr/ADR-001-soft-archive-through-a-status-column.md (new)',
+    'Catalog: PRD-ARCH | +CAT-CU-02 +CAT-CU-03 +CAT-RM-003 +CAT-RM-004 +CAT-D-001 ~CAT-CU-01',
+    'INDEX.md written',
   ],
   warnings: ['WARN CAT-CU-01: rewritten without a line removed — say what is no longer true'],
-  next: `/cctoolkit:knowledge-merge ${DEMO_PLAN} — the knowledge base is not written yet: it shows the diff and writes it on the user's confirmation`,
+  next: null,
 }
 
 // The plan delivered whole, as examples/ tells it: F1 archives, F2 restores and hides archived
-// products; every batch DONE, so the final check runs and the merge is staged, never written.
+// products; every batch DONE, so the final check and the security pass run and the run writes the merge.
 export const demoMergeRuns = (at: number): WorkflowRun[] => {
   const t = inMs
   const cast = (begin: number) => {
@@ -2468,8 +2492,10 @@ export const demoMergeRuns = (at: number): WorkflowRun[] => {
     const f2 = lotAgents('F2', 20, f2Start, null, ['restore', 'refuse not archived', 'hide archived'], 1.1)
     const f2End = endOf(f2)
     const checkEnd = f2End + t(1, 10) + t(3, 20)
-    const draftFrom = checkEnd + t(0, 40)
-    const draft = agent('md', 40, null, 'merge draft', 'Merge', draftFrom, draftFrom + t(4, 10), 'done', 'Sonnet', {
+    const securityEnd = checkEnd + t(1, 30)
+    const draftFrom = securityEnd + t(0, 40)
+    const draftEnd = draftFrom + t(4, 10)
+    const draft = agent('md', 40, null, 'merge draft', 'Merge', draftFrom, draftEnd, 'done', 'Sonnet', {
       type: 'cctoolkit:knowledge-merger', answer: `merge draft: ${DEMO_MERGE.lines[0]}`,
     })
     const supervisors = [
@@ -2478,10 +2504,12 @@ export const demoMergeRuns = (at: number): WorkflowRun[] => {
       supervisor('g1', 15, 'gate F1', 'Gate', f1End, t(1, 10)),
       supervisor('n2', 16, 'next batch', 'Batch', f1End + t(1, 10), t(0, 20)),
       supervisor('g2', 35, 'gate F2', 'Gate', f2End, t(1, 10)),
-      supervisor('fc', 37, 'final check', 'Final check', f2End + t(1, 10), t(3, 20)),
-      supervisor('mp', 38, 'merge prepare', 'Merge', checkEnd, t(0, 40)),
+      supervisor('fc', 36, 'final check', 'Final check', f2End + t(1, 10), t(3, 20)),
+      supervisor('sc', 37, 'security', 'Security', checkEnd, t(1, 30)),
+      supervisor('mp', 38, 'merge prepare', 'Merge', securityEnd, t(0, 40)),
       { ...draft, effort: 'medium' },
-      supervisor('rp', 41, 'report', 'Report', draftFrom + t(4, 10), t(0, 40)),
+      supervisor('ma', 41, 'merge apply', 'Merge', draftEnd, t(0, 20)),
+      supervisor('rp', 42, 'report', 'Report', draftEnd + t(0, 20), t(0, 40)),
     ]
     const agents = [...supervisors, ...f1, ...f2].sort((a, b) => a.index - b.index)
     return { agents, total: endOf(agents) }
@@ -2640,7 +2668,7 @@ export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFini
     const merged = toValidateOf(DEMO_MERGE_REPORTS.F1 ?? '', 'F1')[0]
     const reports = Object.fromEntries(Object.entries(DEMO_MERGE_REPORTS).map(([lot, text]) => [`${root}/batches/${lot}.md`, text]))
     const work = [
-      jsonLine({ kind: 'journal', run: DEMO_MERGE_STAMP, text: `knowledge base: merge staged — ${DEMO_MERGE.lines[0]}`, at: s - 60 }),
+      jsonLine({ kind: 'journal', run: DEMO_MERGE_STAMP, text: `knowledge base: merge written — ${DEMO_MERGE.lines[0]}`, at: s - 60 }),
       jsonLine({ kind: 'ack', batch: 'F1', ref: 'n-demo-m1', what: 'note-taken', at: s - 1500 }),
       jsonLine({ kind: 'ack', batch: 'F1', ref: merged?.id ?? '', what: 'applied', at: s - 1400 }),
     ]
@@ -2768,17 +2796,18 @@ async function refreshLots($: EngineInterface, run: WorkflowRun): Promise<void> 
       const text = await changedText($, sheet)
       const parsed = text === null ? null : parseSheet(text, sheet)
       const base = parsed ?? entry.view
-      const view = base === null ? null : await withCycleProgress($, base, sheet, entry.lot, parsed !== null)
+      const view = base === null ? null : await withCycleProgress($, base, `${lotRunRootOf({ ...entry, sheet })}/.work.jsonl`, entry.lot, parsed !== null)
       if (view !== null) views[entry.lot] = view
     }
     if (entry.sheet === null || agents.length === 0) continue
+    const root = lotRunRootOf({ ...entry, sheet: entry.sheet })
     const text = await changedText($, entry.sheet)
     const parsed = text === null ? null : parseSheet(text, entry.sheet)
     const base = parsed ?? entry.view
-    const view = base === null ? null : await withCycleProgress($, base, entry.sheet, entry.lot, parsed !== null)
+    const view = base === null ? null : await withCycleProgress($, base, `${root}/.work.jsonl`, entry.lot, parsed !== null)
     if (view !== null) views[entry.lot] = view
     if (entry.outcome === null && agents.some(agent => agent.phase === REPORT_PHASE && agent.state !== 'running' && !isStaleReport(agents, agent))) {
-      for (const path of reportPathsOf(entry.sheet, entry.lot)) {
+      for (const path of [`${root}/batches/${entry.lot}.md`]) {
         const report = await readText($, path)
         const outcome = report === null ? null : reportOutcomeOf(report, path)
         if (outcome !== null) {
@@ -2902,8 +2931,7 @@ async function learnHistory($: EngineInterface, run: WorkflowRun): Promise<void>
     const text = await readText($, journal.path)
     if (text !== null) sampled.push(samplesOf(text, run.child?.labels ?? {}))
   }
-  const known = sampled.reduce(withSamples, {} as PhaseSamples)
-  await update($, history, () => known)
+  await update($, history, () => sampled.reduce(withJournalSamples, {} as WorkflowSamples))
 }
 
 let seenSheet: { path: string; mtimeMs: number } | null = null
@@ -2919,16 +2947,15 @@ async function refreshSheet($: EngineInterface, run: WorkflowRun): Promise<void>
   if (!isSeen) seenSheet = { path, mtimeMs: stat.mtimeMs }
   const parsed = text === null ? null : parseSheet(text, path)
   const base = parsed ?? run.sheet
-  const sheet = base === null ? null : await withCycleProgress($, base, path, base.lot, parsed !== null)
+  const sheet = base === null ? null : await withCycleProgress($, base, workFileOf(path), base.lot, parsed !== null)
   if (sheet === null) return
   await update($, runs, stored => stored.map(one => (one.runId === run.runId ? { ...one, sheet } : one)))
 }
 
 const seenCycles = new Map<string, string>()
 
-async function withCycleProgress($: EngineInterface, sheet: Sheet, path: string, lot: string, isFresh: boolean): Promise<Sheet | null> {
+async function withCycleProgress($: EngineInterface, sheet: Sheet, work: string, lot: string, isFresh: boolean): Promise<Sheet | null> {
   if (sheet.cycles === undefined) return isFresh ? sheet : null
-  const work = workFileOf(path)
   const stat = await $.fs.stat(work).catch(() => null)
   const key = `${work}#${lot}`
   const signature = stat === null ? 'none' : String(stat.mtimeMs)
@@ -2950,11 +2977,11 @@ export const feedPathsOf = (run: WorkflowRun, runRoot: string, work: WorkLine[])
   const sheets =
     run.child === null
       ? [{ sheet: sheetPathOf(run.argument), lot: lotOf(run.argument)?.lot ?? null }]
-      : run.lots.map(entry => ({ sheet: entry.sheet ?? (run.plan === null ? null : run.plan.replace(/\.md$/, `-${entry.lot}.md`)), lot: entry.lot }))
+      : run.lots.map(entry => ({ sheet: entry.sheet ?? (run.plan === null ? null : run.plan.replace(/\.md$/, `-${entry.lot}.md`)), lot: entry.lot, work: entry.work }))
   const stamp = recordsOf(work).flatMap(line => (line.kind === 'journal' || line.kind === 'breaker') && textOf(line.run) !== null ? [textOf(line.run)!] : []).pop()
   return [
     ...new Set([
-      ...sheets.flatMap(({ sheet, lot }) => (sheet === null || lot === null ? [] : reportPathsOf(sheet, lot))),
+      ...sheets.flatMap(({ sheet, lot, work }) => (sheet === null || lot === null ? [] : [`${lotRunRootOf(work === undefined ? { sheet } : { sheet, work })}/batches/${lot}.md`])),
       ...(run.child === null ? [] : [run.outcome?.report ?? null, stamp === undefined ? null : `${runRoot}/${stamp}.md`].flatMap(path => (path === null ? [] : [path]))),
     ]),
   ]
@@ -3037,7 +3064,7 @@ const closeCall = async ($: EngineInterface, agentId: string): Promise<void> => 
   await update($, runs, list =>
     withAgent(list, agentId, agent => {
       const openCalls = Math.max(0, agent.openCalls - 1)
-      return { ...agent, openCalls, toolSince: openCalls === 0 ? null : agent.toolSince, lastActiveAt: at }
+      return { ...agent, openCalls, toolSince: openCalls === 0 ? null : agent.toolSince, toolBudget: openCalls === 0 ? null : agent.toolBudget, lastActiveAt: at }
     }),
   )
 }
@@ -3137,7 +3164,7 @@ export const register: Register = on => {
     root = e.cwd
     await $.command.register({
       name: 'run-lot-pane',
-      description: 'Open the Workflow progress pane (clear forgets the finished run, demo loads a sample run, demo end a finished one, demo plan and demo plan end a run-plan run, demo plan merge a plan delivered whole with its knowledge-base merge staged)',
+      description: 'Open the Workflow progress pane (clear forgets the finished run, demo loads a sample run, demo end a finished one, demo plan and demo plan end a run-plan run, demo plan merge a plan delivered whole with its knowledge-base merge written)',
     })
     $.clock.every(TICK_MS, () => void tick($))
     for (const run of await read($, runs)) {
@@ -3167,7 +3194,7 @@ export const register: Register = on => {
       const shown = loaded[loaded.length - 1]
       if (shown !== undefined) await update($, feed, () => demoFeedOf(shown, at, isPlan, isFinished, isMerged))
       await update($, nav, state => ({ ...state, lot: null, screen: 'run' as const, prompted: null }))
-      await update($, history, () => demoHistory())
+      await update($, history, () => ({ 'run-lot': demoHistory() }))
       await update($, now, () => at)
       await refreshUsage($)
       await openPane($)
@@ -3198,6 +3225,7 @@ export const register: Register = on => {
             tools: agent.tools + 1,
             openCalls: agent.openCalls + 1,
             toolSince: agent.openCalls === 0 ? calledAt : agent.toolSince,
+            toolBudget: agent.openCalls === 0 ? (typeof input.timeout === 'number' ? input.timeout : null) : agent.toolBudget,
             lastActiveAt: calledAt,
             toolCounts: { ...agent.toolCounts, [e.tool]: (agent.toolCounts[e.tool] ?? 0) + 1 },
           })),
@@ -3327,7 +3355,7 @@ export const register: Register = on => {
         ...run,
         status: 'running',
         agents: [...run.agents.filter(one => one.id !== agentId), agent],
-        lots: found === null || run.child === null ? run.lots : withLot(run.lots, found.lot, one => ({ ...one, sheet: one.sheet ?? found.sheet })),
+        lots: found === null || run.child === null ? run.lots : withLot(run.lots, found.lot, one => ({ ...one, sheet: found.sheet, ...(found.work === undefined ? {} : { work: found.work }) })),
       })),
     )
     const owner = (await read($, runs)).find(run => run.runId === runId)
@@ -3421,7 +3449,7 @@ export const register: Register = on => {
     const at = await read($, now)
     const session = await read($, usage)
     const where = await read($, nav)
-    const known = await read($, history)
+    const learned = await read($, history)
     const kept = await read($, feed)
     const last = list[list.length - 1]
     const runFeed = kept !== null && last !== undefined && kept.runId === last.runId ? kept : null
@@ -3429,6 +3457,7 @@ export const register: Register = on => {
     const planRun = last !== undefined && last.child !== null ? last : null
     const lotInView = planRun !== null && where.lot !== null && planRun.lots.some(one => one.lot === where.lot) ? where.lot : null
     const current = planRun !== null && lotInView !== null ? lotRun(planRun, lotInView) : last
+    const known = learned[workflowKey(current?.name ?? '')] ?? {}
     const columns = e.props.bodyColumns
     // A desktop keeps a running row's glyph still: a spinner inside a button changes its content every tick, the
     // button is redrawn and a click landing then is lost. The row's wash already tells it runs.

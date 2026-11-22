@@ -9,7 +9,7 @@ import {
   alertOf, argumentOf, childPluginOf, childScriptPathsOf, childWorkflowOf, claudeHomeOf, installPathOf, lotRun, lotStateOf, mergeLots, parsePlanLots, planPathOf, promptLotOf, reportOutcomeOf, reportPathsOf, attemptsOf, auditLabel, auditOf, auditTone, blankAgent, coarse, completeRun, currentStep, demoHistory, demoRuns,
   callBrief, clockOf, closedCall, relativePath, samePath, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   canonicalPhase, mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
-  activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples, washOf } from '../hooks/register'
+  activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples, washOf, lotRunRootOf, withJournalSamples, workflowKey } from '../hooks/register'
 import { PANE, paneAt, paneCommand, world, indented } from './world'
 import type { Directory, Stamps, World } from './world'
 
@@ -92,6 +92,7 @@ const JOURNAL = JSON.stringify({
 })
 
 const OLD_JOURNAL = JSON.stringify({
+  workflowName: 'run-lot',
   status: 'completed',
   workflowProgress: [
     { type: 'workflow_agent', agentId: 'o1', phaseTitle: 'RED', state: 'done', durationMs: 20_000 },
@@ -102,6 +103,7 @@ const OLD_JOURNAL = JSON.stringify({
 })
 
 const SPAN_JOURNAL = JSON.stringify({
+  workflowName: 'run-lot',
   status: 'completed',
   workflowProgress: [
     { type: 'workflow_agent', agentId: 'h1', phaseTitle: 'Design', state: 'done', startedAt: 1_000, durationMs: 60_000, toolCalls: 10 },
@@ -404,6 +406,26 @@ describe('reading the run', () => {
     expect(samplesOf('{')).toEqual([])
   })
 
+  test('history by workflow: a run-audit Report never weighs on a run-lot one; a child agent counts for its child', () => {
+    const done = (phaseTitle: string, label: string, durationMs: number) => ({ type: 'workflow_agent', phaseTitle, label, state: 'done', durationMs })
+    const audit = JSON.stringify({ workflowName: 'run-audit', workflowProgress: [done('Report', 'report', 300_000)] })
+    const fix = JSON.stringify({ workflowName: 'run-fix', workflowProgress: [done('▸ cctoolkit:run-lot', 'report', 20_000), done('Doc', 'merge apply', 7_000)] })
+    const learned = [samplesOf(audit), samplesOf(fix, { report: 'Report' })].reduce(withJournalSamples, {})
+    expect(Object.keys(learned).sort()).toEqual(['run-audit', 'run-fix', 'run-lot'])
+    expect(learned['run-lot']?.Report?.total).toBe(20_000)
+    expect(learned['run-audit']?.Report?.total).toBe(300_000)
+    expect(learned['run-fix']?.Doc?.count).toBe(1)
+    expect([workflowKey('cctoolkit:run-lot'), workflowKey('run-plan')]).toEqual(['run-lot', 'run-plan'])
+  })
+
+  test('run folder of a plan batch: the work file its prompt names, in the checkout when its sheet lies in a worktree', () => {
+    const prompt = 'Workflow run-lot, batch F2. Global plan: /tmp/wt-F2/todo/cat/CAT-PLAN.md. Batch sheet: /tmp/wt-F2/todo/cat/CAT-PLAN-F2.md. Run work file: todo/cat/run/.work.jsonl.\nBatch worktree: …'
+    const found = promptLotOf(prompt)
+    expect(found).toEqual({ lot: 'F2', sheet: '/tmp/wt-F2/todo/cat/CAT-PLAN-F2.md', work: 'todo/cat/run/.work.jsonl' })
+    expect(lotRunRootOf(found!)).toBe('todo/cat/run')
+    expect(lotRunRootOf({ sheet: 'todo/cat/CAT-PLAN-F2.md' })).toBe('todo/cat/run')
+  })
+
   test('audit verdict: severities counted, minors ignored, label and tone', () => {
     const verdict = auditOf({ verdict: 'ECARTS', gaps: [{ severity: 'Bloquant' }, { severity: 'Majeur' }, { severity: 'Majeur' }, { severity: 'Mineur' }] })
     expect(verdict).toEqual({ verdict: 'ECARTS', blocking: 1, major: 2 })
@@ -476,6 +498,10 @@ describe('history, estimated end, stall, cost and alert', () => {
     expect(liveSignalOf(running({ waitingSince: 0 }), 120_001)).toBe('waiting')
     expect(liveSignalOf(running({ openCalls: 1, toolSince: 0 }), 300_000)).toBeNull()
     expect(liveSignalOf(running({ openCalls: 1, toolSince: 0, waitingSince: 0 }), 300_001)).toBe('long tool')
+    // A Bash call declaring its timeout (run-audit's `stryker wait`, 9 min) is long only past it.
+    expect(liveSignalOf(running({ openCalls: 1, toolSince: 0, toolBudget: 600_000 }), 300_001)).toBeNull()
+    expect(liveSignalOf(running({ openCalls: 1, toolSince: 0, toolBudget: 600_000 }), 600_001)).toBe('long tool')
+    expect(liveSignalOf(running({ openCalls: 1, toolSince: 0, toolBudget: 30_000 }), 300_001)).toBe('long tool')
     expect(liveSignalOf(agentOf('d', 'GREEN', 'done', { waitingSince: 0 }), 600_000)).toBeNull()
   })
 
@@ -1519,7 +1545,7 @@ test('plan demo: running plan view, batch opened, plan end', async ($, on) => {
   await end.unmount()
 })
 
-test('plan merge demo: the plan delivered whole, its knowledge-base merge staged under the outcome, the Final check and Merge steps', async ($, on) => {
+test('plan merge demo: the plan delivered whole, its knowledge-base merge written under the outcome, the Final check, Security and Merge steps', async ($, on) => {
   runWorld(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await paneCommand($, 'demo plan merge')
@@ -1527,14 +1553,15 @@ test('plan merge demo: the plan delivered whole, its knowledge-base merge staged
     const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
     expect(await ui.find({ type: 'Text', text: /2\/2 batches/ })).toBeDefined()
     expect(await ui.find({ key: 'outcome' })).toBeDefined()
-    const head = await ui.find({ type: 'Text', text: '◆ Knowledge base — merge staged, not written' })
-    expect(head?.props.color).toBe('warning')
+    const head = await ui.find({ type: 'Text', text: '✓ Knowledge base — updated' })
+    expect(head?.props.color).toBe('success')
     expect(head?.props.bold).toBe(true)
     expect(await ui.find({ type: 'Text', text: 'staged: 7 file(s) — cctoolkit knowledge-write apply --merge PRD-ARCH' })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: /^\+14 −0 docs\/business\/Catalog\/usecases\/CAT-CU-02-archive-product\.md \(new\)$/ }))?.props.color).toBe('inactive')
+    expect(await ui.find({ type: 'Text', text: 'INDEX.md written' })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: /^WARN CAT-CU-01: rewritten without a line removed/ }))?.props.color).toBe('warning')
-    expect(await ui.find({ type: 'Text', text: /^→ \/cctoolkit:knowledge-merge todo\/product-archiving\/PRD-ARCH-PLAN\.md$/ })).toBeDefined()
-    for (const label of ['final check', 'merge prepare', 'merge draft']) expect(await ui.find({ type: 'Text', text: label })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^→ / })).toBeUndefined()
+    for (const label of ['final check', 'security', 'merge prepare', 'merge draft', 'merge apply']) expect(await ui.find({ type: 'Text', text: label })).toBeDefined()
     await ui.unmount()
   }
 

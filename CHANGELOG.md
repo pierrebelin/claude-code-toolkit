@@ -4,6 +4,13 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.18.2 — 2026-11-22
+
+- `run-lot-pane`: a batch run beside another in a worktree (`run.parallelBatches: 2`) shows its outcome, audit verdict, cycle progress and tests again. The pane read them beside the batch's sheet, in the worktree, while run-lot writes them in the checkout's run folder; it now takes the work file the batch's prompts name.
+- `run-lot-pane`: the estimated end and the slow-agent flag compare a phase with earlier runs of the same workflow only. `run-audit`, `run-plan`, `run-lot` and `run-fix` share phase titles (`Preflight`, `Report`) whose durations have nothing in common; a run-lot agent run inside a run-plan or a run-fix counts for run-lot.
+- `run-lot-pane`: `⚠ long tool` waits for the `timeout` a call declares when it is above 5 min, so run-audit's `stryker wait` (one 9-min call) is no longer flagged each round.
+- `run-lot-pane`: `/run-lot-pane demo plan merge` shows a plan as run-plan delivers it today: a `Security` step after the final check, the merge drafted, then written by `merge apply` (`✓ Knowledge base — updated`). The README describes the written merge and the run-fix view.
+
 ## 2.18.1 — 2026-11-22
 
 - `run-lot-pane`: on a run-plan, a running batch's line names its phase as the batch view does, `RED · GREEN` for today's run-lot, no longer the bare `RED`.
