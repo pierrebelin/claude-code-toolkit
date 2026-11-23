@@ -25,6 +25,9 @@
 // shortindex: the resume agent relays the index without its cycles — read again alone, both cycles run;
 // shortindex2: the second copy is short too — BLOCKED, nothing run.
 // asideconflict: the work of a batch set aside does not merge back — the batch starts over, listed to validate.
+// asidesheet: the sheet's `## Cycles` block changed since the batch was set aside — the work is not put back, listed to validate.
+// deferred: the declaratives step kept a moved file and deferred its deletion to C1's ripple — listed to validate, the
+// index read again before the first cycle.
 // root: the batch runs in a worktree of its own beside another — every agent is handed it and the prefix of its Bash
 // calls, the work file stays in the session's run folder, the suites run under the build lock.
 // Global green: a green first pass is one haiku agent; snapshot: a red suite → repair (default model), its promoted
@@ -42,7 +45,7 @@ const isLight = variant.startsWith('light')
 const GAPV = { verdict: 'GAPS', gaps: [{ severity: 'Major', axis: 'Reuse', gap: 'Second type of the same shape', evidence: 'src/X.cs:3', closure: 'one type left', fix: 'rename' }, { severity: 'Major', axis: 'Scope', gap: 'Hunk outside the batch', evidence: 'src/Y.cs:1', closure: 'hunk gone', fix: 'revert' }], minors: [], validations: [], hypotheses: [], block: '## Verdict — GAPS' }
 const WRONGV = { ...GAPV, gaps: [{ severity: 'Blocking', axis: 'Correctness', gap: 'Null owner', evidence: 'src/X.cs:3', closure: 'owner checked', fix: 'guard' }] }
 const cyc = (id, wave, b) => ({ id, wave, behaviour: b, rmcu: 'RM-01', steps: ['1. Step'], refactor: false, guard: false, methods: ['A.ShouldX_WhenY', 'A.ShouldDead_WhenZ'], decisions: '' })
-const idx = { ok: true, missing: false, errors: [], declaratives: variant === 'block' ? ['src/X.cs — mirrors Y'] : [], cycles: variant === 'split' ? Array.from({ length: 13 }, (_, i) => cyc(`C${i + 1}`, 1, `B${i + 1}`)) : [cyc('C1', 1, 'One'), cyc('C2', 2, 'Two')] }
+const idx = { ok: true, missing: false, errors: [], declaratives: variant === 'block' || variant === 'deferred' ? ['src/X.cs — mirrors Y'] : [], cycles: variant === 'split' ? Array.from({ length: 13 }, (_, i) => cyc(`C${i + 1}`, 1, `B${i + 1}`)) : [cyc('C1', 1, 'One'), cyc('C2', 2, 'Two')] }
 if (variant === 'guardout') idx.cycles[1] = { ...idx.cycles[1], guard: true }
 if (variant === 'dag') {
   const at = (c, files, reads = []) => ({ ...c, files, reads })
@@ -166,18 +169,18 @@ const agent = async (prompt, o) => {
   }
   if (l === 'resume state' && !prompt.includes('cctoolkit batch-baseline snapshot todo/x/run/.work.jsonl F3')) console.log('WARN no batch snapshot')
   if (l === 'resume state' && !prompt.includes('--states todo/x/run/.work.jsonl')) console.log('WARN saved states not read through sheet-cycles --states')
-  if (l === 'resume state' && !/batch-baseline resume \S+\.work\.jsonl F3; cctoolkit batch-baseline snapshot /.test(prompt)) console.log('WARN work set aside not put back before the snapshot')
+  if (l === 'resume state' && !/batch-baseline resume \S+\.work\.jsonl F3 --sheet \S+-F3\.md; cctoolkit batch-baseline snapshot /.test(prompt)) console.log('WARN work set aside not put back before the snapshot, or without the sheet')
   if (l === 'resume state') {
     const saved = variant === 'resume' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { ...REDOK, unreachable: [] }, green: { status: 'GREEN', exit: 0 } }]
       : variant === 'resumenotable' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { status: 'RED', tests: ['t.cs'], exit: 1 }, green: { status: 'GREEN', exit: 0 } }]
       : variant === 'resumeempty' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: { ...REDOK, table: [], unreachable: [] }, green: { status: 'GREEN', exit: 0 } }]
       : variant === 'resumered' ? [{ behaviour: 'One', rmcu: 'RM-01', steps: [], red: REDOK }]
       : []
-    return { cycles: saved, index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : variant.startsWith('shortindex') ? { ...idx, count: 2, cycles: [] } : idx, ...(variant === 'asideconflict' ? { resume: 'resume: conflict on src/X.cs — batch starts over, its saved cycles dropped; partial work: /p.patch' } : {}) }
+    return { cycles: saved, index: variant === 'nodesign' ? { ok: false, missing: true, errors: ['no block'], declaratives: [], cycles: [] } : variant.startsWith('shortindex') ? { ...idx, count: 2, cycles: [] } : idx, ...(variant === 'asidesheet' ? { resume: 'resume: sheet changed since set aside (## Cycles) — work not put back, batch starts over; partial work: /p.patch' } : {}), ...(variant === 'asideconflict' ? { resume: 'resume: conflict on src/X.cs — batch starts over, its saved cycles dropped; partial work: /p.patch' } : {}) }
   }
   if (l.startsWith('index')) return variant === 'shortindex2' ? { ...idx, count: 2, cycles: idx.cycles.slice(1) } : variant === 'shortindex' ? { ...idx, count: 2 } : idx
   if (l === 'design') return { blocked: false, reason: '', review: ['choice x'] }
-  if (l === 'declaratives') { if (!prompt.includes('`cctoolkit config command build` prints it') || prompt.includes('test-scope.md')) console.log('WARN declaratives without the build command, or sent to test-scope.md'); return { ok: true } }
+  if (l === 'declaratives') { if (!prompt.includes('`cctoolkit config command build` prints it') || prompt.includes('test-scope.md')) console.log('WARN declaratives without the build command, or sent to test-scope.md'); if (!prompt.includes('batch-baseline put-back') || !prompt.includes('deferred')) console.log('WARN declaratives without the deferred move repair'); return variant === 'deferred' ? { ok: true, deferred: [{ path: 'src/Old.cs', cycle: 'C1' }] } : { ok: true } }
   if (l === 'pre-audit') return variant === 'gatered' ? { ok: true, files: [], preauditGreen: false, failures: ['DEAD REFERENCE RM-09'] } : { ok: true, files: [], preauditGreen: true, failures: [] }
   if (l === 'capture') { if (!prompt.includes('--base todo/x/run/.work.jsonl --suites-green UnitTests')) console.log('WARN capture without base or green suites'); return { ok: true } }
   if (/^audit (code|plan)/.test(l)) { if (prompt.includes('First run')) console.log('WARN split auditor reruns the capture'); if (!prompt.includes('Decisions the run took')) console.log('WARN audit without decisions'); return { verdict: 'VALID', gaps: [], minors: [`minor of ${l}`], validations: [], hypotheses: [], block: `## Verdict — ${l}` } }

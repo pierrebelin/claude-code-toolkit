@@ -9,15 +9,23 @@
         --code: `.md` and `*.verified.*` left out. --name-only: paths only.
     cctoolkit batch-baseline base <work> FX <path>
         prints the content <path> had at batch start (empty for a file the batch created).
-    cctoolkit batch-baseline restore <work> FX [--save <patch>]
+    cctoolkit batch-baseline put-back <work> FX <path>...
+        puts each path back as it was at batch start (HEAD content in the checkout's line
+        endings, a file absent from HEAD deleted), then checks `git status` is empty on it.
+        A preexisting file is left as is. Exit 1 when a path still differs.
+    cctoolkit batch-baseline restore <work> FX [--save <patch> [--sheet <sheet>]]
         --save writes the diff first, and the batch files as a commit on top of HEAD
-        (created files included) under `refs/cctoolkit/aside/<plan folder>/FX` — no
+        (created files included) under `refs/cctoolkit/aside/<plan folder>/FX`, the
+        fingerprint of the sheet's `## Cycles` block in its message with --sheet — no
         ref saved, the batch's `cycle`, `test-edit`, `closing` and `attempt` lines are
         dropped, its code being gone; then
         every batch file under the source and test roots goes back to HEAD and created
         files are deleted. A preexisting file the batch also modified is left as is and
         listed.
-    cctoolkit batch-baseline resume <work> FX
+    cctoolkit batch-baseline resume <work> FX [--sheet <sheet>]
+        with --sheet, a `## Cycles` block changed since the batch was set aside (fingerprint
+        recorded with the ref; a ref without one: the sheet modified after it): nothing is
+        written, the batch starts over and the ref is deleted (the patch stays). Otherwise
         puts back the work `restore --save` kept under that ref, merged three-way with
         what HEAD changed since, then deletes the ref. Without a snapshot of FX one is
         taken first, before the files come back: they are the batch's, never preexisting.
@@ -38,6 +46,7 @@ Exit 0, exit 2 on usage error, missing snapshot, or unreadable kit.config.json,
 exit 1 when git refuses the commit.
 """
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -97,7 +106,9 @@ def batch_files(work: Path, batch: str) -> tuple[list[str], list[str]]:
 
 
 def show(rev: str, path: str) -> bytes | None:
-    shown = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True, cwd=ROOT)
+    """The blob as the checkout writes it (`--filters`: core.autocrlf, .gitattributes eol), never the raw blob:
+    a raw LF blob written into a CRLF checkout leaves the file modified for git."""
+    shown = subprocess.run(["git", "cat-file", "--filters", f"{rev}:{path}"], capture_output=True, cwd=ROOT)
     return shown.stdout if shown.returncode == 0 else None
 
 
@@ -152,7 +163,35 @@ def start_over(work: Path, batch: str) -> None:
     work_file.keep(work, lambda r: not (r.get("batch") == batch and r.get("kind") in work_file.START_OVER))
 
 
-def save_ref(work: Path, batch: str, paths: list[str], patch: Path) -> str:
+CYCLES_MARK = "Kit-Cycles: "
+
+
+def cycles_print(sheet: Path | None) -> str:
+    """Fingerprint of the sheet's `## Cycles` section (heading to the next `## `), line endings left out."""
+    if not sheet or not sheet.is_file():
+        return ""
+    lines = sheet.read_text(encoding="utf-8", errors="replace").splitlines()
+    start = next((i for i, l in enumerate(lines) if re.match(r"##\s+Cycles\b", l)), None)
+    if start is None:
+        return ""
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    return hashlib.sha1("\n".join(l.rstrip() for l in lines[start:end]).encode("utf-8")).hexdigest()[:12]
+
+
+def sheet_changed(tip: str, sheet: Path | None) -> bool:
+    """The `## Cycles` block differs from the one recorded with the ref; a ref without a fingerprint
+    (before 2.19.0): the sheet modified after the ref was written."""
+    if not sheet or not sheet.is_file():
+        return False
+    body = git("log", "-1", "--format=%B", tip)
+    recorded = next((l[len(CYCLES_MARK):].strip() for l in body.splitlines() if l.startswith(CYCLES_MARK)), None)
+    if recorded is not None:
+        return recorded != cycles_print(sheet)
+    written = git("log", "-1", "--format=%ct", tip).strip()
+    return written.isdigit() and sheet.stat().st_mtime > int(written) + 1
+
+
+def save_ref(work: Path, batch: str, paths: list[str], patch: Path, sheet: Path | None = None) -> str:
     """The batch files as a commit on HEAD, through a temporary index: the user's index is never touched."""
     with tempfile.TemporaryDirectory() as folder:
         env = {**os.environ, "GIT_INDEX_FILE": str(Path(folder) / "index")}
@@ -163,7 +202,9 @@ def save_ref(work: Path, batch: str, paths: list[str], patch: Path) -> str:
         if run("read-tree", "HEAD").returncode or run("add", "-A", "--", *paths).returncode:
             return ""
         tree = run("write-tree").stdout.strip()
-        tip = run("commit-tree", tree, "-p", "HEAD", "-m", f"aside {batch} — patch {patch.as_posix()}").stdout.strip()
+        mark = cycles_print(sheet)
+        body = f"aside {batch} — patch {patch.as_posix()}" + (f"\n\n{CYCLES_MARK}{mark}" if mark else "")
+        tip = run("commit-tree", tree, "-p", "HEAD", "-m", body).stdout.strip()
     ref = work_file.aside_ref(work, batch)
     if not tip or subprocess.run(["git", "update-ref", ref, tip], capture_output=True, cwd=ROOT).returncode:
         return ""
@@ -186,11 +227,20 @@ def merged(base: bytes | None, ours: bytes | None, theirs: bytes | None) -> tupl
     return out.returncode == 0, out.stdout if out.returncode == 0 else None
 
 
-def resume(work: Path, batch: str) -> int:
+def resume(work: Path, batch: str, sheet: Path | None = None) -> int:
     ref = work_file.aside_ref(work, batch)
     tip = git("rev-parse", "--verify", "-q", f"{ref}^{{commit}}").strip()
     if not tip:
         print("resume: nothing saved")
+        return 0
+    saved = git("log", "-1", "--format=%s", tip).strip().partition(" — patch ")[2]
+    if sheet_changed(tip, sheet):
+        # The work was set aside against another `## Cycles` block: putting it back would bring back what
+        # the sheet was changed to avoid. The script deletes the ref itself: an agent may not run update-ref.
+        subprocess.run(["git", "update-ref", "-d", ref], capture_output=True, cwd=ROOT)
+        start_over(work, batch)
+        print(f"resume: sheet changed since set aside (## Cycles) — work not put back, batch starts over"
+              f"{f'; partial work: {saved}' if saved else ''}")
         return 0
     snapshot(work, batch, quiet=True)
     changed = [p for p in git("diff", "--name-only", "--no-renames", "-z", f"{tip}^", tip).split("\0") if p]
@@ -210,7 +260,6 @@ def resume(work: Path, batch: str) -> int:
     subprocess.run(["git", "update-ref", "-d", ref], capture_output=True, cwd=ROOT)
     if clash:
         start_over(work, batch)
-        saved = git("log", "-1", "--format=%s", tip).strip().partition(" — patch ")[2]
         print(f"resume: conflict on {', '.join(clash)} — batch starts over, its saved cycles dropped"
               f"{f'; partial work: {saved}' if saved else ''}")
         return 0
@@ -233,14 +282,36 @@ def prune(folder: Path) -> None:
         folder = folder.parent
 
 
-def restore(work: Path, batch: str, patch: Path | None) -> int:
+def put_back(work: Path, batch: str, paths: list[str]) -> int:
+    before = work_file.preexisting(work_file.read(work), batch) or {}
+    still = []
+    for given in paths:
+        path = Path(given).resolve().relative_to(ROOT).as_posix() if Path(given).is_absolute() else Path(given).as_posix()
+        if path in before:
+            print(f"{path}: modified before the batch, left as is")
+            continue
+        start, target = head(path), ROOT / path
+        if start is None:
+            if target.is_file():
+                target.unlink()
+                prune(target.parent)
+        elif not target.is_file() or target.read_bytes() != start:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(start)
+        left = git("status", "--porcelain", "--", path).strip()
+        print(f"{path}: {'put back' if not left else f'still differs from HEAD ({left[:2].strip()})'}")
+        still += [path] if left else []
+    return 1 if still else 0
+
+
+def restore(work: Path, batch: str, patch: Path | None, sheet: Path | None = None) -> int:
     files, kept = batch_files(work, batch)
     back = [p for p in files if in_scope(p) and p not in kept]
     if patch:
         patch.parent.mkdir(parents=True, exist_ok=True)
         with open(patch, "w", encoding="utf-8") as out:
             write_diff(back, False, False, out)
-    ref = save_ref(work, batch, back, patch) if patch and back else ""
+    ref = save_ref(work, batch, back, patch, sheet) if patch and back else ""
     if patch and not ref:
         start_over(work, batch)
     restored = deleted = 0
@@ -322,8 +393,9 @@ def main(argv: list[str]) -> int:
         RUN_DIR = ""
     if command == "snapshot":
         return snapshot(work, batch)
+    sheet = Path(argv[argv.index("--sheet") + 1]).resolve() if "--sheet" in argv[:-1] else None
     if command == "resume":
-        return resume(work, batch)
+        return resume(work, batch, sheet)
     records = work_file.read(work)
     if work_file.preexisting(records, batch) is None:
         print(f"no snapshot of {batch} in {work}", file=sys.stderr)
@@ -332,12 +404,14 @@ def main(argv: list[str]) -> int:
         write_diff([p for p in batch_files(work, batch)[0] if in_scope(p)], "--code" in argv, "--name-only" in argv, sys.stdout)
         return 0
     if command == "restore":
-        return restore(work, batch, Path(argv[argv.index("--save") + 1]).resolve() if "--save" in argv else None)
+        return restore(work, batch, Path(argv[argv.index("--save") + 1]).resolve() if "--save" in argv else None, sheet)
+    if command == "put-back" and len(argv) > 3:
+        return put_back(work, batch, argv[3:])
     if command == "base" and len(argv) == 4:
         sys.stdout.write(text(head(argv[3])))
         return 0
-    if command == "commit" and "--sheet" in argv:
-        return commit(work, batch, Path(argv[argv.index("--sheet") + 1]))
+    if command == "commit" and sheet:
+        return commit(work, batch, sheet)
     print(__doc__, file=sys.stderr)
     return 2
 

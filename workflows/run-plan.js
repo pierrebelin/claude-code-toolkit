@@ -283,7 +283,7 @@ function setAside(b, reason, at = null) {
       FRAME + treeLine(at),
       '',
       `Batch ${b.batch} is set aside: ${reason}. Put the tree back to its state at the batch start, in this order:`,
-      `1. \`cctoolkit batch-baseline restore ${work} ${b.batch} --save ${patch}\` (the script alone touches the source and test roots; it keeps the work under a git ref, or drops the saved cycles when it could not). Exit ≠ 0 → \`ok: false\`, \`detail\` = its output verbatim, stop.`,
+      `1. \`cctoolkit batch-baseline restore ${work} ${b.batch} --save ${patch} --sheet ${b.sheet}\` (the script alone touches the source and test roots; it keeps the work under a git ref with the fingerprint of the sheet's \`## Cycles\` block — a sheet changed before the next run and the work is not put back —,or drops the saved cycles when it could not). Exit ≠ 0 → \`ok: false\`, \`detail\` = its output verbatim, stop.`,
       `2. \`cctoolkit run-work drop ${work} --batch ${b.batch} --kind question,answer; ${rmTmp(`gate-${b.batch}`, b.batch)}\`: the saved cycles and the snapshot stay — the next run puts the work back (\`cctoolkit batch-baseline resume\`) and resumes the batch from them.`,
       `3. \`grep -nE "^### (Batch|Lot) ${b.batch}\\b" ${inTree(pre.plan, at)}\`: the heading carries \`✅ DONE\` → one Edit putting \`⬜\` in place of \`✅ DONE\` and its date, nothing else moves.`,
       `4. \`${journalLine(`${b.batch} ✗ — set aside — ${reason} — patch ${patch}`)}\`.`,

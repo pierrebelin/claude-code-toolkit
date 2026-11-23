@@ -333,6 +333,22 @@
         "stdout": "REVIEW Start: work set aside not put back: conflict on src/X.cs — batch st"
       }
     },
+    {
+      "name": "run-lot flow: work set aside against another `## Cycles` block — not put back, the batch starts over, listed to validate",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js asidesheet | grep -E 'REVIEW|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "REVIEW Start: work set aside not put back: sheet changed since set aside ( ;"
+      }
+    },
+    {
+      "name": "run-lot flow: the declaratives step keeps a moved file and defers its deletion to a cycle's ripple — listed to validate, the index read again, both cycles run",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js deferred | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED' | tr '\\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 Declaratives,RED One,RED Two | audits 1;AGENTS resume state | declaratives | index X-PLAN-F3.md | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN |"
+      }
+    },
     {"name": "run-lot flow: a cycle saved with a RED lacking its table does not crash the resume nor pass for done: its RED runs again", "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js resumenotable | grep -E 'STATUS|log: [0-9]+ wave|saved RED|ERR|WARN|UNHANDLED' | cut -c1-70 | tr '\\n' ';'", "expect": {"exit": 0, "stdout": "log: 2 wave(s), 2 behaviour(s);log: One: saved RED rejected, RED rerun;STATUS DONE"}},
     {"name": "run-lot flow: a cycle saved with a table emptied by mistake (no `removed`, no `unreachable`) never passes for no test written: its RED runs again", "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js resumeempty | grep -E 'STATUS|log: [0-9]+ wave|saved RED|ERR|WARN|UNHANDLED' | cut -c1-70 | tr '\\n' ';'", "expect": {"exit": 0, "stdout": "log: 2 wave(s), 2 behaviour(s);log: One: saved RED rejected, RED rerun;STATUS DONE"}},
     {"name": "run-lot checks: the cycle agent never writes its state, the hook saves it from the prompt's `Cycle state:` line; a RED without its table or with one empty for no reason is refused, an empty one with a reason keeps its meaning", "cmd": "node {{KIT}}/evals/workflows/run-lot-checks.js {{KIT}}/workflows/run-lot.js | grep -E 'FAIL|ERR|cycle state:|RED without|empty table' | tr '\\n' ';'", "expect": {"exit": 0, "stdout": "ok   RED without its table refused, never a crash;ok   empty table without a reason refused, never read as no test written;ok   empty table with a reason: no test written, no GREEN;ok   cycle state: named in the prompt for the hook, no append left to the agent;"}},

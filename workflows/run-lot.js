@@ -109,6 +109,8 @@ const GREEN = obj({
 }, ['diagnostic'])
 
 const OK = obj({ ok: bool, detail: str }, ['detail'])
+// A move the declaratives step split in two: the old file kept, its deletion moved into the ripple of `cycle`.
+const DECLARED = obj({ ok: bool, detail: str, deferred: arr(obj({ path: str, cycle: str })) }, ['detail', 'deferred'])
 
 // A file the global green repair wrote under the test roots: the only two it may write are an
 // approved snapshot a sheet decision changes and a shared double a value of the batch requires.
@@ -174,6 +176,7 @@ const FRAME = [
   `Workflow run-lot, batch ${batch}. Global plan: ${plan}. Batch sheet: ${sheet}. Run work file: ${workFile}.`,
   'Autonomous mode: nobody answers. Never AskUserQuestion, never a Git command that writes: the batch commit is `cctoolkit batch-baseline commit`, run only where a step gives it.',
   'Return the result through the structured output; prose written into repo files follows `language.docs` of `kit.config.json`.',
+  `A file to put back as it was at batch start: \`cctoolkit batch-baseline put-back ${workFile} ${batch} <path>…\` (a cycle agent: the \`tdd-scope restore\` its contract names), then \`git status --porcelain -- <those paths>\` empty; never rewritten by hand, never \`git show\` copied into it: the checkout's line endings would not survive.`,
   '`<kit>` below = the cctoolkit plugin directory, printed by `cctoolkit root`; kit scripts run as `cctoolkit <script>`.',
   ...(root ? [ROOT_LINE] : []),
 ].join('\n')
@@ -645,7 +648,7 @@ const loading = agent(
   [
     FRAME,
     '',
-    `First, one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit run-validate apply ${workFile}; cctoolkit batch-baseline resume ${workFile} ${batch}; cctoolkit batch-baseline snapshot ${workFile} ${batch}\` — questions of an earlier run never answer this one; run-validate writes the answers given in the run-lot-pane mod into the sheets; resume puts back the work of a batch set aside by run-plan, \`resume\` = the line it printed, verbatim; the snapshot records the files already modified, left out of the batch diff and commit (kept when it exists).`,
+    `First, one call: \`cctoolkit run-work drop ${workFile} --batch ${batch} --kind question,answer; cctoolkit run-validate apply ${workFile}; cctoolkit batch-baseline resume ${workFile} ${batch} --sheet ${sheet}; cctoolkit batch-baseline snapshot ${workFile} ${batch}\` — questions of an earlier run never answer this one; run-validate writes the answers given in the run-lot-pane mod into the sheets; resume puts back the work of a batch set aside by run-plan, \`resume\` = the line it printed, verbatim; the snapshot records the files already modified, left out of the batch diff and commit (kept when it exists).`,
     `Then in one message: \`cctoolkit sheet-cycles ${sheet} --states ${workFile}\` and \`${indexCommand(sheet)}\`.`,
     '`cycles` = the JSON array `--states` printed, each object as-is, no field changed (`[]` when no cycle was saved).',
     '`index` = the JSON line `sheet-cycles` printed, verbatim, whatever its exit code (0 valid, 1 invalid, 2 no block).',
@@ -705,7 +708,7 @@ const loaded = await loading
 saved = loaded || { cycles: [] }
 if (!loaded) log('resume state agent without result — no cycle reused')
 const resumeLine = loaded && loaded.resume ? loaded.resume.trim() : ''
-if (/^resume: conflict\b/.test(resumeLine)) toReview('Start', resumeLine.replace(/^resume: /, 'work set aside not put back: '))
+if (/^resume: (conflict|sheet changed)\b/.test(resumeLine)) toReview('Start', resumeLine.replace(/^resume: /, 'work set aside not put back: '))
 else if (/^resume: \d+ file/.test(resumeLine)) log(resumeLine)
 lotIndex = loaded ? loaded.index : null
 if (!whole(lotIndex)) {
@@ -738,7 +741,10 @@ log(`${new Set(pending.map(c => c.wave)).size} wave(s), ${pending.length} behavi
 if ((lotIndex.parallel || 1) > 1) log(`up to ${lotIndex.parallel} cycles at once`)
 
 if (lotIndex.declaratives.length) {
-  const { reason } = await withRetry(
+  // A declarative creates; it never deletes nor moves a file that still has usages (common-rules §4.5). A sheet
+  // that does anyway (2026-11-23: two events moved, their usages migrated by C1's ripple, the build broke and the
+  // batch was set aside before its first cycle) is split here: old file kept, its deletion deferred to the ripple.
+  const { result, reason } = await withRetry(
     'Declaratives',
     suffix => agent(
       [
@@ -746,14 +752,24 @@ if (lotIndex.declaratives.length) {
         '',
         'Write the declarative artefacts below before any RED, per `<kit>/skills/implement-tdd/references/common-rules.md` §4 point 5, that paragraph only: each mirrors the existing file it names, a registry entry goes after the neighbour entry it names; one already on disk with that content stays as is. No test, no signature stub, no logic.',
         ...lotIndex.declaratives.map(d => `- ${d}`),
-        'Then the solution build once: `cctoolkit config command build` prints it, run it literally (never `eval`); nothing printed → `ok: true`. Exit 0 → `ok: true`; otherwise fix what you wrote, at most twice, then `ok: false`, `detail` = the first error line.',
+        'Then the solution build once: `cctoolkit config command build` prints it, run it literally (never `eval`); nothing printed → `ok: true`. Exit 0 → `ok: true`; otherwise fix what you wrote, at most twice — only the files listed above: a file that uses them is never yours —, then `ok: false`, `detail` = the first error line.',
+        `An entry that deletes or moves a file (\`moved from\`, \`deleted\`, \`removed\`, the old path gone) breaks the build while its usages wait for a cycle's \`ripple\`. When the build fails only on those usages: put the old file back (\`batch-baseline put-back\` above), keep the new one beside it, touch no usage; in the \`## Cycles\` block of \`${sheet}\`, drop the deletion from that \`declaratives\` entry and add \`<old path> — delete once its usages are migrated (move deferred from declaratives)\` to the \`ripple\` of the first cycle (lowest \`wave\`, then block order) whose \`ripple\` names a file the build errors name; one \`deferred\` item \`{path: <old path>, cycle: <its id>}\`. Two files declaring one type (same name and namespace): the old one goes, never the new one. Then build again: it alone checks the repair.`,
         ...(lock ? ["Another batch builds beside this one: run each solution build as `cctoolkit build-lock -- <printed command>`, the command as words, never quoted: it waits for the other's build to end and keeps the exit."] : []),
       ].join('\n') + suffix,
-      { schema: OK, phase: 'Design', label: 'declaratives', model: 'sonnet', effort: 'low' },
+      { schema: DECLARED, phase: 'Design', label: 'declaratives', model: 'sonnet', effort: 'low' },
     ),
     x => (!x ? 'declaratives agent without result' : !x.ok ? `declaratives — ${x.detail || ''}` : null),
   )
   if (reason) return await finish(BLOCKED, `declaratives — ${reason}`)
+  const deferred = (result && result.deferred) || []
+  if (deferred.length) {
+    for (const d of deferred) toReview('Declaratives', `${d.path}: kept beside its new copy, its deletion moved to the \`ripple\` of ${d.cycle} — a declarative never deletes a file still used`)
+    const again = await readIndex(sheet, 'Design')
+    if (!again || !again.ok || !whole(again)) return await finish(BLOCKED, `declaratives — \`## Cycles\` invalid after the deferred deletion: ${again ? short(again.errors.join(' ; '), 160) : 'index unread'}`)
+    const byId = new Map(again.cycles.map(c => [c.id, c]))
+    for (const [i, c] of pending.entries()) if (byId.has(c.id)) pending[i] = { ...byId.get(c.id), ...(c.resume ? { resume: true } : {}) }
+    lotIndex = { ...again }
+  }
 }
 
 // Two cycles meet when one writes a file the other writes, or a file a later wave reads bounded; a cycle

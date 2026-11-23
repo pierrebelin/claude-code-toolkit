@@ -96,6 +96,30 @@
         "exit": 0,
         "stdout": "0|preexisting F1=1"
       }
+    },
+    {
+      "name": "batch baseline put-back writes HEAD's content in the checkout's line endings (core.autocrlf true: CRLF), deletes a file the batch created, leaves a preexisting file alone, and git status is empty on the paths",
+      "cmd": "R={{FIX}}/putback-{{SID}}; W=$R.jsonl; rm -rf $R $W; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && git config core.autocrlf true && printf 'a\\r\\nb\\r\\n' > src/A/a.cs && git add -A && git commit -qm init && printf 'user\\n' > src/A/user.cs && cd {{ROOT}} && B=\"python3 {{KIT}}/scripts/batch-baseline.py\" && $B snapshot $W F1 --root $R >/dev/null && printf 'a\\nchanged\\n' > $R/src/A/a.cs && printf 'new\\n' > $R/src/A/n.cs && out=$($B put-back $W F1 src/A/a.cs src/A/n.cs src/A/user.cs --root $R | tr '\\n' ' ') && echo \"$out|$(python3 -c 'import sys; print(open(sys.argv[1],\"rb\").read().count(b\"\\r\\n\"))' $R/src/A/a.cs)|$(test -e $R/src/A/n.cs && echo kept || echo gone)|$(git -C $R status --porcelain -- src/A/a.cs src/A/n.cs | wc -l | tr -d ' ')\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "src/A/a.cs: put back src/A/n.cs: put back src/A/user.cs: modified before the batch, left as is |2|gone|0"
+      }
+    },
+    {
+      "name": "batch baseline resume --sheet: a `## Cycles` block changed since the batch was set aside puts nothing back, drops the saved cycles (it starts over), names the patch and deletes the ref itself",
+      "cmd": "R={{FIX}}/sheetchanged-{{SID}}; W=$R.jsonl; S=$R-F1.md; rm -rf $R $R.patch $W $S; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/a.cs && git add -A && git commit -qm init && cd {{ROOT}} && B=\"python3 {{KIT}}/scripts/batch-baseline.py\" && printf '# F1\\n\\n## Cycles\\n\\n```json\\n{\"cycles\": [1]}\\n```\\n\\n## Assumptions\\n' > $S && $B snapshot $W F1 --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/a.cs && printf '%s\\n' '{\"kind\":\"cycle\",\"batch\":\"F1\",\"slug\":\"one\",\"state\":{}}' >> $W && $B restore $W F1 --root $R --save $R.patch --sheet $S >/dev/null && sed -i 's/\\[1\\]/[2]/' $S && out=$($B resume $W F1 --root $R --sheet $S) && echo \"$out|$(tr '\\n' ' ' < $R/src/A/a.cs)|$(git -C $R for-each-ref refs/cctoolkit | wc -l | tr -d ' ')|$(python3 -c 'import json,sys; print(sum(json.loads(l)[\"kind\"]==sys.argv[2] for l in open(sys.argv[1])))' $W cycle)\" | sed 's#partial work: [^|]*[.]patch#partial work: P#'",
+      "expect": {
+        "exit": 0,
+        "stdout": "resume: sheet changed since set aside (## Cycles) — work not put back, batch starts over; partial work: P|v0 |0|0"
+      }
+    },
+    {
+      "name": "batch baseline resume --sheet: a sheet changed outside its `## Cycles` block keeps the fingerprint, the work is put back",
+      "cmd": "R={{FIX}}/sheetsame-{{SID}}; W=$R.jsonl; S=$R-F1.md; rm -rf $R $R.patch $W $S; mkdir -p $R/src/A $R/tests/T && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf 'v0\\n' > src/A/a.cs && git add -A && git commit -qm init && cd {{ROOT}} && B=\"python3 {{KIT}}/scripts/batch-baseline.py\" && printf '# F1\\n\\n## Cycles\\n\\n```json\\n{\"cycles\": [1]}\\n```\\n\\n## Assumptions\\n' > $S && $B snapshot $W F1 --root $R >/dev/null && printf 'batch\\n' >> $R/src/A/a.cs && printf '%s\\n' '{\"kind\":\"cycle\",\"batch\":\"F1\",\"slug\":\"one\",\"state\":{}}' >> $W && $B restore $W F1 --root $R --save $R.patch --sheet $S >/dev/null && printf 'H1 later\\n' >> $S && out=$($B resume $W F1 --root $R --sheet $S) && echo \"$out|$(tr '\\n' ' ' < $R/src/A/a.cs)|$(git -C $R for-each-ref refs/cctoolkit | wc -l | tr -d ' ')|$(python3 -c 'import json,sys; print(sum(json.loads(l)[\"kind\"]==sys.argv[2] for l in open(sys.argv[1])))' $W cycle)\" | sed 's#partial work: [^|]*[.]patch#partial work: P#'",
+      "expect": {
+        "exit": 0,
+        "stdout": "resume: 1 file(s) reapplied from refs/cctoolkit/aside/fixtures/F1|v0 batch |0|1"
+      }
     }
   ]
 }

@@ -104,8 +104,13 @@ def tree(cfg):
     return {p: _hash(os.path.join(cfg.root, p)) for p in dirty(cfg)}
 
 
+def head_blob(cfg, path):
+    """HEAD's content as the checkout writes it (core.autocrlf, .gitattributes eol), comparable with the file."""
+    return _git(cfg, "cat-file", "--filters", f"HEAD:{path}")
+
+
 def head_hash(cfg, path):
-    blob = _git(cfg, "show", f"HEAD:{path}")
+    blob = head_blob(cfg, path)
     return hashlib.sha1(blob).hexdigest() if blob else "-"
 
 
@@ -176,7 +181,7 @@ def text_before(cfg, snap, copies, path):
                 return fh.read()
         except OSError:
             return ""
-    return _git(cfg, "show", f"HEAD:{path}").decode("utf-8", "replace")
+    return head_blob(cfg, path).decode("utf-8", "replace")
 
 
 def copies_of(agent_id, record):
@@ -813,7 +818,7 @@ def restore(cfg, agent_id, paths):
         elif _git(cfg, "ls-tree", "HEAD", "--", rel):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             with open(dst, "wb") as fh:
-                fh.write(_git(cfg, "show", f"HEAD:{rel}"))
+                fh.write(head_blob(cfg, rel))
         elif os.path.exists(dst):
             os.remove(dst)
         print(f"{rel}: restored")
