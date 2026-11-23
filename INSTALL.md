@@ -3,7 +3,7 @@
 ## Requirements
 
 - Claude Code with plugin support
-- `jq` and Python 3.10+ (`python3`)
+- `jq` and Python 3.10+ (`python3`) — a `python3` older than 3.10 (macOS `/usr/bin/python3`): export `CCTOOLKIT_PYTHON` with the path of a 3.10+ interpreter, the kit uses it in place of `python3`
 - on Windows: Git for Windows — Claude Code runs the hooks and the statusline in its Git Bash — see [Windows](#windows)
 - the `Workflow` tool (`disableWorkflows` absent or `false`): `/implement-tdd` launches `/cctoolkit:run-lot` or `/cctoolkit:run-plan`, there is no manual implementation path
 

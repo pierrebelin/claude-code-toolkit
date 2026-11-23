@@ -12,6 +12,11 @@ case "${OSTYPE:-}" in
   *)
     _KIT_PLATFORM=posix
     kit_path() { :; }
+    # A system python3 older than 3.10 (macOS /usr/bin) gives way to CCTOOLKIT_PYTHON.
+    if [ -n "${CCTOOLKIT_PYTHON:-}" ]; then
+      python3() { command "$CCTOOLKIT_PYTHON" "$@"; }
+      export -f python3
+    fi
     return 0
     ;;
 esac

@@ -681,7 +681,7 @@ test('a decision closed without an answer reads "no answer" in grey, never a kep
 
 const BAND = {
   component: 'AbovePrompt',
-  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
+  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
 } as const
 
 test('a button above the prompt opens and closes the pane on the desktop, once a spec is followed; never on the terminal', async ($, on) => {

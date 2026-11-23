@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # jq, python3, node and git ship with the runner. Some cases commit in
       # a fixture repo: git needs an identity.
       - name: git identity
@@ -69,8 +69,8 @@ jobs:
       # The CLI the mods' tests were last run with: `claude plugin test` gives them their engine.
       CLAUDE_CODE_VERSION: 2.1.304
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: claude code

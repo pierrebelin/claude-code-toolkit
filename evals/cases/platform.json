@@ -2,9 +2,17 @@
   "cases": [
     {
       "name": "posix: kit_path leaves a path as it is, python3 and jq stay the binaries",
-      "cmd": "bash -c 'OSTYPE=linux-gnu; unset -f python3 jq kit_path; . {{KIT}}/lib/platform.sh; v=\"C:\\\\a\\\\b\"; kit_path v; printf \"%s %s %s\" \"$v\" \"$(type -t python3)\" \"$(type -t jq)\"'",
+      "cmd": "bash -c 'OSTYPE=linux-gnu; unset CCTOOLKIT_PYTHON; unset -f python3 jq kit_path; . {{KIT}}/lib/platform.sh; v=\"C:\\\\a\\\\b\"; kit_path v; printf \"%s %s %s\" \"$v\" \"$(type -t python3)\" \"$(type -t jq)\"'",
       "expect": {
         "stdout": "C:\\a\\b file file",
+        "exit": 0
+      }
+    },
+    {
+      "name": "posix: CCTOOLKIT_PYTHON set, python3 becomes a function a child bash inherits, calling that interpreter",
+      "cmd": "f=$(mktemp); printf '#!/bin/sh\\necho picked $1\\n' >$f; chmod +x $f; CCTOOLKIT_PYTHON=$f bash -c 'OSTYPE=linux-gnu; unset -f python3 jq kit_path; . {{KIT}}/lib/platform.sh; bash -c \"printf %s- \\$(type -t python3); python3 -V\"'; rm -f $f",
+      "expect": {
+        "stdout": "function-picked -V",
         "exit": 0
       }
     },

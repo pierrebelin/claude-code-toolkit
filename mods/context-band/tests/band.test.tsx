@@ -103,7 +103,7 @@ const BAND = {
 // A desktop draws no tail beside the hint line: there the band goes above the prompt.
 const ABOVE = {
   component: 'AbovePrompt',
-  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
+  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
 } as const
 
 const turn = { reason: 'answer', answer: '', durationMs: 10, isAborted: false, turnId: 't1' } as const
