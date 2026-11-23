@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.19.1 — 2026-11-23
+
+- `cctoolkit` TDD scope hook, `run-notes`: the Workflow harness now sends a step's prompt inside its own relay message, after `The computed task text follows:`, every line indented by two spaces. The hook dropped that message as the relay alone, so it read an empty prompt: no `Cycle state:` line, no run work file. The RED and GREEN of each cycle were no longer saved (the run-lot-pane mod showed a finished batch at 0/N cycles, and a resume started its cycles over), the cycle's contract checks and its `test-edit` lines were skipped, and run notes went nowhere. The hook now reads the prompt after that line, its indentation removed.
+
 ## 2.19.0 — 2026-11-23
 
 - `cctoolkit` `/plan-implementation`, `adversarial-reviewer`: a `declaratives` entry creates a file, never deletes nor moves one that is still used. A move takes two steps: the new file in `declaratives`, the old one kept beside it, its deletion in the `ripple` of the first cycle that migrates its usages. The sheet review flags a deletion or a move in `declaratives` as Blocking and gives that rewrite. Before, the run built right after the declaratives, the deleted file's usages were still there, and the batch was set aside before its first cycle, its dependants never started.

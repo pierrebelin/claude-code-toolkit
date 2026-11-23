@@ -37,6 +37,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import textwrap
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -250,7 +251,17 @@ def start(cfg, agent_id, agent_type):
 
 # --- prompt ---------------------------------------------------------------------------
 # The Workflow harness writes its relay of the user request as the agent's first message, the step's prompt after it.
+# Since 2026-11 it writes one message instead: its header, `… The computed task text follows:`, then the step's prompt
+# with every line indented (a line at column zero would be forged). Read as is, the prompt was dropped with the
+# header: no `Cycle state:` saved, no contract checked, every `^` frame line missed.
 RELAY = "[Workflow harness"
+COMPUTED = re.compile(r"follows:[ \t]*\r?\n")
+
+
+def _computed(content):
+    """The step's prompt a relay message carries, its harness indentation removed; "" for a relay alone."""
+    m = COMPUTED.search(content)
+    return textwrap.dedent(content[m.end():]) if m else ""
 
 
 def prompt_of(transcript_path, agent_id):
@@ -275,8 +286,10 @@ def prompt_of(transcript_path, agent_id):
                     content = (entry.get("message") or {}).get("content", "")
                     if isinstance(content, list):
                         content = "\n".join(c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text")
-                    if isinstance(content, str) and not content.startswith(RELAY):
-                        texts.append(content)
+                    if isinstance(content, str):
+                        content = _computed(content) if content.startswith(RELAY) else content
+                        if content:
+                            texts.append(content)
         except OSError:
             continue
         return "\n".join(texts)
