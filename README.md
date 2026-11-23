@@ -29,7 +29,7 @@ flowchart LR
 ```
 
 1. **`/cctoolkit:business-spec`** — Claude asks you one question at a time, then writes a short business spec: rules, use cases, no technical detail. A second agent tries to poke holes in it.
-2. **`/cctoolkit:plan-implementation`** — turns the spec into a technical plan, split into small batches.
+2. **`/cctoolkit:plan-implementation`** — turns the spec into a technical plan, split into small batches. It then offers a short quiz (**`/cctoolkit:quiz`**) to check you understand what the run will do before you validate it; the same quiz works on any feature of the base.
 3. **Build** — each batch on its own: tests first, then code, then an audit. Two ways to go through the plan: all at once, or one batch at a time.
 
 ### The whole plan, or batch by batch

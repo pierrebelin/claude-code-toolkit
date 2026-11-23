@@ -82,6 +82,7 @@ Status per batch: `sequential` default, or `parallelisable with F?` (two worktre
 5. Self-validation: re-read plan vs checklist. Deviation → fix plan. Doubt on business intent → ask user.
 6. **Adversarial review.** In one message, one `Agent` per batch sheet with `subagent_type: cctoolkit:adversarial-reviewer`, a `description`, prompt starting `mode: sheet todo/<code>/<CODE>-PLAN-FX.md`, plus one prompt starting `mode: plan todo/<code>/` for cross-batch issues. `Blocking` → fix plan per its `Settled by` source, else AskUserQuestion: the plan never closes with a Blocking unanswered; `Major` → fix, or keep with one line in the sheet's `## Decisions` saying why. Never re-run it on the corrected plan. Settle here everything `run-plan` would otherwise ask mid-run: the run asks only `humanOnly` questions, so a choice left open now is taken without the user and reviewed after the plan.
 7. Summary: batch count, RM/CU traced, technical points settled and ADRs taken, files produced, folder path, review rows settled and how.
+8. **Comprehension quiz.** AskUserQuestion: a quiz of three to five open questions on what the run will do, before validating the plan (recommended), or skip. Yes → Skill `cctoolkit:quiz`, argument the global plan path: the plan is in context, it reads nothing again. A plan fix it proposes is applied on the user's word, then the next step below.
 
 ## Execution-plan rules (`0. Summary` > `### Batch FX`)
 

@@ -4,6 +4,11 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.20.0 — 2026-11-23
+
+- `cctoolkit`: new skill `/cctoolkit:quiz` — three to five open questions to check you understand what will happen or how something works, each answer graded (`understood`, `partial`, `missed`) with the plan section or knowledge-base id to re-read. On a plan: what changes, the riskiest batch, a decision and the alternative it rejected, scope, the assumptions the run takes without asking; a wrong answer may point at an unclear plan, and the fix it proposes is applied on your word. On a subject (feature, context, use case, id, handler): read from the knowledge base like `/cctoolkit:ask`. No names or paths to recall, no multiple choice.
+- `cctoolkit`: `/cctoolkit:plan-implementation` ends by offering that quiz on the plan, before you validate it and launch a run.
+
 ## 2.19.1 — 2026-11-23
 
 - `cctoolkit` TDD scope hook, `run-notes`: the Workflow harness now sends a step's prompt inside its own relay message, after `The computed task text follows:`, every line indented by two spaces. The hook dropped that message as the relay alone, so it read an empty prompt: no `Cycle state:` line, no run work file. The RED and GREEN of each cycle were no longer saved (the run-lot-pane mod showed a finished batch at 0/N cycles, and a resume started its cycles over), the cycle's contract checks and its `test-edit` lines were skipped, and run notes went nowhere. The hook now reads the prompt after that line, its indentation removed.
