@@ -68,7 +68,7 @@ A batch that stops short: fix the cause and run `/cctoolkit:run-lot` on the same
 
 **A bug?** `/cctoolkit:fix-bug <ticket>` checks it is not already fixed, diagnoses the cause in a read-only agent and asks you one thing: bug, rule to correct, or spec gap (→ `/business-spec`). Then the `run-fix` workflow writes the failing test, the fix, audits the diff and updates the knowledge base from the validated cause.
 
-**A small rule change?** `/cctoolkit:run-change "<the change>"` skips the spec → plan → run-plan chain when one rule already in the knowledge base changes: one agent writes the rule's new statement, a one-batch plan and its sheet, then the same run writes the failing test, the change, audits the diff and rewrites the rule in the base, without a question. Anything bigger (a new rule, two rules, a new use case) stops before any code and points to `/business-spec`.
+**A small change?** `/cctoolkit:run-change "<the change>"` skips the spec → plan → run-plan chain when the change fits one batch: a rule changed or added, a use case adjusted, a field on an existing request. One agent first judges its size, then writes the delta, a one-batch plan and its sheet, settling an open point on what the code already does elsewhere. The same run then writes the failing tests, the change, audits the diff and updates the base, without a question. Too big (a new aggregate, use case or migration, two contexts, more than one batch) stops before any code and points to `/business-spec`.
 
 Want to see the files? **[`examples/`](examples/README.md)** walks one small feature from spec to report.
 
