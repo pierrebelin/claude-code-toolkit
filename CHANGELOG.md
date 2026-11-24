@@ -4,6 +4,10 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.22.2 — 2026-11-24
+
+- `run-lot-pane`: while a `run-lot` runs, the cycle agents now sit under the one `RED · GREEN` phase. Their phase, read live from each agent's meta file, was not mapped to the pane's own name for that phase, so the list showed `RED · GREEN` twice: once pending with its detail and `wave n/N`, once running with the agents beneath it, and the progress bar counted a phase too many.
+
 ## 2.22.1 — 2026-11-24
 
 - `cctoolkit` `/cctoolkit:run-change`: the draft now judges how big the change is, not how many rules it touches. It takes the change when it fits one batch: one bounded context, at most five cycles and twelve production files, no new aggregate, entity, use case, endpoint or migration. Inside that, rules added (their ids taken with `next-id`) or rewritten, an existing use case adjusted, a field added to a request or a command, a port extended and a decision overturned are all in. Before, it stopped on anything but one existing rule changed, so a short change such as a new choice on an existing command (a value typed or generated, as at creation) was sent to `/business-spec`. An open point is settled on what the code already does elsewhere (the request says "as at creation" → what creation does) and listed as an assumption to validate; the run stops `AMBIGUOUS` only when the request contradicts itself or nothing in the code chooses. `OUT_OF_SCOPE` becomes `TOO_BIG`. The result lists every object of the delta, before and after, instead of one rule.

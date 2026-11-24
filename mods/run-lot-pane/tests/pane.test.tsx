@@ -2001,3 +2001,25 @@ describe('run-sync', () => {
     expect(demoSyncRuns(0)).toHaveLength(1)
   })
 })
+
+test('cycle phase read from an agent meta as `RED · GREEN` joins the script phase: one row, running, no pending twin', async ($, on) => {
+  const files: Record<string, string> = {
+    [SCRIPT_PATH]: "export const meta = { name: 'run-lot', phases: [{ title: 'Design' }, { title: 'RED · GREEN', detail: 'one agent per cycle' }, { title: 'Report' }] }\nawait agent(p, { phase: 'RED · GREEN', label: `RED ${c.id} w${c.wave} x +GREEN` })",
+    [`${DIR}/agent-a1.meta.json`]: JSON.stringify({ workflowPhase: 'Design' }),
+    [`${DIR}/agent-a2.meta.json`]: JSON.stringify({ workflowPhase: 'RED · GREEN' }),
+    [SHEET_PATH]: SHEET,
+  }
+  const clock = runWorld(on, files)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await launch($)
+  await $.agent.spawn(spawn('design', 1))
+  await $.turn.complete(complete('a1'))
+  await $.agent.spawn(spawn('RED C1 w1 x +GREEN', 2))
+  await clock.advance(4_000)
+
+  const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface: 'terminal', ...PANE })
+  expect(await ui.find({ type: pressType('terminal'), text: /[✢✳✶✻✽●] RED · GREEN(?! ·)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /○ RED · GREEN/ })).toBeUndefined()
+  expect(await ui.find({ type: pressType('terminal'), text: /○ RED · GREEN/ })).toBeUndefined()
+  await ui.unmount()
+})

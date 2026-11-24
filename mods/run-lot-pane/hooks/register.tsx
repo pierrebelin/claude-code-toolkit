@@ -2957,7 +2957,7 @@ async function metaPhase($: EngineInterface, transcriptDir: string, agentId: str
   if (text === null) return null
   try {
     const phase = (JSON.parse(text) as { workflowPhase?: unknown }).workflowPhase
-    return typeof phase === 'string' && phase !== '' ? phase : null
+    return typeof phase === 'string' && phase !== '' ? canonicalPhase(phase) : null
   } catch {
     return null
   }
