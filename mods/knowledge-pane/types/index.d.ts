@@ -29,7 +29,11 @@ export type MergeObject = { id: string; kind: string; change: string; context: s
 // `<root>/.merge/<CODE>/`: prepared while only `.drafts/` holds files, staged once `stage` laid the whole files.
 export type Merge = { code: string; isPartial: boolean; isStaged: boolean; objects: MergeObject[]; after: Record<string, string> }
 
-export type Sync = { context: string; files: string[] }
+// One object of `<root>/.sync/<Context>/`, against the base: `new` (a provisional id, or one the base lacks), `modified`
+// (its own lines differ), `retired` (a base object its staged file no longer holds, or the file staged empty).
+export type SyncObject = { id: string; change: 'new' | 'modified' | 'retired'; title: string; level: Level | null; before: string | null; after: string | null; file: string }
+
+export type Sync = { context: string; files: string[]; objects: SyncObject[] }
 
 export type IndexState = 'ok' | 'missing' | 'stale'
 
@@ -96,6 +100,8 @@ export type View =
   | { kind: 'object'; id: string }
   | { kind: 'merge'; code: string }
   | { kind: 'change'; code: string; id: string }
+  | { kind: 'sync' }
+  | { kind: 'staged'; context: string; id: string }
   | { kind: 'search' }
   | { kind: 'spec' }
 

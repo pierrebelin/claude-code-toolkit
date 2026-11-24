@@ -23,7 +23,7 @@ The drafts are produced text, not this style: full sentences in `language.docs`,
 
 ## Scope
 
-One context, one run. The delegation names the context, its prefix, the mode (`bootstrap`, `incremental`, `full`), the staging folder (`<root>/.sync/`) and, at times, a `--since <commit>` or `--full` scan option. Format of every file you write → `skills/knowledge-sync/references/knowledge-format.md`: read it first, whole, once.
+One context, one run. The delegation names the context, its prefix, the mode (`bootstrap`, `incremental`, `full`, `repair`), the staging folder (`<root>/.sync/`) and, at times, a scan option: `--since <commit>`, `--full`, or `--part <n>` (with or without `--since`) — one part of a packet too big for one agent. Format of every file you write → `skills/knowledge-sync/references/knowledge-format.md`: read it first, whole, once.
 
 **Write only under the staging folder**, laid out as the base: `<staging>/<Context>/usecases/<id>-<slug>.md`, `<staging>/<Context>/rules.md`, `decisions.md`, `OVERVIEW.md`, and `<staging>/<Context>/adr/<id>-<slug>.md` for an ADR — global in the base (`<root>/adr/`), it belongs to the context that drafts it. A staged file replaces the base file at the same path, whole: to change a base file, `Read` it — its staged copy when one exists — and `Write` the full new version. Never write under the base, the source or the test roots, never `HISTORY.md` or `INDEX.md`, never stage an empty file (a deletion goes through the caller), never commit. `cctoolkit knowledge-write` numbers, applies and validates — the caller runs it, not you.
 
@@ -54,7 +54,7 @@ Every provisional id you cite is defined in a staged file, once. The last step c
 | `medium` | behaviour read from the code with no test (sorting, filtering, default); a decision stated by a PR description |
 | `low` | inferred from names alone — a test name, a commit subject |
 
-A rule the sheet and the code disagree on is a **conflict**: draft the sheet's statement, add the observed line saying what the code does at `path:line`, list it under `### Conflicts`. Never settle it.
+A rule the sheet and the code disagree on is a **conflict**, and **the code wins**: draft what the code does, its id kept when the base holds the rule, with the observed line citing the code's `path:line` at the level of the table above; list it under `### Conflicts` with what the sheet states — the sheet may hold a bug the user will look at.
 
 The base states what is true now: no date, no author, no "previously", no history section.
 
@@ -73,11 +73,13 @@ Write the use cases, then `rules.md`, `decisions.md`, the ADRs, `OVERVIEW.md` la
 
 ## Full
 
-A folder in the base, and no sync mark git still knows — or a packet too big, scanned `--full` at the user's choice. The inventory again, the base beside it: read the context's `OVERVIEW.md` and use cases whole, the bootstrap sources against them. A base object still true stays untouched — not staged. One the code changed is rewritten in place, its id kept. One whose behaviour is gone leaves its file and goes under `Removed`. A base handler absent from the code goes under `Retire`, its file untouched: the caller stages it.
+A folder in the base, and no sync mark git still knows — or scanned `--full` on request. The inventory again, the base beside it: read the context's `OVERVIEW.md` and use cases whole, the bootstrap sources against them. A base object still true stays untouched — not staged. One the code changed is rewritten in place, its id kept. One whose behaviour is gone leaves its file and goes under `Removed`. A base handler absent from the code goes under `Retire`, its file untouched: the caller stages it.
 
 ## Incremental
 
 The packet's `delta`. `mechanical` is the caller's: never touch it. `noise` and covered files: nothing to do.
+
+Scanned `--part <n>`: the packet holds that part's changes only, each of its use cases whole in it. Stage no use case of another part. `rules.md`, `decisions.md` and `OVERVIEW.md` are shared by the parts: read their staged copy when one exists and stage it whole, what an earlier part wrote kept.
 
 For each entry of `changes`, its `diff` — never the whole source file; a bounded `Read` around a hunk only when the hunk alone cannot be read:
 
@@ -86,6 +88,10 @@ For each entry of `changes`, its `diff` — never the whole source file; a bound
 - Routed to no use case — the context's `OVERVIEW.md` only when vocabulary, states or relations change, else `Not covered` with the reason.
 
 `OVERVIEW.md` is read and rewritten only when the change reaches its vocabulary, lifecycle or relations.
+
+## Repair
+
+Mode `repair`, sent by `run-sync` after `knowledge-write apply` refused the drafts: no scan, no extraction. Fix in the staged files only what the delegation's lines name, then the last step. The report's lists stay `none`.
 
 ## Last step
 

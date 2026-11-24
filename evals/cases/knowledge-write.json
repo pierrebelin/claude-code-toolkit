@@ -91,11 +91,11 @@
    }
   },
   {
-   "name": "knowledge-write apply --context: that context's drafts only — another context's drafts stay staged and its mark stays put, even when an ADR cites it",
+   "name": "knowledge-write apply --context: that context's drafts only — another context's drafts stay staged and its mark stays put, even when an ADR cites it; each object of the delta on its own line with its title",
    "cmd": "K={{KIT}}/scripts; R={{FIX}}/kw-ctx-{{SID}}; rm -rf $R; cp -R {{FIX}}/kw-base $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nST=$(python3 $K/knowledge-write.py init); mkdir -p $ST/Catalog/usecases $ST/Studio/usecases\nprintf '# CAT-CU-?1 — Archive a product\\n\\n## Handlers <!-- kit:handlers -->\\n\\n- `ArchiveProductCommandHandler`: archive.\\n' > \"$ST/Catalog/usecases/CAT-CU-?1-archive-product.md\"\nprintf '# STU-CU-?1 — Add a node\\n\\n## Handlers <!-- kit:handlers -->\\n\\n- `AddNodeCommandHandler`: add.\\n' > \"$ST/Studio/usecases/STU-CU-?1-add-node.md\"\npython3 $K/knowledge-write.py apply >/dev/null; git add -A; git commit -qm base\nST=$(python3 $K/knowledge-write.py init); mkdir -p $ST/Catalog/adr $ST/Studio/usecases\nprintf '# ADR-?1 — One store\\nChoice: one store for both.\\nLinks: CAT-CU-01, STU-CU-01\\n' > \"$ST/Catalog/adr/ADR-?1-one-store.md\"\nsed 's/add\\./add a node./' docs/business/Studio/usecases/STU-CU-01-add-node.md > $ST/Studio/usecases/STU-CU-01-add-node.md\npython3 $K/knowledge-write.py status --context Catalog | cut -d' ' -f1-3; python3 $K/knowledge-write.py apply --context Catalog | head -2 | sed \"s/$(git rev-parse --short HEAD)/HEAD/\"; wc -l < docs/business/Studio/HISTORY.md | tr -d ' '; ls $ST/Studio/usecases; ls docs/business/adr",
    "expect": {
     "exit": 0,
-    "stdout": "Catalog: 1 file(s)\nCatalog: sync HEAD | +ADR-001\nids: ADR-?1 → ADR-001\n6\nSTU-CU-01-add-node.md\nADR-001-one-store.md"
+    "stdout": "Catalog: 1 file(s)\nCatalog: sync HEAD | +ADR-001\n  +ADR-001 — One store\n6\nSTU-CU-01-add-node.md\nADR-001-one-store.md"
    }
   },
   {

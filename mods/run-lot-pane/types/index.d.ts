@@ -43,6 +43,8 @@ export type WorkflowAgent = {
   prompt: string
   answer: string | null
   structured: string[] | null
+  // run-sync's scan agent: the contexts its plan lists, read from its structured output.
+  scanned?: ScannedContext[] | null
   calls: ToolTrace[]
   toolCounts: Record<string, number>
   files: string[]
@@ -61,11 +63,37 @@ export type KnowledgeMerge = {
   next: string | null
 }
 
+// A run-sync result (workflows/run-sync.js): one entry per context scanned, its rules changed when written.
+export type SyncConflict = { object: string; sheet: string; code: string; evidence: string }
+
+export type SyncRemoved = { id: string; why: string; evidence: string }
+
+export type SyncContext = {
+  name: string
+  mode: string
+  parts: number
+  state: string
+  row: string
+  objects: string[]
+  conflicts: SyncConflict[]
+  removed: SyncRemoved[]
+  retired: string[]
+  notCovered: string[]
+  warnings: string[]
+  reason: string
+}
+
+export type SyncReport = { contexts: SyncContext[]; next: string | null }
+
+// A context as run-sync's scan agent listed it, before its phase opens: what to come, to mark or to skip.
+export type ScannedContext = { name: string; mode: string; parts: number; hasPrefix: boolean; isIdle: boolean }
+
 export type Outcome = {
   label: string
   reason: string | null
   report: string | null
   merge?: KnowledgeMerge
+  sync?: SyncReport
 }
 
 export type AuditVerdict = {

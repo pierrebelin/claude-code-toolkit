@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, FsEntry, ModelUsage, Register, TurnStepChunk } from 'claude-code'
 
 import type {
-  AuditVerdict, ChildWorkflow, Journal, KnowledgeMerge, Navigation, Outcome, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet, WorkflowSamples,
+  AuditVerdict, ChildWorkflow, Journal, KnowledgeMerge, Navigation, Outcome, ScannedContext, SyncContext, SyncReport, PhaseDeclaration, PhaseSample, PhaseSamples, RunStatus, Screen, SessionFigures, Sheet, WorkflowSamples,
   LotFigures, PlanLot, Prompted, RunFeed, SheetCycle, Step, StreamKind, TddMarks, ToolTrace, WorkflowAgent, WorkflowRun, WrittenTest,
 } from '../types'
 
@@ -864,7 +864,11 @@ const outcomeOf = (result: unknown): Outcome | null => {
   if (label === null) return null
   const reason = textOf(fields.raison) ?? textOf(fields.reason)
   const merge = mergeOf(fields.merge)
-  return { label, reason: reason === '—' ? null : reason, report: textOf(fields.rapport) ?? textOf(fields.report), ...(merge === null ? {} : { merge }) }
+  const sync = syncReportOf(fields)
+  return {
+    label, reason: reason === '—' ? null : reason, report: textOf(fields.rapport) ?? textOf(fields.report),
+    ...(merge === null ? {} : { merge }), ...(sync === null ? {} : { sync }),
+  }
 }
 
 const MERGE_STATES = ['written', 'staged', 'refused', 'blocked', 'failed'] as const
@@ -892,9 +896,151 @@ export const mergeRows = (merge: KnowledgeMerge): { text: string; tone: 'success
   ...(merge.next === null ? [] : [{ text: `→ ${merge.next}`, tone: undefined, bold: false }]),
 ]
 
+// --- run-sync (workflows/run-sync.js) ------------------------------------------------------------------
+// One phase per context, titled `sync: <Context>`, opens between Scan and Close; its agents are labelled
+// `<Context> · part n/N`, `· extract`, `· mechanical`, `· retire <Handler>`, `· apply`, `· repair`, `· apply again`.
+export const SYNC_PHASE = 'sync: '
+const SYNC_SCAN = 'Scan'
+const SYNC_STATES = ['written', 'marked', 'skipped', 'blocked', 'refused'] as const
+
+export const isSyncRun = (run: Pick<WorkflowRun, 'name'>): boolean => typeof run.name === 'string' && workflowKey(run.name) === 'run-sync'
+
+const listOf = (value: unknown): unknown[] => (Array.isArray(value) ? value : [])
+const textsOf = (value: unknown): string[] => listOf(value).flatMap(one => (textOf(one) === null ? [] : [textOf(one) as string]))
+const recordIn = (value: unknown): Record<string, unknown> => (value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {})
+
+// The scan agent's structured output carries the plan JSON as a string, verbatim from `knowledge-scan --plan`.
+export const scannedOf = (value: unknown): ScannedContext[] | null => {
+  const plan = recordIn(value).plan
+  const parsed = typeof plan === 'string' ? jsonOf(plan) : null
+  const contexts = recordIn(parsed).contexts
+  if (!Array.isArray(contexts)) return null
+  return contexts.flatMap(raw => {
+    const one = recordIn(raw)
+    const name = textOf(one.name)
+    if (name === null) return []
+    const mode = textOf(one.mode) ?? ''
+    const parts = mode === 'incremental' ? listOf(one.parts).length : 1
+    const isIdle = mode === 'incremental' && parts === 0 && listOf(one.mechanical).length === 0 && one.staged !== true
+    return [{ name, mode, parts, hasPrefix: textOf(one.prefix) !== null, isIdle }]
+  })
+}
+
+export const syncReportOf = (fields: Record<string, unknown>): SyncReport | null => {
+  const contexts = listOf(fields.contexts).flatMap((raw): SyncContext[] => {
+    const one = recordIn(raw)
+    const name = textOf(one.name)
+    const state = textOf(one.state)
+    if (name === null || state === null) return []
+    return [{
+      name, state, mode: textOf(one.mode) ?? '', parts: typeof one.parts === 'number' ? one.parts : 0, row: textOf(one.row) ?? '',
+      objects: textsOf(one.objects),
+      conflicts: listOf(one.conflicts).map(recordIn).map(c => ({ object: textOf(c.object) ?? '?', sheet: textOf(c.sheet) ?? '', code: textOf(c.code) ?? '', evidence: textOf(c.evidence) ?? '' })),
+      removed: listOf(one.removed).map(recordIn).map(r => ({ id: textOf(r.id) ?? '?', why: textOf(r.why) ?? '', evidence: textOf(r.evidence) ?? '' })),
+      retired: textsOf(one.retired), notCovered: textsOf(one.notCovered), warnings: textsOf(one.warnings), reason: textOf(one.reason) ?? '',
+    }]
+  })
+  if (contexts.length === 0 && !Array.isArray(fields.contexts)) return null
+  return contexts.length === 0 && textOf(fields.head) === null ? null : { contexts, next: textOf(fields.next) }
+}
+
+type Tone = 'success' | 'warning' | 'error' | 'inactive' | undefined
+export type ToneRow = { text: string; tone: Tone; bold: boolean }
+
+// A sign is a signal: `+` new in green, `~` changed in amber, `-` gone in red; the title stays in the text colour.
+export const signTone = (line: string): Tone => (line.startsWith('+') ? 'success' : line.startsWith('~') ? 'warning' : line.startsWith('-') ? 'error' : undefined)
+
+// The rules changed, context by context: what was written, what the code won against a sheet, what went.
+export const syncRows = (report: SyncReport): ToneRow[] => {
+  const rows: ToneRow[] = []
+  const marked = report.contexts.filter(one => one.state === 'marked').map(one => one.name)
+  for (const one of report.contexts) {
+    if (one.state === 'marked') continue
+    if (one.state === 'written') {
+      const delta = one.row.split(' | ').slice(1).join(' | ')
+      const changed = one.objects.length
+      rows.push({ text: `✓ ${one.name} — written · ${changed} object${changed === 1 ? '' : 's'}${delta === '' || changed > 0 ? '' : ` · ${delta}`}`, tone: 'success', bold: true })
+      rows.push(...one.objects.map(text => ({ text: `  ${text}`, tone: signTone(text), bold: false })))
+      for (const c of one.conflicts) {
+        rows.push({ text: `  ⚠ ${c.object} — code won, check the sheet`, tone: 'warning', bold: false })
+        rows.push({ text: `    sheet: ${c.sheet} · code: ${c.code}${c.evidence === '' ? '' : ` · ${c.evidence}`}`, tone: 'inactive', bold: false })
+      }
+      rows.push(...one.removed.map(r => ({ text: `  − ${r.id} removed — ${r.why}${r.evidence === '' ? '' : ` · ${r.evidence}`}`, tone: 'inactive' as const, bold: false })))
+      if (one.retired.length > 0) rows.push({ text: `  retired: ${one.retired.join(', ')}`, tone: 'inactive', bold: false })
+      if (one.notCovered.length > 0) rows.push({ text: `  not covered: ${one.notCovered.join(' ; ')}`, tone: 'inactive', bold: false })
+      rows.push(...one.warnings.map(text => ({ text: `  ${text}`, tone: 'warning' as const, bold: false })))
+    } else if (one.state === 'skipped') {
+      rows.push({ text: `○ ${one.name} — skipped`, tone: 'inactive', bold: true })
+      if (one.reason !== '') rows.push({ text: `  ${one.reason}`, tone: 'inactive', bold: false })
+    } else {
+      rows.push({ text: `✗ ${one.name} — ${one.state}`, tone: 'error', bold: true })
+      if (one.reason !== '') rows.push({ text: `  ${one.reason}`, tone: undefined, bold: false })
+    }
+  }
+  if (marked.length > 0) rows.push({ text: `✓ ${marked.join(', ')} — marked, nothing changed`, tone: 'inactive', bold: false })
+  if (report.next !== null) rows.push({ text: `→ ${report.next}`, tone: undefined, bold: false })
+  return rows
+}
+
+const scannedIn = (run: WorkflowRun): ScannedContext[] =>
+  run.agents.find(agent => agent.scanned !== undefined && agent.scanned !== null)?.scanned ?? []
+
+// The contexts of a run-sync in plan order: those the scan listed, those the result names, those a phase opened.
+export const syncTitlesOf = (run: WorkflowRun): string[] => {
+  const names = [
+    ...scannedIn(run).map(one => one.name),
+    ...(run.outcome?.sync?.contexts.map(one => one.name) ?? []),
+    ...run.agents.flatMap(agent => (agent.phase?.startsWith(SYNC_PHASE) ? [agent.phase.slice(SYNC_PHASE.length)] : [])),
+  ]
+  return [...new Set(names)].map(name => `${SYNC_PHASE}${name}`)
+}
+
+const PART_LABEL = / · part (\d+)\/(\d+)$/
+const exitOf = (agent: WorkflowAgent): number | null => {
+  const found = (agent.structured ?? []).map(line => /^exit: (-?\d+)$/.exec(line)).find(one => one !== null)
+  return found === undefined || found === null ? null : Number(found[1])
+}
+
+export type SyncState = { state: string; parts: { done: number; total: number } | null }
+
+// A context's state: the result's once the run ended, else read from its agents and the scan's plan.
+export const syncStateOf = (run: WorkflowRun, title: string): SyncState => {
+  const name = title.slice(SYNC_PHASE.length)
+  const agents = run.agents.filter(agent => agent.phase === title && agent.state !== 'interrupted')
+  const parted = agents.flatMap(agent => {
+    const found = PART_LABEL.exec(agent.label)
+    return found === null ? [] : [{ agent, total: Number(found[2]) }]
+  })
+  const scanned = scannedIn(run).find(one => one.name === name)
+  const total = parted[0]?.total ?? (scanned !== undefined && scanned.mode === 'incremental' && scanned.parts > 1 ? scanned.parts : null)
+  const parts = total === null ? null : { done: parted.filter(one => one.agent.state === 'done').length, total }
+  const final = run.outcome?.sync?.contexts.find(one => one.name === name)
+  if (final !== undefined && SYNC_STATES.some(one => one === final.state)) return { state: final.state, parts }
+  if (agents.some(agent => agent.state === 'running')) {
+    const running = agents.filter(agent => agent.state === 'running').map(agent => agent.label.split(' · ').slice(1).join(' · '))
+    return { state: running[0] === undefined || running[0] === '' ? 'running' : running[0], parts }
+  }
+  if (agents.length > 0) {
+    const applied = [...agents].reverse().find(agent => / · apply(?: again)?$/.test(agent.label) && agent.state === 'done')
+    if (applied !== undefined && exitOf(applied) === 0) return { state: 'written', parts }
+    if (applied !== undefined && applied.label.endsWith(' · apply again')) return { state: 'refused', parts }
+    if (agents.some(agent => (agent.structured ?? []).some(line => /^blocked: \S/.test(line)))) return { state: 'blocked', parts }
+    return { state: run.status === 'running' ? 'extracting' : 'stopped', parts }
+  }
+  if (scanned !== undefined && !scanned.hasPrefix) return { state: 'skipped', parts }
+  if (scanned !== undefined && scanned.isIdle) {
+    const mark = run.agents.find(agent => agent.label === 'mark' && agent.state === 'done')
+    return { state: mark !== undefined && exitOf(mark) === 0 ? 'marked' : 'to mark', parts }
+  }
+  return { state: 'to come', parts }
+}
+
+export const syncStateTone = (state: string): Tone =>
+  state === 'written' ? 'success' : ['blocked', 'refused'].includes(state) ? 'error' : state === 'stopped' ? 'warning' : 'inactive'
+
 export const outcomeTone = (outcome: Outcome, status: RunStatus): 'success' | 'warning' | 'error' | typeof WAITING_TONE => {
   if (['TERMINÉ', 'DONE'].includes(outcome.label)) return 'success'
-  if (['ECARTS', 'ÉCARTS', 'GAPS'].includes(outcome.label)) return 'warning'
+  if (['ECARTS', 'ÉCARTS', 'GAPS', 'PARTIAL'].includes(outcome.label)) return 'warning'
   if (['BLOQUÉ', 'BLOCKED'].includes(outcome.label)) return 'error'
   return status === 'completed' ? 'success' : status === 'killed' ? 'warning' : 'error'
 }
@@ -1338,7 +1484,7 @@ export const stageLabelOf = (agent: WorkflowAgent, sheet: Sheet | null): string 
 
 // The RED phase of a run-lot without a GREEN phase holds both stages of each cycle.
 export const phaseTitleOf = (run: WorkflowRun, title: string): string =>
-  title === 'RED' && !run.phases.includes('GREEN') ? 'RED · GREEN' : title
+  title === 'RED' && !run.phases.includes('GREEN') ? 'RED · GREEN' : isSyncRun(run) && title.startsWith(SYNC_PHASE) ? title.slice(SYNC_PHASE.length) : title
 
 export const isSheetDone = (sheet: Sheet): boolean =>
   sheet.isDone || (sheet.cycles !== undefined && sheet.cycles.every(one => one.state === 'done'))
@@ -1356,6 +1502,7 @@ const isLive = (agent: WorkflowAgent): boolean => agent.state !== 'interrupted'
 
 const phaseTitles = (run: WorkflowRun): string[] => {
   const titles = [...run.phases]
+  if (isSyncRun(run)) titles.splice(titles.indexOf(SYNC_SCAN) + 1, 0, ...syncTitlesOf(run).filter(title => !titles.includes(title)))
   for (const agent of run.agents) {
     const title = agent.phase ?? NO_PHASE
     if (!titles.includes(title)) titles.push(title)
@@ -1404,7 +1551,8 @@ export const phaseRows = (run: WorkflowRun, at: number): PhaseRow[] => {
       const starts = timed.map(agent => agent.startedAt)
       const ends = timed.map(agent => agent.endedAt ?? at)
       const span = timed.length === 0 ? 0 : Math.max(...ends) - Math.min(...starts)
-      const mark: PhaseRow['mark'] = isRunning ? 'running' : isReached && agents.some(isLive) ? 'done' : 'pending'
+      const settled = isSyncRun(run) && title.startsWith(SYNC_PHASE) && all.length === 0 && ['marked', 'written'].includes(syncStateOf(run, title).state)
+      const mark: PhaseRow['mark'] = isRunning ? 'running' : (isReached && agents.some(isLive)) || settled ? 'done' : 'pending'
       return { title, detail: run.details[title] ?? null, mark, agents, earlier, span }
     })
     .filter(row => row.title !== NO_PHASE || row.agents.length > 0 || row.earlier.length > 0)
@@ -2629,6 +2777,74 @@ const DEMO_MERGE_TEXT = `## To validate
 
 const jsonLine = (record: Record<string, unknown>): string => JSON.stringify(record)
 
+// A run-sync as /cctoolkit:knowledge-sync launches it (workflows/run-sync.js): Catalog over the budget in
+// two parts, a handler gone retired, written; Studio in one part, running, then written.
+const DEMO_SYNC_HEAD = '4f2a9c1'
+const DEMO_SYNC_PLAN = JSON.stringify({
+  root: 'docs/business', head: DEMO_SYNC_HEAD, budget: 12000, unassigned: 0,
+  contexts: [
+    { name: 'Catalog', prefix: 'CAT', proposedPrefix: null, mode: 'incremental', parts: [{ part: 1 }, { part: 2 }], staged: false, mechanical: ['cctoolkit knowledge-write retire Catalog GetProductQueryHandler'] },
+    { name: 'Studio', prefix: 'STU', proposedPrefix: null, mode: 'incremental', parts: [{ part: 1 }], staged: false, mechanical: [] },
+  ],
+})
+export const DEMO_SYNC_RESULT = {
+  status: 'DONE', reason: '—', head: DEMO_SYNC_HEAD, unassigned: 0,
+  contexts: [
+    {
+      name: 'Catalog', mode: 'incremental', parts: 2, state: 'written', row: `Catalog: sync ${DEMO_SYNC_HEAD} | +CAT-RM-006 ~CAT-RM-002 -CAT-RM-005`,
+      objects: ['+CAT-RM-006 — Product names are unique in a catalog', '~CAT-RM-002 — Only a published product can be archived', '-CAT-RM-005 — Archiving twice is refused'],
+      conflicts: [{ object: 'CAT-RM-002', sheet: 'a draft product cannot be archived', code: 'a draft product is archived too', evidence: 'src/Shop.Domain/Catalog/Product.cs:88' }],
+      removed: [{ id: 'CAT-RM-005', why: 'the guard against archiving twice is gone', evidence: 'ArchiveProductCommandHandler.cs:31' }],
+      retired: ['GetProductQueryHandler'], notCovered: [], status: [], warnings: [], reason: '',
+    },
+    {
+      name: 'Studio', mode: 'incremental', parts: 1, state: 'written', row: `Studio: sync ${DEMO_SYNC_HEAD} | +STU-RM-004`,
+      objects: ['+STU-RM-004 — A node belongs to one ModuleDiagram'],
+      conflicts: [], removed: [], retired: [], notCovered: [], status: [], warnings: [], reason: '',
+    },
+  ],
+  next: 'Review `git diff -- docs/business` and commit it with the code it describes.',
+}
+const DEMO_SYNC_DETAILS: Record<string, string> = {
+  Scan: '`knowledge-write init`, then `knowledge-scan --plan`: per context its mode, its parts, its mechanical changes',
+  Close: '`knowledge-write mark` on the contexts nothing touched',
+  Report: 'per context: the rules added, changed and removed, the conflicts the code won, the handlers retired',
+}
+
+export const demoSyncRuns = (at: number, isFinished = false): WorkflowRun[] => {
+  const t = inMs
+  const total = t(9, 35)
+  const begin = isFinished ? at - total : at - t(7, 50)
+  const agent = (id: string, index: number, label: string, phase: string, from: number, to: number | null, state: WorkflowAgent['state'], model: string, extra: Partial<WorkflowAgent> = {}) => ({
+    ...demoAgent(`s-${id}`, index, label, phase, begin + from, to === null ? null : begin + to, state, model, {
+      lot: null, type: model === 'Haiku' ? 'general-purpose' : 'cctoolkit:knowledge-extractor',
+      ...(state === 'running' ? { lastTool: 'Read', tools: 24, activeAt: at - t(0, 4) } : {}),
+    }),
+    prompt: `Workflow run-sync, ${model === 'Haiku' ? 'supervisor step' : 'extraction'}. ${label}.`,
+    files: [],
+    ...extra,
+  })
+  const ok = { structured: ['exit: 0'] }
+  const extracted = (status: string) => ({ structured: [`status: ${status}`, 'conflicts: none'] })
+  const agents = [
+    agent('scan', 1, 'scan', 'Scan', 0, t(0, 25), 'done', 'Haiku', { scanned: scannedOf({ plan: DEMO_SYNC_PLAN }), structured: ['exit: 0', 'staging: docs/business/.sync'] }),
+    agent('cm', 2, 'Catalog · mechanical', 'sync: Catalog', t(0, 25), t(0, 40), 'done', 'Haiku', ok),
+    agent('c1', 3, 'Catalog · part 1/2', 'sync: Catalog', t(0, 40), t(3, 50), 'done', 'Sonnet', extracted('Catalog: 2 file(s), +1 ~1')),
+    agent('c2', 4, 'Catalog · part 2/2', 'sync: Catalog', t(3, 50), t(6, 30), 'done', 'Sonnet', extracted('Catalog: 1 file(s), ~1')),
+    agent('ca', 5, 'Catalog · apply', 'sync: Catalog', t(6, 30), t(6, 55), 'done', 'Haiku', ok),
+    isFinished
+      ? agent('s1', 6, 'Studio · part 1/1', 'sync: Studio', t(6, 55), t(9, 5), 'done', 'Sonnet', extracted('Studio: 1 file(s), +1'))
+      : agent('s1', 6, 'Studio · part 1/1', 'sync: Studio', t(6, 55), null, 'running', 'Sonnet'),
+    ...(isFinished ? [agent('sa', 7, 'Studio · apply', 'sync: Studio', t(9, 5), t(9, 30), 'done', 'Haiku', ok)] : []),
+  ]
+  return [{
+    runId: `${DEMO}sync`, name: 'run-sync', argument: null, phases: ['Scan', 'Close', 'Report'], details: DEMO_SYNC_DETAILS,
+    transcriptDir: null, startedAt: begin, launchedAt: begin, durationMs: isFinished ? total : null, status: isFinished ? 'completed' : 'running',
+    child: null, plan: null, lots: [], audit: null, sheet: null, agents,
+    outcome: isFinished ? outcomeOf(DEMO_SYNC_RESULT) : null,
+  }]
+}
+
 // The run files of each demo, as the workflow and the pane would have left them: the views read
 // them like any run's; the pane's answers go into this copy, never to disk.
 export const demoFeedOf = (run: WorkflowRun, at: number, isPlan: boolean, isFinished: boolean, isMerged = false): RunFeed => {
@@ -3164,7 +3380,7 @@ export const register: Register = on => {
     root = e.cwd
     await $.command.register({
       name: 'run-lot-pane',
-      description: 'Open the Workflow progress pane (clear forgets the finished run, demo loads a sample run, demo end a finished one, demo plan and demo plan end a run-plan run, demo plan merge a plan delivered whole with its knowledge-base merge written)',
+      description: 'Open the Workflow progress pane (clear forgets the finished run, demo loads a sample run, demo end a finished one, demo plan and demo plan end a run-plan run, demo plan merge a plan delivered whole with its knowledge-base merge written, demo sync and demo sync end a run-sync run)',
     })
     $.clock.every(TICK_MS, () => void tick($))
     for (const run of await read($, runs)) {
@@ -3182,17 +3398,18 @@ export const register: Register = on => {
       await update($, runs, list => list.filter(run => run.status === 'running' && !run.runId.startsWith(DEMO)))
       return { text: 'Finished workflow run cleared.' }
     }
-    const demo = /^demo(?: (end|plan|plan end|plan merge))?$/.exec(e.args.trim())
+    const demo = /^demo(?: (end|plan|plan end|plan merge|sync|sync end))?$/.exec(e.args.trim())
     if (demo !== null) {
       const at = await $.clock.now()
       const variant = demo[1] ?? ''
       const isPlan = variant.startsWith('plan')
       const isMerged = variant === 'plan merge'
-      const isFinished = variant !== '' && variant !== 'plan'
-      const loaded = isMerged ? demoMergeRuns(at) : isPlan ? demoPlanRuns(at, isFinished) : demoRuns(at, isFinished)
+      const isSync = variant.startsWith('sync')
+      const isFinished = variant !== '' && variant !== 'plan' && variant !== 'sync'
+      const loaded = isSync ? demoSyncRuns(at, isFinished) : isMerged ? demoMergeRuns(at) : isPlan ? demoPlanRuns(at, isFinished) : demoRuns(at, isFinished)
       await update($, runs, list => [...list.filter(run => !run.runId.startsWith(DEMO)), ...loaded].slice(-KEPT_RUNS))
       const shown = loaded[loaded.length - 1]
-      if (shown !== undefined) await update($, feed, () => demoFeedOf(shown, at, isPlan, isFinished, isMerged))
+      if (shown !== undefined) await update($, feed, () => (isSync ? null : demoFeedOf(shown, at, isPlan, isFinished, isMerged)))
       await update($, nav, state => ({ ...state, lot: null, screen: 'run' as const, prompted: null }))
       await update($, history, () => ({ 'run-lot': demoHistory() }))
       await update($, now, () => at)
@@ -3216,10 +3433,12 @@ export const register: Register = on => {
         const callId = typeof e.tool_use_id === 'string' && e.tool_use_id !== '' ? e.tool_use_id : `call-${(sequence += 1)}`
         const brief = callBrief(e.tool, input, root)
         const structured = isStructured ? structuredLines(input) : null
+        const scanned = isStructured ? scannedOf(input) : null
         await update($, runs, list =>
           withAgent(list, agentId, agent => ({
             ...agent,
             structured: structured ?? agent.structured,
+            ...(scanned === null ? {} : { scanned }),
             calls: withCall(agent.calls, { id: callId, tool: e.tool, brief, at: calledAt, state: 'running', error: null }),
             lastTool: e.tool,
             tools: agent.tools + 1,
@@ -3375,6 +3594,7 @@ export const register: Register = on => {
       const answer = (e as { answer?: unknown }).answer
       const parsed = typeof answer === 'string' ? jsonOf(answer) : null
       const structured = structuredLines(parsed)
+      const scanned = scannedOf(parsed)
       const audit = auditOf(parsed)
       if (audit !== null) await update($, runs, list => withAudit(list, agentId, audit))
       await update($, runs, list =>
@@ -3386,6 +3606,7 @@ export const register: Register = on => {
           openCalls: 0,
           ...QUIET,
           structured: structured ?? agent.structured,
+          ...(scanned === null ? {} : { scanned }),
           answer: structured === null && typeof answer === 'string' && answer.trim() !== '' ? firstLine(answer, 400) : agent.answer,
         })),
       )
@@ -3483,6 +3704,13 @@ export const register: Register = on => {
           {content}
         </Button>
       )
+
+    const syncBlock = (key: string, report: SyncReport) =>
+      syncRows(report).map((row, index) => (
+        <Text key={`${key}-${index}`} wrap="wrap" bold={row.bold} color={row.tone}>
+          {row.text}
+        </Text>
+      ))
 
     const mergeBlock = (key: string, merge: KnowledgeMerge) =>
       mergeRows(merge).map((row, index) => (
@@ -4514,7 +4742,7 @@ export const register: Register = on => {
         outcome.label,
         reasonBlock(`${prefix}reason`, reason ?? ''),
         outcome.report,
-        outcome.merge !== undefined && mergeBlock(`${prefix}merge`, outcome.merge),
+        outcome.merge !== undefined ? mergeBlock(`${prefix}merge`, outcome.merge) : outcome.sync !== undefined && syncBlock(`${prefix}sync`, outcome.sync),
       )
     const sessionFigure = `${session.context === null ? '—' : `ctx ${kilo(session.context)}`}${session.percent === null ? '' : ` (${session.percent}%)`}`
     const figuresBox = (label: string, tokens: number) => !isDesktop ? (
@@ -4626,6 +4854,17 @@ export const register: Register = on => {
     }
 
     const phaseSuffix = (phase: PhaseRow, room: number) => {
+      if (isSyncRun(current) && phase.title.startsWith(SYNC_PHASE)) {
+        const { state, parts } = syncStateOf(current, phase.title)
+        const text = parts === null || state.startsWith('part ') ? state : `${state} · parts ${parts.done}/${parts.total}`
+        if (room < 6) return null
+        return (
+          <Text key="sync-state" color={syncStateTone(state)} bold={['written', 'blocked', 'refused'].includes(state)} wrap="truncate-end">
+            {'  '}
+            {fit(text, room - 2)}
+          </Text>
+        )
+      }
       if (phase.title === AUDIT_PHASE && current.audit !== null) {
         return (
           <Text bold color={auditTone(current.audit)}>

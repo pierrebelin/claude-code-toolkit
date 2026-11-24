@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The knowledge base against the code: what `/knowledge-sync` has to look at — read only.
 
-    cctoolkit knowledge-scan [--context C[,C]] [--since <commit>] [--json]
+    cctoolkit knowledge-scan [--context C[,C]] [--since <commit> | --full] [--json | --plan]
+    cctoolkit knowledge-scan --context C --part N [--since <commit>] --json
     cctoolkit knowledge-scan --reminder [--staged | <path>...]
 
 Per bounded context:
@@ -13,11 +14,14 @@ Per bounded context:
   working tree, `Kit-Batch:` commits and those adding a `sync` row skipped. Each file is
   routed to its use cases with its diff, whitespace, import and comment lines removed.
   A pure rename or deletion of a handler is `mechanical`. Above `knowledge.syncBudget`
-  the packet is `overBudget`.
+  the packet is `overBudget`. The changes are split in `parts` under the budget, each use
+  case whole in one part (a use case alone above the budget stays one part).
 - `full` — a folder but no mark git still knows: the inventory again, the base beside it.
 
-`--since` replaces every mark by one commit. Default output: a summary
-per context; `--json`: everything, for the extraction agent and the evals.
+`--since` replaces every mark by one commit; `--full` ignores them. Default output: a summary
+per context; `--json`: everything, for the extraction agent and the evals; `--plan`: the
+same without diffs nor inventories (mode, parts, mechanical changes, drafts staged), for the
+run-sync workflow; `--part N`: the packet of one part only.
 
 `--reminder`: one line per context whose use cases the paths (or the staged files) touch —
 tests never count, and a context whose `sync` row is staged too stays silent. Silent without
@@ -53,7 +57,8 @@ CHAPTER = re.compile(r"^##\s+(.*?)\s*(?:<!--.*-->)?\s*$")
 def usage(msg=None):
     if msg:
         print(f"knowledge-scan: {msg}", file=sys.stderr)
-    print("usage: cctoolkit knowledge-scan [--context C[,C]] [--since <commit>] [--json]\n"
+    print("usage: cctoolkit knowledge-scan [--context C[,C]] [--since <commit> | --full] [--json | --plan]\n"
+          "       cctoolkit knowledge-scan --context C --part N [--since <commit>] --json\n"
           "       cctoolkit knowledge-scan --reminder [--staged | <path>...]", file=sys.stderr)
     sys.exit(2)
 
@@ -414,13 +419,57 @@ def incremental(ctx, marks, handlers, all_handlers, known, ad, base_ids, base_uc
             entry["newHandler"] = stem
         entry["diff"] = diff
         changes.append(entry)
-    size = sum(len(c["diff"]) for c in changes) + sum(len(knowledge.read(os.path.join(C.root, p))) for p in cu_files)
-    tokens = size // 4
+    sizes = {p: len(knowledge.read(os.path.join(C.root, p))) for p in cu_files}
+    tokens = (sum(len(c["diff"]) for c in changes) + sum(sizes.values())) // 4
+    cu_size = {c: sizes[p] for (cx, c, p) in base_uc.values() if p in sizes}
     return {
         "commits": foreign, "skipped": skipped, "worktree": wt, "covered": covered,
         "changes": changes, "mechanical": mechanical, "noise": noise,
         "tokens": tokens, "overBudget": tokens > C.sync_budget, "needsAgent": bool(changes),
+        "parts": split(changes, cu_size, C.sync_budget),
     }
+
+
+def split(changes, cu_size, budget):
+    """The changes in parts under the budget: changes sharing a use case stay in one part,
+    the largest units placed first, each in the first part it fits (a unit above the budget
+    alone). One agent per part, one after the other, reads only its part's packet."""
+    parent = list(range(len(changes)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    owner = {}
+    for i, ch in enumerate(changes):
+        for cu in ch["useCases"]:
+            if cu in owner:
+                parent[find(i)] = find(owner[cu])
+            else:
+                owner[cu] = i
+    groups = {}
+    for i in range(len(changes)):
+        groups.setdefault(find(i), []).append(i)
+    units = []
+    for idx in groups.values():
+        cus = sorted({cu for i in idx for cu in changes[i]["useCases"]})
+        size = sum(len(changes[i]["diff"]) for i in idx) + sum(cu_size.get(cu, 0) for cu in cus)
+        units.append((size // 4, idx, cus))
+    units.sort(key=lambda u: (-u[0], min(u[1])))
+    bins = []
+    for tokens, idx, cus in units:
+        for b in bins:
+            if b[0] + tokens <= budget:
+                b[0] += tokens
+                b[1] += idx
+                b[2] += cus
+                break
+        else:
+            bins.append([tokens, list(idx), list(cus)])
+    return [{"part": n + 1, "tokens": b[0], "useCases": sorted(set(b[2])),
+             "paths": [changes[i]["path"] for i in sorted(b[1])]} for n, b in enumerate(bins)]
 
 
 def language_docs():
@@ -507,6 +556,32 @@ def reminder(paths, staged):
 
 
 # --- main ----------------------------------------------------------------------------------------
+def plan(result):
+    """What run-sync does per context, no diff nor inventory: one agent per part (one for
+    bootstrap and full), the mechanical changes, the drafts an interrupted sync left staged."""
+    sync = os.path.join(knowledge.base_dir(C), ".sync")
+    out = {"root": result["root"], "head": result["head"], "budget": result["budget"],
+           "unassigned": len(result["unassigned"]), "contexts": []}
+    for x in result["contexts"]:
+        d = x.get("delta") or {}
+        top = os.path.join(sync, x["name"])
+        staged = os.path.isdir(top) and any(f.endswith(".md") for _, _, fs in os.walk(top) for f in fs)
+        if x["mode"] == "incremental":
+            parts = [{"part": p["part"], "tokens": p["tokens"], "useCases": p["useCases"], "files": len(p["paths"])}
+                     for p in d.get("parts", [])]
+        else:
+            parts = [{"part": None, "tokens": None, "useCases": [], "files": None}]
+        out["contexts"].append({
+            "name": x["name"], "prefix": x["prefix"], "proposedPrefix": x["proposedPrefix"], "mode": x["mode"],
+            "marks": x["marks"], "tokens": d.get("tokens"), "overBudget": d.get("overBudget", False),
+            "parts": parts, "staged": staged,
+            "mechanical": [f"cctoolkit knowledge-write retire {x['name']} {m['handler']}" if m["action"] == "retire"
+                           else f"cctoolkit knowledge-write rename {x['name']} {m['from']} {m['to']}"
+                           for m in d.get("mechanical", [])],
+        })
+    return out
+
+
 def summary(result):
     print(f"knowledge-scan — {result['root']} at {result['head'] or 'no commit'}")
     for x in result["contexts"]:
@@ -526,6 +601,9 @@ def summary(result):
             print(f"  changes {len(d['changes'])}, mechanical {len(d['mechanical'])}, noise only {len(d['noise'])},"
                   f" ~{d['tokens']} tokens{' — OVER BUDGET' if d['overBudget'] else ''}"
                   f"{'' if d['needsAgent'] else ' — no agent needed'}")
+            if len(d["parts"]) > 1:
+                print(f"  parts {len(d['parts'])}: " + ", ".join(
+                    f"{p['part']} ~{p['tokens']} ({', '.join(p['useCases']) or 'context'})" for p in d["parts"]))
             for m in d["mechanical"]:
                 print(f"  {m['action']}: {m.get('handler') or m['from'] + ' → ' + m['to']} ({m['useCase']})")
             for ch in d["changes"]:
@@ -536,15 +614,22 @@ def summary(result):
 
 def main(argv):
     global C
-    ctx_filter, since, as_json, remind, staged, paths = None, None, False, False, False, []
+    ctx_filter, since, full, part, as_json, as_plan, remind, staged, paths = None, None, False, None, False, False, False, False, []
     it = iter(argv)
     for a in it:
         if a == "--context":
             ctx_filter = set(next(it, "").split(",")) - {""} or usage("--context expects a name")
         elif a == "--since":
             since = next(it, None) or usage("--since expects a commit")
+        elif a == "--full":
+            full = True
+        elif a == "--part":
+            n = next(it, "")
+            part = int(n) if n.isdigit() and int(n) > 0 else usage("--part expects a number from 1")
         elif a == "--json":
             as_json = True
+        elif a == "--plan":
+            as_plan = True
         elif a == "--reminder":
             remind = True
         elif a == "--staged":
@@ -555,6 +640,12 @@ def main(argv):
             paths.append(a)
     if (staged or paths) and not remind:
         usage("--staged and paths go with --reminder")
+    if since and full:
+        usage("--since and --full exclude each other")
+    if as_json and as_plan:
+        usage("--json and --plan exclude each other")
+    if part and (full or not ctx_filter or len(ctx_filter) != 1):
+        usage("--part goes with one --context, without --full")
     try:
         C = kit_config.load()
     except kit_config.KitConfigError as e:
@@ -610,7 +701,7 @@ def main(argv):
         if not prefix:
             proposed = proposed_prefix(ctx, taken)
             taken.add(proposed)
-        marks = [since] if since else (knowledge.sync_marks(C, ctx) if ctx in in_base else [])
+        marks = [since] if since else [] if full else (knowledge.sync_marks(C, ctx) if ctx in in_base else [])
         mode = "incremental" if marks else "full" if ctx in in_base else "bootstrap"
         x = {"name": ctx, "prefix": prefix, "proposedPrefix": proposed, "mode": mode,
              "marks": [m[:7] for m in marks], "inBase": ctx in in_base}
@@ -619,8 +710,19 @@ def main(argv):
             x["inventory"] = inventory(ctx, handlers, known, ad, sources)
         if mode == "incremental" and knowledge.head(C.root):
             x["delta"] = incremental(ctx, marks, handlers, all_handlers, known, ad, base_ids, base_uc)
+        if part:
+            d = x.get("delta")
+            if not d or part > len(d["parts"]):
+                print(f"knowledge-scan: no part {part} in {ctx}, {len(d['parts']) if d else 0} part(s)", file=sys.stderr)
+                return 2
+            p = d["parts"][part - 1]
+            d["changes"] = [c for c in d["changes"] if c["path"] in p["paths"]]
+            d.update(part=part, tokens=p["tokens"], overBudget=p["tokens"] > C.sync_budget)
         result["contexts"].append(x)
-    if as_json:
+    if as_plan:
+        json.dump(plan(result), sys.stdout, indent=1, ensure_ascii=False)
+        print()
+    elif as_json:
         json.dump(result, sys.stdout, indent=1, ensure_ascii=False)
         print()
     else:

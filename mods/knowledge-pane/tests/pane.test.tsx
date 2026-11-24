@@ -5,8 +5,11 @@ import {
   askTarget,
   contextParts,
   handlerTarget,
+  lastSync,
   matrixColumns,
   matrixSvg,
+  observedLevel,
+  ownText,
   parseHistory,
   parseIndex,
   parseIndexMd,
@@ -14,6 +17,8 @@ import {
   search,
   sliceObject,
   staleOf,
+  stagedRel,
+  syncObjects,
 } from '../hooks/register'
 
 const ROOT = '/repo/docs/business'
@@ -515,7 +520,41 @@ test('a staged merge: alert, objects by change, base now beside the staged text'
   await ui.unmount()
 })
 
-test('a staged sync: alert, its files on a press; a change on disk reloads at the next tick', async ($, on) => {
+test('own text leaves nested objects out; observed level; a staged name reads ~ as ?', () => {
+  expect(ownText(CU02_FILE, 'CAT-CU-02')).not.toMatch(/CAT-RM-003|ProductNotPublishedException/)
+  expect(ownText(CU02_FILE, 'CAT-CU-02')).toMatch(/Also applies: CAT-RM-001, CAT-RM-004\.[\s\S]*## Handlers/)
+  expect(ownText(CU02_FILE, 'CAT-RM-003')).toBe('Outcome: `ProductNotPublishedException`')
+  expect(observedLevel('Observed: `src/a.cs:3` <!-- kit:observed medium -->')).toBe('medium')
+  expect(observedLevel('Outcome: x')).toBeNull()
+  expect(stagedRel('Catalog/usecases/CAT-CU-~1-duplicate.md')).toBe('Catalog/usecases/CAT-CU-?1-duplicate.md')
+})
+
+test('sync objects: new, modified, removed against the base; an object moved between files is not removed', () => {
+  const staged = [
+    { rel: 'Catalog/usecases/CAT-CU-02-archive-product.md', text: CU02_FILE.replace('Outcome: `ProductNotPublishedException`', 'Outcome: `ProductNotPublishedException`, the draft kept\nObserved: `src/a.cs:12` <!-- kit:observed high -->') + '\n### CAT-RM-?1 — Archived twice is a no-op\nObserved: `src/a.cs:20` <!-- kit:observed medium -->\n' },
+    { rel: 'Catalog/rules.md', text: '# Catalog — cross-cutting rules\n\n### CAT-RM-001 — A product is visible only to its organisation\nOutcome: reported as not found, `ProductNotFoundException`.\n\n### CAT-RM-002 — The catalogue listing is sorted by name\nOutcome: by name.\n' },
+  ]
+  const base: Record<string, string> = { 'Catalog/usecases/CAT-CU-02-archive-product.md': CU02_FILE, 'Catalog/rules.md': RULES }
+  const homes: Record<string, string> = { 'CAT-RM-002': '# CAT-CU-01 — Consult products\n\n### CAT-RM-002 — The catalogue listing is sorted by name\nOutcome: by name.\n' }
+  const ids = new Set(staged.flatMap(file => [...file.text.matchAll(/^#+ (\S+) — /gm)].map(found => found[1] ?? '')))
+  const found = syncObjects(staged, rel => base[rel] ?? null, id => homes[id] ?? null, ids)
+  expect(found.map(one => `${one.change} ${one.id} ${one.level ?? '-'}`)).toEqual(['modified CAT-RM-003 high', 'new CAT-RM-?1 medium', 'retired CAT-RM-004 -'])
+  expect(found[0]?.before).toBe('Outcome: `ProductNotPublishedException`')
+  expect(found[2]?.after).toBeNull()
+  expect(syncObjects([{ rel: 'Catalog/rules.md', text: '' }], rel => base[rel] ?? null, () => null, new Set()).map(one => one.id)).toEqual(['CAT-RM-001', 'CAT-RM-004'])
+})
+
+test('last sync: the latest sync rows across contexts, a merge row left out', () => {
+  const rows = [
+    ...parseHistory('Catalog', HISTORY),
+    { context: 'Studio', date: '2026-10-01', feature: 'sync 3f9e2c1', delta: [] },
+    { context: 'Studio', date: '2026-09-01', feature: 'sync 1111111', delta: ['+STU-CU-01'] },
+  ]
+  expect(lastSync(rows).map(one => `${one.context} ${one.feature} ${one.delta.length}`)).toEqual(['Catalog sync 3f9e2c1 3', 'Studio sync 3f9e2c1 0'])
+  expect(lastSync(parseHistory('Catalog', HISTORY.replace(/\| 2026-10-01 \| sync 3f9e2c1 .*\n/, '')))).toEqual([])
+})
+
+test('a staged sync: alert with its counts, objects by change, base now above the staged text; a change on disk reloads at the next tick', async ($, on) => {
   const files = baseFiles()
   files[`${ROOT}/.index/files.json`] = stamps(files)
   const clock = world(on, files)
@@ -525,14 +564,45 @@ test('a staged sync: alert, its files on a press; a change on disk reloads at th
   expect(await before.find({ type: 'Text', text: /sync staged/ })).toBeUndefined()
   await before.unmount()
 
-  files[`${ROOT}/.sync/Catalog/usecases/CAT-CU-?1-duplicate-product.md`] = '# CAT-CU-?1 — Duplicate a product\n'
+  files[`${ROOT}/.sync/Catalog/usecases/CAT-CU-~1-duplicate-product.md`] = '# CAT-CU-?1 — Duplicate a product\n\nA manager copies a product.\nObserved: `src/d.cs:4` <!-- kit:observed high -->\n'
+  files[`${ROOT}/.sync/Catalog/usecases/CAT-CU-02-archive-product.md`] = CU02_FILE.replace('Outcome: `ProductNotPublishedException`', 'Outcome: `ProductNotPublishedException`, the draft kept')
+  files[`${ROOT}/.sync/Catalog/rules.md`] = RULES.replace(/\n### CAT-RM-004[\s\S]*$/, '\n')
   await clock.advance(3_000)
   const ui = await $.ui.mount({ plugin: 'knowledge-pane', surface: 'terminal', ...PANE })
   expect(await ui.find({ type: 'Text', text: /◆ Catalog — sync staged, not written/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /\+1 ~1 −1 · 3 files/ })).toBeDefined()
   await ui.press({ key: 'open-sync-Catalog' })
-  expect(await ui.find({ type: 'Text', text: /usecases\/CAT-CU-\?1-duplicate-product\.md/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Staged by the sync: nothing is written/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Duplicate a product$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / ◐ high/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /usecases\/CAT-CU-~1-duplicate-product\.md/ })).toBeUndefined()
+  await ui.press({ key: 'toggle-sync-files-Catalog' })
+  expect(await ui.find({ type: 'Text', text: /usecases\/CAT-CU-~1-duplicate-product\.md/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /read 0s ago/ })).toBeDefined()
+
+  await ui.press({ key: 'open-staged-CAT-RM-003' })
+  expect(await ui.find({ type: 'Text', text: /^Outcome: ProductNotPublishedException$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Outcome: ProductNotPublishedException, the draft kept$/ })).toBeDefined()
+  await ui.press({ key: 'back' })
+  await ui.press({ key: 'open-staged-CAT-RM-004' })
+  expect(await ui.find({ type: 'Text', text: /removed: the code no longer holds it/ })).toBeDefined()
+  await ui.press({ key: 'back' })
+  await ui.press({ key: 'open-staged-CAT-CU-?1' })
+  expect(await ui.find({ type: 'Text', text: /^not in the base$/ })).toBeDefined()
   await ui.unmount()
+
+  // The sync written: the staging gone, the home lists the last sync's objects, each one pressable.
+  for (const path of Object.keys(files).filter(one => one.includes('/.sync/'))) delete files[path]
+  files[`${ROOT}/Catalog/HISTORY.md`] = HISTORY.replace('| 2026-10-15 |', '| 2026-10-20 | sync 9a8b7c6 | ~CAT-RM-003 -CAT-RM-009 |\n| 2026-10-15 |')
+  await clock.advance(3_000)
+  const after = await $.ui.mount({ plugin: 'knowledge-pane', surface: 'terminal', ...PANE })
+  await after.press({ key: 'home' })
+  expect(await after.find({ type: 'Text', text: /sync staged/ })).toBeUndefined()
+  expect(await after.find({ type: 'Text', text: /^Last sync · sync 9a8b7c6 · 2026-10-20$/ })).toBeDefined()
+  expect(await after.find({ type: 'Text', text: /CAT-RM-009 — not in the base/ })).toBeDefined()
+  await after.press({ key: 'open-synced-Catalog-~CAT-RM-003' })
+  expect(await after.find({ type: 'Text', text: /^Outcome: ProductNotPublishedException$/ })).toBeDefined()
+  await after.unmount()
 
   // An object in view keeps its whole text when the base reloads under it.
   await $.command.run({ command: 'knowledge-pane', args: 'CAT-CU-02' } as never)
@@ -585,6 +655,7 @@ test('desktop: every view draws a tree the surface accepts, bodies as Markdown, 
     objects: [{ id: 'CAT-RM-001', kind: 'RM', change: 'modified', context: 'Catalog', title: 'A product is visible only to its organisation', status: 'todo' }],
   })
   files[`${merge}/Catalog/rules.md`] = RULES
+  files[`${ROOT}/.sync/Catalog/rules.md`] = RULES.replace('`ProductNotFoundException`.', '`ProductNotFoundException`.\nObserved: `src/a.cs:3` <!-- kit:observed medium -->')
   world(on, files)
   await $.session.start({ cwd: '/repo', surface: 'desktop', isInteractive: true })
   await $.command.run({ command: 'knowledge-pane', args: '' } as never)
@@ -607,6 +678,14 @@ test('desktop: every view draws a tree the surface accepts, bodies as Markdown, 
   await accepted()
   await ui.press({ key: 'open-change-CAT-RM-001' })
   await accepted()
+  await ui.press({ key: 'home' })
+  expect(await ui.find({ type: 'Text', text: /^Last sync · sync 3f9e2c1 · 2026-10-01\s*$/ })).toBeDefined()
+  await ui.press({ key: 'open-sync-Catalog' })
+  await accepted()
+  expect(await ui.find({ type: 'Text', text: /◐ medium/ })).toBeDefined()
+  await ui.press({ key: 'open-staged-CAT-RM-001' })
+  await accepted()
+  expect(await ui.find({ type: 'Markdown', text: /kit:observed|src\/a\.cs:3/ })).toBeDefined()
   await ui.press({ key: 'search' })
   await accepted()
   await ui.unmount()

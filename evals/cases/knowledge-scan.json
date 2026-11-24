@@ -74,9 +74,9 @@
   },
   {
    "name": "knowledge-scan: a deleted handler is a mechanical retire",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-rm-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\ngit rm -q src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs && git commit -qm 'refactor: drop the query'\npython3 $K/knowledge-scan.py --context Catalog\n",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-rm-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\ngit rm -q src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs && git commit -qm 'refactor: drop the query'\npython3 $K/knowledge-scan.py --context Catalog\npython3 $K/knowledge-scan.py --plan --context Catalog | python3 -c \"import json,sys; print(json.load(sys.stdin)['contexts'][0]['mechanical'])\"\n",
    "expect": {
-    "stdout": "retire: GetProductQueryHandler (CAT-CU-02)",
+    "stdout": "retire: GetProductQueryHandler (CAT-CU-02)\n['cctoolkit knowledge-write retire Catalog GetProductQueryHandler']",
     "exit": 0
    }
   },
@@ -93,6 +93,30 @@
    "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-full-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nsed -i.bak 's/| sync [0-9a-f]* |/| sync deadbee |/' docs/business/Catalog/HISTORY.md && rm docs/business/Catalog/HISTORY.md.bak\npython3 $K/knowledge-scan.py --context Catalog | sed -n 3p\n",
    "expect": {
     "stdout": "Catalog — CAT — full",
+    "exit": 0
+   }
+  },
+  {
+   "name": "knowledge-scan: a packet over syncBudget is split in parts, each use case whole in one part",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-parts-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nprintf '{\"product\": \"Shop\", \"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}, \"syncBudget\": 60}}' > .claude/kit.config.json\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save(); p.Notify(\"archived\");/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs\nsed -i.bak 's/public void Handle() { }/public void Handle() { var items = Load(); items.Sort(); }/' src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs\nrm -f src/Shop.Application/Catalog/Products/*/*.bak && git commit -qam 'feat: save, notify, sort'\npython3 $K/knowledge-scan.py --context Catalog | grep -E 'OVER BUDGET|^  parts' | sed 's/~[0-9]*/~n/g'\n",
+   "expect": {
+    "stdout": "OVER BUDGET\n  parts 2: 1 ~n (CAT-CU-0",
+    "exit": 0
+   }
+  },
+  {
+   "name": "knowledge-scan --part N --json: the packet of that part only; --plan lists the parts without diffs",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/ks-part-{{SID}}; rm -rf $R; cp -R {{FIX}}/ks-synced $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nprintf '{\"product\": \"Shop\", \"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\", \"Studio\": \"STU\"}, \"syncBudget\": 60}}' > .claude/kit.config.json\nsed -i.bak 's/p.Archive();/p.Archive(); p.Save(); p.Notify(\"archived\");/' src/Shop.Application/Catalog/Products/ArchiveProduct/ArchiveProductCommandHandler.cs\nsed -i.bak 's/public void Handle() { }/public void Handle() { var items = Load(); items.Sort(); }/' src/Shop.Application/Catalog/Products/GetProduct/GetProductQueryHandler.cs\nrm -f src/Shop.Application/Catalog/Products/*/*.bak && git commit -qam 'feat: save, notify, sort'\npython3 $K/knowledge-scan.py --json --context Catalog --part 2 | python3 -c \"import json,sys; d=json.load(sys.stdin)['contexts'][0]['delta']; print(d['part'], len(d['changes']), len(d['parts']))\"\npython3 $K/knowledge-scan.py --plan --context Catalog | python3 -c \"import json,sys; x=json.load(sys.stdin)['contexts'][0]; print(x['mode'], [p['part'] for p in x['parts']], x['staged'], 'diff' in json.dumps(x))\"\npython3 $K/knowledge-scan.py --json --context Catalog --part 3; echo \"exit=$?\"\n",
+   "expect": {
+    "stdout": "2 1 2\nincremental [1, 2] False False\nexit=2",
+    "exit": 0
+   }
+  },
+  {
+   "name": "knowledge-scan --full ignores the sync marks: the inventory again, the base beside it; --since excludes it",
+   "cmd": "K={{KIT}}/scripts; cd {{FIX}}/ks-synced || exit 1; export CLAUDE_PROJECT_DIR=$PWD\npython3 $K/knowledge-scan.py --context Catalog --full | sed -n 3p\npython3 $K/knowledge-scan.py --full --since HEAD 2>&1 | head -1\n",
+   "expect": {
+    "stdout": "Catalog — CAT — full\nknowledge-scan: --since and --full exclude each other",
     "exit": 0
    }
   },

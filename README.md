@@ -83,7 +83,7 @@ flowchart LR
     H["code changed<br/>outside the kit"] -->|"/knowledge-sync"| K
 ```
 
-- **`/cctoolkit:knowledge-sync`** builds the base from your code the first time, then catches up with what changed outside the kit. Nothing is written until you confirm.
+- **`/cctoolkit:knowledge-sync`** builds the base from your code the first time, then catches up with what changed outside the kit: only the contexts changed since their last sync are read, the code taken as the truth, in the background — it asks only the prefix of a new context, and ends on a report of the rules added, changed and removed, to review in `git diff` before committing.
 - **`/cctoolkit:business-spec`** reads the base first and writes the spec as a delta: what the feature adds, changes or retires.
 - When a whole plan is delivered, `run-plan` writes the spec's delta into the base itself: the spec was validated before the plan, you review the base's diff with the code before committing. A merge it could not write stays staged for **`/cctoolkit:knowledge-merge`**.
 - **`/cctoolkit:ask`** answers how the product behaves, or why, from the base, each fact cited by its id.

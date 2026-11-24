@@ -19,6 +19,7 @@ import type {
   SpecKind,
   SpecSection,
   Sync,
+  SyncObject,
   Tracked,
   View,
 } from '../types'
@@ -39,6 +40,8 @@ const LEVELS: Level[] = ['high', 'medium', 'low']
 const KIND_NAMES: Record<Kind, string> = { CU: 'use case', RM: 'rule', D: 'decision', ADR: 'ADR' }
 const HISTORY_SHOWN = 5
 const RESULTS_SHOWN = 40
+// The last sync's block opens by itself up to this many objects, folded beyond.
+const LAST_SYNC_OPEN = 12
 const ID_PATTERN = /^(?:[A-Z][A-Z0-9]{1,5}-(?:CU|RM|D)-[\w?]+|ADR-[\w?]+)$/
 const INDEX_COMMAND = 'cctoolkit knowledge-index'
 const SKILL = 'business-spec'
@@ -227,6 +230,89 @@ export const parseHistory = (context: string, text: string): HistoryRow[] =>
 export const deltaId = (token: string): string => token.replace(/^[+~-]/, '')
 
 export const historyOf = (rows: HistoryRow[], id: string): HistoryRow[] => rows.filter(row => row.delta.some(token => deltaId(token) === id))
+
+// The rows of the latest sync: its `sync <commit>` feature on its date, one row per context it touched or marked.
+export const lastSync = (rows: HistoryRow[]): HistoryRow[] => {
+  const syncs = rows.filter(row => /^sync\s+\S+/.test(row.feature))
+  const top = syncs.reduce<HistoryRow | undefined>((best, row) => (best === undefined || row.date > best.date ? row : best), undefined)
+  if (top === undefined) return []
+  return syncs.filter(row => row.date === top.date && row.feature === top.feature).sort((a, b) => a.context.localeCompare(b.context))
+}
+
+const isObjectHeading = (line: string): boolean => ID_PATTERN.test(headingOf(line)?.id ?? '')
+
+// The ids a file defines, with their titles, in file order.
+export const objectsIn = (text: string): { id: string; title: string }[] =>
+  text.split('\n').flatMap(line => {
+    const found = headingOf(line)
+    return found !== null && ID_PATTERN.test(found.id) ? [{ id: found.id, title: found.title }] : []
+  })
+
+// An object's own lines, the objects nested under it left out: a use case without its rules, as `lib/knowledge.py` diffs it.
+export const ownText = (text: string, id: string): string | null => {
+  const lines = text.split('\n')
+  const at = lines.findIndex(line => headingOf(line)?.id === id)
+  if (at < 0) return null
+  const level = headingOf(lines[at] ?? '')?.level ?? 1
+  const own: string[] = []
+  let skipping = 0
+  for (const line of lines.slice(at + 1)) {
+    const found = /^(#{1,6})\s/.exec(line)
+    if (found !== null) {
+      const depth = (found[1] ?? '').length
+      if (depth <= level) break
+      if (skipping > 0 && depth <= skipping) skipping = 0
+      if (skipping === 0 && isObjectHeading(line)) {
+        skipping = depth
+        continue
+      }
+    }
+    if (skipping === 0) own.push(line)
+  }
+  return own.join('\n').trim()
+}
+
+export const observedLevel = (text: string): Level | null =>
+  (/<!--\s*kit:observed\s+(high|medium|low)\s*-->/.exec(text)?.[1] as Level | undefined) ?? null
+
+// A staged path as the base holds it: `~` read as `?` (Windows forbids `?` in a file name), `<Context>/adr/<f>` under `adr/`.
+export const stagedRel = (rel: string): string => rel.replace(/-~(\d+)/g, '-?$1')
+export const baseRelOf = (rel: string): string => {
+  const parts = rel.split('/')
+  return parts.length > 2 && parts[1] === 'adr' ? parts.slice(1).join('/') : rel
+}
+
+const squeezed = (text: string): string => text.split(/\s+/).filter(Boolean).join(' ')
+
+// What a context's staged files change in the base. `baseOf` gives the base file at a path under the root,
+// `homeOf` the base file holding an id elsewhere (an object moved between files), `staged` every id any sync stages.
+export const syncObjects = (
+  files: { rel: string; text: string }[],
+  baseOf: (rel: string) => string | null,
+  homeOf: (id: string) => string | null,
+  staged: Set<string>,
+): SyncObject[] => {
+  const found: SyncObject[] = []
+  for (const file of files) {
+    const base = baseOf(baseRelOf(file.rel))
+    for (const one of objectsIn(file.text)) {
+      const after = sliceObject(file.text, one.id)
+      const level = observedLevel(ownText(file.text, one.id) ?? '')
+      const home = one.id.includes('?') ? null : base !== null && ownText(base, one.id) !== null ? base : homeOf(one.id)
+      if (home === null) {
+        found.push({ id: one.id, change: 'new', title: one.title, level, before: null, after, file: file.rel })
+        continue
+      }
+      const was = objectsIn(home).find(other => other.id === one.id)?.title ?? ''
+      if (squeezed(was + ' ' + (ownText(home, one.id) ?? '')) !== squeezed(one.title + ' ' + (ownText(file.text, one.id) ?? '')))
+        found.push({ id: one.id, change: 'modified', title: one.title, level, before: sliceObject(home, one.id), after, file: file.rel })
+    }
+    if (base === null) continue
+    for (const one of objectsIn(base))
+      if (!staged.has(one.id)) found.push({ id: one.id, change: 'retired', title: one.title, level: null, before: sliceObject(base, one.id), after: null, file: file.rel })
+  }
+  return found
+}
 
 // An object's own lines, heading excluded: from its heading to the next heading of the same or a higher level.
 export const sliceObject = (text: string, id: string): string | null => {
@@ -923,14 +1009,33 @@ async function loadMerge($: EngineInterface, at: string, code: string): Promise<
   return { code, isPartial: / partial$/.test(feature), isStaged: staged.length > 0, objects, after }
 }
 
-async function loadSyncs($: EngineInterface, at: string): Promise<Sync[]> {
-  const syncs: Sync[] = []
+async function loadSyncs($: EngineInterface, repo: string, at: string, objects: KObject[]): Promise<Sync[]> {
+  const staged: { context: string; files: { rel: string; text: string }[]; names: string[] }[] = []
   for (const entry of await listOf($, join(at, '.sync'))) {
     if (entry.kind !== 'dir' || entry.name.startsWith('.')) continue
-    const files = (await filesUnder($, join(at, '.sync', entry.name))).map(one => one.rel).sort()
-    if (files.length > 0) syncs.push({ context: entry.name, files })
+    const names = (await filesUnder($, join(at, '.sync', entry.name))).map(one => one.rel).sort()
+    if (names.length === 0) continue
+    const files: { rel: string; text: string }[] = []
+    for (const name of names.filter(one => one.endsWith('.md')))
+      files.push({ rel: stagedRel(join(entry.name, name)), text: (await readText($, join(at, '.sync', entry.name, name))) ?? '' })
+    staged.push({ context: entry.name, files, names })
   }
-  return syncs
+  if (staged.length === 0) return []
+  const ids = new Set(staged.flatMap(one => one.files.flatMap(file => objectsIn(file.text).map(found => found.id))))
+  const texts = new Map<string, string | null>()
+  const textAt = async (path: string) => {
+    if (!texts.has(path)) texts.set(path, await readText($, path))
+    return texts.get(path) ?? null
+  }
+  const bases = new Map<string, string | null>()
+  for (const one of staged) for (const file of one.files) bases.set(baseRelOf(file.rel), await textAt(join(at, baseRelOf(file.rel))))
+  const homes = new Map<string, string | null>()
+  for (const object of objects) if (ids.has(object.id)) homes.set(object.id, await textAt(join(repo, object.path)))
+  return staged.map(one => ({
+    context: one.context,
+    files: one.names,
+    objects: syncObjects(one.files, rel => bases.get(rel) ?? null, id => homes.get(id) ?? null, ids),
+  }))
 }
 
 export async function loadBase(
@@ -991,7 +1096,7 @@ export async function loadBase(
     overviews,
     history,
     merges,
-    syncs: await loadSyncs($, at),
+    syncs: await loadSyncs($, repo, at, objects),
   }
 }
 
@@ -1526,6 +1631,31 @@ export const register: Register = on => {
       </Box>
     )
 
+    const toneOf = (change: string) => (change === 'new' ? 'success' : change === 'retired' ? 'error' : 'warning')
+    const syncCounts = (sync: Sync) =>
+      `+${sync.objects.filter(one => one.change === 'new').length} ~${sync.objects.filter(one => one.change === 'modified').length} −${sync.objects.filter(one => one.change === 'retired').length}`
+    // One token of a HISTORY.md delta: its sign in its tone, the id and title pressed to open it; an id gone from the base shown alone.
+    const deltaRow = (key: string, token: string) => {
+      const id = deltaId(token)
+      const sign = token.startsWith('+') ? '+' : token.startsWith('-') ? '−' : '~'
+      const change = sign === '+' ? 'new' : sign === '−' ? 'retired' : 'modified'
+      const object = byId.get(id)
+      const lead = isDesktop ? `${sign} ` : `${' '.repeat(ROW + 2)}${sign} `
+      return (
+        <Box key={key} height={1}>
+          <Text color={toneOf(change)}>{lead}</Text>
+          {object === undefined ? (
+            <Text color="inactive" wrap="truncate-end">{`${id} — not in the base`}</Text>
+          ) : (
+            <Button key={`open-${key}`} plain onPress={go({ kind: 'object', id })}>
+              <Text color="inactive">{`${id} `}</Text>
+              <Text wrap="truncate-end">{fit(object.title, columns - lead.length - id.length - 2)}</Text>
+            </Button>
+          )}
+        </Box>
+      )
+    }
+
     // --- home ---------------------------------------------------------------------------
     const homeView = () => {
       const followed = spec.isArmed
@@ -1580,21 +1710,15 @@ export const register: Register = on => {
         )
       }
       for (const sync of kb.syncs) {
-        const slot = `sync:${sync.context}`
+        const trail = `${syncCounts(sync)} · ${counted(sync.files.length, 'file')}`
         alerts.push(
-          !isDesktop ? alertLine(`alert-sync-${sync.context}`, `open-sync-${sync.context}`, '◆', 'warning', sync.context, '— sync staged, not written', counted(sync.files.length, 'file'), unfold(slot)) :
+          !isDesktop ? alertLine(`alert-sync-${sync.context}`, `open-sync-${sync.context}`, '◆', 'warning', sync.context, '— sync staged, not written', trail, go({ kind: 'sync' })) :
           <Box key={`alert-sync-${sync.context}`} height={1}>
-            <Button key={`open-sync-${sync.context}`} plain onPress={unfold(slot)}>
+            <Button key={`open-sync-${sync.context}`} plain onPress={go({ kind: 'sync' })}>
               <Text color="warning" bold>{`◆ ${sync.context} — sync staged, not written`}</Text>
-              <Text color="inactive">{`  ${counted(sync.files.length, 'file')}`}</Text>
+              <Text color="inactive">{`  ${trail}`}</Text>
             </Button>
           </Box>,
-          ...(where.expanded.includes(slot)
-            ? [
-                ...sync.files.map((rel, index) => (isDesktop ? <Text key={`sync-${sync.context}-${index}`} color="inactive" wrap="truncate-start">{`    ${rel}`}</Text> : tail(`sync-${sync.context}-${index}`, 2, rel))),
-                <Text key={`sync-${sync.context}-next`} color="inactive" wrap="wrap">{isDesktop ? '    → /cctoolkit:knowledge-sync to review and write it' : '  → /cctoolkit:knowledge-sync to review and write it'}</Text>,
-              ]
-            : []),
         )
       }
       const contextRows = isDesktop ? kb.contexts.map(context => (
@@ -1627,6 +1751,16 @@ export const register: Register = on => {
       const adrs = kb.objects.filter(one => one.kind === 'ADR').sort((a, b) => a.id.localeCompare(b.id))
       const observed = LEVELS.map(level => ({ level, items: kb.objects.filter(one => one.level === level) }))
       const observedCount = observed.reduce((sum, one) => sum + one.items.length, 0)
+      const synced = lastSync(kb.history)
+      const syncedTokens = synced.reduce((sum, row) => sum + row.delta.length, 0)
+      const syncedRows = synced.flatMap(row =>
+        row.delta.length === 0
+          ? [<Text key={`synced-${row.context}`} color="inactive" wrap="truncate-end">{`${isDesktop ? '' : ' '.repeat(ROW)}${row.context}: nothing changed`}</Text>]
+          : [
+              <Text key={`synced-${row.context}`} bold={!isDesktop} color={isDesktop ? 'inactive' : undefined} wrap="truncate-end">{`${isDesktop ? '' : ' '.repeat(ROW)}${row.context}`}</Text>,
+              ...row.delta.map(token => deltaRow(`synced-${row.context}-${token}`, token)),
+            ],
+      )
       return [
         ...(alerts.length > 0
           ? [isDesktop
@@ -1644,6 +1778,9 @@ export const register: Register = on => {
           observedCount > 0 ? 'warning' : 'success',
           false,
         ),
+        ...(synced.length === 0
+          ? []
+          : [group('last-sync', `Last sync · ${synced[0]?.feature} · ${synced[0]?.date}`, syncedTokens === 0 ? 'nothing changed' : counted(syncedTokens, 'object'), syncedRows, undefined, syncedTokens <= LAST_SYNC_OPEN)]),
         isDesktop ? (
           <Box key="recent" flexDirection="column" marginTop="sm" gap="xs" backgroundColor={SURFACE} {...BLOCK}>
             <Text size="footnote" weight="semibold" color="inactive">Recent</Text>
@@ -1847,6 +1984,90 @@ export const register: Register = on => {
           </Box>
         </Box>,
         ...(byId.has(id) ? [<Box key="open-object-row" marginTop={1} height={1}>{idRow('change-object', id, isDesktop ? 0 : INDENT.length)}</Box>] : []),
+      ]
+    }
+
+    // --- sync ---------------------------------------------------------------------------
+    const syncLevel = (one: SyncObject) => (one.level === null ? '' : ` ◐ ${one.level}`)
+    const syncView = () => {
+      if (kb.syncs.length === 0) return [blank('No sync staged any more.')]
+      const state = 'Staged by the sync: nothing is written to the base yet.'
+      const next = '→ /cctoolkit:knowledge-sync writes it, its report lists what changed'
+      return [
+        isDesktop ? (
+          <Box key="sync-state" flexDirection="column" marginTop={1}>
+            <Text color="warning" wrap="wrap">{`  ${state}`}</Text>
+            <Text color="inactive" wrap="wrap">{`  ${next}`}</Text>
+          </Box>
+        ) : (
+          <Box key="sync-state" flexDirection="column" marginTop={1} marginLeft={INDENT.length} borderStyle="round" borderColor="warning" paddingX={1}>
+            <Text wrap="wrap">
+              <Text color="warning">◆ </Text>
+              {state}
+            </Text>
+            <Text color="inactive" wrap="wrap">{next}</Text>
+          </Box>
+        ),
+        ...kb.syncs.flatMap(sync => [
+          group(
+            `sync-${sync.context}`,
+            sync.context,
+            syncCounts(sync),
+            sync.objects.length === 0
+              ? [<Text key={`sync-${sync.context}-none`} color="inactive">{`${isDesktop ? '' : ' '.repeat(ROW)}no object changed yet`}</Text>]
+              : sync.objects.map(one => (
+                  <Box key={`staged-${sync.context}-${one.id}`} height={1}>
+                    <Text color={toneOf(one.change)}>{`${isDesktop ? '  ' : ' '.repeat(ROW)}${markOf(one.change)} `}</Text>
+                    <Button key={`open-staged-${one.id}`} plain onPress={go({ kind: 'staged', context: sync.context, id: one.id })}>
+                      <Text color="inactive">{one.id} </Text>
+                      <Text wrap="truncate-end">{fit(one.title, columns - one.id.length - (isDesktop ? 6 : ROW + 4) - syncLevel(one).length)}</Text>
+                      {one.level === null ? <Text> </Text> : <Text color="warning">{syncLevel(one)}</Text>}
+                    </Button>
+                  </Box>
+                )),
+          ),
+          group(
+            `sync-files-${sync.context}`,
+            `${sync.context} files`,
+            `${sync.files.length}`,
+            sync.files.map((rel, index) => (isDesktop ? <Text key={`sync-${sync.context}-${index}`} color="inactive" wrap="truncate-start">{`  ${rel}`}</Text> : tail(`sync-${sync.context}-${index}`, ROW, rel))),
+            undefined,
+            false,
+          ),
+        ]),
+      ]
+    }
+    const stagedView = (context: string, id: string) => {
+      const one = kb.syncs.find(sync => sync.context === context)?.objects.find(object => object.id === id)
+      if (one === undefined) return [blank(`${id}: not staged by the sync any more`)]
+      return [
+        <Box key="staged-kind" marginTop={1}>
+          {isDesktop
+            ? <Text color={toneOf(one.change)}>{`  ${markOf(one.change)} ${one.change} · ${context}${syncLevel(one)}`}</Text>
+            : (
+              <Text>
+                {INDENT}
+                <Text color={toneOf(one.change)}>{`${markOf(one.change)} `}</Text>
+                {one.change}
+                <Text color="inactive">{` · ${context}`}</Text>
+                {one.level !== null && <Text color="warning">{syncLevel(one)}</Text>}
+              </Text>
+            )}
+        </Box>,
+        <Box key="before" flexDirection="column" marginTop={1} {...(isDesktop ? {} : { marginLeft: INDENT.length })}>
+          <Text bold>Base now</Text>
+          <Box flexDirection="column" marginLeft={2}>
+            {one.before === null ? <Text color="inactive">not in the base</Text> : paragraph('before', one.before, 'inactive')}
+          </Box>
+        </Box>,
+        <Box key="after" flexDirection="column" marginTop={1} {...(isDesktop ? {} : { marginLeft: INDENT.length })}>
+          <Text bold>Staged</Text>
+          <Box flexDirection="column" marginLeft={2}>
+            {one.change === 'retired' ? <Text color="error">removed: the code no longer holds it</Text> : paragraph('after', one.after ?? '')}
+          </Box>
+        </Box>,
+        tail('staged-file', isDesktop ? 0 : INDENT.length, one.file),
+        ...(byId.has(id) ? [<Box key="open-object-row" marginTop={1} height={1}>{idRow('staged-object', id, isDesktop ? 0 : INDENT.length)}</Box>] : []),
       ]
     }
 
@@ -2111,6 +2332,8 @@ export const register: Register = on => {
       }
       if (view.kind === 'merge') return [`Merge ${view.code}`, TITLE]
       if (view.kind === 'change') return [`${view.id} in ${view.code}`, 'Merge']
+      if (view.kind === 'sync') return ['Sync staged', TITLE]
+      if (view.kind === 'staged') return [`${view.id} in the sync`, 'Sync']
       if (view.kind === 'search') return ['Search', TITLE]
       if (view.kind === 'spec') return [spec.doc?.title || spec.topic || SPEC_TITLE, spec.doc?.title ? SPEC_TITLE : undefined]
       return [TITLE, undefined]
@@ -2125,7 +2348,11 @@ export const register: Register = on => {
             ? mergeView(view.code)
             : view.kind === 'change'
               ? changeView(view.code, view.id)
-              : view.kind === 'search'
+              : view.kind === 'sync'
+                ? syncView()
+                : view.kind === 'staged'
+                  ? stagedView(view.context, view.id)
+                  : view.kind === 'search'
                 ? searchView()
                 : view.kind === 'spec'
                   ? specView()

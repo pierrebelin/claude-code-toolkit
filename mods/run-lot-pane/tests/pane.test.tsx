@@ -10,6 +10,7 @@ import {
   callBrief, clockOf, closedCall, relativePath, samePath, detailsOf, duration, editedPath, errorDetail, errorOf, errorsOf, promptBrief, structuredLines, withCall, headlineOf, figuresLine, firstLine, fit, oneLine, isSlow, isStepDone, journalPathOf, labelPhasesOf, lotOf, nestedPhaseOf, markOf, outcomeTone,
   canonicalPhase, mergeOf, mergeRows, parseJournal, parsePhases, parseSheet, phaseInsight, passesOf, phaseRows, remainingMs, samplesOf, sheetPathOf, shortModel,
   activityOf, liveSignalOf, reasonLines, stallReasons, withoutRepeated, wrapWords, throughputOf, toolSummary, totalsOf, typicalMs, typicalTools, withFile, withSamples, washOf, lotRunRootOf, withJournalSamples, workflowKey } from '../hooks/register'
+import { DEMO_SYNC_RESULT, demoSyncRuns, isSyncRun, scannedOf, syncRows, syncStateOf, syncTitlesOf } from '../hooks/register'
 import { PANE, paneAt, paneCommand, world, indented } from './world'
 import type { Directory, Stamps, World } from './world'
 
@@ -1890,4 +1891,113 @@ test('terminal at 40, 60 and 100 columns: block titles ruled to the figures, age
     }
     await ui.unmount()
   }
+})
+
+describe('run-sync', () => {
+  const PLAN = JSON.stringify({
+    root: 'docs/business', head: 'abc1234', budget: 12000, unassigned: 0,
+    contexts: [
+      { name: 'Catalog', prefix: 'CAT', mode: 'incremental', parts: [{ part: 1 }, { part: 2 }], mechanical: [], staged: false },
+      { name: 'Studio', prefix: 'STU', mode: 'incremental', parts: [], mechanical: [], staged: false },
+      { name: 'Billing', prefix: null, proposedPrefix: 'BIL', mode: 'bootstrap', parts: [{ part: null }], mechanical: [], staged: false },
+    ],
+  })
+  const agentOf = (id: string, label: string, phase: string, state: WorkflowAgent['state'], extra: Partial<WorkflowAgent> = {}): WorkflowAgent =>
+    ({ ...blankAgent(id, 1, label, 'Haiku', 'general-purpose', '', 0), phase, state, ...extra })
+  const runOf = (agents: WorkflowAgent[], status: WorkflowRun['status'] = 'running'): WorkflowRun =>
+    ({ ...demoSyncRuns(10_000)[0]!, name: 'cctoolkit:run-sync', status, outcome: null, agents })
+
+  test('scan plan: contexts in plan order, to come, to mark, skipped without prefix', () => {
+    expect(scannedOf({ plan: PLAN })).toEqual([
+      { name: 'Catalog', mode: 'incremental', parts: 2, hasPrefix: true, isIdle: false },
+      { name: 'Studio', mode: 'incremental', parts: 0, hasPrefix: true, isIdle: true },
+      { name: 'Billing', mode: 'bootstrap', parts: 1, hasPrefix: false, isIdle: false },
+    ])
+    expect(scannedOf({ plan: 'not json' })).toBeNull()
+    expect(scannedOf({ exit: 0 })).toBeNull()
+  })
+
+  test('phases: one per context between Scan and Close, named by its context; states read from the agents', () => {
+    const scan = agentOf('a1', 'scan', 'Scan', 'done', { scanned: scannedOf({ plan: PLAN }) })
+    const run = runOf([scan, agentOf('a2', 'Catalog · part 1/2', 'sync: Catalog', 'done'), agentOf('a3', 'Catalog · part 2/2', 'sync: Catalog', 'running')])
+    expect(isSyncRun(run)).toBe(true)
+    expect(syncTitlesOf(run)).toEqual(['sync: Catalog', 'sync: Studio', 'sync: Billing'])
+    expect(phaseRows(run, 1000).map(row => `${row.title}:${row.mark}`)).toEqual(['Scan:done', 'sync: Catalog:running', 'sync: Studio:pending', 'sync: Billing:pending', 'Close:pending', 'Report:pending'])
+    expect(phaseTitleOf(run, 'sync: Catalog')).toBe('Catalog')
+    expect(syncStateOf(run, 'sync: Catalog')).toEqual({ state: 'part 2/2', parts: { done: 1, total: 2 } })
+    expect(syncStateOf(run, 'sync: Studio').state).toBe('to mark')
+    expect(syncStateOf(run, 'sync: Billing').state).toBe('skipped')
+    const applied = runOf([
+      scan, agentOf('a2', 'Catalog · part 1/2', 'sync: Catalog', 'done'), agentOf('a3', 'Catalog · part 2/2', 'sync: Catalog', 'done'),
+      agentOf('a4', 'Catalog · apply', 'sync: Catalog', 'done', { structured: ['exit: 0', 'lines · 2'] }), agentOf('a5', 'mark', 'Close', 'done', { structured: ['exit: 0'] }),
+    ])
+    expect(syncStateOf(applied, 'sync: Catalog')).toEqual({ state: 'written', parts: { done: 2, total: 2 } })
+    expect(syncStateOf(applied, 'sync: Studio').state).toBe('marked')
+    expect(phaseRows(applied, 1000).find(row => row.title === 'sync: Studio')?.mark).toBe('done')
+    expect(syncStateOf(runOf([scan, agentOf('a6', 'Catalog · apply again', 'sync: Catalog', 'done', { structured: ['exit: 1'] })]), 'sync: Catalog').state).toBe('refused')
+    expect(syncStateOf(runOf([scan, agentOf('a7', 'Catalog · part 1/2', 'sync: Catalog', 'done', { structured: ['blocked: knowledge-scan exit 2'] })]), 'sync: Catalog').state).toBe('blocked')
+  })
+
+  test('result: the rules changed per context, signs coloured, the conflicts the code won, contexts marked in one line', () => {
+    const contexts = [...DEMO_SYNC_RESULT.contexts, { name: 'Billing', state: 'skipped', reason: 'no prefix in knowledge.contexts' }, { name: 'Pricing', state: 'marked' }, { name: 'Orders', state: 'refused', reason: 'refused: CAT-RM-?1 dangling' }]
+    const journal = parseJournal(JSON.stringify({ status: 'completed', result: { ...DEMO_SYNC_RESULT, contexts } }))
+    const sync = journal?.outcome?.sync
+    expect(journal?.outcome?.label).toBe('DONE')
+    expect(sync?.contexts.map(one => `${one.name}:${one.state}`)).toEqual(['Catalog:written', 'Studio:written', 'Billing:skipped', 'Pricing:marked', 'Orders:refused'])
+    const rows = syncRows(sync!)
+    expect(rows.map(row => row.text)).toEqual([
+      '✓ Catalog — written · 3 objects',
+      '  +CAT-RM-006 — Product names are unique in a catalog',
+      '  ~CAT-RM-002 — Only a published product can be archived',
+      '  -CAT-RM-005 — Archiving twice is refused',
+      '  ⚠ CAT-RM-002 — code won, check the sheet',
+      '    sheet: a draft product cannot be archived · code: a draft product is archived too · src/Shop.Domain/Catalog/Product.cs:88',
+      '  − CAT-RM-005 removed — the guard against archiving twice is gone · ArchiveProductCommandHandler.cs:31',
+      '  retired: GetProductQueryHandler',
+      '✓ Studio — written · 1 object',
+      '  +STU-RM-004 — A node belongs to one ModuleDiagram',
+      '○ Billing — skipped',
+      '  no prefix in knowledge.contexts',
+      '✗ Orders — refused',
+      '  refused: CAT-RM-?1 dangling',
+      '✓ Pricing — marked, nothing changed',
+      '→ Review `git diff -- docs/business` and commit it with the code it describes.',
+    ])
+    expect(rows.slice(1, 4).map(row => row.tone)).toEqual(['success', 'warning', 'error'])
+    expect(rows[4]?.tone).toBe('warning')
+    expect(outcomeTone({ label: 'PARTIAL', reason: null, report: null }, 'completed')).toBe('warning')
+    expect(parseJournal(JSON.stringify({ status: 'completed', result: { status: 'BLOCKED', reason: 'scan agent without result', contexts: [] } }))?.outcome?.sync).toBeUndefined()
+  })
+
+  test('demo sync: contexts as phases with their state and parts, then the rules changed in the outcome', async ($, on) => {
+    const toasts: string[] = []
+    runWorld(on, {}, { toasts })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    await paneCommand($, 'demo sync')
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
+      expect(await ui.find({ type: 'Text', text: /run-sync/ })).toBeDefined()
+      expect(await ui.find({ type: pressType(surface), text: /✓ Catalog/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /written · parts 2\/2/ })).toBeDefined()
+      expect(await ui.find({ type: pressType(surface), text: /Studio/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /part 1\/1/ })).toBeDefined()
+      expect(await ui.find({ type: pressType(surface), text: /○ Close/ })).toBeDefined()
+      expect(await ui.find({ key: 'outcome' })).toBeUndefined()
+      await ui.unmount()
+    }
+    await paneCommand($, 'demo sync end')
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({ plugin: 'run-lot-pane', surface, ...PANE })
+      expect(await ui.find({ type: 'Text', text: /✓ completed\s+9m35\s+7\/7 agents/ })).toBeDefined()
+      expect((await ui.find({ type: 'Text', text: /^DONE$/ }))?.props.color).toBe('success')
+      expect((await ui.find({ type: 'Text', text: /^✓ Catalog — written · 3 objects$/ }))?.props.color).toBe('success')
+      expect((await ui.find({ type: 'Text', text: /~CAT-RM-002 — Only a published/ }))?.props.color).toBe('warning')
+      expect((await ui.find({ type: 'Text', text: /CAT-RM-002 — code won, check the sheet/ }))?.props.color).toBe('warning')
+      expect(await ui.find({ type: 'Text', text: /retired: GetProductQueryHandler/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /\+STU-RM-004 — A node belongs to one ModuleDiagram/ })).toBeDefined()
+      await ui.unmount()
+    }
+    expect(toasts).toEqual([])
+    expect(demoSyncRuns(0)).toHaveLength(1)
+  })
 })

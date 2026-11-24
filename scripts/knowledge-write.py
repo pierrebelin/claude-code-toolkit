@@ -21,8 +21,8 @@ Format: `skills/knowledge-sync/references/knowledge-format.md`.
         handler is staged empty.
     cctoolkit knowledge-write apply [--context C[,C]]
         numbers the provisional ids, writes the files, adds one `| <date> | sync <HEAD> | <delta> |`
-        row per context named (`—` when nothing changed), clears their drafts, rebuilds the
-        index and `INDEX.md`. Refused, nothing written: a dangling provisional id, an id
+        row per context named (`—` when nothing changed), then for a sync one line per object
+        of the delta, `  <sign><id> — <title>`; clears their drafts, rebuilds the index and `INDEX.md`. Refused, nothing written: a dangling provisional id, an id
         defined twice, an unknown prefix, a file outside a context folder, a base file staged
         by two contexts, a rule left in a use case's file while several apply it. Warns on an
         `OVERVIEW.md` above `knowledge.overviewBudget`.
@@ -470,10 +470,14 @@ def apply(ctxs):
     for path in files.values():
         os.remove(path)
     date = datetime.date.today().isoformat()
+    titles = {o.id: o.title for t in (before_texts, after_texts) for text in t.values() for o in knowledge.objects(text)}
     for ctx in sorted(rows):
         delta = " ".join(deltas.get(ctx, [])) or "—"
         history_row(ctx, f"| {date} | {label} | {delta} |")
         print(f"{ctx}: {label} | {delta}")
+        if not MERGE:
+            for item in deltas.get(ctx, []):
+                print(f"  {item} — {titles.get(item[1:], '')}")
     for line in kept:
         print(f"WARN {line}")
     ensure_git_files()

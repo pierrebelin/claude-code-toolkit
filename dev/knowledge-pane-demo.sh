@@ -3,7 +3,8 @@
 #
 # Why. Installed, the mod cannot reach `examples/` of the kit: it ships its own copy
 # under `mods/knowledge-pane/demo/` (a repo: `.claude/kit.config.json`, `docs/business/`
-# with the index the example gives, and a staged merge `.merge/PRD-DUP/` of its own).
+# with the index the example gives, a staged merge `.merge/PRD-DUP/` and a staged sync `.sync/Catalog/`
+# of its own).
 #   bash dev/knowledge-pane-demo.sh           copies the example again and rebuilds the index
 #   bash dev/knowledge-pane-demo.sh --check   writes nothing: exit 1 and a FAIL line when the
 #                                             copy or its index lags; run by dev/release-check.sh
@@ -25,7 +26,7 @@ index() { # <repo> — the index the example gives, in <repo>/docs/business/.ind
 }
 
 if [ "$check" = --check ]; then
-  if ! diff -rq -x .index -x .merge "$src" "$base" >/dev/null 2>&1; then
+  if ! diff -rq -x .index -x .merge -x .sync "$src" "$base" >/dev/null 2>&1; then
     echo "FAIL  $base differs from $src — bash dev/knowledge-pane-demo.sh"
     exit 1
   fi
@@ -40,7 +41,7 @@ if [ "$check" = --check ]; then
   exit 0
 fi
 
-find "$base" -mindepth 1 -maxdepth 1 ! -name .merge -exec rm -rf {} + || exit 1
+find "$base" -mindepth 1 -maxdepth 1 ! -name .merge ! -name .sync -exec rm -rf {} + || exit 1
 cp -R "$src/." "$base/" || { echo "FAIL  copy of $src into $base" >&2; exit 1; }
 index "$demo" || { echo "FAIL  knowledge-index on $demo" >&2; exit 1; }
 # knowledge-index rewrites INDEX.md when it lags: the example's own copy is then the one to fix.
