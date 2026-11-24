@@ -49,6 +49,7 @@ if (lot.status !== DONE) {
 }
 
 // --- Doc: the fix spec is the intent the user validated; its delta goes to the base unasked ---------
+// run-change carries the same step (a workflow nests one level only): a change to it goes to both.
 phase('Doc')
 const skill = `/cctoolkit:knowledge-merge ${plan}`
 let knowledge
