@@ -21,8 +21,9 @@ const naming = /^(.*)-(F\d+)\.md$/.exec(sheet)
 if (!naming) throw new Error('expected argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`')
 const plan = `${naming[1]}.md`
 const batch = naming[2]
-// A batch run in a git worktree of its own, beside another batch (run-plan, `run.parallelBatches`):
-// `root` = that worktree, absolute — sheet, plan, source and test paths resolve under it; `run` = the run
+// A batch run in a git worktree of its own, beside another batch (run-plan, `run.parallelBatches`), or in the
+// plan's other repository its `Repo` column names (run-plan, `cctoolkit batch-repo carry`: the plan folder
+// copied there): `root` = that tree, absolute — sheet, plan, source and test paths resolve under it; `run` = the run
 // folder of the session's checkout, absolute — work file, questions and report stay where the session reads them.
 const opts = args && typeof args === 'object' ? args : {}
 const root = slashed(opts.root || '').trim().replace(/\/+$/, '')
@@ -33,6 +34,10 @@ const commitAtEnd = !(args && typeof args === 'object' && args.commit === false)
 // Beside another batch: `lock` = solution builds, whole suites and the cycles' test-project builds
 // (`commands.testFast`) under `cctoolkit build-lock`.
 const lock = opts.lock === true
+// A batch consuming another repository's batch as a package (run-plan, `F1(package)`): `packages` = `{ from, version,
+// feed }`, the prerelease run-plan packed into the local feed. Pinned once the snapshot is taken, before the first
+// cycle: the change is the batch's own — in its diff, its commit, restored when it is set aside.
+const pin = opts.packages && typeof opts.packages === 'object' && opts.packages.version ? opts.packages : null
 const tmpCommand = `cctoolkit run-work tmp ${batch}`
 const TMP = `\`<tmp>\` = the folder \`${tmpCommand}\` prints (system temp, never under run/)`
 
@@ -170,7 +175,7 @@ const LOADED = obj({
 // and the TDD scope hook (lib/tdd_scope.py) takes the agent's tree from it.
 const AT_ROOT = root ? `cd '${root}' && export CLAUDE_PROJECT_DIR='${root}' &&` : ''
 const ROOT_LINE = root
-  ? `Batch worktree: \`${root}\`, a git worktree of the repo, not the session's checkout. Every Bash call opens with \`${AT_ROOT}\` (the shell goes back to the session's checkout after each call): the relative paths below resolve in that worktree. Read, Edit and Write take absolute paths, \`${root}/<path>\` for a sheet, plan, source or test path; no file of the session's checkout is yours, save under the run folder \`${runRoot}\`.`
+  ? `Batch worktree: \`${root}\`, a git worktree of the repo or the plan's other repository, not the session's checkout. Every Bash call opens with \`${AT_ROOT}\` (the shell goes back to the session's checkout after each call): the relative paths below resolve in that tree. Read, Edit and Write take absolute paths, \`${root}/<path>\` for a sheet, plan, source or test path; no file of the session's checkout is yours, save under the run folder \`${runRoot}\`.`
   : ''
 const FRAME = [
   `Workflow run-lot, batch ${batch}. Global plan: ${plan}. Batch sheet: ${sheet}. Run work file: ${workFile}.`,
@@ -710,6 +715,23 @@ if (!loaded) log('resume state agent without result — no cycle reused')
 const resumeLine = loaded && loaded.resume ? loaded.resume.trim() : ''
 if (/^resume: (conflict|sheet changed)\b/.test(resumeLine)) toReview('Start', resumeLine.replace(/^resume: /, 'work set aside not put back: '))
 else if (/^resume: \d+ file/.test(resumeLine)) log(resumeLine)
+if (pin) {
+  const at = AT_ROOT ? `${AT_ROOT} ` : ''
+  const pinned = await agent(
+    [
+      FRAME,
+      '',
+      `Batch ${batch} consumes batch ${pin.from} of another repository as a package: point it at the prerelease \`${pin.version}\` of the local feed before its first cycle. In this order, stop at the first failure:`,
+      `1. One call: \`${at}cctoolkit config command usePackage --version ${pin.version} --feed '${pin.feed}'\` → the pin command. Nothing printed → \`ok\` false, \`detail\` \`commands.usePackage unset\`.`,
+      `2. One call (timeout 600000), the printed command run literally, never through \`eval\`: \`${at}f=$(mktemp); <printed command> > "$f" 2>&1; echo "use=$?"; tail -3 "$f"; rm -f "$f"\`. \`use\` other than 0 → \`ok\` false, \`detail\` = \`use=<code>\` followed by the lines printed.`,
+      `3. One call: \`${at}cctoolkit batch-package note ${sheet} --work ${workFile} --batch ${batch} --from ${pin.from} --version ${pin.version} --feed '${pin.feed}'\` → \`files\` = the lines it printed (the files the pin changed, now a row of the sheet's assumptions). \`ok\` true, \`detail\` empty.`,
+    ].join('\n'),
+    { schema: obj({ ok: bool, files: arr(str), detail: str }), phase: 'Design', label: 'package pin', model: 'haiku', effort: 'low' },
+  ).catch(() => null)
+  if (!pinned || !pinned.ok) return await finish(BLOCKED, `package pin of ${pin.from} (${pin.version}) — ${pinned ? pinned.detail : 'agent without result'}`)
+  toReview('Package', `pointed at ${pin.from}'s prerelease ${pin.version} on the local feed ${pin.feed}: ${list(pinned.files)} — switch back to the published version once its CI passes`)
+  log(`package pin: ${pin.from} ${pin.version} — ${pinned.files.join(', ') || 'no file changed'}`)
+}
 lotIndex = loaded ? loaded.index : null
 if (!whole(lotIndex)) {
   log(`resume state relayed ${lotIndex.cycles.length} of ${lotIndex.count} cycle(s) — index read again`)

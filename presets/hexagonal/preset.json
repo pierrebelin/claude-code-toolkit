@@ -120,6 +120,8 @@
     "build": "",
     "test": "",
     "worktreeSetup": "",
+    "pack": "",
+    "usePackage": "",
     "architectureTest": {
       "run": "",
       "when": ""

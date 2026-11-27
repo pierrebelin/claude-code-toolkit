@@ -29,8 +29,9 @@ Structure expected by the `run-plan` / `run-lot` workflows. Two levels:
 | F1 | [1 sentence] | RM-01, RM-03 / CU-01 | — | . | sequential | foundation / first contract |
 | F2 | [1 sentence] | RM-04 / CU-02 | F1 | . | parallelisable with F3 (2 worktrees) / sequential | [no shared code, configuration or fixtures] |
 | F3 | [1 sentence] | RM-05 / CU-03 | F1 | ../[Other.Repo] | parallelisable with F2 (2 repos) / sequential | [concrete reason] |
+| F4 | [1 sentence] | RM-06 / CU-03 | F3(package) | . | sequential | consumes the package F3 publishes |
 
-`Repo`: path relative to the root of this repository, `.` by default — read by `cctoolkit plan-next-batch` for `/run-plan`. `sequential` is the default. Mark `parallelisable` only if the prerequisites are finished and the batches touch neither the same aggregate, handler, endpoint, project, DI, migration, route nor test fixture.
+`Repo`: path relative to the root of this repository, `.` by default — read by `cctoolkit plan-next-batch` for `/run-plan`, which runs a batch of another repository from this one (that repository needs its own `.claude/kit.config.json`: `/cctoolkit:kit-init` there first, and is put on this checkout's branch). `Depends on`: `F3(package)`, the qualifier verbatim, when the batch consumes F3's code of another repository through the package it publishes — `/run-plan` packs F3 into the local feed and points this batch at that prerelease; one per batch, toward another repository only. `sequential` is the default. Mark `parallelisable` only if the prerequisites are finished and the batches touch neither the same aggregate, handler, endpoint, project, DI, migration, route nor test fixture.
 
 ### Batch F1 — [Name] — ⬜
 - [ ] 1. [Step title]

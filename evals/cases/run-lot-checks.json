@@ -158,6 +158,22 @@
       }
     },
     {
+      "name": "run-lot flow: a batch consuming another repository's batch as a package (`packages`) is pinned to its prerelease by one agent right after the snapshot and before the first cycle — commands.usePackage printed and run literally, the files noted in the sheet — the pin listed to switch back once its CI passes",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js pin | grep -E 'STATUS|ERR|WARN|UNHANDLED|AGENTS|REASON' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | toReview 3 Package,RED One,RED Two | audits 1;AGENTS resume state | package pin | RED C1 w1 One +GREEN | RED C2 w2 Two +GREEN | suites run | pre-audit | audit | report;"
+      }
+    },
+    {
+      "name": "run-lot flow: a package pin that fails stops the batch BLOCKED before any cycle, its output as the reason",
+      "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js pinfail | grep -E 'STATUS|ERR|WARN|UNHANDLED|AGENTS|REASON' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | toReview 0 ;AGENTS resume state | package pin | report;REASON package pin of F1 (1.4.1-kit.202611271000.1) — use=1 refused: no tracked .props, .targets or project file defines <AcmeSharedVersion> | TO VALIDATE ;"
+      }
+    },
+    {
       "name": "run-lot flow: a batch in a worktree of its own beside another (`root`, `run`, `lock`) hands every agent that worktree and the prefix of its Bash calls, keeps the work file in the session's run folder and runs the suites under the build lock",
       "cmd": "node {{KIT}}/evals/workflows/run-lot-flow.js {{KIT}}/workflows/run-lot.js root | grep -E 'STATUS|ERR|WARN (agent without|work file outside|suites run without)|UNHANDLED|AGENTS' | tr '\\n' ';'",
       "expect": {
@@ -323,6 +339,62 @@
       "expect": {
         "exit": 0,
         "stdout": "STATUS DONE | — | F1 DONE, F2 DONE, F3 DONE;AGENTS preflight | next batch | run-lot F1 | gate F1 | commit F1 | next batch | run-lot F2 | gate F2 | commit F2 | next batch | run-lot F3 | gate F3 | commit F3 | next batch | final check | security | merge prepare | report;"
+      }
+    },
+    {
+      "name": "run-plan repos flow: a plan whose Repo column names other repositories — /s and /e checked at the preflight (kit.config.json, branch rule, doctor, build), the checkout's own batch adding none; F1 carried into /s on the checkout's branch, run there (run-lot root, the sheet's copy, the run folder of the checkout), gated and committed in /s, its plan folder brought back; then F2 in /e beside F3 in the checkout, no pair looked for; the final check in the checkout then in each repo committed in, a red suite named <repo>/<suite> with its log command there; the security pass reads each repo's commits with git -C; the report names each repo's branch",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-repos-flow.js {{KIT}}/workflows/run-plan.js repos | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|CLEAN' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | — | F1 DONE, F3 DONE, F2 DONE;AGENTS preflight | preflight s | preflight e | next batch | carry F1 | run-lot F1 /s | gate F1 | commit F1 | back F1 | next batch | carry F2 | run-lot F3 | run-lot F2 /e | gate F3 | commit F3 | gate F2 | commit F2 | back F2 | next batch | final check | final check s | final check e | security | merge prepare | report;CLEAN;"
+      }
+    },
+    {
+      "name": "run-plan repos flow: a repository without kit.config.json stops the run at the preflight, before any batch, its line and its fix (/cctoolkit:kit-init in that repository) as the reason",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-repos-flow.js {{KIT}}/workflows/run-plan.js preflight | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|CLEAN' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | /s: no .claude/kit.config.json — run /cctoolkit:kit-init in that repository | ;AGENTS preflight | preflight s | cleanup;CLEAN;"
+      }
+    },
+    {
+      "name": "run-plan repos flow: a repository whose local changes block the switch to the checkout's branch — its batch set aside at the carry, without run-lot nor restore, the checkout's batch committed",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-repos-flow.js {{KIT}}/workflows/run-plan.js branch | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|CLEAN' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | batches set aside: F2 | F1 DONE, F2 BLOCKED, F3 DONE;AGENTS preflight | preflight s | preflight e | next batch | carry F1 | run-lot F1 /s | gate F1 | commit F1 | back F1 | next batch | carry F2 | journal | run-lot F3 | gate F3 | commit F3 | next batch | final check | final check s | security | report;CLEAN;"
+      }
+    },
+    {
+      "name": "run-plan repos flow: a batch blocked in another repository — set aside there (the sheet's copy fingerprinted, the patch in the checkout's run folder), its plan folder brought back, the checkout's batch beside it committed",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-repos-flow.js {{KIT}}/workflows/run-plan.js aside | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|CLEAN' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | batches set aside: F2 | F1 DONE, F3 DONE, F2 BLOCKED;AGENTS preflight | preflight s | preflight e | next batch | carry F1 | run-lot F1 /s | gate F1 | commit F1 | back F1 | next batch | carry F2 | run-lot F3 | run-lot F2 /e | gate F3 | commit F3 | aside F2 | back F2 | next batch | final check | final check s | security | report;CLEAN;"
+      }
+    },
+    {
+      "name": "run-plan repos flow: F2 consumes F1 as a package (F1(package)) — /s checked for commands.pack, /e for commands.usePackage and the local feed; F1 packed in /s under the run's prerelease after its gate and before its commit; run-lot F2 pinned to that prerelease, the pin listed to switch back",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-repos-flow.js {{KIT}}/workflows/run-plan.js package | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|CLEAN' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | — | F1 DONE, F3 DONE, F2 DONE;AGENTS preflight | preflight s | preflight e | next batch | carry F1 | run-lot F1 /s | gate F1 | pack F1 | journal | commit F1 | back F1 | next batch | carry F2 | run-lot F3 | run-lot F2 /e | gate F3 | commit F3 | gate F2 | commit F2 | back F2 | next batch | final check | final check s | final check e | security | merge prepare | report;CLEAN;"
+      }
+    },
+    {
+      "name": "run-plan repos flow: a producer whose pack fails is set aside in its repository like a red gate, nothing committed, its consumer and dependents held",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-repos-flow.js {{KIT}}/workflows/run-plan.js packfail | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|CLEAN' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS BLOCKED | batches set aside: F1 (holds back F2, F3) | F1 GATE RED;AGENTS preflight | preflight s | preflight e | next batch | carry F1 | run-lot F1 /s | gate F1 | pack F1 | aside F1 | back F1 | next batch | report;CLEAN;"
+      }
+    },
+    {
+      "name": "run-plan repos flow: a producer committed by an earlier run is packed again from its repository's HEAD, that repository first put on the run's branch, before its consumer runs",
+      "cmd": "node {{KIT}}/evals/workflows/run-plan-repos-flow.js {{KIT}}/workflows/run-plan.js repack | grep -E 'STATUS|AGENTS|ERR|WARN|UNHANDLED|CLEAN' | tr '\n' ';'",
+      "expect": {
+        "exit": 0,
+        "stdout": "STATUS DONE | — | F3 DONE, F2 DONE;AGENTS preflight | preflight s | preflight e | next batch | branch F1 | pack F1 | journal | carry F2 | run-lot F3 | run-lot F2 /e | gate F3 | commit F3 | gate F2 | commit F2 | back F2 | next batch | final check | final check e | security | merge prepare | report;CLEAN;"
       }
     },
     {

@@ -3,11 +3,11 @@ export const meta = {
   description: 'Whole plan, autonomous: run-lot on every runnable batch in dependency order, gate read from disk after each, run report',
   whenToUse: 'Implement every batch of a global plan without human intervention. Argument: path of the global plan `todo/<code>/<CODE>-PLAN.md`, optionally followed by `--until FX` or `--only FX`.',
   phases: [
-    { title: 'Preflight', detail: 'plan check, doctor, docker, build green, kit root, run stamp, old runs and orphan scratch folders removed' },
-    { title: 'Batch', detail: 'next batch, out-of-batch check and journal in one call, run-lot; run.parallelBatches 2: an independent batch beside it, in a worktree of its own, long builds under build-lock' },
-    { title: 'Gate', detail: 'report status, plan heading, build green, one repair, batch commit, journal; a worktree batch committed there, landed on the checkout, its build checked once landed — a conflict or a red build reruns it alone' },
+    { title: 'Preflight', detail: 'plan check, doctor, docker, build green, kit root, run stamp, old runs and orphan scratch folders removed; every other repo of the plan in scope (Repo column): kit.config.json, branch rule, doctor, build; a repo that packs or pins a package: its commands and the local feed' },
+    { title: 'Batch', detail: 'next batch, out-of-batch check and journal in one call, run-lot; run.parallelBatches 2: an independent batch beside it, in a worktree of its own, long builds under build-lock; a batch of another repo (Repo column): that repo put on the checkout\'s branch, plan folder carried there, run there beside the batch of the checkout; a batch consuming a package (F1(package)): pinned by run-lot to its producer\'s prerelease before its first cycle' },
+    { title: 'Gate', detail: 'report status, plan heading, build green, one repair, a package producer packed into the local feed, batch commit, journal; a worktree batch committed there, landed on the checkout, its build checked once landed — a conflict or a red build reruns it alone; a batch of another repo gated and committed in that repo, its plan and sheet brought back' },
     { title: 'Aside', detail: 'blocked batch: partial work saved under a git ref (and a patch to read), its saved cycles kept, tree restored to the batch start, dependents skipped — the next run puts the work back and resumes; from the second, an arbiter looks for a cause common to the batches set aside — one stops the plan' },
-    { title: 'Final check', detail: 'every test suite run whole once, integration included, after the last batch: reported, never blocking' },
+    { title: 'Final check', detail: 'every test suite run whole once, integration included, after the last batch, in the checkout and in each other repo a batch was committed in: reported, never blocking' },
     { title: 'Security', detail: 'one read-only pass over the batch commits of the plan: findings listed for review, never blocking' },
     { title: 'Merge', detail: 'whole plan delivered, spec written against the knowledge base: its merge drafted by knowledge-merger from the spec delta and written by the run — a refusal leaves it staged, /cctoolkit:knowledge-merge shows it and writes it on confirmation' },
     { title: 'Report', detail: 'run/<stamp>.md: every decision taken without the user first, then batches, final check and journal; run lines of run/.work.jsonl removed, notification' },
@@ -47,11 +47,12 @@ const obj = (properties, optional = []) => ({
   required: Object.keys(properties).filter(k => !optional.includes(k)),
 })
 
-const PREFLIGHT = obj({ ok: bool, failure: str, plan: str, root: str, kit: str, runRoot: str, stamp: str, parallel: int }, ['parallel'])
+const REPO = obj({ repo: str, checkout: bool, batches: arr(str), pack: arr(str), use: arr(str) })
+const PREFLIGHT = obj({ ok: bool, failure: str, plan: str, root: str, kit: str, runRoot: str, stamp: str, parallel: int, repos: arr(REPO), feed: str }, ['parallel', 'repos', 'feed'])
 const NEXT = obj({
   kind: { type: 'string', enum: ['END', 'WAITING', 'BATCHES', 'ERROR'] },
   line: str,
-  batches: arr(obj({ batch: str, repo: str, sheet: str })),
+  batches: arr(obj({ batch: str, repo: str, sheet: str, packageFrom: arr(obj({ batch: str, repo: str })), pack: bool }, ['packageFrom', 'pack'])),
   held: arr(obj({ batch: str, by: arr(str) })),
   outsideBatch: str,
   outsidePaths: arr(str),
@@ -75,6 +76,10 @@ const MERGED = obj({ staged: bool, stagedLine: str, files: arr(str), warnings: a
 const PAIR = obj({ batches: arr(obj({ batch: str, repo: str, sheet: str })), apart: arr(obj({ batch: str, reason: str })) })
 const WORKTREE = obj({ ok: bool, path: str, detail: str })
 const LANDED = obj({ landed: bool, commit: str, from: str, detail: str })
+const CARRIED = obj({ ok: bool, plan: str, outside: arr(str), carried: bool, detail: str, branch: str, switched: str }, ['branch', 'switched'])
+const READY = obj({ ok: bool, failure: str, branch: str }, ['branch'])
+const PACKED = obj({ ok: bool, version: str, detail: str })
+const BROUGHT = obj({ ok: bool, back: arr(str), merged: arr(str), conflict: arr(str), kept: arr(str), detail: str })
 // A whole IntegrationTests run measured 602 s downstream (2026-09-10): past 25 min the suite hangs.
 const FINAL_TIMEOUT_MIN = 25
 // A suite whose log has not grown for this long hangs: one line per test, a test past 5 min flagged
@@ -98,7 +103,7 @@ const NOT_VALIDATED = 'these tests did not run, so the code of the batches is no
 function finalText(x, job) {
   const n = finalCounts(x)
   const stop = x.exit === 124 ? (x.stalled ? ` (stopped: its log silent ${FINAL_SILENT_MIN} min)` : ` (stopped after ${FINAL_TIMEOUT_MIN} min)`) : ''
-  const logLine = `log: \`cctoolkit bg log ${job} --lines 40\``
+  const logLine = `log: \`${x.repo ? `cd '${x.repo}' && ` : ''}cctoolkit bg log ${job} --lines 40\``
   if (!n.failed && !n.listed) return `${x.name} exit=${x.exit}${stop}: no test result read from its log, the suite gives no verdict on the batches — ${logLine}`
   const causes = ((x.report || {}).setup || []).map(g => `"${g.message}" (${g.tests.length})`).join(' ; ')
   return [
@@ -165,10 +170,10 @@ const pre = await agent(
     `Plan argument: \`${words[0]}\`.`,
     '1. `plan` = absolute path of the plan (`realpath`; under Git Bash on Windows `cygpath -m "$(realpath <p>)"`, a `C:/…` path the Write tool reads), `root` = `git rev-parse --show-toplevel`, `kit` = `cctoolkit root`.',
     '2. First, one call: `cctoolkit docker-up --wait 0 || true` (Docker Desktop boots during the build, no wait loop).',
-    '   Then in one message, from `root`: `cctoolkit plan-next-batch <plan> --check`, `cctoolkit doctor --quiet`, `cctoolkit config parallel-batches` (→ `parallel`, 1 when it fails) and `cctoolkit config command build`, the build configured by kit-init (`commands.build`, empty for a stack without one).',
+    `   Then in one message, from \`root\`: \`cctoolkit plan-next-batch <plan> --check\`, \`cctoolkit plan-next-batch <plan>${scope ? ' ' + scope : ''} --repos\` (→ \`repos\` = the \`repos\` array of the JSON line it prints, each object as-is; empty when it fails), \`cctoolkit config package-feed\` (→ \`feed\`, empty when nothing printed), \`cctoolkit doctor --quiet\`, \`cctoolkit config parallel-batches\` (→ \`parallel\`, 1 when it fails) and \`cctoolkit config command build\`, the build configured by kit-init (\`commands.build\`, empty for a stack without one).`,
     '   Then one call, from `root` (timeout 600000): the printed build command run literally, never through `eval` (the Bash guards read the command text) — `f=$(mktemp); <printed command> > "$f" 2>&1; echo "build=$?"; grep -m1 -iE \'(^|[^a-z])error([^a-z]|$)\' "$f"; rm -f "$f"`, nothing printed → `echo build=none` in its place —, followed by `; cctoolkit docker-up --wait 120`.',
     '3. `--check` exit ≠ 0, a doctor `FAIL` line, a `docker=` line other than `docker=ready…` or `docker=absent`, or `build` neither 0 nor `none` → `ok: false`, `failure` = the failing line verbatim (for the build: `build=<code>` followed by the first error line, the working tree must compile before any batch starts), `runRoot` and `stamp` empty, stop. No test suite runs here: each batch runs the tests its diff reaches, in its own global green.',
-    `4. Otherwise \`stamp\` = \`$(date +%Y-%m-%d-%H%M)\`, \`runRoot\` = \`<plan folder>/run\` (absolute). One call: \`cctoolkit run-work purge <runRoot> <stamp> && cctoolkit run-validate apply <runRoot>/.work.jsonl && cctoolkit run-work journal <runRoot>/.work.jsonl <stamp> "start $(date '+%Y-%m-%d %H:%M') — plan <plan> — scope ${scope || 'whole plan'}"\` (purge: older layouts migrated, lines no run needs dropped, the 3 most recent runs kept; run-validate: the answers given in the run-lot-pane mod written into the sheets). \`ok: true\`, \`failure\` empty.`,
+    `4. Otherwise \`stamp\` = \`$(date +%Y-%m-%d-%H%M)\`, \`runRoot\` = \`<plan folder>/run\` (absolute). One call: \`cctoolkit batch-repo prune >/dev/null; cctoolkit run-work purge <runRoot> <stamp> && cctoolkit run-validate apply <runRoot>/.work.jsonl && cctoolkit run-work journal <runRoot>/.work.jsonl <stamp> "start $(date '+%Y-%m-%d %H:%M') — plan <plan> — scope ${scope || 'whole plan'}"\` (batch-repo prune: a plan folder a stopped run left in another repo brought back; purge: older layouts migrated, lines no run needs dropped, the 3 most recent runs kept; run-validate: the answers given in the run-lot-pane mod written into the sheets). \`ok: true\`, \`failure\` empty.`,
   ].join('\n'),
   { schema: PREFLIGHT, phase: 'Preflight', label: 'preflight', ...SHELL },
 )
@@ -228,9 +233,13 @@ function nextBatches() {
   )
 }
 
-// A batch run beside another, in a worktree of its own (`run.parallelBatches`): its gate, repair, commit and
-// setting aside run in that tree `at` — each Bash call opens with the prefix run-lot gives the batch's agents.
+// A batch run beside another, in a worktree of its own (`run.parallelBatches`), or in the plan's other repository
+// its `Repo` column names: its gate, repair, commit and setting aside run in that tree `at` — each Bash call opens
+// with the prefix run-lot gives the batch's agents. In another repository the plan folder is a copy carried there
+// (`cctoolkit batch-repo carry`): the sheet the commit and the setting aside read is that copy's.
 const rootOf = () => slashed(pre.root).replace(/\/$/, '')
+const repoTrees = new Set()
+const sheetIn = (b, at) => (at && repoTrees.has(at) ? inTree(b.sheet, at) : b.sheet)
 const inTree = (path, at) => (at && slashed(path).toLowerCase().startsWith(`${rootOf().toLowerCase()}/`) ? `${at}${slashed(path).slice(rootOf().length)}` : path)
 const treeLine = at => (at ? `\n\nBatch worktree: \`${at}\`, not the session's checkout. Every Bash call opens with \`cd '${at}' && export CLAUDE_PROJECT_DIR='${at}' &&\`; Read and Edit take absolute paths under it.` : '')
 
@@ -268,7 +277,7 @@ function seal(b, done, at = null) {
     [
       FRAME + treeLine(at),
       '',
-      `Batch ${b.batch} passed its gate. One call: \`cctoolkit batch-baseline commit ${work} ${b.batch} --sheet ${b.sheet}; echo "exit=$?"\`.`,
+      `Batch ${b.batch} passed its gate. One call: \`cctoolkit batch-baseline commit ${work} ${b.batch} --sheet ${sheetIn(b, at)}; echo "exit=$?"\`.`,
       'exit 0 → `ok: true`; otherwise `ok: false`. `commit` = the output verbatim, stderr included.',
       `Then one call: \`cctoolkit run-work drop ${work} --batch ${b.batch} --kind preexisting,question,answer; ${rmTmp(`gate-${b.batch}`, b.batch)}\`, then \`${journalLine(done)}\`.`,
     ].join('\n'),
@@ -283,7 +292,7 @@ function setAside(b, reason, at = null) {
       FRAME + treeLine(at),
       '',
       `Batch ${b.batch} is set aside: ${reason}. Put the tree back to its state at the batch start, in this order:`,
-      `1. \`cctoolkit batch-baseline restore ${work} ${b.batch} --save ${patch} --sheet ${b.sheet}\` (the script alone touches the source and test roots; it keeps the work under a git ref with the fingerprint of the sheet's \`## Cycles\` block — a sheet changed before the next run and the work is not put back —,or drops the saved cycles when it could not). Exit ≠ 0 → \`ok: false\`, \`detail\` = its output verbatim, stop.`,
+      `1. \`cctoolkit batch-baseline restore ${work} ${b.batch} --save ${patch} --sheet ${sheetIn(b, at)}\` (the script alone touches the source and test roots; it keeps the work under a git ref with the fingerprint of the sheet's \`## Cycles\` block — a sheet changed before the next run and the work is not put back —,or drops the saved cycles when it could not). Exit ≠ 0 → \`ok: false\`, \`detail\` = its output verbatim, stop.`,
       `2. \`cctoolkit run-work drop ${work} --batch ${b.batch} --kind question,answer; ${rmTmp(`gate-${b.batch}`, b.batch)}\`: the saved cycles and the snapshot stay — the next run puts the work back (\`cctoolkit batch-baseline resume\`) and resumes the batch from them.`,
       `3. \`grep -nE "^### (Batch|Lot) ${b.batch}\\b" ${inTree(pre.plan, at)}\`: the heading carries \`✅ DONE\` → one Edit putting \`⬜\` in place of \`✅ DONE\` and its date, nothing else moves.`,
       `4. \`${journalLine(`${b.batch} ✗ — set aside — ${reason} — patch ${patch}`)}\`.`,
@@ -305,7 +314,7 @@ const serialOnly = new Set()
 let paired = false
 
 function record(b, result, together = null) {
-  const entry = { batch: b.batch, status: result.status, reason: result.reason, report: result.report, audit: result.audit || null, hypotheses: result.hypotheses || [], minors: result.minors || [], ...(together ? { with: together } : {}) }
+  const entry = { batch: b.batch, status: result.status, reason: result.reason, report: result.report, audit: result.audit || null, hypotheses: result.hypotheses || [], minors: result.minors || [], ...(together ? { with: together } : {}), ...(samePath(b.repo || pre.root, pre.root) ? {} : { repo: slashed(b.repo).replace(/\/$/, '') }), ...(b.branch ? { branch: b.branch } : {}) }
   ran.push(entry)
   for (const x of result.toReview || []) toReview.push({ batch: b.batch, ...x })
   return entry
@@ -335,7 +344,7 @@ async function putAside(b, result, entry, failure, at = null) {
   entry.status = result.status === DONE ? 'GATE RED' : result.status
   phase('Aside')
   const back = await setAside(b, failure, at)
-  if (!at && (!back || !back.ok)) {
+  if ((!at || repoTrees.has(at)) && (!back || !back.ok)) {
     stop = `${b.batch} — ${failure} — tree not restored: ${back ? back.detail : 'agent without result'}`
     await journal(`${b.batch} ✗ — ${stop}`)
     return true
@@ -364,7 +373,7 @@ async function sealed(b, entry, at = null) {
   entry.commit = s ? s.commit : null
   if (!s || !s.ok) toReview.push({ batch: b.batch, step: 'Gate', text: `batch commit failed, the batch stays uncommitted in the tree: ${s ? s.commit : 'agent without result'}` })
   else if (/committed whole/.test(s.commit)) toReview.push({ batch: b.batch, step: 'Gate', text: s.commit })
-  if (!at) log(`→ ${b.batch} ✅ (${ran.length})${s && s.ok ? ` — ${s.commit.split(':')[0]}` : ' — not committed'}`)
+  if (!at || repoTrees.has(at)) log(`→ ${b.batch} ✅ (${ran.length})${s && s.ok ? ` — ${s.commit.split(':')[0]}` : ' — not committed'}${at ? ` in ${at}` : ''}`)
   return s
 }
 
@@ -381,9 +390,12 @@ async function partnerOf(b) {
     { schema: PAIR, phase: 'Batch', label: 'pair', ...SHELL },
   ).catch(() => null)
   const [first, second] = g ? g.batches : []
-  if (!first || first.batch !== b.batch || !second || serialOnly.has(second.batch) || !samePath(second.repo, pre.root)) return null
+  if (!first || first.batch !== b.batch || !second || serialOnly.has(second.batch) || !samePath(second.repo, pre.root) || packaged(second)) return null
   return second
 }
+
+// A batch that packs or pins a package runs alone in its tree: the pair's landing would rebuild what was packed.
+const packaged = x => !!(x.pack || (x.packageFrom || []).length)
 
 async function worktreeFor(p) {
   const w = await agent(
@@ -470,6 +482,184 @@ async function runPair(b, p, at) {
   return !!stop
 }
 
+// A batch that never started — its repository refused it, or the package it consumes was not packed: set aside,
+// nothing to restore, its dependents held.
+async function unrun(o, why) {
+  record(o, { status: BLOCKED, reason: why, report: null })
+  aside.push({ batch: o.batch, reason: why, patch: null, report: null, restored: '' })
+  log(`→ ${o.batch} set aside — ${why}`)
+  await journal(`${o.batch} ✗ — set aside — ${why}`)
+}
+
+// Preflight of one repository of the plan (`plan-next-batch --repos`), before any batch: another repository is
+// checked as the checkout is — kit.config.json, doctor, build — and on the checkout's branch rule (`batch-repo branch
+// --check`); any repository that packs or pins a package (`F1(package)`) has the commands and the feed that needs.
+// The failure, or null.
+async function repoReady(r) {
+  const repo = slashed(r.repo).replace(/\/$/, '')
+  const at = `cd '${repo}' && export CLAUDE_PROJECT_DIR='${repo}' &&`
+  const pkg = r.pack.length || r.use.length
+  const roles = [r.batches.length ? `batches ${r.batches.join(', ')}` : '', r.pack.length ? `packs ${r.pack.join(', ')}` : '', r.use.length ? `consumes a package in ${r.use.join(', ')}` : ''].filter(Boolean).join(', ')
+  const check = `${r.checkout ? '' : `${at} `}cctoolkit batch-package check${r.pack.length ? ' --pack' : ''}${r.use.length ? ' --use' : ''} --feed '${feed}'`
+  const steps = r.checkout
+    ? [`1. One call: \`${check}\`. Exit ≠ 0 → \`ok\` false, \`failure\` = \`${repo}: \` followed by its \`missing:\` lines joined by \`; \`, stop. \`ok\` true, \`failure\` empty.`]
+    : [
+        `1. One call: \`test -f '${repo}/.claude/kit.config.json' && echo config=ok || echo config=absent\`. \`config=absent\` → \`ok\` false, \`failure\` = \`${repo}: no .claude/kit.config.json — run /cctoolkit:kit-init in that repository\`, stop.`,
+        `2. One call, from the checkout: \`cctoolkit batch-repo branch --repo ${repo} --check\`. It printed one JSON line: \`refused\` → \`ok\` false, \`failure\` = \`${repo}: \` followed by that field verbatim, stop. Otherwise \`branch\` = its \`branch\`.`,
+        `3. One call: \`${at} cctoolkit doctor --quiet; cctoolkit config command build\`. A doctor \`FAIL\` line → \`ok\` false, \`failure\` = \`${repo}: \` followed by that line verbatim and \` — fix: /cctoolkit:kit-init in that repository\`, stop.`,
+        `4. The build step 3 printed, nothing printed → skip: one call (timeout 600000), the command run literally, never through \`eval\`: \`${at} f=$(mktemp); <printed command> > "$f" 2>&1; echo "build=$?"; grep -m1 -iE '(^|[^a-z])error([^a-z]|$)' "$f"; rm -f "$f"\`. \`build\` other than 0 → \`ok\` false, \`failure\` = \`${repo}: build=<code>\` followed by the first error line (that repository must compile before its batch starts), stop.`,
+        ...(pkg ? [`5. One call: \`${check}\`. Exit ≠ 0 → \`ok\` false, \`failure\` = \`${repo}: \` followed by its \`missing:\` lines joined by \`; \`, stop.`] : []),
+        '`ok` true, `failure` empty.',
+      ]
+  const x = await agent(
+    [FRAME, '', `Preflight of the repository \`${repo}\` of the plan (${roles}), before any batch. In this order, stop at the first failure:`, ...steps].join('\n'),
+    { schema: READY, phase: 'Preflight', label: `preflight ${repo.replace(/^.*\//, '')}`, ...SHELL },
+  ).catch(() => null)
+  if (!x) return `${repo}: preflight agent without result`
+  return x.ok ? null : x.failure
+}
+
+// A batch of the plan's other repository (`Repo` column), run from this checkout: that repository put on the
+// checkout's branch and the plan folder carried there (`cctoolkit batch-repo carry`), its files modified outside the
+// batch listed — its config, doctor and build were checked at the preflight. Its tree, or null: the batch set aside.
+async function carried(o) {
+  const repo = slashed(o.repo).replace(/\/$/, '')
+  const c = await agent(
+    [
+      FRAME,
+      '',
+      `Batch ${o.batch} runs in another repository than the checkout: \`${repo}\`. In this order:`,
+      `1. One call: \`cctoolkit batch-repo carry ${o.batch} --repo ${repo} --plan ${pre.plan}\`. It printed one JSON line: \`refused\` → \`ok\` false, \`carried\` false, \`detail\` = that field verbatim, stop. Otherwise \`carried\` true, \`plan\` = its \`plan\`, \`branch\` and \`switched\` = its fields.`,
+      `2. One call: \`cctoolkit plan-next-batch ${pre.plan} --outside ${o.batch}\` → \`outside\` = the paths it printed, one per line (none: empty).`,
+      `3. \`${journalLine(`${o.batch} launched — ${o.sheet} — repo ${repo}`)}\`. \`ok\` true, \`detail\` empty.`,
+    ].join('\n'),
+    { schema: CARRIED, phase: 'Batch', label: `carry ${o.batch}`, ...SHELL },
+  ).catch(() => null)
+  if (c && c.ok) {
+    if (c.outside.length) toReview.push({ batch: o.batch, step: 'Start', text: `files modified in ${repo} outside the batch at launch, left out of the batch diff and commit: ${c.outside.join(', ')}` })
+    if (c.branch) {
+      o.branch = c.branch
+      log(`${o.batch}: ${repo} on branch ${c.branch} (${c.switched || 'kept'})`)
+    }
+    repoTrees.add(repo)
+    return repo
+  }
+  if (c && c.carried) await bringBack(o, repo)
+  await unrun(o, `repo ${repo} not ready: ${c ? c.detail : 'agent without result'}`)
+  return null
+}
+
+// A batch another repository's batch consumes as a package (`pack`): once its gate passed and before its commit, packed
+// into the local feed under the run's prerelease (`cctoolkit batch-package version`: `<base>-kit.<stamp>.<n>`) by
+// `commands.pack` — a failed pack sets it aside like a red gate, nothing committed. A producer committed by an earlier
+// run is packed again from its repository's HEAD, on the run's branch, before its first consumer. The failure, or null.
+const versions = {}
+const unpacked = {}
+async function packed(b, at, again = false) {
+  if (again && at) {
+    const br = await treeCall(`branch ${b.batch}`, [`One call: \`cctoolkit batch-repo branch --repo ${at}\`. It printed one JSON line: \`refused\` → \`ok\` false, \`detail\` = that field verbatim. Otherwise \`ok\` true, \`detail\` = its \`branch\`.`])
+    if (!br || !br.ok) return `branch of ${at}: ${br ? br.detail : 'agent without result'}`
+  }
+  const p = await agent(
+    [
+      FRAME + treeLine(at),
+      '',
+      `Batch ${b.batch} feeds another repository's batch as a package: pack it into the local feed${again ? ' (committed by an earlier run: packed from HEAD)' : ''}. In this order, stop at the first failure:`,
+      `1. One call: \`cctoolkit batch-package version ${b.batch} --stamp ${pre.stamp}\` → \`version\` = the line it printed.`,
+      `2. One call: \`cctoolkit config command pack --version <version> --feed '${feed}'\` → the pack command. Nothing printed → \`ok\` false, \`detail\` \`commands.pack unset\`.`,
+      `3. One call (timeout 600000), the printed command run literally, never through \`eval\`: \`f=$(mktemp); <printed command> > "$f" 2>&1; echo "pack=$?"; grep -m1 -iE '(^|[^a-z])error([^a-z]|$)' "$f"; rm -f "$f"\`. \`pack\` other than 0 → \`ok\` false, \`detail\` = \`pack=<code>\` followed by the first error line. Otherwise \`ok\` true, \`detail\` empty.`,
+    ].join('\n'),
+    { schema: PACKED, phase: 'Gate', label: `pack ${b.batch}`, ...SHELL },
+  ).catch(() => null)
+  if (!p || !p.ok || !p.version) return `pack: ${p ? p.detail || 'no version' : 'agent without result'}`
+  versions[b.batch] = p.version
+  log(`→ ${b.batch} packed ${p.version} into ${feed}`)
+  await journal(`${b.batch} packed — ${p.version} — feed ${feed}`)
+  return null
+}
+
+// The run-lot arguments that pin a consumer (`packageFrom`) to its producer's prerelease, packing a producer
+// committed by an earlier run first; {} for a batch without one; null when the producer could not be packed — the
+// consumer then set aside, never run against a version it was not planned on.
+async function pinOf(b) {
+  const from = (b.packageFrom || [])[0]
+  if (!from) return {}
+  if (!versions[from.batch]) {
+    const fail = unpacked[from.batch] || (unpacked[from.batch] = await packed({ batch: from.batch, repo: from.repo }, samePath(from.repo, pre.root) ? null : slashed(from.repo).replace(/\/$/, ''), true))
+    if (fail) {
+      await unrun(b, `package of ${from.batch} not packed — ${fail}`)
+      return null
+    }
+  }
+  return { packages: { from: from.batch, version: versions[from.batch], feed } }
+}
+
+// The plan folder carried into another repository, brought back into the checkout: the plan heading and the
+// sheet the batch wrote there, merged with what the checkout's batches wrote meanwhile.
+async function bringBack(o, repo) {
+  const r = await agent(
+    [
+      FRAME,
+      '',
+      `One call: \`cctoolkit batch-repo back ${o.batch} --repo ${repo}\`. It printed one JSON line: \`refused\` → \`ok\` false, \`detail\` = that field verbatim, the lists empty. Otherwise \`ok\` true, \`back\`, \`merged\`, \`conflict\` and \`kept\` = its fields, \`detail\` empty.`,
+    ].join('\n'),
+    { schema: BROUGHT, phase: 'Gate', label: `back ${o.batch}`, ...SHELL },
+  ).catch(() => null)
+  if (!r || !r.ok) toReview.push({ batch: o.batch, step: 'Gate', text: `plan folder not brought back from ${repo}: ${r ? r.detail : 'agent without result'} — \`cctoolkit batch-repo back ${o.batch} --repo ${repo}\`` })
+  else if (r.conflict.length) toReview.push({ batch: o.batch, step: 'Gate', text: `plan files written on both sides, the checkout's kept: ${r.conflict.join(', ')} — the batch's copy: ${r.kept.join(', ')}` })
+}
+
+// A finished batch: its gate, then its commit or its setting aside. True when the plan stops.
+async function settle(b, result, at = null) {
+  const entry = record(b, result)
+  let failure = result.status !== DONE || !result.report ? `${result.status} — ${result.reason}` : null
+  if (!failure) failure = await gated(b, result, at)
+  if (!failure && b.pack) failure = await packed(b, at)
+  if (failure) return putAside(b, result, entry, failure, at)
+  await sealed(b, entry, at)
+  return false
+}
+
+// The batches `plan-next-batch` launches now in other repositories (one per repo), each carried there, run beside
+// the checkout's batch `b` (if any): no tree, no build, no lock shared. Then one after the other: `b` as alone, each
+// other gated and committed or set aside in its repo, its plan folder brought back. True when the plan stops.
+async function runRepos(b, others) {
+  const trees = []
+  const pa = b ? await pinOf(b) : null
+  if (!pa) b = null
+  for (const o of others) {
+    const pins = await pinOf(o)
+    const at = pins ? await carried(o) : null
+    if (at) trees.push({ o, at, pins })
+  }
+  if (!b && !trees.length) return !!stop
+  log(`→ ${[...(b ? [b.batch] : []), ...trees.map(t => `${t.o.batch} in ${t.at}`)].join(', ')} launched`)
+  const failed = e => ({ status: BLOCKED, reason: `run-lot failed: ${e.message}`, report: null })
+  const [ra, ...rs] = await Promise.all([
+    b ? workflow('cctoolkit:run-lot', { sheet: slashed(b.sheet), commit: false, ...pa }).catch(failed) : null,
+    ...trees.map(t => workflow('cctoolkit:run-lot', { sheet: inTree(t.o.sheet, t.at), commit: false, root: t.at, run: runRoot, ...t.pins }).catch(failed)),
+  ])
+  let halt = b ? await settle(b, ra) : false
+  for (const [i, t] of trees.entries()) {
+    halt = (await settle(t.o, rs[i], t.at)) || halt
+    await bringBack(t.o, t.at)
+  }
+  return halt || !!stop
+}
+
+// Every repository of the plan other than the checkout, and any that packs or pins a package, checked before any
+// batch: a failure stops the run there, its line and its fix in the result.
+const feed = slashed(pre.feed || '').replace(/\/$/, '')
+for (const r of pre.repos || []) {
+  if (r.checkout && !r.pack.length && !r.use.length) continue
+  const failure = await repoReady(r)
+  if (failure) {
+    stop = failure
+    log(`preflight: ${failure}`)
+    break
+  }
+}
+
 while (!stop) {
   phase('Batch')
   const next = await nextBatches()
@@ -479,34 +669,29 @@ while (!stop) {
   if (next.kind !== 'BATCHES') { stop = next.line; break }
 
   const b = next.batches.find(x => samePath(x.repo, pre.root))
-  if (!b) {
-    stop = `batches of another repo (${next.batches.map(x => `${x.batch} ${x.repo}`).join(', ')}): run run-plan from that repo`
-    break
-  }
-  if (next.batches.length > 1) log(`${next.batches.filter(x => x !== b).map(x => x.batch).join(', ')} in another repo, not launched here`)
+  const others = next.batches.filter(x => !samePath(x.repo, pre.root))
 
-  if (next.outsideBatch === b.batch && next.outsidePaths.length) {
+  if (b && next.outsideBatch === b.batch && next.outsidePaths.length) {
     toReview.push({ batch: b.batch, step: 'Start', text: `files modified outside the batch at launch, left out of the batch diff and commit: ${next.outsidePaths.join(', ')}` })
   }
 
-  const partner = PARALLEL > 1 && !serialOnly.has(b.batch) ? await partnerOf(b) : null
+  if (others.length) {
+    if (await runRepos(b, others)) break
+    continue
+  }
+
+  const partner = PARALLEL > 1 && !serialOnly.has(b.batch) && !packaged(b) ? await partnerOf(b) : null
   const at = partner ? await worktreeFor(partner) : null
   if (at) {
     if (await runPair(b, partner, at)) break
     continue
   }
 
+  const pins = await pinOf(b)
+  if (!pins) continue
   log(`→ ${b.batch} launched`)
-  const result = await workflow('cctoolkit:run-lot', { sheet: slashed(b.sheet), commit: false }).catch(e => ({ status: BLOCKED, reason: `run-lot failed: ${e.message}`, report: null }))
-  const entry = record(b, result)
-
-  let failure = result.status !== DONE || !result.report ? `${result.status} — ${result.reason}` : null
-  if (!failure) failure = await gated(b, result)
-
-  if (failure) {
-    if (await putAside(b, result, entry, failure)) break
-  } else await sealed(b, entry)
-
+  const result = await workflow('cctoolkit:run-lot', { sheet: slashed(b.sheet), commit: false, ...pins }).catch(e => ({ status: BLOCKED, reason: `run-lot failed: ${e.message}`, report: null }))
+  if (await settle(b, result)) break
 }
 
 for (const x of aside) {
@@ -521,35 +706,48 @@ const left = aside.length
   : null
 const reason = [stop, left].filter(Boolean).join(' ; ') || null
 
-const finalCheck = ran.some(r => r.status === DONE) && !scope.startsWith('--only')
-  ? await (phase('Final check'), agent(
-      [
-        FRAME,
-        '',
-        `Final check of the plan, after its last batch: every suite runs whole once, \`IntegrationTests\` included. The result is reported, never a stop: fix nothing.`,
-        `1. One call: \`cctoolkit suites-plan --final ${pre.stamp}\`. It prints \`suites\` (each with \`name\`, \`job\`, \`start\`, \`log\`) and \`notRun\`: copy each line literally, never rebuild nor \`eval\` one — the suite's env prefix, the integration guard's \`KIT_FINAL_CHECK=1\` marker and the Docker start are in it. \`suites\` empty → \`suites\` empty, stop.`,
-        '2. Every `start` line in a single message, one Bash call each: each suite runs detached, a `cctoolkit bg` job.',
-        `3. Then each job in turn, Bash timeout 600000: \`cctoolkit bg wait <job> --seconds 540 --silent ${FINAL_SILENT_MIN * 60}\`. It prints \`DONE exit=<n>\`, \`FAILED exit=<n>\` (\`exit=none\`: the process died without an exit code), \`RUNNING <seconds>s\` or \`STALLED <seconds>s\` (its log silent ${FINAL_SILENT_MIN} min: the suite hangs). \`RUNNING\` under ${FINAL_TIMEOUT_MIN * 60} s → the same call again; ${FINAL_TIMEOUT_MIN * 60} s or more → \`cctoolkit bg stop <job>\`, that suite's \`exit\` = 124. \`STALLED\` → \`cctoolkit bg stop <job>\`, \`exit\` = 124, \`stalled\` = true. No other wait loop, no \`sleep\`.`,
-        '4. One entry per suite: `name`, `exit` = the code `bg wait` printed (`exit=none` → 125), `report` = for an exit other than 0, the JSON `cctoolkit suites-plan --failures <log>` prints, verbatim, those calls in one message; none for a green suite. A suite at 124 also gets `last` = the lines `cctoolkit bg log <job> --lines 8` prints (the log fills test by test: they name the test the suite stopped on). Never open a log beyond that.',
-      ].join('\n'),
-      { schema: FINAL, phase: 'Final check', label: 'final check', ...SHELL },
-    ).catch(() => null))
-  : null
+// Every suite of the checkout, then of each other repository a batch was committed in, its suites named `<repo>/<suite>`.
+const finalWanted = ran.some(r => r.status === DONE) && !scope.startsWith('--only')
+const finalIn = (at, label) => agent(
+  [
+    FRAME + treeLine(at),
+    '',
+    `Final check of the plan, after its last batch: every suite runs whole once, \`IntegrationTests\` included. The result is reported, never a stop: fix nothing.`,
+    `1. One call: \`cctoolkit suites-plan --final ${pre.stamp}\`. It prints \`suites\` (each with \`name\`, \`job\`, \`start\`, \`log\`) and \`notRun\`: copy each line literally, never rebuild nor \`eval\` one — the suite's env prefix, the integration guard's \`KIT_FINAL_CHECK=1\` marker and the Docker start are in it. \`suites\` empty → \`suites\` empty, stop.`,
+    '2. Every `start` line in a single message, one Bash call each: each suite runs detached, a `cctoolkit bg` job.',
+    `3. Then each job in turn, Bash timeout 600000: \`cctoolkit bg wait <job> --seconds 540 --silent ${FINAL_SILENT_MIN * 60}\`. It prints \`DONE exit=<n>\`, \`FAILED exit=<n>\` (\`exit=none\`: the process died without an exit code), \`RUNNING <seconds>s\` or \`STALLED <seconds>s\` (its log silent ${FINAL_SILENT_MIN} min: the suite hangs). \`RUNNING\` under ${FINAL_TIMEOUT_MIN * 60} s → the same call again; ${FINAL_TIMEOUT_MIN * 60} s or more → \`cctoolkit bg stop <job>\`, that suite's \`exit\` = 124. \`STALLED\` → \`cctoolkit bg stop <job>\`, \`exit\` = 124, \`stalled\` = true. No other wait loop, no \`sleep\`.`,
+    '4. One entry per suite: `name`, `exit` = the code `bg wait` printed (`exit=none` → 125), `report` = for an exit other than 0, the JSON `cctoolkit suites-plan --failures <log>` prints, verbatim, those calls in one message; none for a green suite. A suite at 124 also gets `last` = the lines `cctoolkit bg log <job> --lines 8` prints (the log fills test by test: they name the test the suite stopped on). Never open a log beyond that.',
+  ].join('\n'),
+  { schema: FINAL, phase: 'Final check', label, ...SHELL },
+).catch(() => null)
+let finalCheck = null
+if (finalWanted) {
+  phase('Final check')
+  finalCheck = await finalIn(null, 'final check')
+  if (!finalCheck) toReview.push({ batch: '—', step: 'Final check', text: 'final check agent without result: suites not run whole' })
+  for (const repo of [...new Set(ran.filter(r => r.status === DONE && r.repo).map(r => r.repo))]) {
+    const name = repo.replace(/^.*\//, '')
+    const f = await finalIn(repo, `final check ${name}`)
+    if (!f) toReview.push({ batch: '—', step: 'Final check', text: `final check agent without result in ${repo}: its suites not run whole` })
+    else finalCheck = { suites: [...(finalCheck ? finalCheck.suites : []), ...f.suites.map(x => ({ ...x, name: `${name}/${x.name}`, suite: x.name, repo }))] }
+  }
+}
 const finalRed = finalCheck ? finalCheck.suites.filter(x => x.exit !== 0) : []
-if (finalCheck === null && ran.some(r => r.status === DONE) && !scope.startsWith('--only')) toReview.push({ batch: '—', step: 'Final check', text: 'final check agent without result: suites not run whole' })
-for (const x of finalRed) toReview.push({ batch: '—', step: 'Final check', text: finalText(x, `final-${pre.stamp}-${x.name}`), why: (x.last || []).join(' / ') })
+for (const x of finalRed) toReview.push({ batch: '—', step: 'Final check', text: finalText(x, `final-${pre.stamp}-${x.suite || x.name}`), why: (x.last || []).join(' / ') })
 if (finalRed.length) log(`final check red: ${finalRedNames(finalRed)}`)
 
 // One security pass over what the plan committed, read-only, never a stop: the audits judge a batch
 // against its sheet, none looks at the plan's changes for what an attacker can reach.
 const SECURITY = obj({ findings: arr(obj({ severity: { type: 'string', enum: ['Blocking', 'Major'] }, finding: str, evidence: str, fix: str })) })
-const committed = ran.map(r => (/\bcommitted ([0-9a-f]{4,40}):/.exec(r.commit || '') || [])[1]).filter(Boolean)
+const committed = ran.map(r => [(/\bcommitted ([0-9a-f]{4,40}):/.exec(r.commit || '') || [])[1], r.repo]).filter(([c]) => c)
+const commitsIn = committed.filter(([, repo]) => !repo).map(([c]) => c)
+const commitsElsewhere = committed.filter(([, repo]) => repo).map(([c, repo]) => `${c} (\`git -C ${repo}\`)`)
 const security = committed.length
   ? await (phase('Security'), agent(
       [
         'Workflow run-plan, security pass after the last batch. Autonomous mode: nobody answers. Read-only: never edit, never a Git command that writes, never build nor run a test. Return the findings through the structured output; prose follows `language.docs` of `kit.config.json`.',
         '',
-        `Batch commits of the plan: ${committed.join(' ')}. Read them with \`git show --stat <commit>\`, then bounded \`git show <commit> -- <path>\` on production files only, never tests.`,
+        `Batch commits of the plan: ${[...commitsIn, ...commitsElsewhere].join(' ')}. Read them with \`git show --stat <commit>\`, then bounded \`git show <commit> -- <path>\` on production files only, never tests${commitsElsewhere.length ? ' — a commit of another repository read with the `git -C <repo>` given beside it' : ''}.`,
         'Look only for security defects these changes bring: authorisation missing, or checked on mere existence instead of the relationship that grants it; a resource of another organisation reachable; injection (SQL, command, path); a secret or personal data written to a log, a response or the repo; input reaching a query, a file path or an external call unvalidated; an unbounded read an anonymous caller can trigger.',
         'Each finding: `severity` Blocking (exploitable as written) or Major (exploitable under an assumption you name), `finding` one line, `evidence` `path:line`, `fix` one line. No evidence, no finding; hardening wishes and style are not findings. Nothing found → `findings` empty.',
       ].join('\n'),
@@ -638,6 +836,7 @@ const rep = await agent(
     `Write \`${reportFile}\` in a single Write, headings verbatim, prose in the docs language of \`kit.config.json\`, from the two JSON below, without reading code, tests or batch reports. Header: plan, scope, start time = the \`start\` line of the journal, end time = \`date '+%Y-%m-%d %H:%M'\`. Then, in this order:`,
     '- table `| Batch | Status | Report | Commit | Patch |`, one row per batch of the first JSON, `Commit` = the hash `commit` starts with (`—` when absent)',
     ...(paired ? ['- in that table, a batch carrying `with` gets ` ∥ <with>` after its status: the two ran together, the second listed in a worktree of its own, then landed on the checkout or `DISCARDED` and run again alone'] : []),
+    ...(ran.some(r => r.repo) ? ['- in that table, a batch carrying `repo` gets ` (<repo>, branch <branch>)` after its batch (` (<repo>)` without `branch`): it ran in that repository, on that branch, its commit and its patch are there'] : []),
     ...(breaker ? ['- `## Plan stopped — common cause` — from `breaker` of the second JSON: the cause, the batches it reached, what to fix in the spec or the plan before relaunching (`fixBeforeRelaunch`), then the relaunch: a new `/run-plan` skips the batches ✅ DONE'] : []),
     `- \`## To validate\` — from the second JSON, everything the run decided without the user (marked \`${TO_REVIEW}\`), to review after the plan, one \`###\` per kind: \`### Stop\` (\`stop\` verbatim, only when not null), \`### Batches set aside\` (\`toReview\` entries of step \`Set aside\`), \`### Start\` (\`toReview\` entries of step \`Start\`), \`### Final check\` (\`toReview\` entries of step \`Final check\`, their numbers verbatim, never recounted), \`### Security\` (\`toReview\` entries of step \`Security\`),\`### Audits to redo\` (\`audit\` = \`to redo\`: batch, report, command \`/verify-ddd-tdd batch FX\`), \`### Audit gaps carried\` (\`toReview\` entries of step \`Audit\`, and \`audit\` = \`GAPS carried\`), \`### Arbiter and design decisions\` (other \`toReview\` entries, step and why kept), \`### Assumptions\` (every \`h\`). One bullet per entry, prefixed by its batch; \`None.\` for an empty section. Last, when \`decidedAlone\` is not empty, one line after the sections: \`Decided alone, nothing to do: <total> — section Decided alone of the batch reports (<FX n, …>).\``,
     '- `## Minor` — every minor of the first JSON, prefixed by its batch; `None.` when none',

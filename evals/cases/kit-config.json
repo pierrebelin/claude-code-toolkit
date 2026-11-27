@@ -358,6 +358,14 @@
         "exit": 0,
         "stdout": "NOTE\tgit.mutations\task — read from the main checkout's kit.config.json"
       }
+    },
+    {
+      "name": "packages: command pack and usePackage expand {version}, {feed} (packages.feed unless --feed) and {property} (packages.versionProperty); package-feed prints the feed; a malformed packages, a pack without {version} and a git.defaultBranches that is not a list are FAIL lines, a feed that is not a folder a WARN; unset, nothing printed and no packages line",
+      "cmd": "R={{FIX}}/kcp-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R.feed && cd $R && export CLAUDE_PROJECT_DIR=$R && C(){ python3 {{KIT}}/lib/kit_config.py \"$@\"; } && printf '{\"product\": \"Shop\", \"packages\": {\"feed\": \"%s\", \"versionProperty\": \"AcmeSharedVersion\"}}' $R.feed > .claude/kit.config.json && a=$(C command pack --version 1.4.1-kit.1.1 | sed \"s#$R.feed#FEED#\") && b=$(C command usePackage --version 1.4.1-kit.1.1 --feed other | sed \"s#$R.feed#FEED#\") && c=$(C package-feed | sed \"s#$R.feed#FEED#\") && d=$(C validate $R | grep -cE '^(WARN|FAIL)[[:space:]]packages' || true) && printf '{\"packages\": {\"feed\": 3}, \"commands\": {\"pack\": \"dotnet pack\"}, \"git\": {\"defaultBranches\": \"main\"}}' > .claude/kit.config.json && e=$(C validate $R | grep -E '^(WARN|FAIL)[[:space:]](packages|commands.pack|git)' | cut -f1,2 | tr '\\t\\n' ' ,') && printf '{\"packages\": {\"feed\": \"/no/such/feed\"}}' > .claude/kit.config.json && f=$(C validate $R | grep -E '^(WARN|FAIL)[[:space:]]packages' | cut -f1,2 | tr '\\t\\n' ' ,') && rm .claude/kit.config.json && g=\"$(C package-feed)$(C validate $R | grep -c 'packages' || true)\" ; echo \"$a|$b|$c|$d|$e|$f|$g\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "rtk dotnet pack Shop.sln -c Release -o \"FEED\" -p:Version=1.4.1-kit.1.1|cctoolkit batch-package nuget --property AcmeSharedVersion --version 1.4.1-kit.1.1 --feed \"other\" && rtk dotnet restore Shop.sln|FEED|0|FAIL packages,FAIL commands.pack,WARN packages.versionProperty,FAIL git.defaultBranches,|WARN packages.feed,WARN packages.versionProperty,|0"
+      }
     }
   ]
 }

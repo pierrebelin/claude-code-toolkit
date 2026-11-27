@@ -35,7 +35,8 @@ fi
 . "${BASH_SOURCE[0]%/*}/project-root.sh"
 root="$(cd "$PROJECT_ROOT" 2>/dev/null && pwd -P)" || exit 0
 # An auditor of a batch run in a linked worktree (run-lot's `root`) opens each call with `cd <worktree> &&`:
-# its marker and its tree are that worktree's, when its `.git` file points into this repository.
+# its marker and its tree are that worktree's, when its `.git` file points into this repository — or that
+# repository's, when it is another one the run registered (`.git/cctoolkit-linked-repos`).
 if [[ "$cmd" =~ ^[[:space:]]*cd[[:space:]]+[\'\"]?([^\'\"\;\&\|]+)[\'\"]?[[:space:]]*\&\& ]]; then
   wt="${BASH_REMATCH[1]%"${BASH_REMATCH[1]##*[![:space:]]}"}"
   kit_path wt
@@ -44,6 +45,13 @@ if [[ "$cmd" =~ ^[[:space:]]*cd[[:space:]]+[\'\"]?([^\'\"\;\&\|]+)[\'\"]?[[:spac
     kit_path gitdir
     kit_path main
     case "$gitdir" in "$main"/.git/worktrees/*) root="$(cd "$wt" 2>/dev/null && pwd -P)" || exit 0 ;; esac
+  elif [ -d "$wt/.git" ] && [ -f "$root/.git/cctoolkit-linked-repos" ]; then
+    # A batch of the plan's other repository (`cctoolkit batch-repo carry`): followed only when registered.
+    here="$(cd "$wt" 2>/dev/null && pwd -P)" || exit 0
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      [ "$(cd "$line" 2>/dev/null && pwd -P)" = "$here" ] && { root="$here"; break; }
+    done < "$root/.git/cctoolkit-linked-repos"
   fi
 fi
 # HOOK_SUITES_MARKER: the evals point at a fixture marker.

@@ -12,7 +12,11 @@ CLI (hooks, shell scripts, and the skills through `cctoolkit root`):
     kit_config.py root                     # the repo root, resolved as above
     kit_config.py validate                 # one `LEVEL name detail` line per finding (tools/doctor)
     kit_config.py shell <root>             # shell assignments for scripts/pre-audit.sh, audit-capture.sh
-    kit_config.py command <name> [<suite>] # commands.<name>, {product} and {suite} expanded; empty = unset
+    kit_config.py command <name> [<suite>] [--version V] [--feed F]
+                                           # commands.<name>, {product} and {suite} expanded, and for
+                                           # `pack` / `usePackage` {version}, {feed} (packages.feed unless
+                                           # --feed) and {property} (packages.versionProperty); empty = unset
+    kit_config.py package-feed             # packages.feed, the local package feed folder; empty = unset
     kit_config.py parallel-batches         # run.parallelBatches, 1 to 2 (1 when unset or malformed)
     kit_config.py parallel-cycles          # run.parallelCycles, 1 to 3 (2 when unset, 1 when malformed)
     kit_config.py scope-cache [<root>]     # writes the scope cache lib/scope-cache.sh reads, prints its path
@@ -36,7 +40,7 @@ import unicodedata
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRESETS = os.path.join(KIT, "presets")
 DEFAULT_PRESET = "clean-architecture"
-TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd", "knowledge", "closing", "run", "git"}
+TOP_KEYS = {"language", "preset", "product", "layout", "testTag", "commands", "tdd", "knowledge", "closing", "run", "git", "packages"}
 # The knowledge base is stack-neutral: its defaults live here, not in a preset.
 KNOWLEDGE_DEFAULTS = {"root": "docs/business", "contexts": {}, "overviewBudget": 1500, "syncBudget": 12000, "askBudget": 1500}
 PREFIX_RE = re.compile(r"[A-Z][A-Z0-9]{1,5}")
@@ -50,6 +54,11 @@ SUITE_REQUIRES = {"docker"}
 # Inside a batch, cycles whose files do not meet run side by side, `parallelCycles` at most: past 3 the
 # builds of one checkout queue behind each other (`build-lock`) and the gain is gone.
 RUN_DEFAULTS = {"parallelBatches": 1, "parallelCycles": 2}
+# A plan's batch that another repository's batch consumes as a package (`F1(package)`, run-plan): the local feed the
+# producer packs into and the consumer restores from, and the build property the consumer's version is read from.
+PACKAGES_DEFAULTS = {"feed": "", "versionProperty": ""}
+# Branches a batch of another repository is never committed on: the checkout's branch must be none of them.
+GIT_DEFAULT_BRANCHES = ["main", "master", "develop"]
 MAX_PARALLEL_BATCHES = 2
 MAX_PARALLEL_CYCLES = 3
 CONTEXT_RE = re.compile(r"[A-Z][A-Za-z0-9]*")
@@ -124,10 +133,28 @@ def main_worktree(root):
     return os.path.dirname(common).replace(os.sep, "/")
 
 
+# Frozen literal (docs/FROZEN-LITERALS.md): `scripts/batch-repo.py` writes it, `worktree_of` and
+# `lib/guard-auditor.sh` read it — the other repositories a run of this checkout has a batch running in.
+LINKED_REPOS = "cctoolkit-linked-repos"
+
+
+def linked_repos(project=None):
+    """The other repositories a run-plan of the project's checkout has a batch running in (`cctoolkit
+    batch-repo carry`), one absolute path per line of `<checkout>/.git/cctoolkit-linked-repos`; [] when none."""
+    main = main_worktree(project or project_root())
+    try:
+        with open(os.path.join(_native(main), ".git", LINKED_REPOS), encoding="utf-8") as fh:
+            return [_native(line.strip()) for line in fh if line.strip()]
+    except OSError:
+        return []
+
+
 def worktree_of(path, project=None):
-    """The top level of the linked worktree of the project's repository that holds `path`, `/`-separated — a
-    batch run beside another one works there (`run.parallelBatches`) —, or None: a path of the project's own
-    checkout, of another repository or of none gives None, and the hooks judge it as before."""
+    """The top level of the tree holding `path` that a batch of the project's run works in, `/`-separated — a
+    linked worktree of the project's repository (a batch run beside another one, `run.parallelBatches`), or
+    another repository the run registered (a batch of a plan's other repo, `cctoolkit batch-repo`) —, or None:
+    a path of the project's own checkout, of any other repository or of none gives None, and the hooks judge
+    it as before."""
     if not path:
         return None
     project = project or project_root()
@@ -137,8 +164,10 @@ def worktree_of(path, project=None):
         if parent == p:
             return None
         p = parent
-    if not os.path.isfile(os.path.join(p, ".git")) or _same(p, project):
+    if _same(p, project):
         return None
+    if not os.path.isfile(os.path.join(p, ".git")):
+        return p.replace(os.sep, "/") if any(_same(p, r) for r in linked_repos(project)) else None
     return p.replace(os.sep, "/") if _same(main_worktree(p), main_worktree(project)) else None
 
 
@@ -275,6 +304,10 @@ class Config:
         r = data.get("run")
         self.run = merge(RUN_DEFAULTS, r if isinstance(r, dict) else {})
         self.test_tag = data.get("testTag", {})
+        p = data.get("packages")
+        self.packages = merge(PACKAGES_DEFAULTS, p if isinstance(p, dict) else {})
+        g = data.get("git")
+        self.git = g if isinstance(g, dict) else {}
         # Kept malformed for validate_knowledge(): a hook must not die over a key it does not read.
         k = data.get("knowledge")
         k = merge(KNOWLEDGE_DEFAULTS, k if isinstance(k, dict) else {})
@@ -410,7 +443,13 @@ class Config:
         n = self.run.get("parallelCycles", RUN_DEFAULTS["parallelCycles"])
         return min(max(n, 1), MAX_PARALLEL_CYCLES) if isinstance(n, int) and not isinstance(n, bool) else 1
 
-    def command(self, name, suite=None):
+    @property
+    def default_branches(self):
+        """`git.defaultBranches`: branches a batch of the plan's other repository is never committed on."""
+        b = self.git.get("defaultBranches", GIT_DEFAULT_BRANCHES)
+        return [x for x in b if isinstance(x, str) and x] if isinstance(b, list) else list(GIT_DEFAULT_BRANCHES)
+
+    def command(self, name, suite=None, version=None, feed=None):
         if name == "testFast" and not self.commands.get("testFast"):
             # Unset: the solution build then the suite command, the run it stands for.
             parts = [self.command("build"), self.command("test", suite)]
@@ -419,6 +458,11 @@ class Config:
         if isinstance(c, dict):
             c = c.get("run", "")
         c = self.expand(c or "")
+        if name in ("pack", "usePackage"):
+            feed = feed or self.packages.get("feed") or ""
+            prop = self.packages.get("versionProperty") or ""
+            c = c.replace("{feed}", feed if isinstance(feed, str) else "").replace("{property}", prop if isinstance(prop, str) else "")
+            c = c.replace("{version}", version) if version else c
         return c.replace("{suite}", suite) if suite else c
 
 
@@ -503,10 +547,15 @@ def validate(root):
         out.append(("ok", "testTag", f"{a.name} — {a.example}"))
     except kit_testtag.TestTagError as e:
         out.append(("FAIL", "testTag", str(e)))
-    for name in ("build", "test", "testFast", "worktreeSetup"):
+    for name in ("build", "test", "testFast", "worktreeSetup", "pack", "usePackage"):
         v = c.commands.get(name, "")
         if not isinstance(v, str):
             out.append(("FAIL", f"commands.{name}", "expects a string"))
+    out += validate_packages(c.data.get("packages"), c.commands)
+    git_cfg = c.data.get("git")
+    if isinstance(git_cfg, dict) and "defaultBranches" in git_cfg and not (
+            isinstance(git_cfg["defaultBranches"], list) and all(isinstance(b, str) and b for b in git_cfg["defaultBranches"])):
+        out.append(("FAIL", "git.defaultBranches", "expects a list of branch names"))
     at = c.commands.get("architectureTest", {})
     if not isinstance(at, (dict, str)):
         out.append(("FAIL", "commands.architectureTest", "expects {\"run\": \"…\", \"when\": \"<path regex>\"}"))
@@ -592,6 +641,25 @@ def validate_test_fast(c):
         elif not token.endswith(".csproj") and len(found) > 1:
             out.append(("WARN", "commands.testFast", f"{token} matches {len(found)} files (several target frameworks or configurations) — narrow the glob"))
     return out or [("ok", "commands.testFast", run)]
+
+
+def validate_packages(raw, commands):
+    """`packages` and the two commands that read it: `pack` (`{version}`, `{feed}`) and `usePackage`."""
+    out = []
+    if raw is not None and not (isinstance(raw, dict) and all(isinstance(raw.get(k, ""), str) for k in PACKAGES_DEFAULTS)):
+        out.append(("FAIL", "packages", "expects {\"feed\": \"<local feed folder>\", \"versionProperty\": \"<build property>\"}"))
+        raw = {}
+    p = merge(PACKAGES_DEFAULTS, raw or {})
+    if p["feed"] and not os.path.isdir(_native(os.path.expanduser(p["feed"]))):
+        out.append(("WARN", "packages.feed", f"{p['feed']} is not a folder — a pack writes there, a consumer restores from it"))
+    pack, use = commands.get("pack", ""), commands.get("usePackage", "")
+    if isinstance(pack, str) and pack and "{version}" not in pack:
+        out.append(("FAIL", "commands.pack", "expects {version}: run-plan packs a prerelease of its own"))
+    if isinstance(use, str) and use and "{version}" not in use:
+        out.append(("FAIL", "commands.usePackage", "expects {version}: the consumer is pointed at the prerelease run-plan packed"))
+    if raw is not None and isinstance(use, str) and "{property}" in use and not p["versionProperty"]:
+        out.append(("WARN", "packages.versionProperty", "unset, while commands.usePackage reads {property}: a consumer batch cannot pin its package"))
+    return out
 
 
 def validate_run(raw):
@@ -778,6 +846,14 @@ def _cli(argv):
         if path:
             print(path.replace(os.sep, "/"))
         return 0
+    if cmd == "package-feed":
+        try:
+            feed = load().packages.get("feed") or ""
+        except KitConfigError:
+            feed = ""
+        if isinstance(feed, str) and feed:
+            print(feed.replace(os.sep, "/"))
+        return 0
     if cmd == "validate":
         root = argv[2] if len(argv) > 2 else None
         for level, name, detail in validate(root or project_root()):
@@ -785,7 +861,9 @@ def _cli(argv):
         return 0
     try:
         if cmd == "command":
-            run = load().command(argv[2], argv[3] if len(argv) > 3 else None)
+            opt = {k: argv[argv.index(k) + 1] for k in ("--version", "--feed") if k in argv[:-1]}
+            pos = [a for i, a in enumerate(argv) if i >= 2 and a not in opt.values() and a not in ("--version", "--feed")]
+            run = load().command(pos[0], pos[1] if len(pos) > 1 else None, opt.get("--version"), opt.get("--feed"))
             if run:
                 print(run)
             return 0

@@ -73,6 +73,8 @@ Cross-cutting functional batches (Domain + App + Infra + WebAPI + tests), each i
 
 Status per batch: `sequential` default, or `parallelisable with F?` (two worktrees). Parallelisable only if prerequisites done + nothing shared — functional dependency, file, fixture, configuration, migration, route. Same aggregate, handler, endpoint, `.csproj`, DI, EF migration, test fixture → sequential. Concrete reason in plan; doubt → sequential.
 
+A batch of one repository (`Repo`) consuming code another repository's batch publishes as a package: its `Depends on` names that batch with the qualifier `(package)` verbatim, `F1(package)` — `run-plan` packs F1 into the local feed after its gate and pins the consumer to that prerelease before its first cycle. Never `F1 (published version)` nor a step asking the user to publish. At most one `(package)` per batch, always toward another repository (`cctoolkit plan-next-batch --check`).
+
 ### 3. Write
 
 1. Copy `references/plan-template.md` into `todo/[code-kebab-case]/` — the folder `/business-spec` wrote `SPEC-[code-kebab-case].md` in: global plan `[CODE]-PLAN.md`, one sheet `[CODE]-PLAN-F1.md`, `-F2.md`… per batch. `run-lot` on a sheet loads the global plan by section + that sheet alone.

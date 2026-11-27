@@ -1,0 +1,36 @@
+{
+  "cases": [
+    {
+      "name": "batch-package version: the latest vX.Y.Z or X.Y.Z tag reachable from HEAD, patch + 1, then -kit.<stamp digits>.<batch number>; 0.0.1 without a tag; a malformed batch is a usage error",
+      "cmd": "R={{FIX}}/bpk-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf '{}' > .claude/kit.config.json && export CLAUDE_PROJECT_DIR=$R && P(){ python3 {{KIT}}/scripts/batch-package.py \"$@\"; } && git commit -q --allow-empty -m a && a=$(P version F12 --stamp 2026-11-27-1000) && git tag v1.4.0 && git commit -q --allow-empty -m b && git tag 1.3.9 && b=$(P version F1 --stamp 2026-11-27-1000) && { P version FX --stamp s 2>/dev/null; u=$?; } ; echo \"$a|$b|usage=$u\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "0.0.1-kit.202611271000.12|1.4.1-kit.202611271000.1|usage=2"
+      }
+    },
+    {
+      "name": "batch-package check: commands.usePackage reading {property} without packages.versionProperty, and an unset feed, are each a missing line, exit 1; set, ok; a preset without commands.pack names it",
+      "cmd": "R={{FIX}}/bpk-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf '{}' > .claude/kit.config.json && export CLAUDE_PROJECT_DIR=$R && P(){ python3 {{KIT}}/scripts/batch-package.py \"$@\"; } && { P check --pack --use --feed '' > $R.out; x=$?; } ; c=\"$(tr '\\n' ';' < $R.out)exit=$x\" && printf '{\"packages\": {\"versionProperty\": \"AcmeSharedVersion\"}}' > .claude/kit.config.json && mkdir -p $R.feed && d=$(P check --pack --use --feed $R.feed) && printf '{\"preset\": \"hexagonal\"}' > .claude/kit.config.json && { P check --pack --feed $R.feed > $R.out; x=$?; } ; e=\"$(tr '\\n' ';' < $R.out)exit=$x\"; echo \"$c|$d|$e\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "missing: packages.versionProperty unset — commands.usePackage reads {property};missing: packages.feed unset in the checkout's kit.config.json — the local feed packages go through;exit=1|ok|missing: commands.pack unset — a batch of this repository feeds another one as a package;exit=1"
+      }
+    },
+    {
+      "name": "batch-package nuget: every tracked definition of the property set to the version, CRLF kept, nuget.config created with the local source; an existing nuget.config gets the source once beside its own, and a mapping when it maps its sources; a property no tracked file defines is refused",
+      "cmd": "R={{FIX}}/bpk-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf '{}' > .claude/kit.config.json && export CLAUDE_PROJECT_DIR=$R && P(){ python3 {{KIT}}/scripts/batch-package.py \"$@\"; } && printf '<Project>\\r\\n  <PropertyGroup>\\r\\n    <AcmeSharedVersion>1.4.0</AcmeSharedVersion>\\r\\n  </PropertyGroup>\\r\\n</Project>\\r\\n' > Directory.Build.props && printf '<Project>\\n  <ItemGroup>\\n    <PackageVersion Include=\"Acme.Shared\" Version=\"$(AcmeSharedVersion)\" />\\n  </ItemGroup>\\n</Project>\\n' > Directory.Packages.props && git add -A && git commit -qm base && a=$(P nuget --property AcmeSharedVersion --version 1.4.1-kit.1.1 --feed feeds/local | tr '\\n' ';') && b=\"$(grep -c $'1.4.1-kit.1.1</AcmeSharedVersion>\\r' Directory.Build.props)|$(git diff --name-only | tr '\\n' ' ')|$(grep -c 'key=\"cctoolkit-local\" value=\"feeds/local\"' nuget.config)\" && printf '<configuration>\\n  <packageSources>\\n    <clear />\\n    <add key=\"nuget.org\" value=\"https://api.nuget.org/v3/index.json\" />\\n  </packageSources>\\n  <packageSourceMapping>\\n    <packageSource key=\"nuget.org\">\\n      <package pattern=\"*\" />\\n    </packageSource>\\n  </packageSourceMapping>\\n</configuration>\\n' > nuget.config && P nuget --property AcmeSharedVersion --version 1.4.1-kit.1.2 --feed feeds/local >/dev/null && P nuget --property AcmeSharedVersion --version 1.4.1-kit.1.2 --feed feeds/local >/dev/null && c=\"$(grep -c 'cctoolkit-local' nuget.config)|$(sed -n '5p' nuget.config | tr -d ' ')\" && { P nuget --property Missing --version 1 --feed /f 2> $R.err; x=$?; d=\"$(grep -o 'no tracked .props, .targets or project file defines <Missing>' $R.err) exit=$x\"; } ; echo \"$a|$b|$c|$d\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "Directory.Build.props: AcmeSharedVersion = 1.4.1-kit.1.1;nuget.config: source cctoolkit-local = feeds/local;|1|Directory.Build.props |1|2|<addkey=\"cctoolkit-local\"value=\"feeds/local\"/>|no tracked .props, .targets or project file defines <Missing> exit=1"
+      }
+    },
+    {
+      "name": "batch-package note: the files modified since the batch's snapshot (a file modified before it left out, the plan folder aside) printed and written as the next H row of the sheet's assumptions, marked user decision to validate",
+      "cmd": "R={{FIX}}/bpk-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/todo/x/run && cd $R && git init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false && printf '{}' > .claude/kit.config.json && export CLAUDE_PROJECT_DIR=$R && P(){ python3 {{KIT}}/scripts/batch-package.py \"$@\"; } && printf 'r\\n' > README.md && printf '<Project />\\n' > Directory.Packages.props && git add -A && git commit -qm base && printf 'mine\\n' > README.md && printf '{\"kind\": \"preexisting\", \"batch\": \"F2\", \"at\": 0, \"files\": {\"README.md\": \"%s\"}}\\n' $(git hash-object README.md) > todo/x/run/.work.jsonl && printf '# X-PLAN-F2\\n\\n## Assumptions <!-- kit:assumptions -->\\n\\n| # | Assumption | To be validated by |\\n|---|---|---|\\n| H1 | x | user decision |\\n\\n## Cycles\\n' > todo/x/X-PLAN-F2.md && printf '<Project>v</Project>\\n' > Directory.Packages.props && printf '<configuration />\\n' > nuget.config && a=$(P note todo/x/X-PLAN-F2.md --work todo/x/run/.work.jsonl --batch F2 --from F1 --version 1.4.1-kit.1.1 --feed feeds/local | tr '\\n' ' ') && b=$(grep '^| H2 ' todo/x/X-PLAN-F2.md) && c=$(grep -c '^## Cycles' todo/x/X-PLAN-F2.md); echo \"$a|$b|$c\"",
+      "expect": {
+        "exit": 0,
+        "stdout": "Directory.Packages.props nuget.config || H2 | Package pin from F1: `Directory.Packages.props`, `nuget.config` point at 1.4.1-kit.1.1 on the local feed `feeds/local` — switch back to the published version once its CI passes | user decision to validate ||1"
+      }
+    }
+  ]
+}

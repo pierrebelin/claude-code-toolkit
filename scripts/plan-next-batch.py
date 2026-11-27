@@ -19,14 +19,19 @@ At most one batch per repository: two batches of one repo share a working tree.
 --exclude     batches suspended on an open question: never launched, nor their dependents
 --skip        batches set aside by this run: read as not done, never launched, nor their
               dependents; when only those remain the plan ends (END)
---check       validate the plan (ids, dependencies, cycles, sheets, repos), exit 1 on error
+--check       validate the plan (ids, dependencies, cycles, sheets, repos, package dependencies), exit 1 on error
 --outside FX  modified paths of FX's repo `cctoolkit pre-audit` will flag as outside the
               batch; exit 1 when any
 --next WORK   next batch, out-of-batch check and journal in one JSON line for run-plan:
               `kind` END|WAITING|BATCHES,
               `line` = the text output, `batches`, `held` (`[{"batch", "by"}]`), then
               `outsideBatch` and `outsidePaths`; when nothing is outside, appends the journal
-              line `FX launched — <sheet>` of run --run STAMP to WORK
+              line `FX launched — <sheet>` of run --run STAMP to WORK; a batch that consumes another
+              repository's batch as a package (`F1(package)` in `Depends on`, `(paquet)` read too) carries
+              `packageFrom` (`batch`, `repo`), one that feeds one carries `pack` true
+--repos       the repositories of the batches in scope not yet ✅ DONE, for run-plan's preflight, one JSON
+              line `repos` (`repo`, `checkout`, `batches`, `pack`: its batches a pending batch consumes as a
+              package — done ones included —, `use`: its batches that consume one), in table order
 --context FX  design context of FX for run-lot: earlier batches' audit gaps, the sheets'
               `user decision`/GAPS lines, FX's stopped report and saved cycles, the sheet's
               source and test paths that do not exist
@@ -60,6 +65,9 @@ SECTIONS = {"batch execution", "execution des lots"}
 COLUMN_BATCH = {"batch", "lot"}
 COLUMN_DEPENDS = {"depends on", "depend de"}
 COLUMN_REPO = {"repo", "depot"}
+# `F1(package)` in `Depends on`: F1, of another repository, is consumed through the package it publishes.
+PACKAGE = {"package", "paquet"}
+QUALIFIED = re.compile(r"(F\d+)\s*\(([^)]*)\)")
 AUDIT_GAPS = {"## audit gaps", "## ecarts d'audit"}
 DECISION_MARKS = re.compile(r"user decision|décision user|décision utilisateur|GAPS|ECARTS")
 REPORTS = ("batches/{b}.md",)
@@ -108,7 +116,8 @@ def parse(plan):
     for row in table[2:]:
         c = cells(row)
         repo = c[irepo] if irepo is not None and c[irepo] not in ("", "—", "-") else "."
-        batches.append({"id": c[ilot], "deps": re.findall(r"F\d+", c[idep]), "repo": repo})
+        package = [m.group(1) for m in QUALIFIED.finditer(c[idep]) if fold(m.group(2).strip()) in PACKAGE]
+        batches.append({"id": c[ilot], "deps": re.findall(r"F\d+", c[idep]), "repo": repo, "package": package})
     return batches, set(DONE.findall(text))
 
 
@@ -254,10 +263,14 @@ def next_batches(batches, done, in_scope, excluded, skipped, repo_dir, sheet):
     held = [{"batch": lot, "by": by} for lot, by in held_by.items() if lot not in skipped]
     excluded = dependents(set(re.findall(r"F\d+", excluded)) | skipped, batches)
     launched, repos = [], set()
+    producers = {d for b in batches for d in b["package"]}
     for b in pending:
         if b["id"] not in excluded and set(b["deps"]) <= done and repo_dir(b) not in repos:
             repos.add(repo_dir(b))
-            launched.append({"batch": b["id"], "repo": repo_dir(b).as_posix(), "sheet": sheet(b["id"]).as_posix()})
+            launched.append({"batch": b["id"], "repo": repo_dir(b).as_posix(), "sheet": sheet(b["id"]).as_posix(),
+                             **({"packageFrom": [{"batch": d, "repo": repo_dir(by_id[d]).as_posix()} for d in b["package"] if d in by_id]}
+                                if b["package"] else {}),
+                             **({"pack": True} if b["id"] in producers else {})})
     if launched:
         return "BATCHES", "\n".join(f"{x['batch']} {x['repo']} {x['sheet']}" for x in launched), launched, held
     if all(b["id"] in held_by for b in pending):
@@ -265,6 +278,24 @@ def next_batches(batches, done, in_scope, excluded, skipped, repo_dir, sheet):
         return "END", "END " + " ".join(left), [], held
     waiting = [f"{b['id']}:{','.join(sorted(set(b['deps']) - done)) or 'excluded'}" for b in pending]
     return "WAITING", "WAITING " + " ".join(waiting), [], held
+
+
+def repos_of(batches, done, in_scope, repo_dir, here):
+    """The repositories of the batches in scope not yet done, with what each packs and pins."""
+    by_id = {b["id"]: b for b in batches}
+    pending = [b for b in batches if b["id"] in in_scope and b["id"] not in done]
+    feeds = {d for b in pending for d in b["package"] if d in by_id}
+    out = {}
+    for b in batches:
+        mine, packs, uses = b in pending, b["id"] in feeds, b in pending and bool(b["package"])
+        if not (mine or packs):
+            continue
+        r = out.setdefault(repo_dir(b), {"repo": repo_dir(b).as_posix(), "checkout": repo_dir(b) == here,
+                                         "batches": [], "pack": [], "use": []})
+        r["batches"] += [b["id"]] if mine else []
+        r["pack"] += [b["id"]] if packs else []
+        r["use"] += [b["id"]] if uses else []
+    return list(out.values())
 
 
 def written_paths(sheet_path):
@@ -336,6 +367,7 @@ def main():
     parser.add_argument("--run", default="")
     parser.add_argument("--context")
     parser.add_argument("--parallel", type=int, nargs="?", const=MAX_PARALLEL)
+    parser.add_argument("--repos", action="store_true")
     args = parser.parse_args()
 
     plan = Path(args.plan).resolve()
@@ -373,6 +405,12 @@ def main():
             errors.append("duplicate batch id")
         for b in batches:
             errors += [f"{b['id']}: unknown dependency {d}" for d in b["deps"] if d not in by_id]
+            errors += [f"{b['id']}: {d}(package) names a batch of its own repository — a package dependency "
+                       f"crosses repositories, write {d} alone" for d in b["package"]
+                       if d in by_id and repo_dir(by_id[d]) == repo_dir(b)]
+            if len(b["package"]) > 1:
+                errors.append(f"{b['id']}: {len(b['package'])} package dependencies ({', '.join(b['package'])}) — "
+                              "one per batch, its repository pins one version (packages.versionProperty)")
             if b["id"] in done:
                 continue
             if not sheet(b["id"]).is_file():
@@ -385,6 +423,10 @@ def main():
         if errors:
             fail("\n".join(errors))
         print(f"OK {len(batches)} batches, {len(done & set(by_id))} DONE")
+        return
+
+    if args.repos:
+        print(json.dumps({"repos": repos_of(batches, done, in_scope, repo_dir, current_repo())}, ensure_ascii=False))
         return
 
     if args.parallel is not None:

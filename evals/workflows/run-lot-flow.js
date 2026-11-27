@@ -30,6 +30,9 @@
 // index read again before the first cycle.
 // root: the batch runs in a worktree of its own beside another — every agent is handed it and the prefix of its Bash
 // calls, the work file stays in the session's run folder, the suites run under the build lock.
+// pin: the batch consumes another repository's batch as a package (run-plan's `packages`) — one haiku agent points it at
+// the prerelease right after the snapshot, before the first cycle, through `commands.usePackage` run literally and
+// `batch-package note`; the files it changed listed to switch back. pinfail: the pin fails — BLOCKED, no cycle run.
 // Global green: a green first pass is one haiku agent; snapshot: a red suite → repair (default model), its promoted
 // snapshot read off the tree, declared, listed for review and handed to the audit; undeclared: a write under the test
 // roots without a `testEdits` entry is rejected, the retry declares it; blocked: a `test-code` write is a BLOCKED,
@@ -167,6 +170,13 @@ const agent = async (prompt, o) => {
     if (prompt.includes('contested')) console.log('WARN fix asked to contest')
     return { fixed: ['x'], files: ['src/X.cs'], validations: [], objections: variant === 'fullgaps' ? ['Hunk outside the batch — harm: drops the audit log'] : [], extensions: [] }
   }
+  if (l === 'package pin') {
+    if (!['pin', 'pinfail'].includes(variant)) console.log('WARN package pin without packages')
+    if (labels.indexOf('resume state') < 0 || labels.indexOf('resume state') > labels.indexOf('package pin')) console.log('WARN package pin before the snapshot')
+    if (!prompt.includes("cctoolkit config command usePackage --version 1.4.1-kit.202611271000.1 --feed '/feed'") || !prompt.includes('never through `eval`')) console.log('WARN package pin not through commands.usePackage run literally')
+    if (!prompt.includes("cctoolkit batch-package note todo/x/X-PLAN-F3.md --work todo/x/run/.work.jsonl --batch F3 --from F1 --version 1.4.1-kit.202611271000.1 --feed '/feed'")) console.log('WARN package pin not noted in the sheet')
+    return variant === 'pinfail' ? { ok: false, files: [], detail: 'use=1 refused: no tracked .props, .targets or project file defines <AcmeSharedVersion>' } : { ok: true, files: ['Directory.Packages.props', 'nuget.config'], detail: '' }
+  }
   if (l === 'resume state' && !prompt.includes('cctoolkit batch-baseline snapshot todo/x/run/.work.jsonl F3')) console.log('WARN no batch snapshot')
   if (l === 'resume state' && !prompt.includes('--states todo/x/run/.work.jsonl')) console.log('WARN saved states not read through sheet-cycles --states')
   if (l === 'resume state' && !/batch-baseline resume \S+\.work\.jsonl F3 --sheet \S+-F3\.md; cctoolkit batch-baseline snapshot /.test(prompt)) console.log('WARN work set aside not put back before the snapshot, or without the sheet')
@@ -200,13 +210,15 @@ const agent = async (prompt, o) => {
   console.log('UNHANDLED', l); return null
 }
 const fn = new (Object.getPrototypeOf(async function () {}).constructor)('args', 'agent', 'log', 'phase', 'parallel', 'workflow', src)
-fn(variant === 'root' ? { sheet: 'todo/x/X-PLAN-F3.md', root: '/w/F3/', run: '/m/todo/x/run', lock: true } : 'todo/x/X-PLAN-F3.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), async () => null)
+const PIN = { from: 'F1', version: '1.4.1-kit.202611271000.1', feed: '/feed' }
+fn(variant === 'root' ? { sheet: 'todo/x/X-PLAN-F3.md', root: '/w/F3/', run: '/m/todo/x/run', lock: true }
+  : ['pin', 'pinfail'].includes(variant) ? { sheet: 'todo/x/X-PLAN-F3.md', packages: PIN } : 'todo/x/X-PLAN-F3.md', agent, m => console.log('log:', m), () => {}, async ts => Promise.all(ts.map(t => t())), async () => null)
   .then(r => {
     console.log('STATUS', r.status, '| toReview', r.toReview.length, r.toReview.map(x => x.step).join(',') + (audits ? ` | audits ${audits}` : '') + (reviews ? ` | light reviews ${reviews}` : ''))
     console.log('REVIEW', r.toReview.map(x => `${x.step}: ${x.text.slice(0, 60)}`).join(' ; '))
     console.log('AGENTS', labels.join(' | '))
     console.log('GLOBAL GREEN', green.join(' | '))
     if (variant === 'dag') console.log('SCHED', sched.join(' '), '| at most', most)
-    if (GREENTRAP.includes(variant) || ['stop', 'wrong'].includes(variant)) console.log('REASON', r.reason, '| TO VALIDATE', r.toReview.filter(x => x.step === 'Global green').map(x => x.text).join(' ; '))
+    if (GREENTRAP.includes(variant) || ['stop', 'wrong', 'pinfail'].includes(variant)) console.log('REASON', r.reason, '| TO VALIDATE', r.toReview.filter(x => x.step === 'Global green').map(x => x.text).join(' ; '))
   })
   .catch(e => { console.log('ERR', e.stack); process.exitCode = 1 })
