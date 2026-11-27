@@ -19,7 +19,7 @@ Workflow and installation: **[README.md](README.md)** — the pitch, short and w
 | `workflows/` | `run-lot` (one batch), `run-plan` (whole plan), `run-fix` (a bug fix: `run-lot` on its one batch, then its knowledge-base merge), `run-change` (a business change that fits one batch: sized, then its spec, plan and sheet drafted by one agent, then as `run-fix`), `run-sync` (the knowledge base aligned with the code, launched by `/knowledge-sync`) and `run-audit` (the quality report), as Workflow scripts |
 | `mods/` | optional in-terminal panes, each its own plugin in the marketplace |
 | `examples/` | one fictional feature as the skills write it — a template, anchor or report format change updates it in the same change |
-| `docs/` | context cost, the frozen literals registry, the README screenshots |
+| `docs/` | context cost, the frozen literals registry, the failure each brick prevents and the simplification log, the README screenshots |
 | `archives/` | retired bricks (`graphify/`, `learn/`, `run-replay/`), unwired and unmaintained, kept for the record with their README |
 | `dev/` | maintainer tools: `bump.sh`, `release-check.sh`, `turn-batching-check.py` (batching and context fill measured from the transcripts), `workflow-timing.py` (duration per phase and per agent of a workflow run, reads and greps per agent), `hook-timing.sh` (median wall time of the hot hooks on the payloads of `dev/hook-timing/*.json`, two kit copies compared), `knowledge-pane-demo.sh` (the mod's demo copy of `examples/docs/business/`), `screenshots.py` (the mods' README screenshots retaken from the real panes) |
 
@@ -53,6 +53,7 @@ A skill's template blocks (spec structure, plan structure, handler sheet) are pr
 | measurement, protocol or procedure too long for `CLAUDE.md` | `docs/CONTEXT-COST.md` — opened on demand, so the standing rule stays in `CLAUDE.md` and only points here |
 | repo-wide scanner or one-shot migration | `scripts/` — never a hook: a hook fires per edit, a scan reads the whole repo |
 | a maintainer tool for this checkout only (version bump, release check) | `dev/` — never shipped as a `cctoolkit` command |
+| a brick added, removed or relaxed (hook, guard, skill, agent, workflow step) | read `docs/BRICKS.md` first; in the same change, its row in § Failure map, or its line in § Simplification log |
 
 Two sources that drift make the choice random: a fact lives in exactly one place.
 
@@ -69,6 +70,6 @@ Two sources that drift make the choice random: a fact lives in exactly one place
 Claude Code pins an installed plugin to the `version` of its `plugin.json`: a push changing shipped files under the same version never reaches the users who installed it. `cctoolkit` and its mods share **one version**, the same in every `plugin.json`.
 
 1. A change to shipped files of any plugin → `bash dev/bump.sh <version>` sets it in every `plugin.json` (patch: fix; minor: behaviour or rule change; major: a change that breaks an installed repo), and add its `## <version> — <date>` section to `CHANGELOG.md`, user-facing, each entry naming the plugin it changes. A change under `rules/` or `presets/*/rules/` is listed under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: the user pulls either by re-running `/cctoolkit:kit-init`.
-2. Before pushing: `bash dev/release-check.sh` — `FAIL` blocks the push (shipped change without bump, versions that differ), `TODO` names a release still to tag.
+2. Before pushing: `bash dev/release-check.sh` — `FAIL` blocks the push (shipped change without bump, versions that differ), `TODO` names a release still to tag, or a brick of `docs/BRICKS.md` due for re-test.
 3. After the commit: `claude plugin tag --push <plugin dir>` for every plugin, each creating `<name>--v<version>`.
 4. Once CI is green on the tag (`.github/workflows/ci.yml`: the hook evals and every mod's `validate` and `test`, on each push, pull request and tag), one GitHub release for the version, the mods included: `gh release create cctoolkit--v<version> --verify-tag --title "cctoolkit <version>"`, its notes the version's `CHANGELOG.md` section. `release-check` says `TODO` until it exists, `FAIL` when the tag's commit is red in CI: that version is never released, fix and bump.

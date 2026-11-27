@@ -4,6 +4,11 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.23.1 — 2026-11-27
+
+- `cctoolkit`: new `docs/BRICKS.md`, for maintainers. Its failure map names the failure each brick prevents (hook, guard, skill, agent, workflow step) and where the evidence is measured, or says `not measured`. Its simplification log lists every brick removed or relaxed since 2.1.0, what justified the change and what was measured after. A row carries a Re-test date when it must be measured again. Nothing changes in your repo.
+- `cctoolkit`: `dev/release-check.sh` prints a `TODO` for each brick of `docs/BRICKS.md` whose Re-test date is past. It never blocks a push.
+
 ## 2.23.0 — 2026-11-27
 
 - `cctoolkit` `/cctoolkit:run-plan`: a plan whose `Repo` column names other repositories now runs whole from the checkout that holds it. Before, the run stopped on the first batch of another repository and told you to launch it from there. Each such batch has its plan folder carried into its repository, git-ignored there. The batch then runs there (`run-lot` with `root`) beside the checkout's batch, if any. Its gate, its commit and its setting aside happen in that repository. Its plan heading and its sheet are then brought back into the checkout, merged three ways with what the checkout's batches wrote meanwhile. The final check also runs the suites of every repository a batch was committed in, each named `<repo>/<suite>`. The security pass reads those commits with `git -C <repo>`.

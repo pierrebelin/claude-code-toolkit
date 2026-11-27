@@ -7,6 +7,7 @@
 # users who already installed it. The kit and its mods share one version:
 #   FAIL  a plugin.json whose version differs from the others (`bash dev/bump.sh`)
 #   FAIL  the knowledge-pane demo behind examples/docs/business (`bash dev/knowledge-pane-demo.sh`)
+#   TODO  a brick of docs/BRICKS.md whose Re-test date is past: measure it again
 # Then, for each plugin of the marketplace:
 #   FAIL  shipped files changed since the current version was released, or no
 #         release found for a committed version
@@ -47,6 +48,20 @@ if [ "$(cut -f1 <<<"$versions" | sort -u | wc -l)" -gt 1 ]; then
 fi
 # The `/knowledge-pane demo` base is a copy of the kit example and of the index it gives.
 bash dev/knowledge-pane-demo.sh --check || fail=1
+# A brick whose Re-test date is past (docs/BRICKS.md): a reminder, never a block.
+awk -v today="$(date +%F)" '
+  function cell(i) { v = h[i]; gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
+  /^\|/ {
+    n = split($0, h, "|")
+    if (!col) { for (i = 2; i < n; i++) if (cell(i) == "Re-test") col = i; next }
+    d = cell(col)
+    if (d ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/ && d <= today) {
+      what = (cell(2) ~ /^[0-9][0-9][0-9][0-9]-/) ? cell(4) : cell(2)
+      printf "TODO  docs/BRICKS.md: re-test %s (due %s)\n", what, d
+    }
+    next
+  }
+  { col = 0 }' docs/BRICKS.md 2>/dev/null
 changed_since() { # <ref> <paths…> — committed, staged, unstaged and untracked
   local ref=$1; shift
   { git diff --name-only "$ref" -- "$@"; git ls-files --others --exclude-standard -- "$@"; } | sort -u
