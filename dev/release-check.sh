@@ -16,9 +16,9 @@
 #   FAIL  a pending version whose release changes rules, with no
 #         "Rules changed" in its CHANGELOG section; same for the preset
 #         skills and "Skills changed" (both copied into repos by kit-init)
-#   TODO  a version committed but not tagged yet: `claude plugin tag --push <dir>`
+#   TODO  a version committed but not tagged yet: `bash dev/release.sh`
 #   TODO  the kit's tag without its GitHub release (one per version, the mods
-#         share it): `gh release create cctoolkit--v<version>`; without `gh`, read from
+#         share it): `bash dev/release.sh`; without `gh`, read from
 #         GitHub's public API
 #   FAIL  that tag's commit red in CI (.github/workflows/ci.yml: hook evals and
 #         mod tests) — never released; TODO while its run is not finished
@@ -122,11 +122,11 @@ while IFS=$'\t' read -r name source; do
       printf '        %s\n' $files | head -10
       fail=1
     elif ! git rev-parse -q --verify "refs/tags/$name--v$ver" >/dev/null; then
-      echo "TODO  $name $ver: not tagged — claude plugin tag --push ${dir:-.}"
+      echo "TODO  $name $ver: not tagged — bash dev/release.sh"
     elif [ -z "$dir" ] && ! has_release "$name--v$ver"; then
       sha=$(git rev-list -n 1 "$name--v$ver")
       case $(ci_state "$sha") in
-        success) echo "TODO  $name $ver: no GitHub release — gh release create $name--v$ver --verify-tag --title \"$name $ver\" (notes: its CHANGELOG section)" ;;
+        success) echo "TODO  $name $ver: no GitHub release — bash dev/release.sh" ;;
         failure) echo "FAIL  $name $ver: CI red on its tag (${sha:0:12}) — fix, bump and tag again, no release"; fail=1 ;;
         *) echo "TODO  $name $ver: CI not finished on its tag (${sha:0:12}) — wait for it before the GitHub release" ;;
       esac
@@ -159,7 +159,7 @@ while IFS=$'\t' read -r name source; do
       fail=1; continue
     fi
   fi
-  next="claude plugin tag --push ${dir:-.}"; [ -z "$dir" ] && next="$next, then its GitHub release"
+  next="push, then bash dev/release.sh"
   echo "OK    $name ${committed:-new} → $ver (pending: commit, then $next)"
 done < <(jq -r '.plugins[] | [.name, .source] | @tsv' .claude-plugin/marketplace.json)
 

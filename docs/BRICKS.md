@@ -23,8 +23,9 @@ due. A row gets a date when its Evidence reads `not measured` and the brick cost
 
 **How to measure.** The protocol of the removals in 2.17.0: 60 days of transcripts on two
 installed repos, counting what the brick did (denials, injections, invocations) and what followed
-it. `dev/turn-batching-check.py` for calls, turns and denials, `dev/workflow-timing.py` for the
-time of a workflow's phases and agents. An outcome is `unchanged` (keep removed), `degraded`
+it. `dev/brick-usage.py` for what each hook printed (refusals, injections, rewrites) and its
+wall time, `dev/turn-batching-check.py` for calls, turns and what followed a denial,
+`dev/workflow-timing.py` for the time of a workflow's phases and agents. An outcome is `unchanged` (keep removed), `degraded`
 (restore) or `not measured`.
 
 ## Failure map
@@ -55,8 +56,8 @@ time of a workflow's phases and agents. An outcome is `unchanged` (keep removed)
 | Slow suite run unfiltered | the integration suite in every cycle | `lib/guard-integration-filter.sh` | not measured | — |
 | Instruction files bloating unseen | rules loaded on every turn, nobody knows their weight | `context-log.sh` | `docs/CONTEXT-COST.md` § Instruction loads | — |
 | Behaviour rediscovered each session | the agent reads code to learn a rule the business already stated | knowledge base, `ask`, `knowledge-sync` (`run-sync`), `knowledge-merge` | not measured: `docs/CONTEXT-COST.md` § Knowledge base questions | — |
-| Knowledge base drifting after a hotfix | the base says one thing, the code another | `knowledge-reminder.sh` | not measured | 2027-01-31 |
-| Use case without its rule sheet | a handler whose rules are written nowhere | `handler-claude-md-check.sh` | not measured | 2027-01-31 |
+| Knowledge base drifting after a hotfix | the base says one thing, the code another | `knowledge-reminder.sh` | 0 reminders in 30 days to 2026-11-27, one repo on kit 2.13 (`dev/brick-usage.py`) | 2027-01-31 |
+| Use case without its rule sheet | a handler whose rules are written nowhere | `handler-claude-md-check.sh` | 148 reminders in 30 days to 2026-11-27, one repo (`hexagonal`, kit 2.13), all `no CLAUDE.md in use_cases`: use cases as flat files, the folder taken for one use case, the sheet never created — noise there (`dev/brick-usage.py`) | 2027-01-31 |
 | Quality drifting unseen | coverage, hotspots, suppressions that move with no one looking | `quality-report` | not measured | — |
 | A run that cannot be corrected without stopping it | the user sees a wrong turn and can only kill the batch | `run-notes.sh`, `run-lot-pane` mod | not measured | — |
 | Broken install disabling the kit silently | a plugin not enabled, a config key wrong, hooks that never fire | `tools/doctor` at `SessionStart` | not measured | — |
@@ -71,8 +72,8 @@ measured once it was made.
 
 | Date | Version | Brick | Change | Before | After | Decision | Re-test |
 |------|---------|-------|--------|--------|-------|----------|---------|
-| 2026-10-09 | — | `read-bounds.sh`, `lib/guard-cat-bounds.sh` | subagent bar raised from 120 lines / 8 kB to 400 / 24 kB | 90 % of denials in subagents, 60 % of forcings followed by an edit | not measured: subagent denials should fall by about ¾ | keep | 2026-11-09 |
-| 2026-10-09 | — | `rules/context-discipline.md`, agents | generic batching line removed, nudge kept | the harness system prompt already asks for it | not measured: back near 1.2 calls per turn means the line returns | keep removed | 2026-11-09 |
+| 2026-10-09 | — | `read-bounds.sh`, `lib/guard-cat-bounds.sh` | subagent bar raised from 120 lines / 8 kB to 400 / 24 kB | 90 % of denials in subagents, 60 % of forcings followed by an edit | 2026-11-27, one repo, 30 days: 20 subagent denials over 7 774 calls, forcings followed by an edit 0 / 8; the two repos of the first measure not reread | keep | — |
+| 2026-10-09 | — | `rules/context-discipline.md`, agents | generic batching line removed, nudge kept | the harness system prompt already asks for it | 2026-11-27, one repo, 30 days: 1.36 calls per tool-carrying turn in the main chain, 1.28 in subagents, above 1.2 | keep removed | — |
 | 2026-10-19 | 2.1.0 | `affected-blast-radius` hook | removed | 300 injections in 30 days, no measurable effect | not measured | keep removed | — |
 | 2026-10-21 | 2.6.0 | `run-lot` questions, waits and arbiters | removed: the agent decides, its decision goes under `## To validate` | 45 of 68 min of a batch in control layers | not measured | keep removed | — |
 | 2026-10-21 | 2.8.0 | next-batch sheet review (`adversarial-reviewer` and a rewriting agent) | removed: the next batch's design checks its sheet | 1 to 5 min and two agents per full batch | not measured | keep removed | — |

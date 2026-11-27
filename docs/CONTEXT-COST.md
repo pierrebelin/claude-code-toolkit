@@ -41,6 +41,8 @@ the full read a `read in full` contract line asked for, one turn burnt to get it
 now read against 400 lines / 24 kB, the main chain keeps 120 / 8 kB. Check after a month:
 `subagent_denials` should fall by ~¾ and `subagent_forced_then_edited` toward zero; if the
 subagents' `Read` bytes per call jump past the saving, lower the bar.
+Checked 2026-11-27 (one repo, 30 days): 20 subagent denials over 7 774 calls, forcings followed
+by an edit 0 / 8 — the bar stays (`docs/BRICKS.md` § Simplification log).
 
 `guard-diff-bounds` stays despite zero denials: it exits on any command without `git`, adds
 no instruction, and the patch it guards against was measured at 109 kB.
@@ -75,6 +77,7 @@ stays is the nudge, which costs nothing until the failure shows, and the groupin
 step (`implement-tdd` phase reads, one `Write` per new file, diff + cost with the green run).
 Check after five batches with `turn-batching-check`: calls per tool-carrying turn back near
 1.2 means the line comes back.
+Checked 2026-11-27 (one repo, 30 days): 1.36 in the main chain, 1.28 in subagents — the line stays out.
 
 ## Delegation
 
