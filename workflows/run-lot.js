@@ -4,7 +4,7 @@ export const meta = {
   whenToUse: 'Implement a plan batch without human intervention. Argument: path of the batch sheet, `todo/<code>/<CODE>-PLAN-FX.md`; plan, batch and run folder are derived from it.',
   phases: [
     { title: 'Design', detail: 'cycle index of the sheet; design writes the `## Cycles` block only when absent or invalid; declaratives' },
-    { title: 'RED · GREEN', detail: 'one tdd-cycle agent per cycle writes its RED, passes the checkpoint the hook checks, then its GREEN and the handler CLAUDE.md; a cycle starts once every earlier cycle it meets is done, run.parallelCycles at once; rejected → one retry, then a diagnosis and one on opus, then stop' },
+    { title: 'RED · GREEN', detail: 'one tdd-cycle agent per cycle writes its RED, passes the checkpoint the hook checks, then its GREEN and the handler CLAUDE.md; a cycle starts once every earlier cycle it meets is done, run.parallelCycles at once; rejected → one retry, then a diagnosis and one on opus, then stop; a failing run is rerun by the TDD scope hook and its failures handed to both' },
     { title: 'Global green', detail: 'beside the pre-audit gate: suites run on haiku as cctoolkit suites-plan resolves them; red → suites repair, its writes under the test roots checked against testEdits; closing level full or light read off the batch diff' },
     { title: 'Closing', detail: 'cctoolkit pre-audit and what it lists, one pass beside global green; what stays red goes to the audit' },
     { title: 'Audit', detail: 'full: cctoolkit audit-capture, ddd-tdd-auditor; light: one review of the diff on Correctness and Scope; GAPS → one fix, a second review only after a Blocking on Correctness' },
@@ -40,6 +40,12 @@ const lock = opts.lock === true
 const pin = opts.packages && typeof opts.packages === 'object' && opts.packages.version ? opts.packages : null
 const tmpCommand = `cctoolkit run-work tmp ${batch}`
 const TMP = `\`<tmp>\` = the folder \`${tmpCommand}\` prints (system temp, never under run/)`
+// A cycle ending on a failing GREEN or a BLOCKED RED: the TDD scope hook reruns its last test command and keeps the
+// failures there (lib/tdd_scope.py `save_failure`, docs/FROZEN-LITERALS.md) — the retry and the diagnosis read the
+// output, not a bare exit code.
+const failuresOf = c => `\`<tmp>/failures/${c.id}.txt\` (\`<tmp>\` = the folder \`${tmpCommand}\` prints)`
+const ranAndFailed = reasons => reasons.some(r => /^(GREEN not observed|BLOCKED)/.test(r))
+const failureHint = c => `\n\nThe failing test runs of the earlier attempts, rerun by the TDD scope hook: ${failuresOf(c)}, one block per attempt, the last at the bottom; the whole output of the last run beside it, \`${c.id}.log\`. Read that file before writing: it names the failing tests and their assertions.`
 
 const BLOCKED = 'BLOCKED'
 const DONE = 'DONE'
@@ -401,6 +407,7 @@ const diagnose = (c, reasons) => agent(
     `Diagnosis of cycle ${c.id} (${c.behaviour}), rejected twice by the orchestrator. Read only, write nothing, no build: the next attempt fixes.`,
     `Rejections, in order: ${reasons.map((r, i) => `${i + 1}. ${r}`).join(' ; ')}.`,
     `In one message: \`${contractCommand(c, '--red')}\` and \`${contractCommand(c, '--green')}\`, then the test and production files they name, as the tree holds them now (the attempts left their writes).`,
+    ...(ranAndFailed(reasons) ? [`What the failing runs printed, rerun by the TDD scope hook: ${failuresOf(c)}, one block per attempt (whole output of the last: \`${c.id}.log\` beside it). Read it: the code shows what was written, this file what ran.`] : []),
     'Find the cause the two rejections share, or why the second repeated the first: a contract the code cannot meet, a test asserting the wrong thing, a file the attempts never touched, a command failing for another reason.',
     '`cause` = that cause in at most two sentences, citing `path:line`; `fix` = what the last attempt must do differently, at most two sentences.',
   ].join('\n'),
@@ -435,7 +442,7 @@ async function runCycle(c, together = false) {
     if (model) log(`${step}: last attempt on ${LAST_MODEL} — ${short(reasons[reasons.length - 1], 60)}`)
     const diagnosis = model ? await diagnose(c, reasons) : null
     if (diagnosis) log(`${step}: diagnosis — ${short(diagnosis.cause, 80)}`)
-    const suffix = n === 1 ? '' : retryHead(step, n, reasons[reasons.length - 1]) + (model ? escalation(reasons, diagnosis) : retryText(reasons[reasons.length - 1]))
+    const suffix = n === 1 ? '' : retryHead(step, n, reasons[reasons.length - 1]) + (model ? escalation(reasons, diagnosis) : retryText(reasons[reasons.length - 1])) + (ranAndFailed(reasons) ? failureHint(c) : '')
     const x = await agent(cycleContract(c, red, together) + suffix, { agentType: 'cctoolkit:tdd-cycle', schema: CYCLE_RESULT, phase: 'RED · GREEN', label: cycleLabel(c, model), ...(model ? { model } : {}) }).catch(() => null)
     const redWhy = red ? null : x ? checkRed(c, x.red) : 'cycle agent without result'
     if (redWhy) {

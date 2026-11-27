@@ -16,7 +16,9 @@ the hook saves both as the cycle's `cycle` line of the run work file, from the p
                                     author, a source file absent from `stubs`; author at RED, a test
                                     failing on the stub once the test command is rerun; implementer,
                                     never refused: each test file it changed is one `test-edit` line
-                                    of the run work file, its assertion lines removed and added
+                                    of the run work file, its assertion lines removed and added;
+                                    cycle under run-lot ending on a failing GREEN or a BLOCKED RED,
+                                    its last test command rerun and the failures kept for the retry
 
 State: `work_file.tmp_dir("tdd-scope")` of the main worktree, shared by its linked worktrees; swept of
 agents older than two days at start; `evidence.jsonl` there is printed by `cctoolkit tdd-scope evidence`.
@@ -745,6 +747,48 @@ def save_cycle_state(cfg, prompt, red, green=None):
         return
 
 
+FAILURE_LINES = 40
+FAILURE_BLOCK_LINES = 8
+
+
+def failure_excerpt(cfg, output):
+    """The failing tests of a test run, each block cut at FAILURE_BLOCK_LINES, FAILURE_LINES at most;
+    no failed test recognised, the last FAILURE_LINES lines."""
+    failed_rx = re.compile((cfg.data.get("tdd", {}) or {}).get("failedTest") or DEFAULT_FAILED)
+    lines, block = [], None
+    for line in output.splitlines():
+        if failed_rx.search(line):
+            block = 0
+        if block is not None and block < FAILURE_BLOCK_LINES:
+            lines.append(line)
+            block += 1
+    return (lines or output.splitlines()[-FAILURE_LINES:])[:FAILURE_LINES]
+
+
+def save_failure(cfg, agent_id, prompt, phase):
+    """A run-lot cycle ending on a failing GREEN or a BLOCKED RED: its last test command rerun, the failures
+    appended to `failures/<cycle>.txt` of the batch's tmp folder, the whole output in `<cycle>.log` — what
+    run-lot's retry and diagnosis read instead of a bare exit code (docs/FROZEN-LITERALS.md)."""
+    batch, cycle = BATCH.search(prompt or ""), CYCLE_OF.search(prompt or "")
+    if not batch or not cycle:
+        return
+    ran = rerun(cfg, agent_id)
+    if ran is None:
+        return
+    seg, code, out = ran
+    try:
+        folder = work_file.tmp_dir(batch.group(1)) / "failures"
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / f"{cycle.group(1)}.log", "w", encoding="utf-8") as fh:
+            fh.write(out)
+        stamp = time.strftime("%H:%M:%S", time.gmtime())
+        with open(folder / f"{cycle.group(1)}.txt", "a", encoding="utf-8") as fh:
+            fh.write(f"--- {phase} attempt {stamp} UTC, rerun of `{seg}`: exit {code}\n")
+            fh.write("\n".join(failure_excerpt(cfg, out)) + "\n")
+    except OSError:
+        return
+
+
 def _canon(report):
     return json.dumps(report or {}, sort_keys=True, ensure_ascii=False)
 
@@ -768,12 +812,18 @@ def final(cfg, d, kind):
                 deny("No RED checkpoint yet: run `cctoolkit tdd-scope red` with your RED report as its heredoc body "
                      "(agents/tdd-cycle.md), then the GREEN, then this output. A RED you cannot complete goes out as "
                      "`red` with `status: BLOCKED`.")
+            else:
+                save_failure(cfg, agent_id, prompt_of(transcript, agent_id), "RED")
             return
         if _canon(red) != _canon(record.get("red")):
             deny("`red` differs from the report the RED checkpoint accepted: return that report unchanged, field for field.")
             return
         record_test_edits(cfg, agent_id, record, transcript)
-        save_cycle_state(cfg, prompt_of(transcript, agent_id), red, ti.get("green"))
+        prompt = prompt_of(transcript, agent_id)
+        save_cycle_state(cfg, prompt, red, ti.get("green"))
+        green = ti.get("green")
+        if isinstance(green, dict) and (str(green.get("status", "")) == "BLOCKED" or green.get("exit") not in (0, None)):
+            save_failure(cfg, agent_id, prompt, "GREEN")
         return
     if kind == IMPLEMENTER:
         record_test_edits(cfg, agent_id, record, transcript)

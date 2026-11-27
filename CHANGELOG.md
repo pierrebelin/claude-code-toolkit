@@ -4,6 +4,11 @@ One section per release, newest first, headed `## <version> — <date>`: `cctool
 
 A release that changes a file under `rules/` or `presets/*/rules/` lists it under **Rules changed**, one under `presets/*/skills/` under **Skills changed**: those files are copied into your repo, so you pull them by re-running `/cctoolkit:kit-init`, which shows each difference and asks.
 
+## 2.24.0 — 2026-11-27
+
+- `cctoolkit` `run-lot`: a rejected RED or GREEN cycle is now retried with what the failing test run printed, not a bare exit code. When a cycle agent ends on a failing GREEN (`exit` not 0, or `BLOCKED`) or a `BLOCKED` RED, the TDD scope hook reruns its last test command and keeps the failures in the batch's tmp folder (`failures/<cycle>.txt`, one block per attempt: failing tests and their assertions, 40 lines at most; the whole output in `<cycle>.log`). The retry, the read-only diagnosis and the last attempt on opus are pointed at that file. Before, they only got `GREEN not observed: exit 1 on <command>`, and the diagnosis read the code without ever seeing what ran. A failing cycle's end takes one test run longer (the rerun). The folder goes with the batch's tmp folder at the end of the batch.
+- `cctoolkit`: `docs/BRICKS.md` has a new Failure map row, "Retry blind to the failure", re-test 2027-01-31: count the cycles still rejected twice or more, and their time, with `dev/workflow-timing.py`.
+
 ## 2.23.1 — 2026-11-27
 
 - `cctoolkit`: new `docs/BRICKS.md`, for maintainers. Its failure map names the failure each brick prevents (hook, guard, skill, agent, workflow step) and where the evidence is measured, or says `not measured`. Its simplification log lists every brick removed or relaxed since 2.1.0, what justified the change and what was measured after. A row carries a Re-test date when it must be measured again. Nothing changes in your repo.

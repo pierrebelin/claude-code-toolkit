@@ -37,6 +37,7 @@ time of a workflow's phases and agents. An outcome is `unchanged` (keep removed)
 | Multi-repo plan stopping halfway | a batch of another repository refused, or run in a repository not ready for it | `run-plan` preflight, `cctoolkit batch-repo` | not measured | — |
 | Plan validated without being understood | the run takes choices the user cannot name | `quiz` | not measured (2.20.0) | — |
 | Code before a failing test | a test written after the code, green at its first run, proving nothing | `tdd-scope-guard.sh` (RED checkpoint on the tree), `tdd-cycle` | not measured | — |
+| Retry blind to the failure | a rejected cycle retried on `exit 1` alone, the same mistake made again, the diagnosis reading code that never ran | `tdd-scope-guard.sh` (`save_failure`: the failing run rerun, its failures kept), `run-lot` retry and diagnosis pointed at them | not measured: before it, one RED rejected three times in a row, ~17 min, twice (`workflows/run-lot.js`, `diagnose`) | 2027-01-31 |
 | Assertion weakened to get green | a test edited at GREEN until it passes | `tdd-scope-guard.sh` (`test-edit` lines), audit row `Tests changed after the RED checkpoint` | `CHANGELOG.md` 2.6.0 | — |
 | Incomplete agent report | the orchestrator spends a turn and a `SendMessage` to get the missing lines | `subagent-report-shape.sh` | `hooks/README.md` | — |
 | Done without proof | a batch called done with red suites or rules untouched | `run-lot` global green, `verify-ddd-tdd`, `cctoolkit closing-level` | not measured | — |
