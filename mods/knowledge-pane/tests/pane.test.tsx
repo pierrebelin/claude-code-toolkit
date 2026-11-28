@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import {
+  adrOrder,
   askTarget,
   contextParts,
   handlerTarget,
@@ -760,4 +761,79 @@ test('terminal at 40, 60 and 100 columns: every block title ruled to the pane ed
     expect(await ui.find({ type: 'Text', text: /^ {4}2026-10-15 {2}PRD-ARCH {2}~CAT-CU-01/ })).toBeDefined()
     await ui.unmount()
   }
+})
+
+// ADR-004 replaces ADR-001 through its `kit:supersedes` line (kit 2.25.0): ADR-001 stays in the base, out of `ADR: <n>.`.
+const SUPERSEDED = {
+  jsonl: JSONL.replace(
+    /^\{"id":"ADR-001".*$/m,
+    line => line.replace('"usecases":', '"supersedes":[],"superseded_by":"ADR-004","usecases":').replace('"cited_by":[]', '"cited_by":["ADR-004"]'),
+  ).replace(
+    'not json',
+    `${row('ADR-004', 'ADR', 'adr/ADR-004-archive-table.md', 1, 8, { title: 'Archive table with retention', cites: ['ADR-001', 'CAT-CU-02', 'CAT-RM-004'], usecases: ['CAT-CU-02'], supersedes: ['ADR-001'], superseded_by: null })}\nnot json`,
+  ),
+  adr: '# ADR-004 — Archive table with retention\n\nChoice: an archive table.\nReplaces: ADR-001 <!-- kit:supersedes -->\n',
+}
+
+const supersededFiles = (): Record<string, string> => {
+  const files = baseFiles()
+  files[`${ROOT}/.index/knowledge.jsonl`] = SUPERSEDED.jsonl
+  files[`${ROOT}/adr/ADR-004-archive-table.md`] = SUPERSEDED.adr
+  files[`${ROOT}/.index/files.json`] = stamps(files)
+  return files
+}
+
+test('an ADR lifecycle read from the index: supersedes, superseded_by, in force first', () => {
+  const objects = parseIndex(SUPERSEDED.jsonl)
+  const old = objects.find(one => one.id === 'ADR-001')
+  const next = objects.find(one => one.id === 'ADR-004')
+  expect([old?.supersedes, old?.supersededBy]).toEqual([[], 'ADR-004'])
+  expect([next?.supersedes, next?.supersededBy]).toEqual([['ADR-001'], null])
+  // A row written before 2.25.0 carries neither field: in force.
+  expect(parseIndex(JSONL).find(one => one.id === 'ADR-001')?.supersededBy).toBeNull()
+  expect(adrOrder(objects.filter(one => one.kind === 'ADR')).map(one => one.id)).toEqual(['ADR-004', 'ADR-001'])
+  expect(contextParts(objects, 'Catalog').adrs.map(one => one.id)).toEqual(['ADR-004', 'ADR-001'])
+})
+
+test('a superseded ADR: listed after the ones in force and marked, out of the count; its detail says supersedes and superseded by', async ($, on) => {
+  world(on, supersededFiles())
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'knowledge-pane', args: '' } as never)
+  const ui = await $.ui.mount({ plugin: 'knowledge-pane', surface: 'terminal', ...PANE })
+  expect(await ui.find({ type: 'Text', text: /^ADRs  1 · 1 superseded ─+$/ })).toBeDefined()
+  const ids = await ui.findAll({ type: 'Text', text: /^ADR-00\d $/ })
+  expect(ids.map(one => one.text.trim())).toEqual(['ADR-004', 'ADR-001'])
+  expect(await ui.find({ type: 'Text', text: /^ superseded by ADR-004$/ })).toBeDefined()
+
+  await ui.press({ key: 'open-context-Catalog' })
+  expect(await ui.find({ type: 'Text', text: /^ADRs  1 · 1 superseded ─+$/ })).toBeDefined()
+
+  await ui.press({ key: 'open-adr-ADR-001' })
+  expect(await ui.find({ type: 'Text', text: /^ {2}⊘ superseded by ADR-004$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^superseded by:  ADR-004 ─+$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^supersedes:  none ─+$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Cited by  / })).toBeUndefined()
+
+  await ui.press({ key: 'open-successor-ADR-004' })
+  expect(await ui.find({ type: 'Text', text: /ADR-004 — Archive table with retention/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^supersedes:  1 ─+$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^superseded by:  none — in force ─+$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'open-supersedes-ADR-001' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'open-cites-ADR-001' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /⊘/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('desktop: a superseded ADR row and detail draw a tree the surface accepts', async ($, on) => {
+  world(on, supersededFiles())
+  await $.session.start({ cwd: '/repo', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'knowledge-pane', args: '' } as never)
+  const ui = await $.ui.mount({ plugin: 'knowledge-pane', surface: 'desktop', ...PANE })
+  await ui.drawn()
+  expect(await ui.find({ type: 'Text', text: /^1 · 1 superseded$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}superseded by ADR-004$/ })).toBeDefined()
+  await ui.press({ key: 'open-adr-ADR-001' })
+  await ui.drawn()
+  expect(await ui.find({ type: 'Text', text: /^⊘ superseded by ADR-004$/ })).toBeDefined()
+  await ui.unmount()
 })

@@ -94,6 +94,14 @@
     "stdout": "staged, not written: PRD-ARCH — /cctoolkit:knowledge-merge todo/<code>/<CODE>-PLAN.md\n0",
     "exit": 0
    }
+  },
+  {
+   "name": "knowledge-merge prepare refuses a sheet ADR whose kit:supersedes line names an ADR the base lacks, or one another ADR already supersedes",
+   "cmd": "K={{KIT}}; R={{FIX}}/km-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs/business/Catalog/usecases $R/todo; cd $R || exit 1\ngit init -q && git config user.name eval && git config user.email eval@example.invalid && git config commit.gpgsign false\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > .claude/kit.config.json\nE=$K/examples/docs/business/Catalog; C=docs/business/Catalog\nprintf '# Catalog\\n\\nCatalog holds the products an organisation sells.\\n\\n## Vocabulary <!-- kit:vocabulary -->\\n\\n<!-- kit:cols term,definition -->\\n| Term | Definition |\\n|------|------------|\\n| Product | Item an organisation sells |\\n' > $C/OVERVIEW.md\nsed -n '1,4p' $E/rules.md > $C/rules.md\nsed 's/Also applies: CAT-RM-001, CAT-RM-004./Also applies: CAT-RM-001./' $E/usecases/CAT-CU-01-consult-products.md > $C/usecases/CAT-CU-01-consult-products.md\nprintf '# Catalog — history\\n\\n<!-- kit:cols date,feature,delta -->\\n| Date | Feature | Delta |\\n|------|---------|-------|\\n| 2026-10-01 | sync 3f9e2c1 | +CAT-CU-01 +CAT-RM-001 +CAT-RM-002 |\\n' > $C/HISTORY.md\ncp -R $K/examples/todo/product-archiving todo/; P=todo/product-archiving/PRD-ARCH-PLAN.md\nsed -i.bak 's/### Batch F2 — Restore a product — ⬜/### Batch F2 — Restore a product — ✅ DONE (2026-10-10)/' $P && rm $P.bak\nprintf '# PRD-ARCH-PLAN-F2 — Restore a product\\n\\n## Decisions <!-- kit:decisions -->\\n\\n- `RestoreProduct` mirrors `ArchiveProduct`.\\n' > todo/product-archiving/PRD-ARCH-PLAN-F2.md\ngit add -A && git commit -qm base; export CLAUDE_PROJECT_DIR=$R; M=\"python3 $K/scripts/knowledge-merge.py\"; W=\"python3 $K/scripts/knowledge-write.py\"\nDR=docs/business/.merge/PRD-ARCH/.drafts/Catalog\nawk '{print} /^Consequences: /{print \"Replaces: ADR-007 <!-- kit:supersedes -->\"}' todo/product-archiving/PRD-ARCH-PLAN-F1.md > f1 && mv f1 todo/product-archiving/PRD-ARCH-PLAN-F1.md\n$M prepare $P 2>&1 | grep '^refused'; mkdir -p docs/business/adr\nprintf '# ADR-007 — Logs in UTC\\nChoice: UTC.\\n' > docs/business/adr/ADR-007-logs-in-utc.md\nprintf '# ADR-008 — Logs in local time\\nChoice: local.\\nReplaces: ADR-007 <!-- kit:supersedes -->\\n' > docs/business/adr/ADR-008-logs-in-local-time.md\n$M prepare $P 2>&1 | grep '^refused'",
+   "expect": {
+    "stdout": "refused: ADR-001 in todo/product-archiving/PRD-ARCH-PLAN-F1.md supersedes ADR-007, absent from the base\nrefused: ADR-001 in todo/product-archiving/PRD-ARCH-PLAN-F1.md supersedes ADR-007, already superseded by ADR-008",
+    "exit": 0
+   }
   }
  ]
 }

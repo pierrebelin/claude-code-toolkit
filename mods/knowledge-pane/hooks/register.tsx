@@ -179,6 +179,8 @@ export const parseIndex = (jsonl: string): KObject[] =>
           handlers: strings(row.handlers),
           citedBy: strings(row.cited_by),
           contexts: strings(row.contexts),
+          supersedes: strings(row.supersedes),
+          supersededBy: typeof row.superseded_by === 'string' && row.superseded_by !== '' ? row.superseded_by : null,
         },
       ]
     } catch {
@@ -382,6 +384,12 @@ export const isOwnRule = (rule: KObject, cu: KObject): boolean => rule.kind === 
 
 export const isSharedRule = (rule: KObject): boolean => rule.kind === 'RM' && /(?:^|[\\/])rules\.md$/.test(rule.path)
 
+// ADRs in force first, then the superseded ones — kept in the base as the trail, out of `INDEX.md`'s `ADR: <n>.` count.
+export const adrOrder = (adrs: KObject[]): KObject[] => {
+  const byId = (a: KObject, b: KObject) => a.id.localeCompare(b.id)
+  return [...adrs.filter(one => one.supersededBy === null).sort(byId), ...adrs.filter(one => one.supersededBy !== null).sort(byId)]
+}
+
 export const contextParts = (objects: KObject[], name: string) => {
   const mine = objects.filter(one => one.context === name)
   const usecases = mine.filter(one => one.kind === 'CU').sort((a, b) => a.id.localeCompare(b.id))
@@ -389,7 +397,7 @@ export const contextParts = (objects: KObject[], name: string) => {
     usecases: usecases.map(cu => ({ cu, rules: mine.filter(one => isOwnRule(one, cu)).sort((a, b) => a.id.localeCompare(b.id)) })),
     shared: mine.filter(isSharedRule).sort((a, b) => a.id.localeCompare(b.id)),
     decisions: mine.filter(one => one.kind === 'D').sort((a, b) => a.id.localeCompare(b.id)),
-    adrs: objects.filter(one => one.kind === 'ADR' && one.contexts.includes(name)).sort((a, b) => a.id.localeCompare(b.id)),
+    adrs: adrOrder(objects.filter(one => one.kind === 'ADR' && one.contexts.includes(name))),
   }
 }
 
@@ -1091,7 +1099,7 @@ export async function loadBase(
     index,
     staleFiles,
     contexts,
-    adrCount: parsed.adrCount ?? (objects.length > 0 ? objects.filter(one => one.kind === 'ADR').length : null),
+    adrCount: parsed.adrCount ?? (objects.length > 0 ? objects.filter(one => one.kind === 'ADR' && one.supersededBy === null).length : null),
     objects,
     overviews,
     history,
@@ -1540,6 +1548,12 @@ export const register: Register = on => {
     )
     const mark = (object: KObject) =>
       object.level === null ? [] : [<Text key="observed" color="warning">{` ◐ ${object.level}`}</Text>]
+    const superseded = (object: KObject) => (object.supersededBy === null ? '' : `superseded by ${object.supersededBy}`)
+    // A group's count of ADRs: the ones in force, as `INDEX.md` counts them, and the superseded ones beside.
+    const adrCount = (adrs: KObject[], inForce = adrs.filter(one => one.supersededBy === null).length) => {
+      const gone = adrs.length - inForce
+      return gone === 0 ? `${inForce}` : `${inForce} · ${gone} superseded`
+    }
     // One object as a row: its id and title, pressed to open it; an id outside the base is shown, not pressable.
     const idRow = (key: string, id: string, indent = ROW) => {
       const object = byId.get(id)
@@ -1555,8 +1569,9 @@ export const register: Register = on => {
           <Box key={key} paddingLeft={nested}>
             <Button key={`open-${key}`} plain onPress={go({ kind: 'object', id })}>
               <Text size="footnote" mono dimColor>{`${object.id}  `}</Text>
-              <Text>{object.title}</Text>
+              <Text dimColor={object.supersededBy !== null}>{object.title}</Text>
               {object.level === null ? [] : [<Text key="observed" size="footnote" color="warning">{`  ◐ observed ${object.level}`}</Text>]}
+              {object.supersededBy === null ? [] : [<Text key="superseded" size="footnote" dimColor>{`  ${superseded(object)}`}</Text>]}
             </Button>
           </Box>
         )
@@ -1572,8 +1587,11 @@ export const register: Register = on => {
           <Text>{' '.repeat(indent)}</Text>
           <Button key={`open-${key}`} plain onPress={go({ kind: 'object', id })}>
             <Text color="inactive">{object.id} </Text>
-            <Text wrap="truncate-end">{fit(object.title, columns - indent - object.id.length - (object.level === null ? 1 : 10))}</Text>
+            <Text color={object.supersededBy === null ? undefined : 'inactive'} wrap="truncate-end">
+              {fit(object.title, columns - indent - object.id.length - (object.level === null ? 1 : 10) - (object.supersededBy === null ? 0 : superseded(object).length + 1))}
+            </Text>
             {mark(object)}
+            {object.supersededBy === null ? [] : [<Text key="superseded" color="inactive">{` ${superseded(object)}`}</Text>]}
           </Button>
         </Box>
       )
@@ -1748,7 +1766,8 @@ export const register: Register = on => {
               </Box>,
             ]),
       ])
-      const adrs = kb.objects.filter(one => one.kind === 'ADR').sort((a, b) => a.id.localeCompare(b.id))
+      const adrs = adrOrder(kb.objects.filter(one => one.kind === 'ADR'))
+      const inForce = adrs.filter(one => one.supersededBy === null)
       const observed = LEVELS.map(level => ({ level, items: kb.objects.filter(one => one.level === level) }))
       const observedCount = observed.reduce((sum, one) => sum + one.items.length, 0)
       const synced = lastSync(kb.history)
@@ -1769,7 +1788,7 @@ export const register: Register = on => {
           : []),
         ...(!isDesktop && followed.length > 0 ? [<Box key="followed" flexDirection="column" marginTop={1}>{followed}</Box>] : []),
         group('contexts', 'Contexts', `${kb.contexts.length}`, contextRows),
-        group('adrs', 'ADRs', `${kb.adrCount ?? adrs.length}`, adrs.map(one => idRow(`adr-${one.id}`, one.id)), undefined, adrs.length <= 8),
+        group('adrs', 'ADRs', adrs.length === 0 ? `${kb.adrCount ?? 0}` : adrCount(adrs), adrs.map(one => idRow(`adr-${one.id}`, one.id)), undefined, inForce.length <= 8),
         group(
           'observed',
           'Observed',
@@ -1838,7 +1857,7 @@ export const register: Register = on => {
         group('usecases', 'Use cases', `${parts.usecases.length}`, caseRows),
         group('shared', 'Cross-cutting rules', `${parts.shared.length}`, parts.shared.map(one => idRow(`shared-${one.id}`, one.id))),
         group('decisions', 'Decisions', `${parts.decisions.length}`, parts.decisions.map(one => idRow(`decision-${one.id}`, one.id))),
-        group('context-adrs', 'ADRs', `${parts.adrs.length}`, parts.adrs.map(one => idRow(`adr-${one.id}`, one.id))),
+        group('context-adrs', 'ADRs', adrCount(parts.adrs), parts.adrs.map(one => idRow(`adr-${one.id}`, one.id))),
         group(
           'history',
           'History',
@@ -1861,6 +1880,9 @@ export const register: Register = on => {
       }
       const ids = (list: string[], key: string) => list.filter(one => one !== id).map(one => idRow(`${key}-${one}`, one))
       const appliesTo = object.kind === 'RM' ? object.usecases : []
+      // An ADR's `kit:supersedes` line cites the ADRs it replaces: shown under `supersedes:`, not again under Cites.
+      const cites = object.cites.filter(one => !object.supersedes.includes(one))
+      const citedBy = object.citedBy.filter(one => one !== object.supersededBy)
       const ownRules = object.kind === 'CU' ? kb.objects.filter(one => isOwnRule(one, object)).sort((a, b) => a.id.localeCompare(b.id)) : []
       const facts = isDesktop ? (
         <Box key="facts" flexDirection="column" gap="xs" marginTop="sm">
@@ -1870,6 +1892,7 @@ export const register: Register = on => {
             <Text size="footnote" weight="medium" color={object.level === null ? 'success' : 'warning'}>
               {object.level === null ? '● specified' : `◐ observed ${object.level} — not validated yet`}
             </Text>
+            {object.supersededBy !== null && <Text size="footnote" weight="medium" dimColor>{`⊘ ${superseded(object)}`}</Text>}
           </Box>
           <Text size="footnote" mono dimColor wrap="truncate-start">{`${object.path}:${object.line}`}</Text>
         </Box>
@@ -1883,6 +1906,7 @@ export const register: Register = on => {
             {object.level !== null && <Text color="inactive"> — not validated yet</Text>}
             <Text color="inactive">{`  ${KIND_NAMES[object.kind]} · ${object.context || object.contexts.join(', ')}`}</Text>
           </Text>
+          {object.supersededBy !== null && <Text color="inactive" wrap="truncate-end">{`${INDENT}⊘ ${superseded(object)}`}</Text>}
           {tail('place', INDENT.length, `${object.path}:${object.line}`)}
         </Box>,
         <Box key="text" flexDirection="column" {...(isDesktop ? { marginTop: 'sm' as const, backgroundColor: SURFACE, ...BLOCK } : { marginTop: 1, marginLeft: 2 })}>
@@ -1902,8 +1926,14 @@ export const register: Register = on => {
               ),
             ]
           : []),
-        ...(object.cites.length > 0 ? [group('cites', 'Cites', `${object.cites.length}`, ids(object.cites, 'cites'))] : []),
-        ...(object.citedBy.length > 0 ? [group('cited-by', 'Cited by', `${object.citedBy.length}`, ids(object.citedBy, 'cited'))] : []),
+        ...(object.kind === 'ADR'
+          ? [
+              group('supersedes', 'supersedes:', object.supersedes.length === 0 ? 'none' : `${object.supersedes.length}`, ids(object.supersedes, 'supersedes')),
+              group('superseded-by', 'superseded by:', object.supersededBy ?? 'none — in force', ids(object.supersededBy === null ? [] : [object.supersededBy], 'successor')),
+            ]
+          : []),
+        ...(cites.length > 0 ? [group('cites', 'Cites', `${cites.length}`, ids(cites, 'cites'))] : []),
+        ...(citedBy.length > 0 ? [group('cited-by', 'Cited by', `${citedBy.length}`, ids(citedBy, 'cited'))] : []),
         group('object-history', 'History', rows.length === 0 ? 'none' : `${rows.length}`, rows.map((row, index) => historyRow(`object-history-${index}`, row, id))),
       ]
     }

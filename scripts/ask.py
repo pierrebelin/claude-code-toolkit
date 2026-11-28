@@ -15,6 +15,9 @@ beyond `INDEX.md`, an `OVERVIEW.md` or a use-case file.
     cctoolkit ask --history [--context C[,C]] [--id <id>]
         `HISTORY.md` rows, newest first.
 
+An ADR superseded by another is left out of every answer but `--id` and a question naming it:
+an `--id` answer says `superseded by: ADR-nnn`.
+
 Every answer ends with `shown N of M`: N printed, M found; N below M is the budget
 (`knowledge.askBudget`, tokens = characters / 4) cutting.
 
@@ -129,12 +132,19 @@ class Out:
         print(text)
 
 
+def in_force(r):
+    """Anything but an ADR another ADR's `kit:supersedes` line names."""
+    return not r.get("superseded_by")
+
+
 def tag(r):
     bits = [NAMES[r["kind"]]]
     if r["kind"] != "CU" and r["usecases"]:
         bits.append(", ".join(r["usecases"]))
     if r["status"] == "observed":
         bits.append(f"observed {r['level']}")
+    if not in_force(r):
+        bits.append(f"superseded by {r['superseded_by']}")
     return " · ".join(bits)
 
 
@@ -165,6 +175,10 @@ def whole(c, r):
         rel.append("handlers: " + ", ".join(f"`{h}`" for h in r["handlers"]))
     if r["cited_by"]:
         rel.append("cited by: " + ", ".join(r["cited_by"]))
+    if r.get("supersedes"):
+        rel.append("supersedes: " + ", ".join(r["supersedes"]))
+    if not in_force(r):
+        rel.append(f"superseded by: {r['superseded_by']}")
     return f"{r['path']}:{r['line']}\n{body}" + ("\n" + " · ".join(rel) if rel else "")
 
 
@@ -192,8 +206,9 @@ def retired(c, oid):
 
 # --- modes -----------------------------------------------------------------------------
 def ask_question(rows, question, ctxs, kind, out):
-    pool = [r for r in rows if in_contexts(r, ctxs) and (not kind or r["kind"] == kind)]
     named = [i for i in knowledge.ID_RE.findall(question)]
+    pool = [r for r in rows if in_contexts(r, ctxs) and (not kind or r["kind"] == kind)
+            and (in_force(r) or r["id"] in named)]
     first = [r for i in named for r in pool if r["id"] == i]
     ranked = first + [r for _, r in rank(pool, question) if r not in first]
     for r in ranked:
@@ -218,7 +233,7 @@ def ask_handler(c, rows, name, out):
         for r in rules:
             out.item(whole(c, r))
         for r in rows:
-            if r["kind"] in ("D", "ADR") and cu["id"] in r["usecases"]:
+            if r["kind"] in ("D", "ADR") and cu["id"] in r["usecases"] and in_force(r):
                 out.item(card(r))
 
 
@@ -242,7 +257,7 @@ def ask_context(c, rows, ctxs, out):
             if r["kind"] == "D":
                 out.item(f"{r['id']} — {r['title']}{mark(r)}")
         for r in rows:
-            if r["kind"] == "ADR" and ctx in r["contexts"]:
+            if r["kind"] == "ADR" and ctx in r["contexts"] and in_force(r):
                 out.item(f"{r['id']} — {r['title']}{mark(r)}")
 
 

@@ -99,11 +99,19 @@
    }
   },
   {
-   "name": "knowledge-write apply: an ADR citing no context id still sits in its context's delta, so its id is never given again",
-   "cmd": "K={{KIT}}/scripts; R={{FIX}}/kw-adr-{{SID}}; rm -rf $R; cp -R {{FIX}}/kw-base $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nST=$(python3 $K/knowledge-write.py init); mkdir -p $ST/Catalog/adr\nprintf '# ADR-?1 — Logs in UTC\\nChoice: every timestamp in UTC.\\n' > \"$ST/Catalog/adr/ADR-?1-logs-in-utc.md\"\npython3 $K/knowledge-write.py apply --context Catalog | head -1 | cut -d'|' -f2; git add -A; git commit -qm adr\nST=$(python3 $K/knowledge-write.py init); mkdir -p $ST/Catalog/adr; : > $ST/Catalog/adr/ADR-001-logs-in-utc.md\npython3 $K/knowledge-write.py apply --context Catalog | head -1 | cut -d'|' -f2; python3 $K/next-id.py ADR",
+   "name": "knowledge-write apply: an ADR citing no context id still sits in its context's delta, so its id is never given again — an observed ADR, not yet accepted, can still be deleted",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/kw-adr-{{SID}}; rm -rf $R; cp -R {{FIX}}/kw-base $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nST=$(python3 $K/knowledge-write.py init); mkdir -p $ST/Catalog/adr\nprintf '# ADR-?1 — Logs in UTC\\nChoice: every timestamp in UTC.\\nObserved: `src/Log.cs:3` <!-- kit:observed medium -->\\n' > \"$ST/Catalog/adr/ADR-?1-logs-in-utc.md\"\npython3 $K/knowledge-write.py apply --context Catalog | head -1 | cut -d'|' -f2; git add -A; git commit -qm adr\nST=$(python3 $K/knowledge-write.py init); mkdir -p $ST/Catalog/adr; : > $ST/Catalog/adr/ADR-001-logs-in-utc.md\npython3 $K/knowledge-write.py apply --context Catalog | head -1 | cut -d'|' -f2; python3 $K/next-id.py ADR",
    "expect": {
     "exit": 0,
     "stdout": " +ADR-001\n -ADR-001\nADR-002"
+   }
+  },
+  {
+   "name": "knowledge-write apply: an accepted ADR is never rewritten nor deleted; a new ADR supersedes it through its kit:supersedes line, naming ADRs of the base, each superseded once; INDEX.md counts the ADRs in force",
+   "cmd": "K={{KIT}}/scripts; R={{FIX}}/kw-adrlife-{{SID}}; rm -rf $R; cp -R {{FIX}}/kw-base $R; cd $R || exit 1; export CLAUDE_PROJECT_DIR=$R\nstage() { A=$(python3 $K/knowledge-write.py init)/Catalog/adr; mkdir -p $A; }; stage\nprintf '# ADR-?1 — Logs in UTC\\nChoice: every timestamp in UTC.\\n' > \"$A/ADR-?1-logs-in-utc.md\"\npython3 $K/knowledge-write.py apply --context Catalog >/dev/null; git add -A; git commit -qm adr; stage\nprintf '# ADR-001 — Logs in UTC\\nChoice: every timestamp in local time.\\n' > $A/ADR-001-logs-in-utc.md\npython3 $K/knowledge-write.py apply --context Catalog 2>&1; : > $A/ADR-001-logs-in-utc.md\npython3 $K/knowledge-write.py apply --context Catalog 2>&1; rm $A/ADR-001-logs-in-utc.md\nprintf '# ADR-?1 — Logs in local time\\nChoice: local time.\\nReplaces: ADR-001, ADR-009 <!-- kit:supersedes -->\\n' > \"$A/ADR-?1-logs-in-local-time.md\"\npython3 $K/knowledge-write.py apply --context Catalog 2>&1\nprintf '# ADR-?1 — Logs in local time\\nChoice: local time.\\nReplaces: ADR-001 <!-- kit:supersedes -->\\n' > \"$A/ADR-?1-logs-in-local-time.md\"\npython3 $K/knowledge-write.py apply --context Catalog | head -1 | cut -d'|' -f2; tail -2 docs/business/INDEX.md; stage\nprintf '# ADR-?1 — Logs in server time\\nChoice: server time.\\nReplaces: ADR-001 <!-- kit:supersedes -->\\n' > \"$A/ADR-?1-logs-in-server-time.md\"\npython3 $K/knowledge-write.py apply --context Catalog 2>&1",
+   "expect": {
+    "stdout": "refused: ADR-001 is accepted: never rewritten — a new ADR supersedes it (kit:supersedes)\nnothing written\nrefused: ADR-001 is accepted: never deleted — a new ADR supersedes it (kit:supersedes)\nnothing written\nrefused: ADR-002 supersedes ADR-009, absent from the base\nnothing written\n +ADR-002\n\nADR: 1.\nrefused: ADR-001 superseded by ADR-002 and ADR-003 — one successor\nnothing written",
+    "exit": 1
    }
   },
   {

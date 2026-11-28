@@ -18,6 +18,9 @@ export type KObject = {
   handlers: string[]
   citedBy: string[]
   contexts: string[]
+  // An ADR's lifecycle (kit 2.25.0): the ADRs its `kit:supersedes` line names, the ADR naming it — null while it is in force.
+  supersedes: string[]
+  supersededBy: string | null
 }
 
 export type ContextRow = { name: string; prefix: string; usecases: number; rules: number; decisions: number; summary: string }

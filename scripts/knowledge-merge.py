@@ -12,7 +12,8 @@ writes the base. Staging `<root>/.merge/<CODE>/`: `.drafts/<Context>/` one fragm
         merger's packet. Every batch ✅ DONE, or with `--partial` the objects whose batches
         are. `nothing to merge: ` — no delta, or the feature's `HISTORY.md` row exists.
         Refused: a batch not done, a `new` id the base holds under another title
-        (`collision: `, with the next free id), a `modified`/`retired` id the base lacks.
+        (`collision: `, with the next free id), a `modified`/`retired` id the base lacks, an
+        ADR whose `kit:supersedes` line names an ADR the base lacks or another ADR superseded.
     cctoolkit knowledge-merge stage <plan>
         assembles the drafts over the base. Refused, nothing staged: a delta object without
         draft, a draft no delta announces, a provisional id, a new dead citation, a new
@@ -307,6 +308,7 @@ def prepare(f, partial):
 
     adrs = []
     spec_ids = {o.id for o, _ in spec_objs}
+    replaced = {t: oid for oid, (_, bo) in base_def.items() for t in bo.supersedes}
     for path in sheets:
         text = knowledge.read(path)
         lines = text.splitlines()
@@ -325,6 +327,11 @@ def prepare(f, partial):
             if out:
                 left.append(f"{o.id} — links {', '.join(out)}, left out")
                 continue
+            for target in o.supersedes:
+                if target not in base_def:
+                    errors.append(f"{o.id} in {C.rel(path)} supersedes {target}, absent from the base")
+                elif replaced.get(target, o.id) != o.id:
+                    errors.append(f"{o.id} in {C.rel(path)} supersedes {target}, already superseded by {replaced[target]}")
             st = check(o.id, o.title, "new", C.rel(path))
             if st:
                 adrs.append({"id": o.id, "kind": "ADR", "change": "new", "context": ctx, "title": o.title,

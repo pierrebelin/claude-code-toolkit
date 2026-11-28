@@ -7,7 +7,8 @@
 A row, one per object: `id`, `kind` (CU, RM, D, ADR), `context` (none for an ADR),
 `contexts` (an ADR's cited prefixes), `title`, `text` (own lines), `status`
 (`specified` | `observed`), `level`, `path`, `line`, `end` (1-based), `cites`,
-`usecases`, `handlers`. `HISTORY.md` is not indexed.
+`usecases`, `handlers`, `cited_by`; for an ADR, `supersedes` (the ADRs its `kit:supersedes` line
+names) and `superseded_by` (the ADR naming it, none while it is in force). `HISTORY.md` is not indexed.
 """
 import hashlib
 import json
@@ -19,7 +20,7 @@ import knowledge
 INDEX_DIR = ".index"
 CACHE = "files.json"
 ROWS = "knowledge.jsonl"
-VERSION = 1
+VERSION = 2
 SKIP = {"INDEX.md", "HISTORY.md"}
 SENTENCE = re.compile(r"^(.+?[.!?])(?=\s|$)")
 
@@ -59,6 +60,7 @@ def parse(c, rel, text):
             "status": "observed" if o.observed else "specified", "level": o.observed,
             "path": rel, "line": o.start + 1, "end": o.end,
             "cites": sorted({i for i in knowledge.ID_RE.findall(own) if i != o.id}),
+            **({"supersedes": o.supersedes} if o.kind == "ADR" else {}),
         })
     defined = {r["id"] for r in rows}
     return {
@@ -81,10 +83,12 @@ def derive(c, files):
         handlers[cu] = f["handlers"]
         for oid in [r["id"] for r in f["rows"]] + f["cites"]:
             applies.setdefault(oid, []).append(cu)
-    cited_by = {}
+    cited_by, successor = {}, {}
     for r in rows:
         for oid in r["cites"]:
             cited_by.setdefault(oid, []).append(r["id"])
+        for oid in r.get("supersedes", []):
+            successor.setdefault(oid, r["id"])
     for r in rows:
         if r["kind"] == "CU":
             cus = [r["id"]]
@@ -98,6 +102,7 @@ def derive(c, files):
         r["cited_by"] = sorted(set(cited_by.get(r["id"], [])))
         if r["kind"] == "ADR":
             r["contexts"] = sorted({prefixes[p] for p in (i.split("-")[0] for i in r["cites"]) if p in prefixes})
+            r["superseded_by"] = successor.get(r["id"])
         else:
             r["contexts"] = [r["context"]] if r["context"] else []
     return sorted(rows, key=lambda r: (r["path"], r["line"]))
@@ -177,7 +182,8 @@ def index_md(c, rows):
         n = {k: sum(1 for r in rows if r["context"] == ctx and r["kind"] == k) for k in ("CU", "RM", "D")}
         name = f"[{ctx}]({ctx}/OVERVIEW.md)" if os.path.isfile(os.path.join(base, ctx, "OVERVIEW.md")) else ctx
         out.append(f"| {name} | {prefixes.get(ctx, '—')} | {n['CU']} | {n['RM']} | {n['D']} | {summary(c, ctx)} |")
-    out += ["", f"ADR: {sum(1 for r in rows if r['kind'] == 'ADR')}.", ""]
+    # The ADRs in force: a superseded one stays in the base, out of the count.
+    out += ["", f"ADR: {sum(1 for r in rows if r['kind'] == 'ADR' and not r.get('superseded_by'))}.", ""]
     return "\n".join(out)
 
 

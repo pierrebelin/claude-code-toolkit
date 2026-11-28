@@ -24,7 +24,9 @@ Format: `skills/knowledge-sync/references/knowledge-format.md`.
         row per context named (`—` when nothing changed), then for a sync one line per object
         of the delta, `  <sign><id> — <title>`; clears their drafts, rebuilds the index and `INDEX.md`. Refused, nothing written: a dangling provisional id, an id
         defined twice, an unknown prefix, a file outside a context folder, a base file staged
-        by two contexts, a rule left in a use case's file while several apply it. Warns on an
+        by two contexts, a rule left in a use case's file while several apply it, an accepted
+        ADR rewritten or deleted, a `kit:supersedes` line naming no ADR of the base, an ADR
+        already superseded, or the ADR itself. Warns on an
         `OVERVIEW.md` above `knowledge.overviewBudget`.
     cctoolkit knowledge-write mark --context C[,C]
         `apply` with nothing staged: the row `sync <HEAD> | —`.
@@ -141,6 +143,47 @@ def state(files):
 
 def base_texts():
     return knowledge.base_texts(C)
+
+
+def adr_errors(before_texts, after_texts):
+    """An accepted ADR — in the base, not `kit:observed` — is never rewritten nor deleted: a new
+    ADR replaces it through its `kit:supersedes` line, which must name ADRs of the base, each
+    superseded once, none of them itself. Only the ADRs this write adds or changes are checked."""
+    def adrs(texts):
+        return {o.id: o for text in texts.values() for o in knowledge.objects(text) if o.kind == "ADR"}
+    was, now = adrs(before_texts), adrs(after_texts)
+    out = []
+    for oid, o in sorted(was.items()):
+        if o.observed:
+            continue
+        if oid not in now:
+            out.append(f"{oid} is accepted: never deleted — a new ADR supersedes it (kit:supersedes)")
+        elif digest(now[oid].body + now[oid].title) != digest(o.body + o.title):
+            out.append(f"{oid} is accepted: never rewritten — a new ADR supersedes it (kit:supersedes)")
+    successor = {}
+    for oid, o in sorted(now.items()):
+        for target in o.supersedes:
+            successor.setdefault(target, []).append(oid)
+    for oid, o in sorted(now.items()):
+        if oid in was and digest(o.body + o.title) == digest(was[oid].body + was[oid].title):
+            continue
+        for target in o.supersedes:
+            if target == oid:
+                continue
+            if target not in now:
+                out.append(f"{oid} supersedes {target}, absent from the base")
+            elif len(successor[target]) > 1:
+                out.append(f"{target} superseded by {' and '.join(successor[target])} — one successor")
+        seen, todo = set(), list(o.supersedes)
+        while todo:
+            t = todo.pop()
+            if t == oid:
+                out.append(f"{oid} supersedes itself through {', '.join(o.supersedes)}")
+                break
+            if t not in seen and t in now:
+                seen.add(t)
+                todo += now[t].supersedes
+    return sorted(set(out))
 
 
 # --- status --------------------------------------------------------------------------------
@@ -422,6 +465,9 @@ def apply(ctxs):
     after, dup = state(after_texts)
     if dup:
         return refuse(dup)
+    adr = adr_errors(before_texts, after_texts)
+    if adr:
+        return refuse(adr)
     applied = {context_of_rel(r) for r in files} | set(ctxs)
     was = {(m[0], m[1]) for m in knowledge.misplaced(before_texts)}
     moved, kept = [], []

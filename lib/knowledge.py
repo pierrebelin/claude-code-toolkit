@@ -18,6 +18,7 @@ HEADING = re.compile(rf"^(#{{1,6}})\s+({ID})\s+—\s+(.*?)\s*$")
 ANY_HEADING = re.compile(r"^(#{1,6})\s")
 HANDLERS = re.compile(r"^##\s.*<!--\s*kit:handlers\s*-->")
 OBSERVED = re.compile(r"<!--\s*kit:observed\s+(high|medium|low)\s*-->\s*$")
+SUPERSEDES = re.compile(r"<!--\s*kit:supersedes\s*-->\s*$")
 CODE = re.compile(r"`([^`]+)`")
 COLS = re.compile(r"^\s*<!--\s*kit:cols\s")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -35,11 +36,11 @@ def kind_of(oid):
 
 
 class Obj:
-    __slots__ = ("id", "kind", "level", "title", "start", "end", "body", "observed")
+    __slots__ = ("id", "kind", "level", "title", "start", "end", "body", "observed", "supersedes")
 
     def __init__(self, oid, level, title, start):
         self.id, self.kind, self.level, self.title, self.start = oid, kind_of(oid), level, title, start
-        self.end, self.body, self.observed = start, "", None
+        self.end, self.body, self.observed, self.supersedes = start, "", None, []
 
 
 def objects(text):
@@ -67,9 +68,11 @@ def objects(text):
         own = next((p.start for p in out if o.start < p.start < o.end), o.end)
         for line in lines[o.start + 1:own]:
             m = OBSERVED.search(line)
-            if m:
+            if m and not o.observed:
                 o.observed = m.group(1)
-                break
+            # An ADR replacing others: the ADR ids of its line ending with `kit:supersedes`.
+            if o.kind == "ADR" and SUPERSEDES.search(line):
+                o.supersedes += [i for i in ID_RE.findall(line) if kind_of(i) == "ADR" and i not in o.supersedes]
     return out
 
 

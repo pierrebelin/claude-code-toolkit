@@ -103,6 +103,7 @@ Section order is fixed: why (`Intent`, `Design`, `Decisions`), then how it is ve
 Choice: [what is done]
 Why: [the reason, one line — the business decision or rule it serves]
 Rejected: [option] ([reason]); [option] ([reason])
+Replaces: [ADR-nnn in force this choice reverses — the line only then] <!-- kit:supersedes -->
 Consequences: [what every later change must respect]
 Links: [T1, the rule and use case ids it serves]
 

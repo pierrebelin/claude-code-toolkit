@@ -137,6 +137,14 @@
         "stdout": "rc=0\nINDEX.md stale — cctoolkit knowledge-index\nrc=0",
         "exit": 0
       }
+    },
+    {
+      "name": "ask: an ADR superseded by another is left out of a question, a context and a handler — kept for --id and a question naming it, flagged superseded; INDEX.md counts the ADRs in force",
+      "cmd": "R={{FIX}}/ki-{{SID}}; rm -rf $R; mkdir -p $R/.claude $R/docs; cp -R {{KIT}}/examples/docs/business $R/docs/\nprintf '%s' '{\"knowledge\": {\"contexts\": {\"Catalog\": \"CAT\"}}}' > $R/.claude/kit.config.json\ncd $R || exit 1; export CLAUDE_PROJECT_DIR=$R; I=\"python3 {{KIT}}/scripts/knowledge-index.py\"; A=\"python3 {{KIT}}/scripts/ask.py\"\nprintf '# ADR-002 — Archive table with retention\\nChoice: archived products move to `ProductArchive`.\\nRejected: status column, ADR-001 (no purge)\\nReplaces: ADR-001 <!-- kit:supersedes -->\\nLinks: CAT-RM-004, CAT-CU-02\\n' > docs/business/adr/ADR-002-archive-table-with-retention.md\n$I >/dev/null; tail -2 docs/business/INDEX.md | tr -d '\\n'; echo\n$A archive --kind adr | grep '^- '; $A --context Catalog | grep '^ADR'; $A --handler ArchiveProductCommandHandler | grep '^- ADR'\n$A 'ADR-001 status column' --kind adr | head -1; $A --id ADR-001 | grep -o 'superseded by: ADR-002'; $A --id ADR-002 | grep -o 'supersedes: ADR-001'",
+      "expect": {
+        "stdout": "ADR: 1.\n- ADR-002 — Archive table with retention · adr · CAT-CU-02\nADR-002 — Archive table with retention\n- ADR-002 — Archive table with retention · adr · CAT-CU-02\n- ADR-001 — Soft archive through a status column · adr · CAT-CU-02, CAT-CU-03 · superseded by ADR-002\nsuperseded by: ADR-002\nsupersedes: ADR-001",
+        "exit": 0
+      }
     }
   ]
 }
